@@ -64,6 +64,79 @@ export default function Home() {
         </motion.div>
       </section>
 
+      {/* How It Works */}
+      <section className="py-24 bg-secondary/30">
+        <div className="container mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <span className="inline-block px-4 py-1.5 rounded-full bg-accent/10 text-accent text-sm font-medium mb-6">
+              How It Works
+            </span>
+            <h2 className="font-serif text-4xl md:text-5xl font-semibold mb-4">Travel Made Simple</h2>
+            <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+              From dream to departure in three effortless steps
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                step: 1,
+                emoji: '✨',
+                title: 'Tell Us Your Dreams',
+                description: 'Share your travel style through our smart quiz, or just tell us where you want to go. We learn what makes you tick.',
+                cta: 'Take the Quiz',
+                link: '/explore',
+              },
+              {
+                step: 2,
+                emoji: '🗺️',
+                title: 'Get Your Perfect Plan',
+                description: 'We craft a complete itinerary — flights, stays, experiences — tailored specifically to your vibe and budget.',
+                cta: 'See Sample',
+                link: '/explore',
+              },
+              {
+                step: 3,
+                emoji: '🚀',
+                title: 'Book & Go',
+                description: "Love it as-is? Book instantly. Want to tweak? Customize everything. Save for later? We've got you covered.",
+                cta: 'Start Planning',
+                link: '/explore',
+              },
+            ].map((item, index) => (
+              <motion.div
+                key={item.step}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-card rounded-2xl p-8 shadow-soft border border-border"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-accent text-accent-foreground flex items-center justify-center text-lg font-semibold">
+                    {item.step}
+                  </div>
+                  <span className="text-2xl">{item.emoji}</span>
+                </div>
+                <h3 className="font-serif text-2xl font-semibold mb-3">{item.title}</h3>
+                <p className="text-muted-foreground mb-6 leading-relaxed">{item.description}</p>
+                <Link to={item.link}>
+                  <Button variant="accent" className="w-full">
+                    {item.cta}
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Value Props */}
       <section className="py-24 bg-background">
         <div className="container mx-auto px-6">
