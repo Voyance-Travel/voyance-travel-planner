@@ -9,6 +9,7 @@ import DestinationDetail from "./pages/DestinationDetail";
 import SignIn from "./pages/SignIn";
 import Profile from "./pages/Profile";
 import TripPlanner from "./pages/TripPlanner";
+import StartPlanning from "./pages/StartPlanning";
 import ItineraryPage from "./pages/ItineraryPage";
 import NotFound from "./pages/NotFound";
 
@@ -26,7 +27,7 @@ const App = () => (
           <Route path="/destinations/:id" element={<DestinationDetail />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/trip/new" element={<TripPlanner />} />
+          <Route path="/trip/new" element={<StartPlanning />} />
           <Route path="/trip/:tripId" element={<TripPlanner />} />
           <Route path="/trip/:tripId/itinerary" element={<ItineraryPage />} />
           <Route path="*" element={<NotFound />} />
