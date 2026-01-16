@@ -11,6 +11,7 @@ import Profile from "./pages/Profile";
 import TripPlanner from "./pages/TripPlanner";
 import StartPlanning from "./pages/StartPlanning";
 import ItineraryPage from "./pages/ItineraryPage";
+import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,8 @@ const App = () => (
           <Route path="/trip/new" element={<StartPlanning />} />
           <Route path="/trip/:tripId" element={<TripPlanner />} />
           <Route path="/trip/:tripId/itinerary" element={<ItineraryPage />} />
+          <Route path="/sample-itinerary" element={<ItineraryPage />} />
+          <Route path="/about" element={<About />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
