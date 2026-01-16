@@ -1,16 +1,36 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [hasScrolled, setHasScrolled] = useState(false);
   const { isAuthenticated, logout } = useAuth();
   const location = useLocation();
   
   const isHome = location.pathname === '/';
-  const isTransparent = isHome;
+  const hasHeroImage = isHome || location.pathname.startsWith('/trip/') && location.pathname.includes('/itinerary');
+  
+  // Only transparent when at top of page AND on a hero page
+  const isTransparent = hasHeroImage && !hasScrolled;
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setHasScrolled(window.scrollY > 20);
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Check initial state
+    
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Reset scroll state on route change
+  useEffect(() => {
+    setHasScrolled(window.scrollY > 20);
+  }, [location.pathname]);
 
   const navLinks = [
     { to: '/', label: 'Home' },
@@ -39,7 +59,7 @@ export function Header() {
                 isTransparent ? 'text-primary-foreground' : 'text-foreground'
               }`}
             >
-              <span className="text-accent">V</span>oyance
+              <span className={isTransparent ? 'text-primary-foreground' : 'text-accent'}>V</span>oyance
             </span>
           </Link>
 
