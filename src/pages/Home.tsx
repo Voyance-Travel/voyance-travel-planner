@@ -3,8 +3,68 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Compass, Clock, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/Header';
+import { useState } from 'react';
+
+const sampleItineraries = [
+  {
+    id: 'bali',
+    destination: 'Bali, Indonesia',
+    days: 7,
+    category: 'Wellness & Culture',
+    price: 1890,
+    includes: [
+      'Private villa with infinity pool',
+      'Daily yoga & meditation',
+      'Authentic Balinese experiences',
+      'Wellness-focused dining',
+    ],
+    dayHighlights: [
+      { day: 1, title: 'Arrival in Paradise', description: 'Private villa, sunset yoga' },
+      { day: 2, title: 'Sacred Temples', description: 'Tanah Lot, traditional ceremony' },
+      { day: 3, title: 'Rice Terrace Trek', description: 'Jatiluwih, local cooking class' },
+    ],
+  },
+  {
+    id: 'tokyo',
+    destination: 'Tokyo, Japan',
+    days: 5,
+    category: 'Urban Exploration',
+    price: 2450,
+    includes: [
+      'Boutique hotel in Shibuya',
+      'Private food tour',
+      'Skip-the-line temple access',
+      'Local neighborhood guides',
+    ],
+    dayHighlights: [
+      { day: 1, title: 'Arrival & Shibuya', description: 'Check-in, Shibuya Crossing' },
+      { day: 2, title: 'Traditional Tokyo', description: 'Senso-ji, tea ceremony' },
+      { day: 3, title: 'Hidden Gems', description: 'Yanaka, local izakayas' },
+    ],
+  },
+  {
+    id: 'iceland',
+    destination: 'Reykjavik, Iceland',
+    days: 6,
+    category: 'Adventure & Nature',
+    price: 3200,
+    includes: [
+      'Cozy downtown guesthouse',
+      'Golden Circle private tour',
+      'Northern Lights expedition',
+      'Blue Lagoon priority access',
+    ],
+    dayHighlights: [
+      { day: 1, title: 'Arctic Arrival', description: 'Reykjavik exploration' },
+      { day: 2, title: 'Golden Circle', description: 'Geysir, Gullfoss, Thingvellir' },
+      { day: 3, title: 'South Coast', description: 'Black sand beaches, waterfalls' },
+    ],
+  },
+];
 
 export default function Home() {
+  const [activeItinerary, setActiveItinerary] = useState(sampleItineraries[0]);
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -63,6 +123,110 @@ export default function Home() {
           </div>
         </motion.div>
       </section>
+
+      {/* Real Itineraries Section */}
+      <section className="py-24 bg-background">
+        <div className="container mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <span className="inline-block px-4 py-1.5 rounded-full bg-accent text-accent-foreground text-sm font-medium mb-6">
+              Real Itineraries
+            </span>
+            <h2 className="font-serif text-4xl md:text-5xl font-semibold mb-4">
+              Trips That Actually<br />
+              <span className="text-accent">Make Sense</span>
+            </h2>
+            <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+              Real itineraries from real travelers. No generic templates, no filler days.
+            </p>
+          </motion.div>
+
+          {/* Destination Tabs */}
+          <div className="flex flex-wrap justify-center gap-3 mb-12">
+            {sampleItineraries.map((itinerary) => (
+              <button
+                key={itinerary.id}
+                onClick={() => setActiveItinerary(itinerary)}
+                className={`px-6 py-3 rounded-full font-medium transition-all ${
+                  activeItinerary.id === itinerary.id
+                    ? 'bg-accent text-accent-foreground'
+                    : 'bg-card border border-border text-foreground hover:border-accent/50'
+                }`}
+              >
+                {itinerary.destination}
+              </button>
+            ))}
+          </div>
+
+          {/* Itinerary Preview Card */}
+          <motion.div
+            key={activeItinerary.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid lg:grid-cols-2 gap-8 max-w-5xl mx-auto"
+          >
+            {/* Left Column - Day Highlights */}
+            <div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="px-3 py-1 rounded-full bg-secondary text-sm">{activeItinerary.days} days</span>
+                <span className="px-3 py-1 rounded-full bg-secondary text-sm">{activeItinerary.category}</span>
+                <span className="px-3 py-1 rounded-full bg-accent text-accent-foreground text-sm font-medium">
+                  from ${activeItinerary.price.toLocaleString()}
+                </span>
+              </div>
+              
+              <h3 className="font-serif text-2xl font-semibold mb-6">
+                {activeItinerary.destination} in {activeItinerary.days} days
+              </h3>
+
+              <div className="space-y-4">
+                {activeItinerary.dayHighlights.map((day) => (
+                  <div key={day.day} className="flex gap-4 p-4 rounded-xl border border-border bg-card">
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-semibold shrink-0">
+                      {day.day}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold">{day.title}</h4>
+                      <p className="text-muted-foreground text-sm">{day.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Column - What's Included */}
+            <div className="lg:pl-8">
+              <h4 className="font-serif text-xl font-semibold mb-6">What's Included</h4>
+              <ul className="space-y-4 mb-8">
+                {activeItinerary.includes.map((item, idx) => (
+                  <li key={idx} className="flex items-center gap-3">
+                    <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="space-y-3">
+                <Link to={`/explore`}>
+                  <Button variant="accent" size="lg" className="w-full">
+                    View Full Itinerary
+                  </Button>
+                </Link>
+                <Link to="/trip/new">
+                  <Button variant="outline" size="lg" className="w-full">
+                    Create Your Own
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
 
       {/* How It Works */}
       <section className="py-24 bg-secondary/30">
