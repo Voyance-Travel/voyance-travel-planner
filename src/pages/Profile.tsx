@@ -268,42 +268,178 @@ export default function Profile() {
           >
             {/* Overview Tab */}
             {activeTab === 'overview' && (
-              <div className="bg-card rounded-xl border border-border p-6">
-                <div className="grid grid-cols-5 gap-4 text-center">
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-accent mb-1">
-                      <Plane className="h-4 w-4" />
-                    </div>
-                    <p className="text-2xl font-semibold">2</p>
-                    <p className="text-xs text-muted-foreground">Upcoming Trips</p>
+              <div className="space-y-8">
+                {/* Travel DNA Banner */}
+                <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-primary to-primary/80 p-8 text-center">
+                  <div className="absolute inset-0 opacity-20">
+                    <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1200')] bg-cover bg-center" />
                   </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-accent mb-1">
-                      <Globe className="h-4 w-4" />
+                  <div className="relative">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium mb-4">
+                      <Sparkles className="h-3 w-3" />
+                      Discovering Your Travel DNA
+                    </span>
+                    <h2 className="text-xl font-serif text-primary-foreground mb-2">
+                      Welcome to your journey as a <span className="text-accent font-semibold">Explorer</span>
+                    </h2>
+                    <p className="text-primary-foreground/70 text-sm max-w-md mx-auto mb-4">
+                      Your thoughtful responses reveal that you travel for curiosity, new textures, and the thrill of the unknown.
+                    </p>
+                    <div className="flex items-center justify-center gap-8 text-primary-foreground/80 text-xs">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-accent" />
+                        95% Match
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Globe className="h-3 w-3" />
+                        58% Total traveled more than 20 international trips/year
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3 w-3" />
+                        27% Adventurer
+                      </span>
                     </div>
-                    <p className="text-2xl font-semibold">2</p>
-                    <p className="text-xs text-muted-foreground">Destinations explored</p>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-amber-500 mb-1">
-                      <Trophy className="h-4 w-4" />
-                    </div>
-                    <p className="text-2xl font-semibold">0</p>
-                    <p className="text-xs text-muted-foreground">Hrs Looking elsewhere</p>
+                </div>
+
+                {/* Start Your Journey CTA */}
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+                    <MapPin className="h-6 w-6 text-accent" />
                   </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-red-500 mb-1">
-                      <Heart className="h-4 w-4" />
+                  <h3 className="font-semibold mb-2">Start Your Journey</h3>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-xs mx-auto">
+                    Begin your unique journey and find this info with Voyance
+                  </p>
+                  <Link to="/start-planning">
+                    <Button variant="accent" size="sm">
+                      <Plus className="h-4 w-4 mr-1" />
+                      Plan Your First Trip
+                    </Button>
+                  </Link>
+                </div>
+
+                {/* Your Travel Journey - Map Section */}
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold">Your Travel Journey</h3>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        6 Countries
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-accent" />
+                        0 Pending
+                      </span>
                     </div>
-                    <p className="text-2xl font-semibold">0</p>
-                    <p className="text-xs text-muted-foreground">Total Favorites</p>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-blue-500 mb-1">
-                      <Clock className="h-4 w-4" />
+
+                  <div className="flex gap-2 mb-4 text-xs">
+                    <button className="px-3 py-1.5 rounded-full bg-accent text-accent-foreground font-medium">
+                      Places
+                    </button>
+                    <button className="px-3 py-1.5 rounded-full bg-secondary text-muted-foreground">
+                      Countries
+                    </button>
+                    <button className="px-3 py-1.5 rounded-full bg-secondary text-muted-foreground">
+                      Experiences
+                    </button>
+                    <button className="px-3 py-1.5 rounded-full bg-secondary text-muted-foreground">
+                      Hours Of
+                    </button>
+                  </div>
+
+                  {/* World Map Visualization */}
+                  <div className="relative aspect-[2/1] rounded-lg overflow-hidden mb-6 bg-muted/30">
+                    <img 
+                      src="https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=1200&q=80" 
+                      alt="World map"
+                      className="w-full h-full object-cover opacity-30"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center text-muted-foreground text-sm">
+                        <Globe className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>Your travel destinations will appear here</p>
+                      </div>
                     </div>
-                    <p className="text-2xl font-semibold">0d</p>
-                    <p className="text-xs text-muted-foreground">Days Traveled</p>
+                  </div>
+
+                  {/* Journey Stats */}
+                  <div className="border-t border-border pt-4">
+                    <p className="text-sm text-muted-foreground mb-4">Your Travel Journey</p>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="flex items-center gap-3 justify-center">
+                        <span className="w-3 h-3 rounded-full bg-accent" />
+                        <div className="text-left">
+                          <p className="text-xl font-semibold">0</p>
+                          <p className="text-xs text-muted-foreground">Total Destinations</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 justify-center">
+                        <span className="w-3 h-3 rounded-full bg-green-500" />
+                        <div className="text-left">
+                          <p className="text-xl font-semibold">27</p>
+                          <p className="text-xs text-muted-foreground">No. of Journey</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 justify-center">
+                        <span className="w-3 h-3 rounded-full bg-blue-500" />
+                        <div className="text-left">
+                          <p className="text-xl font-semibold">0</p>
+                          <p className="text-xs text-muted-foreground">Upcoming Trips</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feature Cards */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center p-6">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                      <Sparkles className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <h4 className="font-medium text-sm mb-1">Jet Surprise</h4>
+                    <p className="text-xs text-muted-foreground">Let AI plan your perfect trip</p>
+                  </div>
+                  <div className="text-center p-6">
+                    <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
+                      <Compass className="h-5 w-5 text-green-600" />
+                    </div>
+                    <h4 className="font-medium text-sm mb-1">Explore</h4>
+                    <p className="text-xs text-muted-foreground">Discover new destinations</p>
+                  </div>
+                  <div className="text-center p-6">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center mx-auto mb-3">
+                      <Sun className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <h4 className="font-medium text-sm mb-1">Tropicos</h4>
+                    <p className="text-xs text-muted-foreground">Warm weather getaways</p>
+                  </div>
+                </div>
+
+                {/* Profile Completion */}
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                        <Check className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-sm">Profile Completion</h4>
+                        <p className="text-xs text-muted-foreground">Track your account status</p>
+                      </div>
+                    </div>
+                    <span className="text-accent font-semibold">100%</span>
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2 mb-4">
+                    <div className="bg-accent h-2 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                  <div className="bg-accent/10 rounded-lg p-4 text-center">
+                    <div className="text-3xl mb-2">🎉</div>
+                    <p className="font-medium text-sm text-accent">Your profile is complete!</p>
+                    <p className="text-xs text-muted-foreground">You're all set to start booking and planning</p>
                   </div>
                 </div>
               </div>
