@@ -1,8 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Menu, X, User, Compass } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 
 export function Header() {
@@ -12,6 +11,16 @@ export function Header() {
   
   const isHome = location.pathname === '/';
   const isTransparent = isHome;
+
+  const navLinks = [
+    { to: '/', label: 'Home' },
+    { to: '/explore', label: 'Explore' },
+    { to: '/trip/new', label: 'Start Planning' },
+    { to: '/profile', label: 'Profile' },
+    { to: '/about', label: 'About Us' },
+  ];
+
+  const isActive = (path: string) => location.pathname === path;
 
   return (
     <header 
@@ -24,60 +33,55 @@ export function Header() {
       <nav className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <Compass 
-              className={`h-7 w-7 transition-colors ${
-                isTransparent ? 'text-primary-foreground' : 'text-accent'
-              }`} 
-            />
+          <Link to="/" className="group">
             <span 
               className={`font-serif text-2xl font-semibold tracking-tight transition-colors ${
                 isTransparent ? 'text-primary-foreground' : 'text-foreground'
               }`}
             >
-              Voyance
+              <span className="text-accent">V</span>oyance
             </span>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
-            <Link 
-              to="/explore" 
-              className={`text-sm font-medium transition-colors hover:opacity-80 ${
-                isTransparent ? 'text-primary-foreground/90' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Explore
-            </Link>
+            {navLinks.map((link) => (
+              <Link 
+                key={link.to}
+                to={link.to} 
+                className={`text-sm font-medium transition-colors ${
+                  isActive(link.to)
+                    ? 'text-accent'
+                    : isTransparent 
+                      ? 'text-primary-foreground/90 hover:text-primary-foreground' 
+                      : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
             
             {isAuthenticated ? (
-              <>
-                <Link 
-                  to="/profile" 
-                  className={`text-sm font-medium transition-colors hover:opacity-80 ${
-                    isTransparent ? 'text-primary-foreground/90' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  My Trips
-                </Link>
-                <Button 
-                  variant={isTransparent ? 'heroOutline' : 'outline'} 
-                  size="sm"
-                  onClick={logout}
-                  className={isTransparent ? 'border-primary-foreground/40 text-primary-foreground h-9 px-4 py-2' : ''}
-                >
-                  Sign Out
-                </Button>
-              </>
+              <button 
+                onClick={logout}
+                className={`text-sm font-medium transition-colors ${
+                  isTransparent 
+                    ? 'text-primary-foreground/90 hover:text-primary-foreground' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Sign Out
+              </button>
             ) : (
-              <Link to="/signin">
-                <Button 
-                  variant={isTransparent ? 'heroOutline' : 'default'} 
-                  size="sm"
-                  className={isTransparent ? 'border-primary-foreground/40 text-primary-foreground h-9 px-4 py-2' : ''}
-                >
-                  Sign In
-                </Button>
+              <Link 
+                to="/signin"
+                className={`text-sm font-medium transition-colors ${
+                  isTransparent 
+                    ? 'text-primary-foreground/90 hover:text-primary-foreground' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Sign In
               </Link>
             )}
           </div>
@@ -103,32 +107,30 @@ export function Header() {
             className="md:hidden absolute top-full left-0 right-0 bg-background border-b border-border shadow-medium"
           >
             <div className="container mx-auto px-6 py-4 flex flex-col gap-4">
-              <Link 
-                to="/explore" 
-                className="text-foreground py-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Explore
-              </Link>
+              {navLinks.map((link) => (
+                <Link 
+                  key={link.to}
+                  to={link.to} 
+                  className={`py-2 ${isActive(link.to) ? 'text-accent' : 'text-foreground'}`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ))}
               {isAuthenticated ? (
-                <>
-                  <Link 
-                    to="/profile" 
-                    className="text-foreground py-2"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    My Trips
-                  </Link>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => { logout(); setIsMenuOpen(false); }}
-                  >
-                    Sign Out
-                  </Button>
-                </>
+                <button 
+                  className="text-foreground py-2 text-left"
+                  onClick={() => { logout(); setIsMenuOpen(false); }}
+                >
+                  Sign Out
+                </button>
               ) : (
-                <Link to="/signin" onClick={() => setIsMenuOpen(false)}>
-                  <Button className="w-full">Sign In</Button>
+                <Link 
+                  to="/signin" 
+                  className="text-foreground py-2"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Sign In
                 </Link>
               )}
             </div>
