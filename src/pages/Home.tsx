@@ -14,7 +14,7 @@ export default function Home() {
         {/* Background Image */}
         <div className="absolute inset-0">
           <img 
-            src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1920&q=80" 
+            src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80" 
             alt="Cinematic travel landscape"
             className="w-full h-full object-cover"
           />
