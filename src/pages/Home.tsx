@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Compass, Clock, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/Header';
+import TopNav from '@/components/common/TopNav';
+import Footer from '@/components/common/Footer';
 import { useState } from 'react';
+import { ROUTES } from '@/config/routes';
 
 const sampleItineraries = [
   {
@@ -66,8 +68,8 @@ export default function Home() {
   const [activeItinerary, setActiveItinerary] = useState(sampleItineraries[0]);
 
   return (
-    <div className="min-h-screen">
-      <Header />
+    <div className="min-h-screen flex flex-col">
+      <TopNav />
       
       {/* Hero Section */}
       <section className="relative h-screen flex items-center justify-center overflow-hidden">
@@ -370,15 +372,7 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="py-8 bg-primary text-primary-foreground">
-        <div className="container mx-auto px-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Compass className="h-5 w-5" />
-            <span className="font-serif font-semibold">Voyance</span>
-          </div>
-          <p className="text-sm opacity-70">© 2026 Voyance. Thoughtful travel planning.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
