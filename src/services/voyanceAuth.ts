@@ -375,6 +375,86 @@ export async function debugAuthStatus(): Promise<Record<string, unknown>> {
 }
 
 // ============================================================================
+// Password Reset
+// ============================================================================
+
+export interface PasswordResetResponse {
+  success?: boolean;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Request a password reset email
+ */
+export async function requestPasswordReset(email: string): Promise<PasswordResetResponse> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/password/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    
+    return response.json();
+  } catch (error) {
+    console.error('[VoyanceAuth] Password reset request error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to request password reset',
+    };
+  }
+}
+
+/**
+ * Reset password with token
+ */
+export async function resetPassword(
+  userId: string,
+  token: string,
+  newPassword: string
+): Promise<PasswordResetResponse> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/password/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, token, newPassword }),
+    });
+    
+    return response.json();
+  } catch (error) {
+    console.error('[VoyanceAuth] Password reset error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reset password',
+    };
+  }
+}
+
+/**
+ * Change password (when already logged in)
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<PasswordResetResponse> {
+  try {
+    const response = await apiRequest<PasswordResetResponse>('/api/v1/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    
+    return response;
+  } catch (error) {
+    console.error('[VoyanceAuth] Change password error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to change password',
+    };
+  }
+}
+
+// ============================================================================
 // Export
 // ============================================================================
 
@@ -395,6 +475,11 @@ const voyanceAuth = {
   getProfile,
   checkAuth,
   debugAuthStatus,
+  
+  // Password reset
+  requestPasswordReset,
+  resetPassword,
+  changePassword,
 };
 
 export default voyanceAuth;
