@@ -36,6 +36,7 @@ export interface QuizSession {
   isComplete: boolean;
   startedAt: string;
   completedAt?: string | null;
+  responsesRecorded?: number; // Added from backend session endpoint
 }
 
 export interface QuizStartResponse {
@@ -66,9 +67,12 @@ export interface QuizProgressResponse {
 
 export interface QuizSessionStatusResponse {
   success: boolean;
-  session?: QuizSession;
+  session?: QuizSession & {
+    responsesRecorded?: number;
+  };
   exists?: boolean;
   error?: string;
+  code?: string;
 }
 
 export interface QuizFinalizeResponse {
