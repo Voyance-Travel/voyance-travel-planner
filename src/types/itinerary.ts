@@ -1,7 +1,19 @@
 // ============================================================================
-// ITINERARY TYPES - Comprehensive types for sample and real itineraries
+// ITINERARY TYPES - Aligned with backend itinerary.ts
 // ============================================================================
 
+// Backend-aligned activity types
+export type BackendActivityCategory = 
+  | 'sightseeing' 
+  | 'dining' 
+  | 'cultural' 
+  | 'adventure' 
+  | 'relaxation' 
+  | 'shopping' 
+  | 'transportation' 
+  | 'accommodation';
+
+// Frontend-friendly activity types for sample itineraries
 export type ActivityType = 
   | 'transportation' 
   | 'accommodation' 
@@ -19,8 +31,10 @@ export type TripPace = 'relaxed' | 'moderate' | 'packed';
 export interface ActivityLocation {
   name: string;
   address: string;
+  coordinates?: { lat: number; lng: number };
 }
 
+// Sample itinerary activity (frontend-friendly)
 export interface ItineraryActivity {
   id: string;
   title: string;
@@ -33,6 +47,41 @@ export interface ItineraryActivity {
   rating?: number;
   tags: string[];
   isLocked: boolean;
+  // Optional backend-aligned fields
+  photos?: string[];
+  bookingRequired?: boolean;
+  tips?: string;
+  walkingDistance?: number;
+  walkingTime?: number;
+}
+
+// Backend activity type (from itineraryAPI.ts)
+export interface BackendActivity {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  startTime: string;
+  endTime: string;
+  duration: string;
+  location: string;
+  estimatedCost: { amount: number; currency: string };
+  bookingRequired: boolean;
+  tips?: string;
+  coordinates?: { lat: number; lng: number };
+  photos?: string[];
+  walkingDistance?: number;
+  walkingTime?: number;
+  venue?: {
+    name: string;
+    type?: string;
+    cuisine?: string[];
+    priceRange?: string;
+    rating?: number;
+    reviewCount?: number;
+  };
+  savedByUser?: boolean;
+  savedByCount?: number;
 }
 
 export interface DayWeather {
@@ -40,8 +89,11 @@ export interface DayWeather {
   low: number;
   condition: WeatherCondition;
   description: string;
+  rainChance?: number;
+  humidity?: number;
 }
 
+// Sample day itinerary (frontend-friendly)
 export interface DayItinerary {
   date: string;
   dayNumber: number;
@@ -52,6 +104,26 @@ export interface DayItinerary {
   totalCost: number;
   estimatedWalkingTime: string;
   estimatedDistance: string;
+}
+
+// Backend day type
+export interface BackendDay {
+  dayNumber: number;
+  date?: string;
+  theme?: string;
+  activities: BackendActivity[];
+  meals?: {
+    breakfast?: { name: string; location: string; estimatedCost: { amount: number; currency: string } };
+    lunch?: { name: string; location: string; estimatedCost: { amount: number; currency: string } };
+    dinner?: { name: string; location: string; estimatedCost: { amount: number; currency: string } };
+  };
+  weather?: {
+    temperature: { high: number; low: number };
+    conditions: string;
+    rainChance: number;
+  };
+  paceScore?: 'relaxed' | 'moderate' | 'packed';
+  totalWalkingDistance?: number;
 }
 
 export interface TripSummary {
@@ -137,4 +209,86 @@ export interface SampleItineraryData {
   hotelInfo: HotelInfo;
   destinationInfo: DestinationInfo;
   days: DayItinerary[];
+}
+
+// ============================================================================
+// TYPE CONVERSION UTILITIES
+// ============================================================================
+
+/**
+ * Convert backend activity to frontend-friendly format
+ */
+export function convertBackendActivity(activity: BackendActivity): ItineraryActivity {
+  const typeMap: Record<string, ActivityType> = {
+    sightseeing: 'activity',
+    dining: 'dining',
+    cultural: 'cultural',
+    adventure: 'activity',
+    relaxation: 'relaxation',
+    shopping: 'shopping',
+    transportation: 'transportation',
+    accommodation: 'accommodation',
+  };
+
+  return {
+    id: activity.id,
+    title: activity.name,
+    description: activity.description,
+    time: activity.startTime,
+    duration: activity.duration,
+    type: typeMap[activity.category] || 'activity',
+    cost: activity.estimatedCost?.amount || 0,
+    location: {
+      name: activity.venue?.name || activity.location,
+      address: activity.location,
+      coordinates: activity.coordinates,
+    },
+    rating: activity.venue?.rating,
+    tags: [],
+    isLocked: activity.savedByUser || false,
+    photos: activity.photos,
+    bookingRequired: activity.bookingRequired,
+    tips: activity.tips,
+    walkingDistance: activity.walkingDistance,
+    walkingTime: activity.walkingTime,
+  };
+}
+
+/**
+ * Convert backend day to frontend-friendly format
+ */
+export function convertBackendDay(day: BackendDay): DayItinerary {
+  const activities = day.activities.map(convertBackendActivity);
+  const totalCost = activities.reduce((sum, a) => sum + a.cost, 0);
+
+  const conditionMap: Record<string, WeatherCondition> = {
+    sunny: 'sunny',
+    clear: 'sunny',
+    'partly cloudy': 'partly-cloudy',
+    cloudy: 'cloudy',
+    rain: 'rainy',
+    snow: 'snowy',
+  };
+
+  return {
+    date: day.date || new Date().toISOString(),
+    dayNumber: day.dayNumber,
+    theme: day.theme || `Day ${day.dayNumber}`,
+    description: '',
+    weather: {
+      high: day.weather?.temperature?.high || 70,
+      low: day.weather?.temperature?.low || 55,
+      condition: conditionMap[day.weather?.conditions?.toLowerCase() || 'sunny'] || 'sunny',
+      description: day.weather?.conditions || 'Pleasant weather',
+      rainChance: day.weather?.rainChance,
+    },
+    activities,
+    totalCost,
+    estimatedWalkingTime: day.totalWalkingDistance 
+      ? `${Math.round(day.totalWalkingDistance / 80)} minutes` 
+      : '1 hour',
+    estimatedDistance: day.totalWalkingDistance 
+      ? `${(day.totalWalkingDistance / 1609).toFixed(1)} miles`
+      : '2 miles',
+  };
 }
