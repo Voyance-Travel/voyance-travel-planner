@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Voyance User API
  * 
@@ -612,6 +613,113 @@ export function useRecalculateProfileCompletion() {
 }
 
 // ============================================================================
+// Avatar API
+// ============================================================================
+
+export interface AvatarUpdateResponse {
+  success: boolean;
+  avatarUrl: string | null;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+    handle: string;
+    avatarUrl: string | null;
+  };
+  error?: string;
+}
+
+/**
+ * Get current user's avatar URL
+ */
+export async function getAvatar(): Promise<{ avatarUrl: string | null }> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/user/me/avatar`, {
+    method: 'GET',
+    headers,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Update user's avatar URL
+ */
+export async function updateAvatar(avatarUrl: string): Promise<AvatarUpdateResponse> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/user/me/avatar`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ avatarUrl }),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Delete user's avatar
+ */
+export async function deleteAvatar(): Promise<{ success: boolean; message?: string }> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/user/me/avatar`, {
+    method: 'DELETE',
+    headers,
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+// React Query hooks for avatar
+export function useAvatar() {
+  return useQuery({
+    queryKey: ['user-avatar'],
+    queryFn: getAvatar,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpdateAvatar() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: updateAvatar,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-avatar'] });
+      queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+    },
+  });
+}
+
+export function useDeleteAvatar() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: deleteAvatar,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-avatar'] });
+      queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+    },
+  });
+}
+
+// ============================================================================
 // Export
 // ============================================================================
 
@@ -635,6 +743,11 @@ const userAPI = {
   // Profile completion
   getProfileCompletion,
   recalculateProfileCompletion,
+  
+  // Avatar
+  getAvatar,
+  updateAvatar,
+  deleteAvatar,
 };
 
 export default userAPI;
