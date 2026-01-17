@@ -1,884 +1,520 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
-  MapPin, Calendar, Users, Trophy, Settings, CreditCard, 
-  ChevronRight, Plus, Globe, Clock, Plane, Star, 
-  UserPlus, Mail, Heart, Compass, Check, Sparkles,
-  Coffee, Mountain, Sun
+  MapPin, 
+  Calendar, 
+  Globe, 
+  Settings, 
+  Camera,
+  ChevronRight,
+  Plus,
+  Compass,
+  Star,
+  Clock
 } from 'lucide-react';
-import { Header } from '@/components/Header';
+import TopNav from '@/components/common/TopNav';
+import Footer from '@/components/common/Footer';
+import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useAuth } from '@/lib/auth';
-import { useTripStore } from '@/lib/tripStore';
-import { getDestinationById } from '@/lib/destinations';
+import { useAuth } from '@/contexts/AuthContext';
+import { ROUTES } from '@/config/routes';
+import { cn } from '@/lib/utils';
 
-// Seeded trips data
-const seededTrips = [
-  {
-    id: 'trip-1',
-    destination: 'London',
-    country: 'United Kingdom',
-    dates: 'Oct 28, 2026 - Nov 4, 2026',
-    duration: '8 days',
-    travelers: 2,
-    price: 4850,
-    status: 'upcoming',
-    image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&q=80',
-  },
-  {
-    id: 'trip-2',
-    destination: 'Paris',
-    country: 'France',
-    dates: 'Feb 28, 2026 - Mar 7, 2027',
-    duration: '8 days',
-    travelers: 2,
-    price: 720,
-    status: 'upcoming',
-    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=600&q=80',
-  },
-  {
-    id: 'trip-3',
-    destination: 'London',
-    country: 'United Kingdom',
-    dates: 'Mar 2, 2025 - Mar 10, 2025',
-    duration: '9 days',
-    travelers: 1,
-    price: 3960,
-    status: 'completed',
-    image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&q=80',
-  },
-  {
-    id: 'trip-4',
-    destination: 'London',
-    country: 'United Kingdom',
-    dates: 'Mar 4, 2025 - Mar 16, 2025',
-    duration: '13 days',
-    travelers: 1,
-    price: 6795,
-    status: 'draft',
-    image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&q=80',
-  },
-  {
-    id: 'trip-5',
-    destination: 'London',
-    country: 'United Kingdom',
-    dates: 'Mar 2, 2025 - Mar 16, 2025',
-    duration: '15 days',
-    travelers: 1,
-    price: 6535,
-    status: 'draft',
-    image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&q=80',
-  },
-  {
-    id: 'trip-6',
-    destination: 'London',
-    country: 'United Kingdom',
-    dates: 'Nov 8, 2025 - Mar 12, 2025',
-    duration: '10 days',
-    travelers: 1,
-    price: 6495,
-    status: 'draft',
-    image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&q=80',
-  },
-];
+type TabType = 'overview' | 'trips' | 'preferences';
 
-// Achievements data
-const achievements = [
-  { id: 'first-flight', icon: <Plane className="h-6 w-6" />, title: 'First Flight', desc: 'Book your first trip', unlocked: true },
-  { id: 'globetrotter', icon: <Globe className="h-6 w-6" />, title: 'Globetrotter', desc: 'Visit 5+ countries', unlocked: false },
-  { id: 'early-bird', icon: <Sun className="h-6 w-6" />, title: 'Early Bird', desc: 'Book 30 days ahead', unlocked: false },
-  { id: 'never-say-never', icon: <Heart className="h-6 w-6" />, title: 'Never Say Never', desc: 'Try a new experience', unlocked: false },
-];
-
-// Pricing plans
-const pricingPlans = [
-  {
-    id: 'free',
-    name: 'Free Explorer',
-    price: 'Free',
-    features: [
-      'Basic AI Travel Chat',
-      'Browse Destinations',
-      'View trip Itinerary',
-      '1 Saved Destination',
-      'Email Support',
-    ],
-    notIncluded: ['AI Trip Planning', 'Unlimited Saves', 'Priority Support'],
-    cta: 'Current Plan',
-    current: true,
-  },
-  {
-    id: 'monthly',
-    name: 'Voyage Monthly',
-    price: '$15.00',
-    period: '/month',
-    features: [
-      'Everything in Free',
-      'Unlimited Trips',
-      'Full AI Itineraries',
-      'Unlimited destination saves',
-      'Save & Access Anytime',
-      'Priority assistance',
-      'Access to 7-day free trial',
-    ],
-    cta: 'Upgrade to Voyage Monthly',
-    highlighted: true,
-  },
-  {
-    id: 'annual',
-    name: 'Wanderlust Annual',
-    price: '$120.00',
-    period: '/year',
-    badge: 'Best Value',
-    features: [
-      'Everything in Voyage',
-      'VIP Priority Support',
-      'Early Curated Lists',
-      'Priority Support',
-      'Premium Flights',
-      'Concierge Assistance',
-      'VIP All Access',
-    ],
-    cta: 'Upgrade to Wanderlust Annual',
-  },
-];
-
-type TabId = 'overview' | 'trips' | 'companions' | 'achievements' | 'billing' | 'preferences';
+// Mock data for trips
+const mockTrips = {
+  upcoming: [
+    {
+      id: '1',
+      destination: 'Kyoto, Japan',
+      dates: 'Mar 15 - Mar 22, 2025',
+      status: 'upcoming' as const,
+      image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
+      progress: 85,
+    },
+  ],
+  completed: [
+    {
+      id: '2',
+      destination: 'Santorini, Greece',
+      dates: 'Sep 5 - Sep 12, 2024',
+      status: 'completed' as const,
+      image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400',
+      rating: 5,
+    },
+    {
+      id: '3',
+      destination: 'Barcelona, Spain',
+      dates: 'Jun 10 - Jun 17, 2024',
+      status: 'completed' as const,
+      image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=400',
+      rating: 4,
+    },
+  ],
+  saved: [
+    {
+      id: '4',
+      destination: 'Reykjavik, Iceland',
+      dates: 'Planning...',
+      status: 'draft' as const,
+      image: 'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=400',
+    },
+  ],
+};
 
 export default function Profile() {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>('trips');
-  const [tripFilter, setTripFilter] = useState<'all' | 'upcoming' | 'completed' | 'draft'>('all');
-  const [companionEmail, setCompanionEmail] = useState('');
-  const [travelStyle, setTravelStyle] = useState('relaxed');
-  const [budgetPreference, setbudgetPreference] = useState('Comfort');
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
 
-  // Mock user stats
-  const userStats = {
-    countries: 6,
-    days: 0,
-    saved: 0,
-    planning: 'Planning',
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    navigate(ROUTES.SIGNIN);
+    return null;
+  }
+
+  const stats = {
+    tripsCompleted: 2,
+    countriesVisited: 4,
+    daysOnTheRoad: 21,
+    upcomingTrips: 1,
   };
 
-  const tabs = [
-    { id: 'overview' as TabId, icon: <Compass className="h-4 w-4" />, label: 'Overview' },
-    { id: 'trips' as TabId, icon: <MapPin className="h-4 w-4" />, label: 'My Trips' },
-    { id: 'companions' as TabId, icon: <Users className="h-4 w-4" />, label: 'Companions' },
-    { id: 'achievements' as TabId, icon: <Trophy className="h-4 w-4" />, label: 'Achievements' },
-    { id: 'billing' as TabId, icon: <CreditCard className="h-4 w-4" />, label: 'Billing' },
-    { id: 'preferences' as TabId, icon: <Settings className="h-4 w-4" />, label: 'Preferences' },
-  ];
+  const travelDNA = user?.preferences ? {
+    archetype: user.preferences.style === 'luxury' ? 'Refined Explorer' 
+             : user.preferences.style === 'adventure' ? 'Bold Adventurer'
+             : user.preferences.style === 'cultural' ? 'Culture Seeker'
+             : 'Mindful Traveler',
+    traits: [
+      user.preferences.style,
+      user.preferences.pace,
+      user.preferences.budget,
+    ].filter(Boolean),
+    interests: user.preferences.interests || [],
+  } : null;
 
-  const filteredTrips = tripFilter === 'all' 
-    ? seededTrips 
-    : seededTrips.filter(t => t.status === tripFilter);
+  const tabs = [
+    { id: 'overview' as const, label: 'Overview' },
+    { id: 'trips' as const, label: 'My Trips' },
+    { id: 'preferences' as const, label: 'Preferences' },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="pt-24 pb-16">
-        <div className="container mx-auto px-6 max-w-4xl">
-          {/* Profile Hero Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative rounded-2xl overflow-hidden mb-6"
-          >
-            <div className="absolute inset-0">
-              <img 
-                src="https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=1200&q=80" 
-                alt="Profile background"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/90 to-primary/70" />
+      <Head
+        title={`${user?.name || 'Profile'} | Voyance`}
+        description="Your travel profile, preferences, and trip history."
+      />
+      <TopNav />
+
+      {/* Hero Header */}
+      <section className="relative pt-20">
+        {/* Cover Image */}
+        <div className="h-64 md:h-80 relative overflow-hidden">
+          <img
+            src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920"
+            alt="Cover"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
+        </div>
+
+        {/* Profile Info */}
+        <div className="max-w-5xl mx-auto px-4 -mt-20 relative z-10">
+          <div className="flex flex-col md:flex-row md:items-end gap-6">
+            {/* Avatar */}
+            <div className="relative">
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background bg-muted flex items-center justify-center overflow-hidden">
+                {user?.avatar ? (
+                  <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-4xl md:text-5xl font-display font-medium text-muted-foreground">
+                    {user?.name?.charAt(0) || user?.email?.charAt(0) || 'V'}
+                  </span>
+                )}
+              </div>
+              <button className="absolute bottom-2 right-2 p-2 bg-background border border-border rounded-full shadow-sm hover:bg-muted transition-colors">
+                <Camera className="h-4 w-4 text-muted-foreground" />
+              </button>
             </div>
-            
-            <div className="relative p-8">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-xl font-semibold shrink-0">
-                    {user?.email?.charAt(0).toUpperCase() || 'G'}
-                  </div>
-                  <div className="text-primary-foreground">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs px-2 py-0.5 rounded bg-accent text-accent-foreground font-medium">VOYANCE</span>
-                    </div>
-                    <h1 className="font-serif text-2xl font-semibold">Graham Lightfoot</h1>
-                    <p className="text-primary-foreground/70 text-sm">grahamlightfoot23 • Seasoned Traveler • ✓ Traveler</p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
+
+            {/* Name & Handle */}
+            <div className="flex-1 pb-2">
+              <h1 className="text-2xl md:text-3xl font-display font-semibold text-foreground">
+                {user?.name || 'Traveler'}
+              </h1>
+              <p className="text-muted-foreground">{user?.email}</p>
+              {travelDNA && (
+                <p className="text-sm text-primary font-medium mt-1">
+                  {travelDNA.archetype}
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pb-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link to={ROUTES.PROFILE.EDIT}>
+                  <Settings className="h-4 w-4 mr-2" />
                   Edit Profile
-                </Button>
-              </div>
-
-              <p className="text-primary-foreground/80 text-sm mt-4 max-w-lg">
-                You travel for <span className="text-accent">curiosity</span>, <span className="text-accent">calm</span>, and <span className="text-accent">memorable wellness</span>.
-              </p>
-
-              {/* Stats */}
-              <div className="flex items-center gap-8 mt-6">
-                <div className="text-center">
-                  <p className="text-2xl font-semibold text-primary-foreground">{userStats.countries}</p>
-                  <p className="text-xs text-primary-foreground/60">Countries</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-semibold text-primary-foreground">{userStats.days}</p>
-                  <p className="text-xs text-primary-foreground/60">Days</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-semibold text-primary-foreground">{userStats.saved}</p>
-                  <p className="text-xs text-primary-foreground/60">Saved</p>
-                </div>
-                <div className="text-center">
-                  <span className="px-2 py-1 rounded bg-accent text-accent-foreground text-xs font-medium">{userStats.planning}</span>
-                  <p className="text-xs text-primary-foreground/60 mt-1">Next Adventure</p>
-                </div>
-              </div>
+                </Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link to={ROUTES.START}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Plan Trip
+                </Link>
+              </Button>
             </div>
-          </motion.div>
+          </div>
+        </div>
+      </section>
 
-          {/* Tabs */}
-          <div className="flex flex-wrap gap-2 mb-6">
+      {/* Tab Navigation */}
+      <section className="border-b border-border mt-8">
+        <div className="max-w-5xl mx-auto px-4">
+          <nav className="flex gap-8">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                className={cn(
+                  'py-4 text-sm font-medium border-b-2 transition-colors',
                   activeTab === tab.id
-                    ? 'bg-accent text-accent-foreground'
-                    : 'bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
+                    ? 'border-foreground text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                )}
               >
-                {tab.icon}
                 {tab.label}
               </button>
             ))}
-          </div>
+          </nav>
+        </div>
+      </section>
 
-          {/* Tab Content */}
+      {/* Content */}
+      <main className="max-w-5xl mx-auto px-4 py-12">
+        {activeTab === 'overview' && (
           <motion.div
-            key={activeTab}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
+            className="space-y-12"
           >
-            {/* Overview Tab */}
-            {activeTab === 'overview' && (
-              <div className="space-y-8">
-                {/* Travel DNA Banner */}
-                <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-primary to-primary/80 p-8 text-center">
-                  <div className="absolute inset-0 opacity-20">
-                    <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1200')] bg-cover bg-center" />
-                  </div>
-                  <div className="relative">
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium mb-4">
-                      <Sparkles className="h-3 w-3" />
-                      Discovering Your Travel DNA
-                    </span>
-                    <h2 className="text-xl font-serif text-primary-foreground mb-2">
-                      Welcome to your journey as a <span className="text-accent font-semibold">Explorer</span>
-                    </h2>
-                    <p className="text-primary-foreground/70 text-sm max-w-md mx-auto mb-4">
-                      Your thoughtful responses reveal that you travel for curiosity, new textures, and the thrill of the unknown.
-                    </p>
-                    <div className="flex items-center justify-center gap-8 text-primary-foreground/80 text-xs">
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-accent" />
-                        95% Match
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Globe className="h-3 w-3" />
-                        58% Total traveled more than 20 international trips/year
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Star className="h-3 w-3" />
-                        27% Adventurer
-                      </span>
-                    </div>
-                  </div>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Trips Completed', value: stats.tripsCompleted, icon: Compass },
+                { label: 'Countries Visited', value: stats.countriesVisited, icon: Globe },
+                { label: 'Days Traveling', value: stats.daysOnTheRoad, icon: Calendar },
+                { label: 'Upcoming Trips', value: stats.upcomingTrips, icon: MapPin },
+              ].map((stat) => (
+                <div key={stat.label} className="p-6 bg-muted/30 rounded-lg">
+                  <stat.icon className="h-5 w-5 text-muted-foreground mb-3" />
+                  <p className="text-3xl font-display font-semibold text-foreground">{stat.value}</p>
+                  <p className="text-sm text-muted-foreground">{stat.label}</p>
                 </div>
+              ))}
+            </div>
 
-                {/* Start Your Journey CTA */}
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-                    <MapPin className="h-6 w-6 text-accent" />
+            {/* Travel DNA */}
+            {travelDNA && (
+              <div>
+                <h2 className="text-lg font-semibold text-foreground mb-4">Your Travel DNA</h2>
+                <div className="p-6 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Compass className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">{travelDNA.archetype}</h3>
+                      <p className="text-sm text-muted-foreground">Your travel personality</p>
+                    </div>
                   </div>
-                  <h3 className="font-semibold mb-2">Start Your Journey</h3>
-                  <p className="text-sm text-muted-foreground mb-4 max-w-xs mx-auto">
-                    Begin your unique journey and find this info with Voyance
-                  </p>
-                  <Link to="/start-planning">
-                    <Button variant="accent" size="sm">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Plan Your First Trip
-                    </Button>
-                  </Link>
-                </div>
-
-                {/* Your Travel Journey - Map Section */}
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold">Your Travel Journey</h3>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-green-500" />
-                        6 Countries
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {travelDNA.traits.map((trait) => (
+                      <span key={trait} className="px-3 py-1 bg-background rounded-full text-sm text-muted-foreground capitalize">
+                        {trait}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-accent" />
-                        0 Pending
-                      </span>
-                    </div>
+                    ))}
                   </div>
-
-                  <div className="flex gap-2 mb-4 text-xs">
-                    <button className="px-3 py-1.5 rounded-full bg-accent text-accent-foreground font-medium">
-                      Places
-                    </button>
-                    <button className="px-3 py-1.5 rounded-full bg-secondary text-muted-foreground">
-                      Countries
-                    </button>
-                    <button className="px-3 py-1.5 rounded-full bg-secondary text-muted-foreground">
-                      Experiences
-                    </button>
-                    <button className="px-3 py-1.5 rounded-full bg-secondary text-muted-foreground">
-                      Hours Of
-                    </button>
-                  </div>
-
-                  {/* World Map Visualization */}
-                  <div className="relative aspect-[2/1] rounded-lg overflow-hidden mb-6 bg-muted/30">
-                    <img 
-                      src="https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=1200&q=80" 
-                      alt="World map"
-                      className="w-full h-full object-cover opacity-30"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center text-muted-foreground text-sm">
-                        <Globe className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                        <p>Your travel destinations will appear here</p>
+                  {travelDNA.interests.length > 0 && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Interests</p>
+                      <div className="flex flex-wrap gap-2">
+                        {travelDNA.interests.map((interest) => (
+                          <span key={interest} className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm capitalize">
+                            {interest}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Journey Stats */}
-                  <div className="border-t border-border pt-4">
-                    <p className="text-sm text-muted-foreground mb-4">Your Travel Journey</p>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div className="flex items-center gap-3 justify-center">
-                        <span className="w-3 h-3 rounded-full bg-accent" />
-                        <div className="text-left">
-                          <p className="text-xl font-semibold">0</p>
-                          <p className="text-xs text-muted-foreground">Total Destinations</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 justify-center">
-                        <span className="w-3 h-3 rounded-full bg-green-500" />
-                        <div className="text-left">
-                          <p className="text-xl font-semibold">27</p>
-                          <p className="text-xs text-muted-foreground">No. of Journey</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 justify-center">
-                        <span className="w-3 h-3 rounded-full bg-blue-500" />
-                        <div className="text-left">
-                          <p className="text-xl font-semibold">0</p>
-                          <p className="text-xs text-muted-foreground">Upcoming Trips</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Feature Cards */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center p-6">
-                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center mx-auto mb-3">
-                      <Sparkles className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <h4 className="font-medium text-sm mb-1">Jet Surprise</h4>
-                    <p className="text-xs text-muted-foreground">Let AI plan your perfect trip</p>
-                  </div>
-                  <div className="text-center p-6">
-                    <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
-                      <Compass className="h-5 w-5 text-green-600" />
-                    </div>
-                    <h4 className="font-medium text-sm mb-1">Explore</h4>
-                    <p className="text-xs text-muted-foreground">Discover new destinations</p>
-                  </div>
-                  <div className="text-center p-6">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center mx-auto mb-3">
-                      <Sun className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <h4 className="font-medium text-sm mb-1">Tropicos</h4>
-                    <p className="text-xs text-muted-foreground">Warm weather getaways</p>
-                  </div>
-                </div>
-
-                {/* Profile Completion */}
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                        <Check className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-sm">Profile Completion</h4>
-                        <p className="text-xs text-muted-foreground">Track your account status</p>
-                      </div>
-                    </div>
-                    <span className="text-accent font-semibold">100%</span>
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-2 mb-4">
-                    <div className="bg-accent h-2 rounded-full" style={{ width: '100%' }} />
-                  </div>
-                  <div className="bg-accent/10 rounded-lg p-4 text-center">
-                    <div className="text-3xl mb-2">🎉</div>
-                    <p className="font-medium text-sm text-accent">Your profile is complete!</p>
-                    <p className="text-xs text-muted-foreground">You're all set to start booking and planning</p>
-                  </div>
+                  )}
+                  <Button variant="ghost" size="sm" className="mt-4" asChild>
+                    <Link to={ROUTES.QUIZ}>
+                      Retake Quiz
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Link>
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* My Trips Tab */}
-            {activeTab === 'trips' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="font-semibold">Travel Timeline</h2>
-                    <p className="text-sm text-muted-foreground">Manage your past and future adventures</p>
-                  </div>
-                  <Link to="/trip/new">
-                    <Button variant="accent" size="sm">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add New Trip
-                    </Button>
-                  </Link>
+            {/* Upcoming Trips */}
+            {mockTrips.upcoming.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-foreground">Upcoming Trip</h2>
+                  <Button variant="ghost" size="sm" onClick={() => setActiveTab('trips')}>
+                    View all
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
                 </div>
-
-                {/* Trip Filters */}
-                <div className="flex gap-2">
-                  {(['all', 'upcoming', 'completed', 'draft'] as const).map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setTripFilter(filter)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                        tripFilter === filter
-                          ? 'bg-accent text-accent-foreground'
-                          : 'bg-secondary text-muted-foreground hover:text-foreground'
-                      }`}
+                <div className="grid gap-4">
+                  {mockTrips.upcoming.map((trip) => (
+                    <Link
+                      key={trip.id}
+                      to={`/trip/${trip.id}`}
+                      className="group flex gap-4 p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
                     >
-                      {filter === 'all' ? 'All Trips' : filter.charAt(0).toUpperCase() + filter.slice(1)} ({
-                        filter === 'all' ? seededTrips.length : seededTrips.filter(t => t.status === filter).length
-                      })
-                    </button>
+                      <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                          {trip.destination}
+                        </h3>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                          <Calendar className="h-3 w-3" />
+                          {trip.dates}
+                        </p>
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                            <span>Planning progress</span>
+                            <span>{trip.progress}%</span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${trip.progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
                   ))}
                 </div>
+              </div>
+            )}
 
-                {/* Trip List */}
-                <div className="space-y-4">
-                  {filteredTrips.map((trip) => (
-                    <div
+            {/* Recent Trips */}
+            {mockTrips.completed.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold text-foreground mb-4">Recent Adventures</h2>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {mockTrips.completed.map((trip) => (
+                    <Link
                       key={trip.id}
-                      className="bg-card rounded-xl border border-border overflow-hidden"
+                      to={`/trip/${trip.id}`}
+                      className="group block"
                     >
-                      <div className="h-24 bg-accent/20 relative">
+                      <div className="aspect-[16/10] rounded-lg overflow-hidden mb-3">
                         <img 
                           src={trip.image} 
-                          alt={trip.destination}
-                          className="w-full h-full object-cover"
+                          alt={trip.destination} 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
-                        <span className={`absolute top-3 left-3 px-2 py-0.5 rounded text-xs font-medium ${
-                          trip.status === 'upcoming' ? 'bg-accent text-accent-foreground' :
-                          trip.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          'bg-secondary text-muted-foreground'
-                        }`}>
-                          {trip.status.charAt(0).toUpperCase() + trip.status.slice(1)}
+                      </div>
+                      <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
+                        {trip.destination}
+                      </h3>
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {trip.dates}
                         </span>
+                        {trip.rating && (
+                          <span className="flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                            {trip.rating}
+                          </span>
+                        )}
                       </div>
-                      <div className="p-4">
-                        <h3 className="font-semibold">Trip to {trip.destination}</h3>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                          <MapPin className="h-3 w-3" /> {trip.country} • {trip.dates}
-                        </p>
-                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {trip.duration}</span>
-                          <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {trip.travelers}</span>
-                          <span className="flex items-center gap-1 text-accent font-medium">${trip.price.toLocaleString()}</span>
-                        </div>
-                        <div className="flex gap-2 mt-4">
-                          <Button variant="ghost" size="sm" className="text-xs">View Details</Button>
-                          <Button variant="ghost" size="sm" className="text-xs text-accent">Book & Reserve</Button>
-                        </div>
-                      </div>
-                    </div>
+                    </Link>
                   ))}
-                </div>
-              </div>
-            )}
-
-            {/* Companions Tab */}
-            {activeTab === 'companions' && (
-              <div className="space-y-6">
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <h2 className="font-semibold mb-2">Travel Together</h2>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Connect with your travel companions to plan unforgettable journeys together.
-                  </p>
-                  
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Enter email (e.g., jane@email.com)"
-                        value={companionEmail}
-                        onChange={(e) => setCompanionEmail(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                    <Button variant="accent">
-                      <UserPlus className="h-4 w-4 mr-1" />
-                      Send Invite
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  {[
-                    { icon: <Users className="h-6 w-6" />, count: 0, label: 'Travel Buddies' },
-                    { icon: <Heart className="h-6 w-6" />, count: 0, label: 'Pending' },
-                    { icon: <Sparkles className="h-6 w-6" />, count: 0, label: 'Shared Trips' },
-                  ].map((stat, idx) => (
-                    <div key={idx} className="text-center p-4">
-                      <div className="text-accent mb-2">{stat.icon}</div>
-                      <p className="text-lg font-semibold">{stat.count}</p>
-                      <p className="text-xs text-muted-foreground">{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <h3 className="font-semibold mb-4">Your Travel Network</h3>
-                  <div className="flex items-center justify-center py-8">
-                    <div className="text-center">
-                      <div className="w-16 h-16 rounded-xl border-2 border-dashed border-accent/30 flex items-center justify-center mx-auto mb-2">
-                        <UserPlus className="h-6 w-6 text-accent/50" />
-                      </div>
-                      <p className="text-sm text-muted-foreground">Invite More Friends</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Achievements Tab */}
-            {activeTab === 'achievements' && (
-              <div className="space-y-6">
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <h2 className="font-semibold mb-4">Your Trophy Case</h2>
-                  
-                  <div className="grid grid-cols-4 gap-4">
-                    {achievements.map((achievement) => (
-                      <div
-                        key={achievement.id}
-                        className={`text-center p-4 rounded-xl border ${
-                          achievement.unlocked 
-                            ? 'border-accent/30 bg-accent/5' 
-                            : 'border-border opacity-50'
-                        }`}
-                      >
-                        <div className={`mx-auto mb-2 ${achievement.unlocked ? 'text-accent' : 'text-muted-foreground'}`}>
-                          {achievement.icon}
-                        </div>
-                        <p className="text-sm font-medium">{achievement.title}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="text-center py-8 mt-6">
-                    <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-3">
-                      <Trophy className="h-6 w-6 text-accent/50" />
-                    </div>
-                    <h3 className="font-semibold">Your Journey Begins</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Start traveling to unlock achievements and build your trophy collection!
-                    </p>
-                    <div className="flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">🏆 Complete trips</span>
-                      <span className="flex items-center gap-1">🌍 Visit new destinations</span>
-                      <span className="flex items-center gap-1">⭐ Earn bonus points</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-accent/10 rounded-lg p-4 flex items-center gap-3">
-                    <Sparkles className="h-5 w-5 text-accent" />
-                    <div>
-                      <p className="font-medium text-sm">What's Next?</p>
-                      <p className="text-xs text-muted-foreground">You're close to unlocking these achievements. Keep exploring to earn more trophies!</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Billing Tab */}
-            {activeTab === 'billing' && (
-              <div className="space-y-6">
-                <h2 className="font-semibold">Your Current Plan</h2>
-                
-                <div className="grid md:grid-cols-3 gap-4">
-                  {pricingPlans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className={`bg-card rounded-xl border p-6 relative ${
-                        plan.highlighted ? 'border-accent shadow-md' : 'border-border'
-                      }`}
-                    >
-                      {plan.badge && (
-                        <span className="absolute -top-2 right-4 px-2 py-0.5 rounded bg-red-500 text-white text-xs font-medium">
-                          {plan.badge}
-                        </span>
-                      )}
-                      {plan.highlighted && (
-                        <span className="absolute -top-2 left-4 px-2 py-0.5 rounded bg-accent text-accent-foreground text-xs font-medium">
-                          Most Popular
-                        </span>
-                      )}
-                      
-                      <h3 className="font-semibold">{plan.name}</h3>
-                      <div className="mt-2 mb-4">
-                        <span className="text-2xl font-bold">{plan.price}</span>
-                        {plan.period && <span className="text-sm text-muted-foreground">{plan.period}</span>}
-                      </div>
-
-                      <ul className="space-y-2 mb-6">
-                        {plan.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-sm">
-                            <Check className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-                            <span>{feature}</span>
-                          </li>
-                        ))}
-                        {plan.notIncluded?.map((feature, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground line-through">
-                            <span className="w-4" />
-                            <span>{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-
-                      <Button
-                        variant={plan.current ? 'outline' : plan.highlighted ? 'accent' : 'default'}
-                        className="w-full"
-                        disabled={plan.current}
-                      >
-                        {plan.cta}
-                        {!plan.current && <ChevronRight className="h-4 w-4 ml-1" />}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Single Trip Unlock */}
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold">Single Trip Unlock</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Perfect for one-time travelers. Get full access for a single trip.
-                      </p>
-                      <ul className="mt-3 space-y-1 text-sm">
-                        <li className="flex items-center gap-2"><Check className="h-3 w-3 text-accent" /> Full AI generated itinerary</li>
-                        <li className="flex items-center gap-2"><Check className="h-3 w-3 text-accent" /> Smart booking integration</li>
-                        <li className="flex items-center gap-2"><Check className="h-3 w-3 text-accent" /> Save and modify anytime</li>
-                        <li className="flex items-center gap-2"><Check className="h-3 w-3 text-accent" /> Visitor feature for trip sharing</li>
-                      </ul>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold">$19.99</p>
-                      <p className="text-xs text-muted-foreground">one-time payment</p>
-                      <Button variant="outline" size="sm" className="mt-3">
-                        Unlock Single Trip
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Preferences Tab */}
-            {activeTab === 'preferences' && (
-              <div className="space-y-6">
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="font-semibold">Complete Your Travel Profile</h2>
-                      <p className="text-sm text-muted-foreground">Help us personalize your travel recommendations</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">65% Done</span>
-                  </div>
-
-                  {/* Profile Steps */}
-                  <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-                    {[
-                      { id: 'style', label: 'Travel Style', icon: <Compass className="h-4 w-4" />, active: true },
-                      { id: 'budget', label: 'Budget Preferences', icon: <CreditCard className="h-4 w-4" /> },
-                      { id: 'accommodation', label: 'Accommodation', icon: <Coffee className="h-4 w-4" /> },
-                      { id: 'food', label: 'Food & Dining', icon: <Coffee className="h-4 w-4" /> },
-                      { id: 'accessibility', label: 'Accessibility & Health', icon: <Heart className="h-4 w-4" /> },
-                      { id: 'packing', label: 'Packing Style', icon: <Settings className="h-4 w-4" /> },
-                    ].map((step) => (
-                      <button
-                        key={step.id}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm whitespace-nowrap transition-all ${
-                          step.active
-                            ? 'bg-accent text-accent-foreground'
-                            : 'bg-secondary text-muted-foreground'
-                        }`}
-                      >
-                        {step.icon}
-                        {step.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Travel Style Section */}
-                  <div className="border rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Compass className="h-5 w-5 text-accent" />
-                      <div>
-                        <h3 className="font-semibold">Travel Style</h3>
-                        <p className="text-xs text-muted-foreground">Tell us how you like to travel</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-sm text-muted-foreground mb-2 block">What's your travel pace?</label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[
-                            { id: 'relaxed', icon: <Coffee className="h-4 w-4" />, label: 'Relaxed', desc: 'I like downtime' },
-                            { id: 'moderate', icon: <Mountain className="h-4 w-4" />, label: 'Moderate', desc: 'A mix of activities' },
-                            { id: 'active', icon: <Sun className="h-4 w-4" />, label: 'Active', desc: 'Go, go, go adventure' },
-                          ].map((option) => (
-                            <button
-                              key={option.id}
-                              onClick={() => setTravelStyle(option.id)}
-                              className={`p-3 rounded-lg border text-left transition-all ${
-                                travelStyle === option.id
-                                  ? 'border-accent bg-accent/5'
-                                  : 'border-border hover:border-accent/50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 mb-1">
-                                {option.icon}
-                                <span className="font-medium text-sm">{option.label}</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground">{option.desc}</p>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-sm text-muted-foreground mb-2 block">Budget preference</label>
-                        <select 
-                          value={budgetPreference}
-                          onChange={(e) => setbudgetPreference(e.target.value)}
-                          className="w-full p-2 border border-border rounded-lg bg-background"
-                        >
-                          <option>Budget</option>
-                          <option>Comfort</option>
-                          <option>Luxury</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-sm text-muted-foreground mb-2 block">Estimate daily budget per person</label>
-                        <Input placeholder="$ 0 - 500" />
-                        <p className="text-xs text-muted-foreground mt-1">This helps us recommend experiences within your budget.</p>
-                      </div>
-
-                      <div>
-                        <label className="text-sm text-muted-foreground mb-2 block">Planning preference</label>
-                        <div className="space-y-2">
-                          {[
-                            { icon: '📅', label: 'Structured Itinerary' },
-                            { icon: '🌊', label: 'Flexible schedule' },
-                            { icon: '🎲', label: 'Spontaneous adventure' },
-                          ].map((pref) => (
-                            <div key={pref.label} className="flex items-center gap-2 p-2 rounded-lg border border-border">
-                              <span>{pref.icon}</span>
-                              <span className="text-sm">{pref.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                      <button className="text-sm text-muted-foreground">← Previous</button>
-                      <div className="flex items-center gap-1">
-                        {[1, 2, 3, 4, 5].map((dot) => (
-                          <div key={dot} className={`w-2 h-2 rounded-full ${dot === 1 ? 'bg-accent' : 'bg-border'}`} />
-                        ))}
-                      </div>
-                      <Button variant="accent" size="sm">
-                        Next →
-                      </Button>
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
           </motion.div>
-        </div>
+        )}
+
+        {activeTab === 'trips' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-10"
+          >
+            {/* Upcoming */}
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Upcoming</h2>
+              {mockTrips.upcoming.length > 0 ? (
+                <div className="grid gap-4">
+                  {mockTrips.upcoming.map((trip) => (
+                    <TripCard key={trip.id} trip={trip} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="No upcoming trips" action="Plan a Trip" />
+              )}
+            </div>
+
+            {/* Completed */}
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Completed</h2>
+              {mockTrips.completed.length > 0 ? (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {mockTrips.completed.map((trip) => (
+                    <TripCard key={trip.id} trip={trip} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="No completed trips yet" />
+              )}
+            </div>
+
+            {/* Saved */}
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Saved Ideas</h2>
+              {mockTrips.saved.length > 0 ? (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {mockTrips.saved.map((trip) => (
+                    <TripCard key={trip.id} trip={trip} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="No saved trips" />
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'preferences' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-8"
+          >
+            <PreferenceSection
+              title="Travel Style"
+              items={[
+                { label: 'Primary Style', value: user?.preferences?.style || 'Not set' },
+                { label: 'Travel Pace', value: user?.preferences?.pace || 'Not set' },
+                { label: 'Budget Level', value: user?.preferences?.budget || 'Not set' },
+              ]}
+            />
+            <PreferenceSection
+              title="Accommodation"
+              items={[
+                { label: 'Preferred Type', value: user?.preferences?.accommodation || 'Not set' },
+              ]}
+            />
+            <PreferenceSection
+              title="Interests"
+              items={user?.preferences?.interests?.map(i => ({ label: i, value: '' })) || []}
+              isTags
+            />
+            <div className="pt-4">
+              <Button variant="outline" asChild>
+                <Link to={ROUTES.QUIZ}>
+                  Update Preferences
+                </Link>
+              </Button>
+            </div>
+          </motion.div>
+        )}
       </main>
 
-      {/* Footer */}
-      <footer className="py-12 bg-primary text-primary-foreground">
-        <div className="container mx-auto px-6">
-          <div className="grid md:grid-cols-5 gap-8 mb-8">
-            <div className="md:col-span-2">
-              <span className="font-serif text-xl font-semibold"><span className="text-accent">V</span>oyance</span>
-              <p className="text-sm opacity-70 mt-2">Personalized travel experiences powered by research, not influencers.</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-3">Travel</h4>
-              <ul className="space-y-2 text-sm opacity-70">
-                <li>How It Works</li>
-                <li>Destinations</li>
-                <li>Curated</li>
-                <li>Trips</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-medium mb-3">Destinations</h4>
-              <ul className="space-y-2 text-sm opacity-70">
-                <li>Popular Routes</li>
-                <li>Travel Styles</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-medium mb-3">Help Center</h4>
-              <ul className="space-y-2 text-sm opacity-70">
-                <li>Contact Us</li>
-                <li>FAQ</li>
-                <li>Privacy Policy</li>
-                <li>Terms of Service</li>
-              </ul>
+      <Footer />
+    </div>
+  );
+}
+
+// Helper Components
+function TripCard({ trip }: { trip: { id: string; destination: string; dates: string; image: string; status: string; progress?: number; rating?: number } }) {
+  return (
+    <Link
+      to={`/trip/${trip.id}`}
+      className="group flex gap-4 p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+    >
+      <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
+        <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
+          {trip.destination}
+        </h3>
+        <p className="text-sm text-muted-foreground mt-1">{trip.dates}</p>
+        {trip.status === 'upcoming' && trip.progress !== undefined && (
+          <div className="mt-2">
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full" style={{ width: `${trip.progress}%` }} />
             </div>
           </div>
-          <div className="border-t border-primary-foreground/20 pt-8 text-center text-sm opacity-70">
-            <p>© 2026 Voyance. All rights reserved.</p>
+        )}
+        {trip.status === 'completed' && trip.rating && (
+          <div className="flex items-center gap-1 mt-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star key={i} className={cn('h-3 w-3', i < trip.rating! ? 'fill-amber-400 text-amber-400' : 'text-muted')} />
+            ))}
           </div>
+        )}
+      </div>
+      <ChevronRight className="h-5 w-5 text-muted-foreground self-center" />
+    </Link>
+  );
+}
+
+function EmptyState({ message, action }: { message: string; action?: string }) {
+  return (
+    <div className="text-center py-12 bg-muted/20 rounded-lg">
+      <MapPin className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+      <p className="text-muted-foreground mb-4">{message}</p>
+      {action && (
+        <Button asChild>
+          <Link to={ROUTES.START}>
+            <Plus className="h-4 w-4 mr-2" />
+            {action}
+          </Link>
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function PreferenceSection({ title, items, isTags }: { title: string; items: { label: string; value: string }[]; isTags?: boolean }) {
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">{title}</h3>
+      {isTags ? (
+        <div className="flex flex-wrap gap-2">
+          {items.map((item) => (
+            <span key={item.label} className="px-3 py-1.5 bg-muted rounded-full text-sm capitalize">
+              {item.label}
+            </span>
+          ))}
+          {items.length === 0 && <span className="text-muted-foreground text-sm">None set</span>}
         </div>
-      </footer>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <div key={item.label} className="flex justify-between items-center py-2 border-b border-border">
+              <span className="text-muted-foreground">{item.label}</span>
+              <span className="text-foreground capitalize">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
