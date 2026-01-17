@@ -63,32 +63,3 @@ export const useAuth = create<AuthState>()(
     }
   )
 );
-
-export const useAuth = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      isAuthenticated: false,
-      
-      login: async (email: string) => {
-        // Simulate authentication delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const user: User = {
-          id: crypto.randomUUID(),
-          email,
-          createdAt: new Date().toISOString(),
-        };
-        
-        set({ user, isAuthenticated: true });
-      },
-      
-      logout: () => {
-        set({ user: null, isAuthenticated: false });
-      },
-    }),
-    {
-      name: 'voyance-auth',
-    }
-  )
-);
