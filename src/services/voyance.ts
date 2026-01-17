@@ -199,7 +199,7 @@ export {
   useHowItWorks,
 } from './contentAPI';
 
-// User API (profile, trips, onboarding, avatar)
+// User API (profile, trips, onboarding, avatar, identity, preferences, GDPR)
 export { default as userAPI } from './userAPI';
 export {
   // Types
@@ -212,6 +212,12 @@ export {
   type Achievements,
   type OnboardingStatus,
   type AvatarUpdateResponse,
+  type UserIdentity,
+  type UserIdentityResponse,
+  type UserPreferences,
+  type PreferencesResponse,
+  type GDPRExportResponse,
+  type GDPRDeleteResponse,
   
   // Trip stats
   getTripStats,
@@ -234,6 +240,17 @@ export {
   updateAvatar,
   deleteAvatar,
   
+  // Identity
+  getUserIdentity,
+  
+  // Preferences
+  getUserPreferences,
+  updateUserPreferences,
+  
+  // GDPR
+  exportUserData,
+  deleteUserAccount,
+  
   // React Query hooks
   useTripStats,
   useTripSummary,
@@ -248,6 +265,11 @@ export {
   useAvatar,
   useUpdateAvatar,
   useDeleteAvatar,
+  useUserIdentity,
+  useUserPreferences,
+  useUpdateUserPreferences,
+  useExportUserData,
+  useDeleteUserAccount,
 } from './userAPI';
 
 // Explore API (destinations, airports, photos)
@@ -548,6 +570,74 @@ export {
   useAmadeusConfig,
 } from './flightAPI';
 
+// Hotel Booking API
+export { default as hotelBookingAPI } from './hotelBookingAPI';
+export {
+  // Types
+  type GuestDetails,
+  type CreateBookingInput,
+  type ConfirmBookingInput,
+  type CancelBookingInput,
+  type CheckAvailabilityInput,
+  type ProcessPaymentInput,
+  type RefundPaymentInput,
+  type BookingStatus,
+  type HotelBooking,
+  type BookingResponse,
+  type AvailabilityResponse,
+  type PaymentIntentResponse,
+  
+  // API functions
+  createHotelBooking,
+  confirmHotelBooking,
+  cancelHotelBooking,
+  getHotelBooking,
+  getUserHotelBookings,
+  checkHotelAvailability,
+  createBookingPaymentIntent,
+  processBookingPayment,
+  refundBookingPayment,
+  
+  // React Query hooks
+  useHotelBooking,
+  useUserHotelBookings,
+  useCreateHotelBooking,
+  useConfirmHotelBooking,
+  useCancelHotelBooking,
+  useCheckHotelAvailability,
+  useCreateBookingPaymentIntent,
+  useProcessBookingPayment,
+  useRefundBookingPayment,
+} from './hotelBookingAPI';
+
+// System Health API
+export { default as systemHealthAPI } from './systemHealthAPI';
+export {
+  // Types
+  type BasicHealthResponse,
+  type DatabaseHealth,
+  type AuthenticationHealth,
+  type EnvironmentHealth,
+  type SystemHealthResponse,
+  type UserFlowHealthResponse,
+  type RouteInfo,
+  type RoutesResponse,
+  
+  // API functions
+  getBasicHealth,
+  getSystemHealth,
+  getUserFlowHealth,
+  getRegisteredRoutes,
+  isBackendReachable,
+  getBackendStatus,
+  
+  // React Query hooks
+  useBasicHealth,
+  useSystemHealth,
+  useBackendStatus,
+  useRegisteredRoutes,
+} from './systemHealthAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -571,6 +661,8 @@ import hotelRankingAPI from './hotelRankingAPI';
 import priceLockAPI from './priceLockAPI';
 import tripIntelligenceAPI from './tripIntelligenceAPI';
 import { flightAPI } from './flightAPI';
+import hotelBookingAPI from './hotelBookingAPI';
+import systemHealthAPI from './systemHealthAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -592,6 +684,8 @@ const voyance = {
   priceLock: priceLockAPI,
   tripIntelligence: tripIntelligenceAPI,
   flights: flightAPI,
+  hotelBookings: hotelBookingAPI,
+  systemHealth: systemHealthAPI,
 };
 
 export default voyance;
