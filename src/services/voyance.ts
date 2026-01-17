@@ -1276,6 +1276,70 @@ export {
   useCheckoutAndRedirect,
 } from './checkoutAPI';
 
+// Trip Save/Resume API (aliased to avoid conflicts)
+export {
+  saveTripProgress,
+  resumeTrip,
+  getTripSaveStatus,
+  getSessionStatus,
+  listSavedTrips as listSavedTripProgress,
+  deleteSavedTrip as deleteSavedTripProgress,
+  cleanupSavedTrips,
+  useSaveTripProgress,
+  useResumeTrip,
+  useTripSaveStatus,
+  useSessionStatus,
+  useSavedTrips as useSavedTripProgress,
+  useDeleteSavedTrip as useDeleteSavedTripProgress,
+  useCleanupSavedTrips,
+} from './tripSaveResumeAPI';
+
+// Saved Trips API
+export {
+  saveTrip,
+  unsaveTrip,
+  getSavedTrips as getUserSavedTrips,
+  isTripSaved,
+  bulkCheckSavedStatus,
+  updateSavedTrip,
+  useSaveTrip,
+  useUnsaveTrip,
+  useUserSavedTrips,
+  useTripSavedStatus,
+  useBulkSavedStatus,
+  useUpdateSavedTrip,
+  useToggleTripSave,
+} from './savedTripsAPI';
+
+// Trip Context API
+export * from './tripContextAPI';
+
+// User Billing API
+export * from './userBillingAPI';
+
+// Activities API
+export * from './activitiesAPI';
+
+// Venues API
+export * from './venuesAPI';
+
+// Featured Destinations API
+export * from './featuredDestinationsAPI';
+
+// Price Drift Extended API (aliased to avoid conflicts with priceDriftAPI)
+export {
+  trackPrice as trackPriceExtended,
+  getPriceStatus as getPriceStatusExtended,
+  stopPriceTracking,
+  subscribeToPriceAlerts,
+  useTrackPrice as useTrackPriceExtended,
+  usePriceStatus as usePriceStatusExtended,
+  useStopPriceTracking,
+} from './priceDriftExtendedAPI';
+
+// Audit Logs API
+export * from './auditLogsAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -1330,6 +1394,15 @@ import budgetAPI from './budgetAPI';
 import tripActivitiesAPI from './tripActivitiesAPI';
 import weatherAPI from './weatherAPI';
 import checkoutAPI from './checkoutAPI';
+import * as tripSaveResumeAPI from './tripSaveResumeAPI';
+import * as savedTripsAPIModule from './savedTripsAPI';
+import * as tripContextAPI from './tripContextAPI';
+import * as userBillingAPI from './userBillingAPI';
+import * as activitiesAPI from './activitiesAPI';
+import * as venuesAPI from './venuesAPI';
+import * as featuredDestinationsAPI from './featuredDestinationsAPI';
+import * as priceDriftExtendedAPI from './priceDriftExtendedAPI';
+import * as auditLogsAPI from './auditLogsAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -1382,6 +1455,15 @@ const voyance = {
   tripActivities: tripActivitiesAPI,
   weather: weatherAPI,
   checkout: checkoutAPI,
+  tripSaveResume: tripSaveResumeAPI,
+  savedTrips: savedTripsAPIModule,
+  tripContext: tripContextAPI,
+  billing: userBillingAPI,
+  activities: activitiesAPI,
+  venues: venuesAPI,
+  featuredDestinations: featuredDestinationsAPI,
+  priceDriftExtended: priceDriftExtendedAPI,
+  auditLogs: auditLogsAPI,
 };
 
 export default voyance;
