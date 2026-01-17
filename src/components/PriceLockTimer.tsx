@@ -1,67 +1,128 @@
+import { motion } from 'framer-motion';
+import { Lock, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Timer, AlertTriangle } from 'lucide-react';
-import { getPriceLockRemaining } from '@/lib/trips';
+import { cn } from '@/lib/utils';
 
 interface PriceLockTimerProps {
-  expiresAt?: string;
+  initialTime?: number;
+  expiresAt?: number | string;
   onExpire?: () => void;
+  className?: string;
 }
 
-export function PriceLockTimer({ expiresAt, onExpire }: PriceLockTimerProps) {
-  const [remaining, setRemaining] = useState(() => getPriceLockRemaining(expiresAt));
+export default function PriceLockTimer({
+  initialTime = 900,
+  expiresAt,
+  onExpire,
+  className
+}: PriceLockTimerProps) {
+  const [timeRemaining, setTimeRemaining] = useState(initialTime);
+  const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
-    if (!expiresAt) return;
-    
-    const interval = setInterval(() => {
-      const newRemaining = getPriceLockRemaining(expiresAt);
-      setRemaining(newRemaining);
-      
-      if (newRemaining <= 0) {
-        clearInterval(interval);
+    if (expiresAt) {
+      const expiryTime = typeof expiresAt === 'string' ? new Date(expiresAt).getTime() : expiresAt;
+      const now = Date.now();
+      const remainingTime = Math.floor((expiryTime - now) / 1000);
+      if (remainingTime > 0) {
+        setTimeRemaining(remainingTime);
+      } else {
+        setTimeRemaining(0);
+        setIsExpired(true);
         onExpire?.();
       }
+      return;
+    }
+
+    const savedExpiryTime = localStorage.getItem('priceHoldExpires');
+    if (savedExpiryTime) {
+      const expiryTimestamp = parseInt(savedExpiryTime);
+      const now = Date.now();
+      const remainingTime = Math.floor((expiryTimestamp - now) / 1000);
+      if (remainingTime > 0) {
+        setTimeRemaining(remainingTime);
+      } else {
+        setTimeRemaining(0);
+        setIsExpired(true);
+        onExpire?.();
+      }
+    } else {
+      const expiryTime = Date.now() + initialTime * 1000;
+      localStorage.setItem('priceHoldExpires', expiryTime.toString());
+    }
+  }, [initialTime, expiresAt, onExpire]);
+
+  useEffect(() => {
+    if (isExpired || timeRemaining <= 0) return;
+
+    const interval = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          setIsExpired(true);
+          onExpire?.();
+          localStorage.removeItem('priceHoldExpires');
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [expiresAt, onExpire]);
+  }, [isExpired, onExpire, timeRemaining]);
 
-  if (!expiresAt || remaining <= 0) {
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const getColorScheme = () => {
+    if (isExpired) return 'text-destructive bg-destructive/10 border-destructive/20';
+    if (timeRemaining <= 120) return 'text-orange-600 bg-orange-50 border-orange-200';
+    if (timeRemaining <= 300) return 'text-amber-600 bg-amber-50 border-amber-200';
+    return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+  };
+
+  if (isExpired) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm">
-        <AlertTriangle className="h-4 w-4 text-destructive" />
-        <span className="text-destructive">Prices may have changed — refresh options to see current availability</span>
-      </div>
+      <motion.div
+        className={cn('flex items-center gap-3 p-4 rounded-lg border', getColorScheme(), className)}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="font-medium">Price Lock Expired</p>
+          <p className="text-sm opacity-80">Prices may have changed. Please refresh to see current rates.</p>
+        </div>
+      </motion.div>
     );
   }
 
-  const minutes = Math.floor(remaining / 60);
-  const seconds = remaining % 60;
-  const isUrgent = remaining < 120; // Less than 2 minutes
-
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${
-        isUrgent 
-          ? 'bg-destructive/10 border-destructive/20' 
-          : 'bg-accent/10 border-accent/20'
-      }`}
+    <motion.div
+      className={cn('flex items-center gap-3 p-4 rounded-lg border', getColorScheme(), className)}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
     >
-      <Timer className={`h-5 w-5 ${isUrgent ? 'text-destructive timer-pulse' : 'text-accent'}`} />
+      <Lock className="w-5 h-5 flex-shrink-0" />
       <div className="flex-1">
-        <p className={`text-sm font-medium ${isUrgent ? 'text-destructive' : 'text-foreground'}`}>
-          Price locked for
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Complete booking to guarantee these rates
+        <p className="font-medium">Prices Locked</p>
+        <p className="text-sm opacity-80">
+          Your current prices are guaranteed for the next {formatTime(timeRemaining)}
         </p>
       </div>
-      <div className={`font-mono text-2xl font-bold ${isUrgent ? 'text-destructive' : 'text-accent'}`}>
-        {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+      <div className="text-right">
+        <div className="text-2xl font-bold font-mono">
+          {formatTime(timeRemaining)}
+        </div>
+        <div className="text-xs opacity-80">remaining</div>
       </div>
     </motion.div>
   );
 }
+
+// Named export for backwards compatibility
+export { PriceLockTimer };
