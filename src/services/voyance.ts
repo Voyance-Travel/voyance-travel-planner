@@ -55,7 +55,7 @@ export {
   changePassword,
 } from './voyanceAuth';
 
-// Quiz API Service
+// Quiz API Service (step-based)
 export { default as quizAPI } from './quizAPI';
 export {
   // Types
@@ -91,6 +91,32 @@ export {
   clearLocalQuizData,
 } from './quizAPI';
 
+// Quiz Sections API (section-based alternative)
+export { default as quizSectionsAPI } from './quizSectionsAPI';
+export {
+  // Types
+  type QuizSection,
+  type QuizProgress,
+  type QuizSectionsResponse,
+  type SaveSectionResponse,
+  type ResetQuizResponse,
+  type CompleteQuizResponse,
+  
+  // API functions
+  getQuizSections,
+  saveQuizSection,
+  getQuizProgress,
+  resetQuiz,
+  completeQuizFinal,
+  
+  // React Query hooks
+  useQuizSections,
+  useQuizProgress,
+  useSaveQuizSection,
+  useResetQuiz,
+  useCompleteQuizFinal,
+} from './quizSectionsAPI';
+
 // Diagnostics Service
 export { default as voyanceDiagnostics } from './voyanceDiagnostics';
 export {
@@ -101,6 +127,8 @@ export {
   type NeonAuthDiagnostics,
   type AuthHealthInfo,
   type JwtTestInfo,
+  type SystemTestResult,
+  type QuizFlowTestResult,
   
   // Debug endpoints
   getAuthDebugStatus,
@@ -115,12 +143,57 @@ export {
   checkAuthHealthSimple,
   
   // System test
+  runUserSystemTest,
+  testQuizFlow,
   runSystemTest,
   getSystemTestStatus,
   
   // OAuth debug
   getGoogleOAuthConfig,
 } from './voyanceDiagnostics';
+
+// Connection Risk API
+export { default as connectionRiskAPI } from './connectionRiskAPI';
+export {
+  // Types
+  type FlightInfo,
+  type ConnectionInfo,
+  type RiskAssessmentInput,
+  type RiskLevel,
+  type RiskAssessmentResult,
+  type RiskAssessmentResponse,
+  type RiskyConnectionsResponse,
+  type ConnectionStatsResponse,
+  
+  // API functions
+  assessConnectionRisk,
+  findRiskyConnections,
+  getConnectionStats,
+  getRiskLevelColor,
+  getRiskLevelLabel,
+  
+  // React Query hooks
+  useConnectionStats,
+  useRiskyConnections,
+  useAssessConnectionRisk,
+} from './connectionRiskAPI';
+
+// Content API (static content)
+export { default as contentAPI } from './contentAPI';
+export {
+  // Types
+  type HomeHeroResponse,
+  type FeatureCard,
+  type FeatureCardsResponse,
+  
+  // API functions
+  getHomeHeroImage,
+  getFeatureCards,
+  
+  // React Query hooks
+  useHomeHeroImage,
+  useFeatureCards,
+} from './contentAPI';
 
 // Voyance API (trips, itinerary, preferences)
 export { default as voyanceAPI } from './voyanceAPI';
@@ -131,13 +204,19 @@ export { default as voyanceAPI } from './voyanceAPI';
 
 import voyanceAuth from './voyanceAuth';
 import quizAPI from './quizAPI';
+import quizSectionsAPI from './quizSectionsAPI';
 import voyanceDiagnostics from './voyanceDiagnostics';
+import connectionRiskAPI from './connectionRiskAPI';
+import contentAPI from './contentAPI';
 import voyanceAPI from './voyanceAPI';
 
 const voyance = {
   auth: voyanceAuth,
   quiz: quizAPI,
+  quizSections: quizSectionsAPI,
   diagnostics: voyanceDiagnostics,
+  connections: connectionRiskAPI,
+  content: contentAPI,
   api: voyanceAPI,
 };
 
