@@ -5,6 +5,7 @@ import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 
@@ -69,145 +70,173 @@ export function SignUpForm() {
     try {
       await signup(email, password, name);
       navigate(ROUTES.QUIZ);
-    } catch (err) {
-      setError('Failed to create account. Please try again.');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <motion.form 
-      onSubmit={handleSubmit} 
-      className="space-y-5"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.2 }}
-    >
-      {error && (
-        <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg">
-          {error}
-        </div>
-      )}
+    <div className="space-y-6">
+      {/* Social Login Buttons */}
+      <SocialLoginButtons mode="signup" />
       
-      <div className="space-y-2">
-        <Label htmlFor="name" className="text-slate-700">Full Name</Label>
-        <div className="relative">
-          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-          <Input
-            id="name"
-            type="text"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-          />
+      {/* Divider */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200" />
         </div>
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="email" className="text-slate-700">Email</Label>
-        <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-          <Input
-            id="email"
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-            required
-          />
+        <div className="relative flex justify-center text-sm">
+          <span className="px-4 bg-gradient-to-bl from-white via-rose-50/30 to-amber-50/30 text-slate-500">
+            or sign up with email
+          </span>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="password" className="text-slate-700">Password</Label>
-        <div className="relative">
-          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-          <Input
-            id="password"
-            type={showPassword ? 'text' : 'password'}
-            placeholder="Create a password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="pl-10 pr-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-            required
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+      {/* Email/Password Form */}
+      <motion.form 
+        onSubmit={handleSubmit} 
+        className="space-y-5"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+      >
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 text-sm text-red-600 bg-red-50 rounded-lg"
           >
-            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-          </button>
+            {error}
+          </motion.div>
+        )}
+        
+        <div className="space-y-2">
+          <Label htmlFor="name" className="text-slate-700">Full Name</Label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <Input
+              id="name"
+              type="text"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
+            />
+          </div>
         </div>
         
-        {/* Password strength indicator */}
-        {password && (
-          <div className="space-y-2 pt-2">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-300 ${passwordStrength.color}`}
-                  style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
-                />
-              </div>
-              <span className="text-xs text-slate-500">{passwordStrength.label}</span>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-1">
-              {passwordRequirements.map((req, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-xs">
-                  {req.met ? (
-                    <Check className="h-3 w-3 text-green-500" />
-                  ) : (
-                    <X className="h-3 w-3 text-slate-300" />
-                  )}
-                  <span className={req.met ? 'text-slate-600' : 'text-slate-400'}>
-                    {req.text}
-                  </span>
-                </div>
-              ))}
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="email" className="text-slate-700">Email</Label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <Input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
+              required
+            />
           </div>
-        )}
-      </div>
+        </div>
 
-      <Button 
-        type="submit" 
-        className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-medium"
-        disabled={isLoading}
-      >
-        {isLoading ? (
-          <span className="flex items-center gap-2">
-            <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-            Creating account...
-          </span>
-        ) : (
-          <span className="flex items-center gap-2">
-            Create account
-            <ArrowRight className="h-4 w-4" />
-          </span>
-        )}
-      </Button>
+        <div className="space-y-2">
+          <Label htmlFor="password" className="text-slate-700">Password</Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <Input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Create a password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pl-10 pr-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
+          </div>
+          
+          {/* Password strength indicator */}
+          {password && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-2 pt-2"
+            >
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(passwordStrength.score / 5) * 100}%` }}
+                    className={`h-full transition-colors duration-300 ${passwordStrength.color}`}
+                  />
+                </div>
+                <span className="text-xs text-slate-500">{passwordStrength.label}</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-1">
+                {passwordRequirements.map((req, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs">
+                    {req.met ? (
+                      <Check className="h-3 w-3 text-green-500" />
+                    ) : (
+                      <X className="h-3 w-3 text-slate-300" />
+                    )}
+                    <span className={req.met ? 'text-slate-600' : 'text-slate-400'}>
+                      {req.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </div>
 
-      <p className="text-center text-sm text-slate-600">
-        Already have an account?{' '}
-        <Link 
-          to={ROUTES.SIGNIN} 
-          className="font-medium text-slate-900 hover:underline"
+        <Button 
+          type="submit" 
+          className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-medium"
+          disabled={isLoading}
         >
-          Sign in
-        </Link>
-      </p>
-      
-      <p className="text-center text-xs text-slate-400 pt-4">
-        By creating an account, you agree to our{' '}
-        <Link to={ROUTES.TERMS} className="underline hover:text-slate-600">Terms</Link>
-        {' '}and{' '}
-        <Link to={ROUTES.PRIVACY} className="underline hover:text-slate-600">Privacy Policy</Link>
-      </p>
-    </motion.form>
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              Creating account...
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              Create account
+              <ArrowRight className="h-4 w-4" />
+            </span>
+          )}
+        </Button>
+
+        <p className="text-center text-sm text-slate-600">
+          Already have an account?{' '}
+          <Link 
+            to={ROUTES.SIGNIN} 
+            className="font-medium text-slate-900 hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
+        
+        <p className="text-center text-xs text-slate-400 pt-4">
+          By creating an account, you agree to our{' '}
+          <Link to={ROUTES.TERMS} className="underline hover:text-slate-600">Terms</Link>
+          {' '}and{' '}
+          <Link to={ROUTES.PRIVACY} className="underline hover:text-slate-600">Privacy Policy</Link>
+        </p>
+      </motion.form>
+    </div>
   );
 }

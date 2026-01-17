@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { QuizProgress } from '@/components/quiz/QuizProgress';
+import { QuizOption } from '@/components/quiz/QuizOption';
+import { QuizCompletion } from '@/components/quiz/QuizCompletion';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
-import { cn } from '@/lib/utils';
 
 const questions = [
   {
     id: 'style',
     title: 'What\'s your travel style?',
     subtitle: 'Choose the option that best describes you',
+    shortTitle: 'Style',
     options: [
       { value: 'luxury', label: 'Luxury', description: 'Five-star hotels, fine dining, first-class everything' },
       { value: 'adventure', label: 'Adventure', description: 'Off the beaten path, unique experiences' },
@@ -26,6 +28,7 @@ const questions = [
     id: 'budget',
     title: 'What\'s your typical travel budget?',
     subtitle: 'Per person, per trip',
+    shortTitle: 'Budget',
     options: [
       { value: 'budget', label: 'Budget', description: 'Under $1,000' },
       { value: 'moderate', label: 'Moderate', description: '$1,000 - $3,000' },
@@ -37,6 +40,7 @@ const questions = [
     id: 'pace',
     title: 'What pace do you prefer?',
     subtitle: 'How packed should your days be?',
+    shortTitle: 'Pace',
     options: [
       { value: 'slow', label: 'Slow & Easy', description: '1-2 activities per day, lots of free time' },
       { value: 'moderate', label: 'Balanced', description: 'Mix of planned activities and downtime' },
@@ -47,6 +51,7 @@ const questions = [
     id: 'interests',
     title: 'What interests you most?',
     subtitle: 'Select all that apply',
+    shortTitle: 'Interests',
     multiSelect: true,
     options: [
       { value: 'food', label: 'Food & Wine', description: 'Local cuisine, fine dining, food tours' },
@@ -61,6 +66,7 @@ const questions = [
     id: 'accommodation',
     title: 'Where do you like to stay?',
     subtitle: 'Your preferred accommodation type',
+    shortTitle: 'Stay',
     options: [
       { value: 'hotel', label: 'Hotels', description: 'Traditional hotels and resorts' },
       { value: 'boutique', label: 'Boutique', description: 'Unique, design-forward properties' },
@@ -73,11 +79,12 @@ const questions = [
 export default function Quiz() {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  const [isComplete, setIsComplete] = useState(false);
   const { setPreferences } = useAuth();
   const navigate = useNavigate();
 
   const question = questions[currentStep];
-  const progress = ((currentStep + 1) / questions.length) * 100;
+  const stepTitles = questions.map(q => q.shortTitle);
 
   const handleSelect = (value: string) => {
     if (question.multiSelect) {
@@ -119,7 +126,7 @@ export default function Quiz() {
         interests: answers.interests as string[],
         accommodation: answers.accommodation as string,
       });
-      navigate(ROUTES.PROFILE.VIEW);
+      setIsComplete(true);
     }
   };
 
@@ -127,6 +134,10 @@ export default function Quiz() {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  const handleComplete = () => {
+    navigate(ROUTES.PROFILE.VIEW);
   };
 
   return (
@@ -137,82 +148,110 @@ export default function Quiz() {
       />
       
       <div className="min-h-screen pt-20 pb-8 flex flex-col">
-        {/* Progress */}
-        <div className="max-w-2xl mx-auto w-full px-4 mb-8">
-          <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
-            <span>Question {currentStep + 1} of {questions.length}</span>
-            <span>{Math.round(progress)}% complete</span>
-          </div>
-          <Progress value={progress} className="h-2" />
-        </div>
-        
-        {/* Question */}
-        <div className="flex-1 flex items-center justify-center px-4">
-          <AnimatePresence mode="wait">
+        {/* Show completion screen or quiz */}
+        <AnimatePresence mode="wait">
+          {isComplete ? (
             <motion.div
-              key={question.id}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="max-w-2xl w-full"
+              key="completion"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
             >
-              <div className="text-center mb-8">
-                <h1 className="text-3xl font-display font-bold text-foreground mb-2">
-                  {question.title}
-                </h1>
-                <p className="text-muted-foreground">{question.subtitle}</p>
+              <QuizCompletion onContinue={handleComplete} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="quiz"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex flex-col"
+            >
+              {/* Progress */}
+              <div className="px-4 mb-8">
+                <QuizProgress
+                  currentStep={currentStep}
+                  totalSteps={questions.length}
+                  stepTitles={stepTitles}
+                />
               </div>
               
-              <div className="grid gap-3">
-                {question.options.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handleSelect(option.value)}
-                    className={cn(
-                      'p-4 rounded-xl border-2 text-left transition-all',
-                      isSelected(option.value)
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    )}
+              {/* Question */}
+              <div className="flex-1 flex items-center justify-center px-4">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={question.id}
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -50 }}
+                    transition={{ 
+                      type: 'spring',
+                      stiffness: 300,
+                      damping: 30
+                    }}
+                    className="max-w-2xl w-full"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-foreground">{option.label}</div>
-                        <div className="text-sm text-muted-foreground">{option.description}</div>
-                      </div>
-                      {isSelected(option.value) && (
-                        <Check className="h-5 w-5 text-primary" />
-                      )}
+                    {/* Question header */}
+                    <motion.div 
+                      className="text-center mb-8"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      <h1 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-3">
+                        {question.title}
+                      </h1>
+                      <p className="text-muted-foreground text-lg">{question.subtitle}</p>
+                    </motion.div>
+                    
+                    {/* Options */}
+                    <div className="grid gap-3">
+                      {question.options.map((option, index) => (
+                        <QuizOption
+                          key={option.value}
+                          value={option.value}
+                          label={option.label}
+                          description={option.description}
+                          isSelected={isSelected(option.value)}
+                          onSelect={handleSelect}
+                          index={index}
+                        />
+                      ))}
                     </div>
-                  </button>
-                ))}
+                  </motion.div>
+                </AnimatePresence>
               </div>
+              
+              {/* Navigation */}
+              <motion.div 
+                className="max-w-2xl mx-auto w-full px-4 mt-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <div className="flex justify-between">
+                  <Button
+                    variant="outline"
+                    onClick={handleBack}
+                    disabled={currentStep === 0}
+                    className="gap-2 h-12 px-6"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                  <Button
+                    onClick={handleNext}
+                    disabled={!canProceed()}
+                    className="gap-2 h-12 px-8 bg-primary hover:bg-primary/90"
+                  >
+                    {currentStep === questions.length - 1 ? 'Complete' : 'Continue'}
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </motion.div>
             </motion.div>
-          </AnimatePresence>
-        </div>
-        
-        {/* Navigation */}
-        <div className="max-w-2xl mx-auto w-full px-4 mt-8">
-          <div className="flex justify-between">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={currentStep === 0}
-              className="gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-            <Button
-              onClick={handleNext}
-              disabled={!canProceed()}
-              className="gap-2"
-            >
-              {currentStep === questions.length - 1 ? 'Complete' : 'Next'}
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+          )}
+        </AnimatePresence>
       </div>
     </MainLayout>
   );
