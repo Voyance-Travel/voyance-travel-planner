@@ -199,7 +199,7 @@ export {
   useHowItWorks,
 } from './contentAPI';
 
-// User API (profile, trips, onboarding)
+// User API (profile, trips, onboarding, avatar)
 export { default as userAPI } from './userAPI';
 export {
   // Types
@@ -211,6 +211,7 @@ export {
   type TripMilestones,
   type Achievements,
   type OnboardingStatus,
+  type AvatarUpdateResponse,
   
   // Trip stats
   getTripStats,
@@ -228,6 +229,11 @@ export {
   completeProfileGuide,
   trackMilestone,
   
+  // Avatar
+  getAvatar,
+  updateAvatar,
+  deleteAvatar,
+  
   // React Query hooks
   useTripStats,
   useTripSummary,
@@ -239,6 +245,9 @@ export {
   useOnboardingStatus,
   useCompleteProfileGuide,
   useTrackMilestone,
+  useAvatar,
+  useUpdateAvatar,
+  useDeleteAvatar,
 } from './userAPI';
 
 // Explore API (destinations, airports, photos)
@@ -477,6 +486,68 @@ export {
   useCancelPriceLock,
 } from './priceLockAPI';
 
+// Trip Intelligence API
+export { default as tripIntelligenceAPI } from './tripIntelligenceAPI';
+export {
+  // Types
+  type InsightType,
+  type TripEventType,
+  type BudgetInsight,
+  type PreferenceWeight,
+  type Disruption,
+  type AirportOption,
+  type TripIntelligence,
+  type TripIntelligenceResponse,
+  type BudgetActionInput,
+  type DisruptionActionInput,
+  
+  // API functions
+  getTripIntelligence,
+  refreshTripIntelligence,
+  getTripBudget,
+  performBudgetAction,
+  getTripDisruptions,
+  handleDisruption,
+  
+  // React Query hooks
+  useTripIntelligence,
+  useRefreshTripIntelligence,
+  useTripBudget,
+  useBudgetAction,
+  useTripDisruptions,
+  useHandleDisruption,
+} from './tripIntelligenceAPI';
+
+// Flight API (with holds and Amadeus config)
+export { flightAPI } from './flightAPI';
+export {
+  // Types
+  type FlightSegment,
+  type FlightPassengers,
+  type FlightPrice,
+  type FlightBaggage,
+  type FlightPriceLock,
+  type FlightSearchParams,
+  type FlightOption,
+  type FlightSearchResponse,
+  type FlightHoldInput,
+  type FlightHoldResponse,
+  
+  // API functions
+  searchFlights,
+  getFlightDetails,
+  createFlightHold,
+  releaseFlightHold,
+  getAmadeusConfig,
+  
+  // React Query hooks
+  useFlightSearch,
+  useFlightDetails,
+  useCreateFlightHold,
+  useReleaseFlightHold,
+  useAmadeusConfig,
+} from './flightAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -498,6 +569,8 @@ import multiCityAPI from './multiCityAPI';
 import flightRankingAPI from './flightRankingAPI';
 import hotelRankingAPI from './hotelRankingAPI';
 import priceLockAPI from './priceLockAPI';
+import tripIntelligenceAPI from './tripIntelligenceAPI';
+import { flightAPI } from './flightAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -517,6 +590,8 @@ const voyance = {
   flightRanking: flightRankingAPI,
   hotelRanking: hotelRankingAPI,
   priceLock: priceLockAPI,
+  tripIntelligence: tripIntelligenceAPI,
+  flights: flightAPI,
 };
 
 export default voyance;
