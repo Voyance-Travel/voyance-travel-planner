@@ -36,6 +36,7 @@ import Quiz from "./pages/Quiz";
 // Pages - Profile
 import Profile from "./pages/Profile";
 import ProfileEdit from "./pages/ProfileEdit";
+import Settings from "./pages/Settings";
 
 // Pages - Trip Planning
 import Planner from "./pages/planner/Planner";
@@ -111,6 +112,11 @@ const App = () => (
                 <Route path="/profile/edit" element={
                   <ProtectedRoute>
                     <ProfileEdit />
+                  </ProtectedRoute>
+                } />
+                <Route path="/profile/settings" element={
+                  <ProtectedRoute>
+                    <Settings />
                   </ProtectedRoute>
                 } />
                 
