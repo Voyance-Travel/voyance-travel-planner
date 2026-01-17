@@ -529,6 +529,89 @@ export function useTrackMilestone() {
 }
 
 // ============================================================================
+// Profile Completion API
+// ============================================================================
+
+export interface ProfileCompletionSection {
+  name: string;
+  weight: number;
+  completed: boolean;
+  progress: number;
+}
+
+export interface ProfileCompletion {
+  percentage: number;
+  sections: ProfileCompletionSection[];
+  nextStep?: string;
+  isComplete: boolean;
+}
+
+/**
+ * Get profile completion status
+ */
+export async function getProfileCompletion(): Promise<{
+  success: boolean;
+  completion?: ProfileCompletion;
+  error?: string;
+}> {
+  try {
+    const response = await apiRequest<{ success: boolean; completion: ProfileCompletion }>('/api/v1/user/profile/completion', { method: 'GET' });
+    return response;
+  } catch (error) {
+    console.error('[UserAPI] Get profile completion error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get profile completion',
+    };
+  }
+}
+
+/**
+ * Force recalculate profile completion
+ */
+export async function recalculateProfileCompletion(): Promise<{
+  success: boolean;
+  completion?: ProfileCompletion;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const response = await apiRequest<{
+      success: boolean;
+      completion: ProfileCompletion;
+      message: string;
+    }>('/api/v1/user/profile/completion/recalculate', { method: 'POST' });
+    return response;
+  } catch (error) {
+    console.error('[UserAPI] Recalculate profile completion error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to recalculate profile completion',
+    };
+  }
+}
+
+// Profile Completion Hooks
+export function useProfileCompletion() {
+  return useQuery({
+    queryKey: ['profile-completion'],
+    queryFn: getProfileCompletion,
+    staleTime: 60_000,
+  });
+}
+
+export function useRecalculateProfileCompletion() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: recalculateProfileCompletion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile-completion'] });
+    },
+  });
+}
+
+// ============================================================================
 // Export
 // ============================================================================
 
@@ -548,6 +631,10 @@ const userAPI = {
   getOnboardingStatus,
   completeProfileGuide,
   trackMilestone,
+  
+  // Profile completion
+  getProfileCompletion,
+  recalculateProfileCompletion,
 };
 
 export default userAPI;

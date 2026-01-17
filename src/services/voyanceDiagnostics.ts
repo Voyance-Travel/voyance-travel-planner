@@ -469,6 +469,129 @@ export async function getGoogleOAuthConfig(): Promise<{
 }
 
 // ============================================================================
+// Frontend-Backend Audit Endpoints
+// ============================================================================
+
+export interface SchemaComparisonAudit {
+  timestamp: string;
+  '1_BACKEND_ACTUAL_RESPONSE': {
+    description: string;
+    structure: {
+      user: { hasData: boolean; fields: string[]; sampleData: unknown };
+      profile: { isNull: boolean; value: unknown };
+      quizStatus: { hasData: boolean; fields: string[]; sampleData: unknown };
+      travelDna: { hasData: boolean; fields: string[]; sampleData: unknown };
+    };
+  };
+  '2_FRONTEND_SHOULD_USE': Record<string, unknown>;
+  '3_FRONTEND_CURRENT_BEHAVIOR': Record<string, unknown>;
+  '4_EXACT_CODE_CHANGES': Record<string, unknown>;
+  '5_VALIDATION_CHECKLIST': Record<string, boolean>;
+  '6_COMMON_FRONTEND_MISTAKES': string[];
+  '7_DEBUG_STEPS': string[];
+}
+
+export interface FrontendTestData {
+  instruction: string;
+  testData: {
+    user: { displayName: string; name: string };
+    profile: null;
+    quizStatus: { hasCompleted: boolean; wrongField: boolean };
+    travelDna: { primaryArchetype: string; wrongField: string };
+  };
+  correctCode: string;
+  whatYouShouldSee: Record<string, string>;
+}
+
+/**
+ * Get schema comparison audit for frontend debugging
+ */
+export async function getSchemaComparisonAudit(): Promise<SchemaComparisonAudit | { error: string }> {
+  try {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${BACKEND_URL}/api/v1/debug/audit/schema-comparison`, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+    return response.json();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Audit failed' };
+  }
+}
+
+/**
+ * Get frontend test data for field verification
+ */
+export async function getFrontendTestData(): Promise<FrontendTestData | { error: string }> {
+  try {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${BACKEND_URL}/api/v1/debug/audit/frontend-test`, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+    return response.json();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Test data fetch failed' };
+  }
+}
+
+// ============================================================================
+// Dev Tools Endpoints
+// ============================================================================
+
+export interface RateLimitStatus {
+  userId: string;
+  rateLimitActive: boolean;
+  limits: Record<string, {
+    value: string | null;
+    ttl: number;
+    expiresIn: string;
+  }>;
+}
+
+export interface ClearRateLimitResponse {
+  success: boolean;
+  message: string;
+  clearedKeys: number;
+}
+
+/**
+ * Clear rate limit for current user (dev only)
+ */
+export async function clearRateLimit(): Promise<ClearRateLimitResponse | { error: string }> {
+  try {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${BACKEND_URL}/api/v1/dev/clear-rate-limit`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+    });
+    return response.json();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Clear rate limit failed' };
+  }
+}
+
+/**
+ * Get rate limit status for current user (dev only)
+ */
+export async function getRateLimitStatus(): Promise<RateLimitStatus | { error: string }> {
+  try {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${BACKEND_URL}/api/v1/dev/rate-limit-status`, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+    return response.json();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Rate limit status failed' };
+  }
+}
+
+// ============================================================================
 // Export
 // ============================================================================
 
@@ -493,6 +616,14 @@ const voyanceDiagnostics = {
   
   // OAuth debug
   getGoogleOAuthConfig,
+  
+  // Frontend-backend audit
+  getSchemaComparisonAudit,
+  getFrontendTestData,
+  
+  // Dev tools
+  clearRateLimit,
+  getRateLimitStatus,
 };
 
 export default voyanceDiagnostics;
