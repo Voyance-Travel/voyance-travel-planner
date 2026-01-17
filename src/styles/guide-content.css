@@ -1,0 +1,141 @@
+/* 
+  Guide Content Styling
+  Additional styles for markdown content in travel guides
+*/
+
+.guide-content .prose {
+  @apply max-w-none;
+}
+
+/* Headings */
+.guide-content h1 {
+  @apply text-4xl font-bold mb-6 mt-10 text-foreground leading-tight;
+}
+
+.guide-content h2 {
+  @apply text-3xl font-bold mb-5 mt-8 text-foreground leading-tight;
+}
+
+.guide-content h3 {
+  @apply text-2xl font-bold mb-4 mt-6 text-foreground leading-tight;
+}
+
+.guide-content h4 {
+  @apply text-xl font-bold mb-3 mt-5 text-foreground leading-tight;
+}
+
+.guide-content h5 {
+  @apply text-lg font-bold mb-2 mt-4 text-foreground leading-tight;
+}
+
+.guide-content h6 {
+  @apply text-base font-bold mb-2 mt-3 text-foreground leading-tight;
+}
+
+/* Paragraphs */
+.guide-content p {
+  @apply text-muted-foreground mb-5 leading-relaxed text-lg;
+}
+
+/* Lists */
+.guide-content ul,
+.guide-content ol {
+  @apply mb-5 pl-6 space-y-2;
+}
+
+.guide-content li {
+  @apply text-muted-foreground leading-relaxed text-lg;
+}
+
+.guide-content ul li {
+  @apply list-disc;
+}
+
+.guide-content ol li {
+  @apply list-decimal;
+}
+
+/* Blockquotes */
+.guide-content blockquote {
+  @apply border-l-4 border-primary/20 pl-4 italic my-6 py-1 text-muted-foreground;
+}
+
+/* Links */
+.guide-content a {
+  @apply text-primary hover:text-primary/80 underline;
+}
+
+/* Code blocks */
+.guide-content pre {
+  @apply bg-muted p-4 rounded-md overflow-x-auto my-6;
+}
+
+.guide-content code {
+  @apply font-mono text-sm bg-muted px-1 py-0.5 rounded;
+}
+
+.guide-content pre code {
+  @apply bg-transparent p-0;
+}
+
+/* Tables */
+.guide-content table {
+  @apply w-full border-collapse my-6;
+}
+
+.guide-content th {
+  @apply bg-muted p-2 border border-border font-semibold text-left;
+}
+
+.guide-content td {
+  @apply p-2 border border-border;
+}
+
+/* Images */
+.guide-content img {
+  @apply max-w-full h-auto rounded-lg my-6 mx-auto shadow-md;
+}
+
+/* Horizontal rules */
+.guide-content hr {
+  @apply my-8 border-t border-border;
+}
+
+/* Special sections like tips, warnings, etc. */
+.guide-content .tip,
+.guide-content .note,
+.guide-content .warning {
+  @apply p-4 my-6 rounded-lg;
+}
+
+.guide-content .tip {
+  @apply bg-blue-50 border-l-4 border-blue-500 dark:bg-blue-950/20;
+}
+
+.guide-content .note {
+  @apply bg-muted border-l-4 border-border;
+}
+
+.guide-content .warning {
+  @apply bg-amber-50 border-l-4 border-amber-500 dark:bg-amber-950/20;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .guide-content h1 {
+    @apply text-3xl;
+  }
+
+  .guide-content h2 {
+    @apply text-2xl;
+  }
+
+  .guide-content h3 {
+    @apply text-xl;
+  }
+
+  .guide-content p,
+  .guide-content li {
+    @apply text-base;
+  }
+}
