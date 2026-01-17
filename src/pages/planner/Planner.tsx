@@ -1,19 +1,210 @@
-import MainLayout from '@/components/layout/MainLayout';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import Head from '@/components/common/Head';
-import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import TopNav from '@/components/common/TopNav';
+import Footer from '@/components/common/Footer';
+import PlannerHeader from '@/components/planner/PlannerHeader';
+import TripSetup from '@/components/planner/steps/TripSetup';
+import FlightSelection from '@/components/planner/steps/FlightSelection';
+import HotelSelection from '@/components/planner/steps/HotelSelection';
+import ItineraryPreview from '@/components/planner/steps/ItineraryPreview';
+import { scrollToTop } from '@/utils/scrollUtils';
+
+type PlannerStep = 'setup' | 'flights' | 'hotels' | 'itinerary';
+
+interface PlannerFormData {
+  destination: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  travelers: number;
+  departureCity: string;
+  selectedDepartureFlight: string | null;
+  selectedReturnFlight: string | null;
+  selectedHotel: string | null;
+}
+
+const initialFormData: PlannerFormData = {
+  destination: '',
+  name: '',
+  startDate: '',
+  endDate: '',
+  travelers: 2,
+  departureCity: '',
+  selectedDepartureFlight: null,
+  selectedReturnFlight: null,
+  selectedHotel: null,
+};
+
+const STEPS = [
+  { title: 'Trip Details', description: 'Set up your trip basics' },
+  { title: 'Flights', description: 'Choose your flights' },
+  { title: 'Hotels', description: 'Select accommodation' },
+  { title: 'Itinerary', description: 'Review your trip' },
+];
 
 export default function Planner() {
-  const { state } = useTripPlanner();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [currentStep, setCurrentStep] = useState<PlannerStep>('setup');
+  const [formData, setFormData] = useState<PlannerFormData>(initialFormData);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Initialize from URL params or localStorage
+  useEffect(() => {
+    const destination = searchParams.get('destination');
+    const savedTrip = localStorage.getItem('voyance-current-trip');
+
+    let initialData = { ...initialFormData };
+
+    if (savedTrip) {
+      try {
+        const parsed = JSON.parse(savedTrip);
+        initialData = { ...initialData, ...parsed };
+      } catch (e) {
+        console.error('Failed to parse saved trip:', e);
+      }
+    }
+
+    if (destination) {
+      initialData.destination = destination;
+    }
+
+    setFormData(initialData);
+  }, [searchParams]);
+
+  // Save form data to localStorage
+  useEffect(() => {
+    if (formData.destination || formData.name) {
+      localStorage.setItem('voyance-current-trip', JSON.stringify(formData));
+    }
+  }, [formData]);
+
+  const updateFormData = (updates: Partial<PlannerFormData>) => {
+    setFormData((prev) => ({ ...prev, ...updates }));
+  };
+
+  const getStepIndex = (step: PlannerStep): number => {
+    const steps: PlannerStep[] = ['setup', 'flights', 'hotels', 'itinerary'];
+    return steps.indexOf(step);
+  };
+
+  const handleStepComplete = (step: PlannerStep) => {
+    scrollToTop();
+
+    switch (step) {
+      case 'setup':
+        setCurrentStep('flights');
+        break;
+      case 'flights':
+        setCurrentStep('hotels');
+        break;
+      case 'hotels':
+        setCurrentStep('itinerary');
+        break;
+      case 'itinerary':
+        handleTripSubmission();
+        break;
+    }
+  };
+
+  const handleBack = () => {
+    scrollToTop();
+
+    switch (currentStep) {
+      case 'flights':
+        setCurrentStep('setup');
+        break;
+      case 'hotels':
+        setCurrentStep('flights');
+        break;
+      case 'itinerary':
+        setCurrentStep('hotels');
+        break;
+    }
+  };
+
+  const handleTripSubmission = async () => {
+    setIsLoading(true);
+
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Clear saved trip data
+      localStorage.removeItem('voyance-current-trip');
+
+      // Create a mock trip ID
+      const tripId = crypto.randomUUID();
+
+      toast.success('Trip created successfully!');
+      navigate(`/trip/${tripId}`);
+    } catch (error) {
+      console.error('Failed to create trip:', error);
+      toast.error('Failed to create trip. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <MainLayout>
-      <Head title="Trip Planner | Voyance" />
-      <section className="pt-24 pb-16">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h1 className="text-3xl font-bold mb-4">Trip Planner</h1>
-          <p className="text-muted-foreground">Planning trip to: {state.basics.destination || 'Not selected'}</p>
-          <p className="text-sm text-muted-foreground mt-8">Full planner flow coming soon...</p>
-        </div>
-      </section>
-    </MainLayout>
+    <div className="min-h-screen bg-slate-50">
+      <Head
+        title="Trip Planner | Voyance"
+        description="Plan your perfect trip with Voyance's intelligent trip planner"
+      />
+
+      <TopNav />
+
+      <PlannerHeader activeStep={getStepIndex(currentStep)} steps={STEPS} />
+
+      <main className="container mx-auto px-4 py-12 max-w-6xl">
+        {currentStep === 'setup' && (
+          <TripSetup
+            formData={formData}
+            updateFormData={updateFormData}
+            onContinue={() => handleStepComplete('setup')}
+          />
+        )}
+
+        {currentStep === 'flights' && (
+          <FlightSelection
+            formData={formData}
+            selectedDeparture={formData.selectedDepartureFlight}
+            selectedReturn={formData.selectedReturnFlight}
+            onSelectDeparture={(id) =>
+              updateFormData({ selectedDepartureFlight: id })
+            }
+            onSelectReturn={(id) =>
+              updateFormData({ selectedReturnFlight: id })
+            }
+            onContinue={() => handleStepComplete('flights')}
+            onBack={handleBack}
+          />
+        )}
+
+        {currentStep === 'hotels' && (
+          <HotelSelection
+            formData={formData}
+            selectedHotel={formData.selectedHotel}
+            onSelectHotel={(id) => updateFormData({ selectedHotel: id })}
+            onContinue={() => handleStepComplete('hotels')}
+            onBack={handleBack}
+          />
+        )}
+
+        {currentStep === 'itinerary' && (
+          <ItineraryPreview
+            tripDetails={formData}
+            onComplete={() => handleStepComplete('itinerary')}
+            onBack={handleBack}
+            isLoading={isLoading}
+          />
+        )}
+      </main>
+
+      <Footer />
+    </div>
   );
 }

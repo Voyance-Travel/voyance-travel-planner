@@ -1,91 +1,110 @@
-import { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Compass, Mail, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useAuth } from '@/lib/auth';
+import { useSearchParams } from 'react-router-dom';
+import { SignInForm } from '@/components/auth/SignInForm';
+import Head from '@/components/common/Head';
+import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
+import AuthLayout from '@/components/layout/AuthLayout';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SignIn() {
-  const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { isLoading: authLoading } = useAuth();
+  const nextPath = searchParams.get('next') || '/profile';
+  const isRedirectedFromProtected = nextPath && nextPath.startsWith('/');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-    
-    setIsLoading(true);
-    await login(email);
-    setIsLoading(false);
-    // New users go to quiz, returning users go to profile
-    navigate('/quiz');
+  const heroImage = {
+    src: 'https://images.pexels.com/photos/3601425/pexels-photo-3601425.jpeg',
+    alt: 'Aerial view of the Amalfi Coast at golden hour',
+    fallbacks: [
+      'https://images.pexels.com/photos/2265876/pexels-photo-2265876.jpeg',
+      'https://images.pexels.com/photos/1287145/pexels-photo-1287145.jpeg',
+    ],
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left side - Image */}
-      <div className="hidden lg:block lg:w-1/2 relative">
-        <img 
-          src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200&q=80"
-          alt="Travel inspiration"
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 hero-overlay" />
-        <div className="absolute inset-0 flex items-center justify-center p-12">
-          <div className="text-center text-primary-foreground">
-            <h2 className="font-serif text-4xl font-semibold mb-4">Your journey awaits</h2>
-            <p className="text-lg opacity-90">Sign in to access your trips and personalized itineraries.</p>
-          </div>
+    <AuthLayout>
+      <Head
+        title="Sign In | Voyance"
+        description="Sign in to your Voyance account to continue planning your personalized travel experiences."
+      />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">
+        <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-0 bg-white lg:bg-transparent">
+          {/* Left: Editorial image */}
+          <motion.div
+            className="relative hidden lg:block h-full min-h-[600px] overflow-hidden rounded-l-2xl"
+            initial={{ opacity: 0, scale: 1.05 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1.2 }}
+          >
+            <HeroImageWithFallback
+              src={heroImage.src}
+              alt={heroImage.alt}
+              fallbackSources={heroImage.fallbacks}
+              overlayGradient="from-black/10 via-transparent to-black/40"
+              className="h-full object-cover"
+            />
+            <div className="absolute bottom-8 left-8 max-w-md">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.5 }}
+                className="text-white text-lg font-light"
+              >
+                "The journey of a thousand miles begins with a single sign-in"
+              </motion.div>
+            </div>
+          </motion.div>
+
+          {/* Right: Form */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="w-full max-w-md mx-auto px-8 py-16 lg:py-24 flex flex-col justify-center"
+          >
+            {authLoading ? (
+              <div className="flex items-center justify-center p-10">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-600" />
+              </div>
+            ) : isRedirectedFromProtected ? (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="mb-8"
+                >
+                  <h1 className="text-2xl font-display font-medium text-slate-900 mb-2">
+                    Sign in to continue
+                  </h1>
+                  <p className="text-slate-600">
+                    You need to sign in to access{' '}
+                    {nextPath === '/profile' ? 'your profile' : 'this page'}.
+                  </p>
+                </motion.div>
+                <SignInForm />
+              </>
+            ) : (
+              <>
+                <motion.div
+                  className="space-y-3 mb-8"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <h1 className="text-3xl font-display font-medium text-slate-900">
+                    Welcome back to Voyance
+                  </h1>
+                  <p className="text-slate-600 leading-relaxed">
+                    Sign in to continue your personalized travel planning
+                  </p>
+                </motion.div>
+                <SignInForm />
+              </>
+            )}
+          </motion.div>
         </div>
       </div>
-
-      {/* Right side - Form */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md"
-        >
-          <Link to="/" className="flex items-center gap-2 mb-12">
-            <Compass className="h-7 w-7 text-accent" />
-            <span className="font-serif text-2xl font-semibold">Voyance</span>
-          </Link>
-
-          <h1 className="font-serif text-3xl font-semibold mb-2">Welcome back</h1>
-          <p className="text-muted-foreground mb-8">Enter your email to continue</p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 h-12"
-                  required
-                />
-              </div>
-            </div>
-
-            <Button type="submit" variant="accent" size="lg" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing in...' : 'Continue'}
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground mt-8">
-            For this prototype, any email will work to sign in.
-          </p>
-        </motion.div>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }
