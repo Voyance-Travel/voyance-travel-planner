@@ -3,26 +3,22 @@
  * Centralized content for travel preference quiz
  */
 
-// Traveler type labels
+// Traveler type labels (editorial style - no emojis)
 export const travelerTypeLabels = {
   explorer: {
     title: 'Explorer',
-    icon: '🎒',
     description: 'You seek authentic experiences and off-the-beaten-path adventures',
   },
   escapeArtist: {
     title: 'Escape Artist',
-    icon: '🧘‍♀️',
     description: 'You travel to disconnect, recharge, and find peace',
   },
   curatedLuxe: {
     title: 'Curated Luxe',
-    icon: '🍷',
     description: 'You appreciate refined experiences and premium accommodations',
   },
   storySeeker: {
     title: 'Story Seeker',
-    icon: '📸',
     description: 'You collect memorable moments and cultural experiences',
   },
 };
