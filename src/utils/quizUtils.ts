@@ -1,8 +1,11 @@
 /**
- * Storage keys for quiz data
+ * Quiz Utility Functions
  */
+
+// Storage keys for quiz data persistence
 export const STORAGE_KEYS = {
   QUIZ_PROGRESS: 'voyance_quiz_progress',
+  QUIZ_STEP: 'voyance_quiz_step',
   QUIZ_RESPONSES: 'voyance_quiz_responses',
   QUIZ_COMPLETED: 'voyance_quiz_completed',
   USER_PREFERENCES: 'voyance_user_preferences'
@@ -12,7 +15,6 @@ export const STORAGE_KEYS = {
  * User preferences type
  */
 export interface UserPreferences {
-  // Display fields
   style: string;
   budget: string;
   pace: string;
@@ -20,8 +22,6 @@ export interface UserPreferences {
   vibe: string;
   climate: string;
   activities: string[];
-  
-  // Additional fields
   travelStyle?: string;
   budgetTier?: string;
   interests?: string[];
@@ -54,7 +54,6 @@ export interface QuizData {
  * Maps quiz responses to user preferences
  */
 export function mapQuizToPreferences(quizData: QuizData): UserPreferences {
-  // Map travel style
   const travelStyleMap: Record<string, string> = {
     'relaxed': 'Relaxed Explorer',
     'active': 'Active Adventurer',
@@ -63,7 +62,6 @@ export function mapQuizToPreferences(quizData: QuizData): UserPreferences {
   };
   const style = travelStyleMap[quizData.travelStyle || ''] || 'Balanced Traveler';
 
-  // Map budget
   const budgetMap: Record<string, string> = {
     'budget': '$',
     'moderate': '$$',
@@ -72,7 +70,6 @@ export function mapQuizToPreferences(quizData: QuizData): UserPreferences {
   };
   const budget = budgetMap[quizData.budgetTier || ''] || '$$';
 
-  // Map pace
   const paceMap: Record<string, string> = {
     'slow': 'Leisurely',
     'moderate': 'Moderate',
@@ -80,7 +77,6 @@ export function mapQuizToPreferences(quizData: QuizData): UserPreferences {
   };
   const pace = paceMap[quizData.travelPace || ''] || 'Moderate';
 
-  // Extract tags from interests
   const tags: string[] = [];
   if (quizData.travelStyle) tags.push(quizData.travelStyle);
   if (quizData.primaryGoal) tags.push(quizData.primaryGoal);
@@ -95,16 +91,13 @@ export function mapQuizToPreferences(quizData: QuizData): UserPreferences {
     });
   }
 
-  // Map vibe from goals
   const vibe = quizData.primaryGoal === 'escape' ? 'Relaxing' :
                quizData.primaryGoal === 'explore' ? 'Adventurous' :
                quizData.primaryGoal === 'celebrate' ? 'Celebratory' :
                'Balanced';
 
-  // Climate preferences
   const climate = quizData.climatePreferences?.[0] || 'Moderate';
 
-  // Extract activities from interests
   const activities: string[] = [];
   if (quizData.interests) {
     Object.entries(quizData.interests).forEach(([key, value]) => {
@@ -156,6 +149,28 @@ export function isQuizComplete(quizData: QuizData): boolean {
 }
 
 /**
+ * Check if quiz has been completed (localStorage flag)
+ */
+export function isQuizCompleted(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.QUIZ_COMPLETED) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mark quiz as completed
+ */
+export function markQuizCompleted(): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.QUIZ_COMPLETED, 'true');
+  } catch (error) {
+    console.error('Failed to mark quiz completed:', error);
+  }
+}
+
+/**
  * Calculate quiz progress percentage
  */
 export function calculateQuizProgress(quizData: QuizData): number {
@@ -182,7 +197,7 @@ export function calculateQuizProgress(quizData: QuizData): number {
  */
 export function saveQuizProgress(step: number, data: QuizData): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.QUIZ_PROGRESS, String(step));
+    localStorage.setItem(STORAGE_KEYS.QUIZ_STEP, String(step));
     localStorage.setItem(STORAGE_KEYS.QUIZ_RESPONSES, JSON.stringify(data));
   } catch (error) {
     console.error('Failed to save quiz progress:', error);
@@ -194,7 +209,7 @@ export function saveQuizProgress(step: number, data: QuizData): void {
  */
 export function loadQuizProgress(): { step: number; data: QuizData } | null {
   try {
-    const step = localStorage.getItem(STORAGE_KEYS.QUIZ_PROGRESS);
+    const step = localStorage.getItem(STORAGE_KEYS.QUIZ_STEP);
     const data = localStorage.getItem(STORAGE_KEYS.QUIZ_RESPONSES);
     
     if (step && data) {
@@ -214,7 +229,7 @@ export function loadQuizProgress(): { step: number; data: QuizData } | null {
  */
 export function clearQuizProgress(): void {
   try {
-    localStorage.removeItem(STORAGE_KEYS.QUIZ_PROGRESS);
+    localStorage.removeItem(STORAGE_KEYS.QUIZ_STEP);
     localStorage.removeItem(STORAGE_KEYS.QUIZ_RESPONSES);
   } catch (error) {
     console.error('Failed to clear quiz progress:', error);

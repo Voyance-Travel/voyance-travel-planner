@@ -1,9 +1,10 @@
 /**
  * Quiz Content Labels and Display Data
  * Centralized content for travel preference quiz
+ * Editorial style - minimal icons, clean descriptions
  */
 
-// Traveler type labels (editorial style - no emojis)
+// Traveler type labels
 export const travelerTypeLabels = {
   explorer: {
     title: 'Explorer',
@@ -27,32 +28,26 @@ export const travelerTypeLabels = {
 export const travelVibeLabels = {
   coastal: {
     title: 'Coastal',
-    icon: '🏝️',
     description: 'Beach, ocean, and seaside experiences',
   },
   urban: {
     title: 'Urban',
-    icon: '🏙️',
     description: 'City exploration, architecture, and metropolitan energy',
   },
   mountain: {
     title: 'Mountain',
-    icon: '⛰️',
     description: 'Alpine views, hiking, and natural grandeur',
   },
   quiet: {
     title: 'Quiet',
-    icon: '🧘',
     description: 'Peaceful settings and relaxing atmospheres',
   },
   bold: {
     title: 'Bold',
-    icon: '🚀',
     description: 'Adventurous, unique, and extraordinary experiences',
   },
   spiritual: {
     title: 'Spiritual',
-    icon: '✨',
     description: 'Mindful travel with cultural or spiritual significance',
   },
 };
@@ -80,23 +75,35 @@ export const tripLengthLabels = {
 export const budgetLabels = {
   budget: {
     title: 'Budget-Friendly',
-    icon: '$',
     description: 'Economical options without sacrificing experience',
   },
   moderate: {
     title: 'Moderate',
-    icon: '$$',
     description: 'Quality experiences at reasonable prices',
   },
   premium: {
     title: 'Premium',
-    icon: '$$$',
     description: 'Higher-end with some luxury elements',
   },
   luxury: {
     title: 'Luxury',
-    icon: '$$$$',
     description: 'Top-tier accommodations and premium experiences',
+  },
+};
+
+// Day structure labels
+export const dayStructureLabels = {
+  planned: {
+    title: 'Fully Planned',
+    description: 'Every detail scheduled in advance',
+  },
+  flexible: {
+    title: 'Flexible',
+    description: 'Go with the flow, decide as you go',
+  },
+  mixed: {
+    title: 'Mixed',
+    description: 'Key activities planned, with free time built in',
   },
 };
 
@@ -104,28 +111,45 @@ export const budgetLabels = {
 export const travelPaceLabels = {
   relaxed: {
     title: 'Relaxed',
-    icon: '🧘',
     description: '1-2 activities per day with plenty of downtime',
   },
   balanced: {
     title: 'Balanced',
-    icon: '⚖️',
     description: '3-4 activities per day with breaks',
   },
   active: {
     title: 'Active',
-    icon: '🏃',
     description: '5+ activities per day, maximizing experiences',
   },
 };
 
 // Travel companion labels
 export const travelCompanionLabels = {
-  solo: { title: 'Solo', icon: '🧳', description: 'Traveling on your own' },
-  partner: { title: 'Partner', icon: '👫', description: 'Traveling with a significant other' },
-  family: { title: 'Family', icon: '👨‍👩‍👧‍👦', description: 'Traveling with family members' },
-  friends: { title: 'Friends', icon: '👯', description: 'Traveling with friends' },
-  group: { title: 'Group', icon: '👥', description: 'Traveling with a larger group' },
+  solo: { title: 'Solo', description: 'Traveling on your own' },
+  partner: { title: 'Partner', description: 'Traveling with a significant other' },
+  family: { title: 'Family', description: 'Traveling with family members' },
+  friends: { title: 'Friends', description: 'Traveling with friends' },
+  group: { title: 'Group', description: 'Traveling with a larger group' },
+};
+
+// Planning preference labels
+export const planningPreferenceLabels = {
+  detailed: {
+    title: 'Detailed Planner',
+    description: 'I research extensively and plan every detail',
+  },
+  flexible: {
+    title: 'Flexible Planner',
+    description: 'I like a loose framework with room for spontaneity',
+  },
+  collaborative: {
+    title: 'Collaborative',
+    description: 'I prefer planning together with my travel companions',
+  },
+  spontaneous: {
+    title: 'Spontaneous',
+    description: 'I prefer to figure things out as I go',
+  },
 };
 
 // Activity level labels
@@ -139,30 +163,169 @@ export const activityLevelLabels = {
 
 // Seat preference labels
 export const seatPreferenceLabels = {
-  window: { title: 'Window', icon: '🪟', description: 'Enjoy the view and a place to rest' },
-  aisle: { title: 'Aisle', icon: '🚶', description: 'Easy access to move around' },
-  noPreference: { title: 'No Preference', icon: '✈️', description: 'Either works fine' },
+  window: { title: 'Window', description: 'Enjoy the view and a place to rest' },
+  aisle: { title: 'Aisle', description: 'Easy access to move around' },
+  noPreference: { title: 'No Preference', description: 'Either works fine' },
 };
 
 // Flight time preference labels
 export const flightTimePreferenceLabels = {
-  morning: { title: 'Morning', icon: '🌅', description: 'Early departures (5am-10am)' },
-  afternoon: { title: 'Afternoon', icon: '☀️', description: 'Midday flights (11am-3pm)' },
-  evening: { title: 'Evening', icon: '🌆', description: 'Evening departures (4pm-8pm)' },
-  overnight: { title: 'Overnight', icon: '🌙', description: 'Red-eye flights (9pm-4am)' },
-  noPreference: { title: 'No Preference', icon: '🕓', description: 'Any time works' },
+  morning: { title: 'Morning', description: 'Early departures (5am-10am)' },
+  afternoon: { title: 'Afternoon', description: 'Midday flights (11am-3pm)' },
+  evening: { title: 'Evening', description: 'Evening departures (4pm-8pm)' },
+  overnight: { title: 'Overnight', description: 'Red-eye flights (9pm-4am)' },
+  noPreference: { title: 'No Preference', description: 'Any time works' },
 };
 
-// Interest category labels
+// Boolean preference labels
+export const booleanPreferenceLabels = {
+  yes: { title: 'Yes', description: 'I prefer this option' },
+  no: { title: 'No', description: 'I do not prefer this option' },
+  noPreference: { title: 'No Preference', description: 'Either way is fine' },
+};
+
+// Hotel style labels
+export const hotelStyleLabels = {
+  boutique: {
+    title: 'Boutique Hotel',
+    description: 'Unique, design-forward, intimate properties',
+  },
+  chain: {
+    title: 'Major Chain',
+    description: 'Reliable brands with consistent quality',
+  },
+  resort: {
+    title: 'Resort',
+    description: 'All-inclusive or amenity-rich properties',
+  },
+  hostel: {
+    title: 'Hostel',
+    description: 'Social, budget-friendly accommodations',
+  },
+  'vacation-rental': {
+    title: 'Vacation Rental',
+    description: 'Apartments, homes, or unique stays',
+  },
+  luxury: {
+    title: 'Luxury Hotel',
+    description: 'Five-star service and premium amenities',
+  },
+};
+
+// Location preference labels
+export const locationPreferenceLabels = {
+  central: {
+    title: 'Central Location',
+    description: 'Walking distance to main attractions',
+  },
+  quiet: {
+    title: 'Quiet Area',
+    description: 'Away from crowds and noise',
+  },
+  scenic: {
+    title: 'Scenic Views',
+    description: 'Beautiful surroundings and vistas',
+  },
+  convenient: {
+    title: 'Convenient Transit',
+    description: 'Easy access to transportation',
+  },
+  local: {
+    title: 'Local Neighborhood',
+    description: 'Authentic, non-touristy area',
+  },
+};
+
+// Weather preference labels
+export const weatherPreferenceLabels = {
+  tropical: {
+    title: 'Tropical',
+    description: 'Warm and humid, beach weather',
+  },
+  temperate: {
+    title: 'Temperate',
+    description: 'Mild temperatures, comfortable year-round',
+  },
+  cold: {
+    title: 'Cold',
+    description: 'Snow, winter sports, cozy vibes',
+  },
+  dry: {
+    title: 'Dry',
+    description: 'Desert climates, low humidity',
+  },
+  humid: {
+    title: 'Humid',
+    description: 'Lush, tropical environments',
+  },
+  variable: {
+    title: 'Variable',
+    description: 'Mixed conditions, I adapt easily',
+  },
+};
+
+// Activity category labels
+export const activityCategoryLabels = {
+  food: {
+    title: 'Food & Dining',
+    description: 'Local cuisine, restaurants, food tours',
+  },
+  culture: {
+    title: 'Culture & Museums',
+    description: 'Historical sites, museums, art galleries',
+  },
+  shopping: {
+    title: 'Shopping & Markets',
+    description: 'Local markets, boutiques, unique finds',
+  },
+  nature: {
+    title: 'Nature & Outdoors',
+    description: 'Parks, hiking, scenic views',
+  },
+  nightlife: {
+    title: 'Nightlife',
+    description: 'Bars, clubs, evening entertainment',
+  },
+  wellness: {
+    title: 'Relaxation & Wellness',
+    description: 'Spas, yoga, wellness activities',
+  },
+  adventure: {
+    title: 'Adventure Activities',
+    description: 'Extreme sports, adrenaline experiences',
+  },
+};
+
+// Travel priority labels
+export const travelPriorityLabels = {
+  flight: {
+    title: 'A great flight',
+    description: 'More comfort in the air',
+  },
+  hotel: {
+    title: 'A great hotel',
+    description: 'More comfort where you stay',
+  },
+  balanced: {
+    title: 'Balanced',
+    description: 'Equal quality for both',
+  },
+  budget: {
+    title: 'Budget-focused',
+    description: 'Whichever saves the most money',
+  },
+};
+
+// Interest category labels (legacy)
 export const interestLabels = {
-  culture: { title: 'Culture & History', icon: '🏛️', description: 'Museums, monuments, and heritage sites' },
-  food: { title: 'Food & Dining', icon: '🍽️', description: 'Local cuisine and culinary experiences' },
-  nature: { title: 'Nature & Outdoors', icon: '🌿', description: 'Parks, wildlife, and natural beauty' },
-  adventure: { title: 'Adventure', icon: '🧗', description: 'Active excursions and thrilling activities' },
-  wellness: { title: 'Wellness & Relaxation', icon: '🧘', description: 'Spas, retreats, and mindfulness' },
-  nightlife: { title: 'Nightlife', icon: '🌙', description: 'Bars, clubs, and evening entertainment' },
-  shopping: { title: 'Shopping', icon: '🛍️', description: 'Markets, boutiques, and local crafts' },
-  art: { title: 'Art & Architecture', icon: '🎨', description: 'Galleries, design, and creative spaces' },
+  culture: { title: 'Culture & History', description: 'Museums, monuments, and heritage sites' },
+  food: { title: 'Food & Dining', description: 'Local cuisine and culinary experiences' },
+  nature: { title: 'Nature & Outdoors', description: 'Parks, wildlife, and natural beauty' },
+  adventure: { title: 'Adventure', description: 'Active excursions and thrilling activities' },
+  wellness: { title: 'Wellness & Relaxation', description: 'Spas, retreats, and mindfulness' },
+  nightlife: { title: 'Nightlife', description: 'Bars, clubs, and evening entertainment' },
+  shopping: { title: 'Shopping', description: 'Markets, boutiques, and local crafts' },
+  art: { title: 'Art & Architecture', description: 'Galleries, design, and creative spaces' },
 };
 
 /**
@@ -180,10 +343,24 @@ export function getPreferenceLabel<T extends Record<string, { title: string; des
  */
 export function getOptionsArray<T extends Record<string, { title: string; description: string }>>(
   labels: T
-): Array<{ key: string; title: string; description: string; icon?: string }> {
+): Array<{ key: string; title: string; description: string }> {
   return Object.entries(labels).map(([key, value]) => ({
     key,
     ...value,
-    icon: 'icon' in value ? (value as { icon: string }).icon : undefined,
   }));
 }
+
+// Quiz step configuration
+export const quizSteps = [
+  { title: 'Travel Identity', description: 'What kind of traveler are you?' },
+  { title: 'Trip Cadence', description: 'How often and how long do you travel?' },
+  { title: 'Pace & Structure', description: 'How do you like your days planned?' },
+  { title: 'Companions', description: 'Who do you travel with?' },
+  { title: 'Mobility', description: 'What\'s your activity level?' },
+  { title: 'Flights', description: 'Your flight preferences' },
+  { title: 'Hotels', description: 'Where do you like to stay?' },
+  { title: 'Climate', description: 'What weather do you prefer?' },
+  { title: 'Activities', description: 'What do you want to experience?' },
+  { title: 'Special Requests', description: 'Any specific needs?' },
+  { title: 'Priorities', description: 'Final trade-offs' },
+];
