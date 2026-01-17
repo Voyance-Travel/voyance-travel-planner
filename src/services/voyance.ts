@@ -1511,4 +1511,42 @@ const voyance = {
   saveTrip: saveTripAPI,
 };
 
+// New API Services (from latest backend routes) - imported with aliases to avoid conflicts
+export * from './destinationImagesAPI';
+export * from './bundlesAPI';
+export * from './usersSearchAPI';
+export { 
+  getDestinations as getDestinationsUnified,
+  getTrendingDestinations as getTrendingDestinationsUnified,
+  getSurpriseDestination as getSurpriseDestinationUnified,
+  getDestinationsByTag as getDestinationsByTagUnified,
+  useDestinations as useDestinationsUnified,
+  useTrendingDestinations as useTrendingDestinationsUnified,
+  useSurpriseDestination as useSurpriseDestinationUnified,
+  useDestinationsByTag as useDestinationsByTagUnified,
+  getGuides as getGuidesUnified,
+  getGuideBySlug as getGuideBySlugUnified,
+  useGuides as useGuidesUnified,
+  useGuide as useGuideUnified,
+  type Destination as UnifiedDestination,
+  type Guide as UnifiedGuide,
+  type GuideDetail as UnifiedGuideDetail,
+} from './destinationsUnifiedAPI';
+export {
+  createCheckoutSession as createCheckoutSessionV1,
+  getBookingStatus as getBookingStatusV1,
+  confirmBooking as confirmBookingV1,
+  cancelBooking as cancelBookingV1,
+  generateIdempotencyKey as generateIdempotencyKeyV1,
+  useCreateCheckoutSession as useCreateCheckoutSessionV1,
+  useBookingStatus as useBookingStatusV1,
+  useConfirmBooking as useConfirmBookingV1,
+  useCancelBooking as useCancelBookingV1,
+  type CheckoutSessionParams as CheckoutSessionParamsV1,
+  type CheckoutSessionResponse as CheckoutSessionResponseV1,
+  type BookingStatusResponse as BookingStatusResponseV1,
+  type ConfirmBookingParams as ConfirmBookingParamsV1,
+  type ConfirmBookingResponse as ConfirmBookingResponseV1,
+} from './bookingsV1API';
+
 export default voyance;
