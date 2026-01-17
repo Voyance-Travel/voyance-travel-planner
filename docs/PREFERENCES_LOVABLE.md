@@ -1,8 +1,14 @@
 # Preferences System - Lovable Adaptation
 
+<!--
+@keywords: preferences, quiz, travel style, budget, interests, accommodation, user settings
+@category: PREFERENCES
+@searchTerms: user preferences, quiz results, travel settings, save preferences, get preferences
+-->
+
 **Last Updated**: January 2025  
 **Status**: ✅ Core Implemented  
-**See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [INDEX.md](./INDEX.md)
+**See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [QUIZ_FLOW_LOVABLE.md](./QUIZ_FLOW_LOVABLE.md) | [INDEX.md](./INDEX.md)
 
 > **Adapted from**: PREFERENCES_RECONCILIATION.md, PREFERENCES_DATA_FIELDS.md, PREFERENCES_SYSTEM_SOT.md
 
@@ -11,6 +17,11 @@ This document describes how preferences work in the Lovable codebase.
 ---
 
 ## Current Implementation
+
+<!--
+@section: current
+@keywords: flow, diagram, quiz, save, API
+-->
 
 ### Preferences Flow
 
@@ -32,17 +43,22 @@ user_preferences table in Neon
 
 ### Current Fields Captured
 
-| Field | Quiz Question | DB Column |
-|-------|--------------|-----------|
-| Style | "What's your travel style?" | `travel_style` |
-| Budget | "What's your typical travel budget?" | `budget` |
-| Pace | "What pace do you prefer?" | `pace` |
-| Interests | "What interests you most?" | `interests` (array) |
-| Accommodation | "Where do you like to stay?" | `accommodation` |
+| Field | Quiz Question | DB Column | Options |
+|-------|--------------|-----------|---------|
+| Style | "What's your travel style?" | `travel_style` | luxury, adventure, cultural, relaxation |
+| Budget | "What's your typical travel budget?" | `budget` | budget, moderate, premium, luxury |
+| Pace | "What pace do you prefer?" | `pace` | slow, moderate, fast |
+| Interests | "What interests you most?" | `interests` (array) | food, nature, art, nightlife, shopping, wellness |
+| Accommodation | "Where do you like to stay?" | `accommodation` | hotel, boutique, airbnb, hostel |
 
 ---
 
 ## API Usage
+
+<!--
+@section: api-usage
+@keywords: API, get, update, read, write, neonDb
+-->
 
 ### Reading Preferences
 
@@ -53,7 +69,7 @@ import { preferencesApi } from '@/services/neonDb';
 const result = await preferencesApi.get(userId);
 if (result.data?.[0]) {
   const prefs = result.data[0];
-  // prefs.travel_style, prefs.budget, etc.
+  // prefs.travel_style, prefs.budget, prefs.pace, prefs.interests, prefs.accommodation
 }
 ```
 
@@ -74,12 +90,18 @@ await preferencesApi.update(userId, {
 
 ## Null Safety (Required)
 
+<!--
+@section: null-safety
+@keywords: null, undefined, optional, chaining, default
+-->
+
 Always use optional chaining when accessing preferences:
 
 ```typescript
 // ✅ CORRECT
 const budget = user?.preferences?.budget || 'moderate';
 const interests = user?.preferences?.interests || [];
+const style = user?.preferences?.style ?? 'cultural';
 
 // ❌ WRONG - Will crash if null
 const budget = user.preferences.budget;
@@ -87,7 +109,33 @@ const budget = user.preferences.budget;
 
 ---
 
+## Type Definitions
+
+<!--
+@section: types
+@keywords: TypeScript, interface, TravelPreferences
+-->
+
+### Current types in AuthContext:
+
+```typescript
+export interface TravelPreferences {
+  style?: string;        // luxury | adventure | cultural | relaxation
+  budget?: string;       // budget | moderate | premium | luxury
+  pace?: string;         // slow | moderate | fast
+  interests?: string[];  // Array of interest categories
+  accommodation?: string; // hotel | boutique | airbnb | hostel
+}
+```
+
+---
+
 ## Future: Extended Preferences
+
+<!--
+@section: future
+@keywords: extended, flight, food, mobility, planned, roadmap
+-->
 
 To match the original system, add these tables/endpoints:
 
@@ -121,24 +169,7 @@ interface MobilityPreferences {
 }
 ```
 
----
-
-## Type Definitions
-
-Current types in AuthContext:
-
-```typescript
-export interface TravelPreferences {
-  style?: string;
-  budget?: string;
-  pace?: string;
-  interests?: string[];
-  accommodation?: string;
-}
-```
-
-Extended types (future):
-
+### Full Extended Type (Future)
 ```typescript
 export interface FullTravelPreferences {
   // Core (current)
@@ -173,6 +204,11 @@ export interface FullTravelPreferences {
 
 ## Migration Path
 
+<!--
+@section: migration
+@keywords: phases, roadmap, implementation, priority
+-->
+
 1. **Phase 1** (Current): Basic 5-field preferences ✅
 2. **Phase 2**: Add flight preferences table + quiz questions
 3. **Phase 3**: Add food preferences table + quiz questions
@@ -183,8 +219,11 @@ export interface FullTravelPreferences {
 
 ## Related SOT Documents
 
-- [PREFERENCES_SYSTEM_SOT.md](./PREFERENCES_SYSTEM_SOT.md) - Full original spec (371 lines)
-- [PREFERENCES_MAPPING_CONTRACT.md](./PREFERENCES_MAPPING_CONTRACT.md) - Field mappings
-- [PREFERENCES_FIELD_MAPPING.md](./PREFERENCES_FIELD_MAPPING.md) - UI to DB mapping
-- [PREFERENCES_RECONCILIATION_GUIDE.md](./PREFERENCES_RECONCILIATION_GUIDE.md) - Frontend changes
-- [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) - 25+ travel personalities
+| Document | Purpose | Keywords |
+|----------|---------|----------|
+| [PREFERENCES_SYSTEM_SOT.md](./PREFERENCES_SYSTEM_SOT.md) | Full original spec | master, schema |
+| [PREFERENCES_MAPPING_CONTRACT.md](./PREFERENCES_MAPPING_CONTRACT.md) | Field mappings | mapping, contract |
+| [PREFERENCES_FIELD_MAPPING.md](./PREFERENCES_FIELD_MAPPING.md) | UI to DB mapping | UI, database |
+| [PREFERENCES_RECONCILIATION_GUIDE.md](./PREFERENCES_RECONCILIATION_GUIDE.md) | Frontend changes | migration, changes |
+| [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) | 25+ travel personalities | DNA, archetype |
+| [QUIZ_FLOW_LOVABLE.md](./QUIZ_FLOW_LOVABLE.md) | Quiz implementation | questions, flow |

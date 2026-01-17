@@ -1,5 +1,11 @@
 # Quiz Flow - Lovable Adaptation
 
+<!--
+@keywords: quiz, questions, answers, flow, travel DNA, archetype, onboarding, user setup
+@category: QUIZ
+@searchTerms: quiz flow, user onboarding, questions, save answers, quiz completion
+-->
+
 **Last Updated**: January 2025  
 **Status**: ✅ Implemented (Simplified)  
 **See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [PREFERENCES_LOVABLE.md](./PREFERENCES_LOVABLE.md)
@@ -11,6 +17,11 @@ This document describes how the quiz works in the Lovable codebase.
 ---
 
 ## Current Implementation (Simplified)
+
+<!--
+@section: current
+@keywords: flow, diagram, steps, save, completion
+-->
 
 ### Flow Overview
 
@@ -45,17 +56,21 @@ Navigate to /profile
 
 ### Code Location
 
-```
-src/pages/Quiz.tsx          # Main quiz page
-src/components/quiz/        # Quiz UI components
-├── QuizProgress.tsx        # Progress indicator
-├── QuizOption.tsx          # Individual option card
-└── QuizCompletion.tsx      # Completion screen
-```
+| File | Purpose | Keywords |
+|------|---------|----------|
+| `src/pages/Quiz.tsx` | Main quiz page | page, route |
+| `src/components/quiz/QuizProgress.tsx` | Progress indicator | progress, steps |
+| `src/components/quiz/QuizOption.tsx` | Individual option card | option, select |
+| `src/components/quiz/QuizCompletion.tsx` | Completion screen | done, complete |
 
 ---
 
 ## Data Storage
+
+<!--
+@section: data-storage
+@keywords: save, persist, API, database, neon
+-->
 
 ### On Quiz Completion
 
@@ -88,30 +103,40 @@ setUser({
 
 ## Differences from Original System
 
-| Feature | Original | Lovable |
-|---------|----------|---------|
-| Steps | 11 | 5 |
-| Session tracking | quiz_sessions table | None (stateless) |
-| Response storage | quiz_responses table | Direct to preferences |
-| Resume support | Yes | No |
-| Travel DNA calc | Backend | Frontend (simple) |
-| Retake history | travel_dna_history | Overwrites previous |
+<!--
+@section: differences
+@keywords: original, migration, comparison, simplified
+-->
+
+| Feature | Original | Lovable | Keywords |
+|---------|----------|---------|----------|
+| Steps | 11 | 5 | steps, questions |
+| Session tracking | quiz_sessions table | None (stateless) | session, resume |
+| Response storage | quiz_responses table | Direct to preferences | responses, answers |
+| Resume support | Yes | No | resume, continue |
+| Travel DNA calc | Backend | Frontend (simple) | DNA, archetype |
+| Retake history | travel_dna_history | Overwrites previous | history, retake |
 
 ---
 
 ## Future: Full Quiz Implementation
+
+<!--
+@section: future
+@keywords: planned, roadmap, tables, endpoints
+-->
 
 To match original system:
 
 ### 1. Add Quiz Tables in Neon
 
 ```sql
--- Quiz sessions
+-- Quiz sessions (track progress)
 CREATE TABLE quiz_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
   quiz_version TEXT DEFAULT 'v1',
-  status TEXT DEFAULT 'in_progress',
+  status TEXT DEFAULT 'in_progress',  -- in_progress, completed, abandoned
   current_step INTEGER DEFAULT 1,
   total_steps INTEGER DEFAULT 11,
   completion_percentage INTEGER DEFAULT 0,
@@ -120,7 +145,7 @@ CREATE TABLE quiz_sessions (
   is_complete BOOLEAN DEFAULT FALSE
 );
 
--- Quiz responses
+-- Quiz responses (individual answers)
 CREATE TABLE quiz_responses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
@@ -135,12 +160,12 @@ CREATE TABLE quiz_responses (
 
 ### 2. Add Edge Function Endpoints
 
-```typescript
-// POST /neon-db/quiz/start
-// POST /neon-db/quiz/save-step
-// POST /neon-db/quiz/finalize
-// GET /neon-db/quiz/session?userId=X
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/neon-db/quiz/start` | Start new session |
+| POST | `/neon-db/quiz/save-step` | Save step answer |
+| POST | `/neon-db/quiz/finalize` | Complete quiz |
+| GET | `/neon-db/quiz/session?userId=X` | Get current session |
 
 ### 3. Implement 11-Step Quiz
 
@@ -164,14 +189,21 @@ Backend process that:
 
 ## Travel DNA Archetypes
 
+<!--
+@section: archetypes
+@keywords: DNA, archetype, personality, traveler type
+-->
+
 From `TRAVEL_ARCHETYPES.md`, implement these 6 categories:
 
-1. **EXPLORER** - Discovery-driven
-2. **CONNECTOR** - Relationship-driven
-3. **ACHIEVER** - Goal-driven
-4. **RESTORER** - Wellness-driven
-5. **CURATOR** - Experience-driven
-6. **TRANSFORMER** - Change-driven
+| Category | Description | Keywords |
+|----------|-------------|----------|
+| **EXPLORER** | Discovery-driven | explore, discover, adventure |
+| **CONNECTOR** | Relationship-driven | social, people, community |
+| **ACHIEVER** | Goal-driven | goals, accomplishment, bucket list |
+| **RESTORER** | Wellness-driven | relax, wellness, recharge |
+| **CURATOR** | Experience-driven | experiences, curate, collect |
+| **TRANSFORMER** | Change-driven | growth, change, transform |
 
 Each has 4+ sub-archetypes for 25+ total personalities.
 
@@ -199,7 +231,10 @@ Would use quiz responses to calculate:
 
 ## Related SOT Documents
 
-- [quiz-data-flow.md](./quiz-data-flow.md) - Full original quiz flow
-- [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) - 25+ travel personalities
-- [PREFERENCES_SYSTEM_SOT.md](./PREFERENCES_SYSTEM_SOT.md) - Preferences system
-- [profile-system-source-of-truth.md](./profile-system-source-of-truth.md) - Profile display
+| Document | Purpose | Keywords |
+|----------|---------|----------|
+| [quiz-data-flow.md](./quiz-data-flow.md) | Full original quiz flow | original, flow |
+| [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) | 25+ travel personalities | DNA, personality |
+| [PREFERENCES_SYSTEM_SOT.md](./PREFERENCES_SYSTEM_SOT.md) | Preferences system | preferences, schema |
+| [PREFERENCES_LOVABLE.md](./PREFERENCES_LOVABLE.md) | Lovable preferences | current, implemented |
+| [profile-system-source-of-truth.md](./profile-system-source-of-truth.md) | Profile display | profile, UI |
