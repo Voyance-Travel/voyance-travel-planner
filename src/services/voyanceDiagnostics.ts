@@ -284,8 +284,100 @@ export async function checkAuthHealthSimple(): Promise<{
 // System Test Endpoints
 // ============================================================================
 
+export interface SystemTestResult {
+  success: boolean;
+  userId?: string;
+  systemHealth?: 'HEALTHY' | 'ISSUES_DETECTED';
+  summary?: {
+    hasQuizSession: boolean;
+    hasQuizResponses: boolean;
+    hasTravelDNA: boolean;
+    hasUserProfile: boolean;
+    isQuizComplete: boolean;
+  };
+  details?: {
+    sessions: {
+      count: number;
+      latest: {
+        id: string;
+        percentage: number;
+        isComplete: boolean;
+        questionsAnswered: number;
+      } | null;
+    };
+    responses: {
+      total: number;
+      stepsWithResponses: number;
+      badResponses: number;
+    };
+    travelDNA: Record<string, unknown> | null;
+    userProfile: Record<string, unknown> | null;
+    preferenceTables: Record<string, boolean>;
+  };
+  error?: string;
+}
+
+export interface QuizFlowTestResult {
+  success: boolean;
+  recentActivity?: Array<{
+    email: string;
+    session_id: string;
+    percentage: number;
+    is_complete: boolean;
+    completed_at: string | null;
+    response_count: number;
+  }>;
+  potentialIssues?: Array<{
+    issue: string;
+    count: number;
+  }>;
+  timestamp: string;
+  error?: string;
+}
+
 /**
- * Run full system test
+ * Run full system test for a user
+ */
+export async function runUserSystemTest(userId: string): Promise<SystemTestResult> {
+  try {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/test/system/${userId}`, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+    return response.json();
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'System test failed',
+    };
+  }
+}
+
+/**
+ * Test quiz flow endpoints
+ */
+export async function testQuizFlow(): Promise<QuizFlowTestResult> {
+  try {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/test/quiz-flow`, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+    return response.json();
+  } catch (error) {
+    return {
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Quiz flow test failed',
+    };
+  }
+}
+
+/**
+ * Run full system test (legacy)
  */
 export async function runSystemTest(): Promise<{
   success: boolean;
@@ -394,6 +486,8 @@ const voyanceDiagnostics = {
   checkAuthHealthSimple,
   
   // System test
+  runUserSystemTest,
+  testQuizFlow,
   runSystemTest,
   getSystemTestStatus,
   
