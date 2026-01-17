@@ -37,7 +37,7 @@ export {
   getGoogleAuthUrl,
   googleCallback,
   refreshAccessToken,
-  getProfile,
+  getProfile as getAuthProfile,
   checkAuth,
   
   // Debug
@@ -674,13 +674,13 @@ export {
   getQuizDebugInfo,
   forceCompleteQuiz,
   testQuizStep11,
-  finalizeQuizSimple,
+  finalizeQuizSimple as finalizeQuizSimpleOld,
   
   // Additional hooks
   useRestoreQuizSession,
   useQuizResponses,
   useQuizDebugInfo,
-  useFinalizeQuizSimple,
+  useFinalizeQuizSimple as useFinalizeQuizSimpleOld,
 } from './quizAPI';
 
 // Activity Alternatives API
@@ -1050,6 +1050,91 @@ export {
   useApplyPreferences,
 } from './preferencesV1API';
 
+// Profile API
+export { default as profileAPI } from './profileAPI';
+export {
+  type TravelDNAArchetype,
+  type TravelDNAPreferences,
+  type TravelDNA as ProfileTravelDNA,
+  type UserPreferences as ProfileUserPreferences,
+  type UserProfile,
+  type ProfileResponse,
+  type ProfileLite,
+  type ProfileLiteResponse,
+  type TravelDNADetails,
+  type TravelDNADetailsResponse,
+  type ProfileUpdateInput,
+  type ProfileUpdateResponse,
+  type ProfileFieldUpdateInput,
+  type ProfileDataResponse,
+  type SessionVerifyResponse,
+  getProfile,
+  getStableProfile,
+  getProfileLite,
+  getTravelDNADetails,
+  getProfileData,
+  updateProfile,
+  updateProfileField,
+  verifySession,
+  useProfile,
+  useStableProfile,
+  useProfileLite,
+  useTravelDNADetails,
+  useProfileData,
+  useVerifySession,
+  useUpdateProfile,
+  useUpdateProfileField,
+} from './profileAPI';
+
+// Timeline Blocks API
+export { default as timelineBlocksAPI } from './timelineBlocksAPI';
+export {
+  type ActivityBlock as TimelineActivityBlock,
+  type TransportMode,
+  type TimelineBlock,
+  type CreateTimelineBlockInput,
+  type UpdateTimelineBlockInput,
+  getTimelineBlocks,
+  addTimelineBlock,
+  updateTimelineBlock,
+  deleteTimelineBlock,
+  useTimelineBlocks,
+  useAddTimelineBlock,
+  useUpdateTimelineBlock,
+  useDeleteTimelineBlock,
+} from './timelineBlocksAPI';
+
+// Transport API
+export { default as transportAPI } from './transportAPI';
+export {
+  type TransportModeType,
+  type TransportOptionsResponse,
+  getTransportOptions,
+  getTransportModeLabel,
+  getTransportModeIcon,
+  useTransportOptions,
+} from './transportAPI';
+
+// Quiz Extended API
+export { default as quizExtendedAPI } from './quizExtendedAPI';
+export {
+  type TravelDNAAnswers,
+  type QuizCompleteFrontendResponse,
+  type QuizFinalizeRequest,
+  type QuizFinalizeResponse as QuizExtendedFinalizeResponse,
+  type QuizDiagnosticStatus,
+  type SimpleQuizFinalizeResponse,
+  completeQuizFrontend,
+  finalizeQuizProfile,
+  finalizeQuizSimple,
+  getQuizDiagnosticStatus,
+  echoQuizData,
+  useQuizDiagnosticStatus,
+  useCompleteQuizFrontend,
+  useFinalizeQuizProfile,
+  useFinalizeQuizSimple,
+} from './quizExtendedAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -1093,11 +1178,16 @@ import mapsAPI from './mapsAPI';
 import manualBookingsAPI from './manualBookingsAPI';
 import itineraryPreviewAPI from './itineraryPreviewAPI';
 import preferencesV1API from './preferencesV1API';
+import profileAPI from './profileAPI';
+import timelineBlocksAPI from './timelineBlocksAPI';
+import transportAPI from './transportAPI';
+import quizExtendedAPI from './quizExtendedAPI';
 
 const voyance = {
   auth: voyanceAuth,
   quiz: quizAPI,
   quizSections: quizSectionsAPI,
+  quizExtended: quizExtendedAPI,
   diagnostics: voyanceDiagnostics,
   connections: connectionRiskAPI,
   content: contentAPI,
@@ -1134,6 +1224,9 @@ const voyance = {
   manualBookings: manualBookingsAPI,
   itineraryPreview: itineraryPreviewAPI,
   preferencesV1: preferencesV1API,
+  profile: profileAPI,
+  timelineBlocks: timelineBlocksAPI,
+  transport: transportAPI,
 };
 
 export default voyance;
