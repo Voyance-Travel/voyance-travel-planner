@@ -291,6 +291,120 @@ export {
 // Voyance API (trips, itinerary, preferences)
 export { default as voyanceAPI } from './voyanceAPI';
 
+// Planner API
+export { default as plannerAPI } from './plannerAPI';
+export {
+  // Types
+  type TripDestination,
+  type TripCreateInput,
+  type TripUpdateInput,
+  type PlannerTrip,
+  type CreateTripResponse,
+  
+  // API functions
+  createPlannerTrip,
+  updatePlannerTrip,
+  getPlannerTrip,
+  
+  // React Query hooks
+  usePlannerTrip,
+  useCreatePlannerTrip,
+  useUpdatePlannerTrip,
+} from './plannerAPI';
+
+// Hotel API
+export { default as hotelAPI } from './hotelAPI';
+export {
+  // Types
+  type HotelSearchParams,
+  type HotelOption,
+  type HotelDestination,
+  type HotelSearchResponse,
+  type HotelDetailResponse,
+  type HotelHoldInput,
+  type HotelHoldResponse,
+  
+  // API functions
+  searchHotels,
+  preloadHotels,
+  batchSearchHotels,
+  getHotelDetails,
+  createHotelHold,
+  
+  // React Query hooks
+  useHotelSearch,
+  useHotelPreload,
+  useHotelDetails,
+  useSearchHotels,
+  useCreateHotelHold,
+} from './hotelAPI';
+
+// Trip Sharing API
+export { default as tripSharingAPI } from './tripSharingAPI';
+export {
+  // Types
+  type TravelerPermission,
+  type TravelerProfile,
+  type GroupProfile,
+  type TravelersResponse,
+  type SavedActivity,
+  type GroupFavorite,
+  type SharedTrip,
+  
+  // API functions
+  addTravelers,
+  getTravelers,
+  removeTraveler,
+  updateTravelerPermissions,
+  saveActivity,
+  getSavedActivities,
+  getGroupFavorites,
+  acceptTripInvitation,
+  getSharedTrips,
+  
+  // React Query hooks
+  useTravelers,
+  useAddTravelers,
+  useRemoveTraveler,
+  useUpdateTravelerPermissions,
+  useSavedActivities,
+  useSaveActivity,
+  useGroupFavorites,
+  useSharedTrips,
+  useAcceptTripInvitation,
+} from './tripSharingAPI';
+
+// Multi-City API
+export { default as multiCityAPI } from './multiCityAPI';
+export {
+  // Types
+  type PotentialCity,
+  type AddCitiesPreferences,
+  type MultiCitySegment,
+  type MultiCityOption,
+  type MultiCityOptionsResponse,
+  type CityAllocation,
+  type MultiCityPricingStructure,
+  type TierInfo,
+  type PopularRoute,
+  
+  // API functions
+  generateMultiCityOptions,
+  getMultiCityOptions,
+  adjustCityNights,
+  confirmMultiCity,
+  getMultiCityPricing,
+  getPopularRoutes,
+  
+  // React Query hooks
+  useMultiCityOptions,
+  useGenerateMultiCityOptions,
+  useAdjustCityNights,
+  useConfirmMultiCity,
+  useMultiCityPricing,
+  usePopularRoutes,
+} from './multiCityAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -305,6 +419,10 @@ import userAPI from './userAPI';
 import exploreAPI from './exploreAPI';
 import contactAPI from './contactAPI';
 import voyanceAPI from './voyanceAPI';
+import plannerAPI from './plannerAPI';
+import hotelAPI from './hotelAPI';
+import tripSharingAPI from './tripSharingAPI';
+import multiCityAPI from './multiCityAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -317,6 +435,10 @@ const voyance = {
   explore: exploreAPI,
   contact: contactAPI,
   api: voyanceAPI,
+  planner: plannerAPI,
+  hotels: hotelAPI,
+  sharing: tripSharingAPI,
+  multiCity: multiCityAPI,
 };
 
 export default voyance;
