@@ -25,6 +25,7 @@ import Press from "./pages/Press";
 // Pages - Auth
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
+import ResetPassword from "./pages/ResetPassword";
 
 // Pages - Onboarding
 import Welcome from "./pages/Welcome";
@@ -84,6 +85,7 @@ const App = () => (
                 {/* Auth Routes */}
                 <Route path="/signin" element={<SignIn />} />
                 <Route path="/signup" element={<SignUp />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 
                 {/* Onboarding Routes */}
                 <Route path="/welcome" element={
