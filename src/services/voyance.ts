@@ -1676,4 +1676,35 @@ export {
   type DestinationTier,
 } from './destinationsCanonicalAPI';
 
+// Account Management API
+export { default as accountManagementAPI } from './accountManagementAPI';
+export {
+  // Types
+  type RequestDeletionResponse,
+  type ConfirmDeletionInput,
+  type ConfirmDeletionResponse,
+  type ChangePasswordInput,
+  type ChangePasswordResponse,
+  type UpdateProfileInput as AccountUpdateProfileInput,
+  type UpdateProfileResponse as AccountUpdateProfileResponse,
+  
+  // API functions
+  requestAccountDeletion,
+  confirmAccountDeletion,
+  changePassword as changeAccountPassword,
+  updateProfile as updateAccountProfile,
+  deleteAccount,
+  
+  // React Query hooks
+  useRequestAccountDeletion,
+  useConfirmAccountDeletion,
+  useChangePassword as useChangeAccountPassword,
+  useUpdateProfile as useUpdateAccountProfile,
+  useDeleteAccount,
+  
+  // Helper functions
+  validatePassword,
+  getPasswordStrength,
+} from './accountManagementAPI';
+
 export default voyance;
