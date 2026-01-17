@@ -1135,6 +1135,147 @@ export {
   useFinalizeQuizSimple,
 } from './quizExtendedAPI';
 
+// User Dashboard API
+export { default as userDashboardAPI } from './userDashboardAPI';
+export {
+  type DashboardCounts,
+  type DashboardTrip,
+  type DashboardData,
+  type DashboardResponse as UserDashboardResponse,
+  type MinimalDashboardUser,
+  type MinimalDashboardResponse,
+  type DashboardTestResponse,
+  getDashboard as getUserDashboard,
+  getMinimalDashboard,
+  testDashboard,
+  useDashboard as useUserDashboard,
+  useMinimalDashboard,
+} from './userDashboardAPI';
+
+// Price Drift API
+export { default as priceDriftAPI } from './priceDriftAPI';
+export {
+  type PriceItemType,
+  type TrackPriceInput,
+  type TrackPriceResponse,
+  type PriceHistoryEntry,
+  type DriftAnalysis,
+  type PriceStatusResponse,
+  type StopTrackingResponse,
+  trackPrice,
+  getPriceStatus,
+  stopTracking,
+  getDriftDirectionLabel,
+  getDriftDirectionColor,
+  formatPriceChange,
+  usePriceStatus,
+  useTrackPrice,
+  useStopTracking,
+} from './priceDriftAPI';
+
+// Guides API
+export { default as guidesAPI } from './guidesAPI';
+export {
+  type Guide,
+  type FullGuide,
+  type GuidesFilters,
+  type GuidesPagination,
+  type GuidesResponse,
+  type FeaturedGuide,
+  type RelatedGuide,
+  getGuides,
+  getGuide,
+  getFeaturedGuides,
+  getRelatedGuides,
+  useGuides,
+  useGuide,
+  useFeaturedGuides,
+  useRelatedGuides,
+} from './guidesAPI';
+
+// Budget Aggregation API
+export { default as budgetAPI } from './budgetAPI';
+export {
+  type CostCategory,
+  type CostSource,
+  type CostItem,
+  type AggregateBudgetInput,
+  type CategoryBreakdown,
+  type AggregateBudgetResponse,
+  type BudgetOverrideInput,
+  type BudgetOverrideResponse,
+  type TripBudgetData,
+  aggregateBudget,
+  overrideBudget,
+  getTripBudget as getBudgetData,
+  formatBudgetAmount,
+  getCategoryLabel,
+  getCategoryIcon,
+  getCategoryPercentage,
+  useTripBudget as useBudgetData,
+  useAggregateBudget,
+  useOverrideBudget,
+} from './budgetAPI';
+
+// Trip Activities API
+export { default as tripActivitiesAPI } from './tripActivitiesAPI';
+export {
+  type ActivityLocation as TripActivityLocation,
+  type Activity,
+  type UpdateActivityInput,
+  type MoveActivityInput,
+  type ActivityUpdateResponse,
+  type AlternativeActivity as TripAlternativeActivity,
+  type AlternativesResponse as TripAlternativesResponse,
+  updateActivity,
+  deleteActivity,
+  moveActivity,
+  lockActivity as lockTripActivity,
+  unlockActivity as unlockTripActivity,
+  getActivityAlternatives as getTripActivityAlternatives,
+  formatActivityTime,
+  getActivityTypeIcon,
+  useActivityAlternatives as useTripActivityAlternatives,
+  useUpdateActivity,
+  useDeleteActivity,
+  useMoveActivity,
+  useLockActivity as useLockTripActivity,
+  useUnlockActivity as useUnlockTripActivity,
+} from './tripActivitiesAPI';
+
+// Weather API
+export { default as weatherAPI } from './weatherAPI';
+export {
+  type WeatherForecast,
+  type WeatherData,
+  type WeatherResponse,
+  getWeather,
+  getWeatherIcon,
+  formatTemperature,
+  getSeasonColor,
+  parseTemperatureRange,
+  useWeather,
+} from './weatherAPI';
+
+// Checkout API
+export { default as checkoutAPI } from './checkoutAPI';
+export {
+  type CreateCheckoutInput,
+  type CheckoutSessionResponse,
+  type CheckoutStatusResponse,
+  createCheckoutSession as createTripCheckout,
+  getCheckoutStatus,
+  checkoutAndRedirect,
+  generateIdempotencyKey,
+  calculateNights,
+  formatCheckoutAmount,
+  isSessionValid,
+  getSessionTimeRemaining,
+  useCheckoutStatus,
+  useCreateCheckoutSession,
+  useCheckoutAndRedirect,
+} from './checkoutAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -1182,6 +1323,13 @@ import profileAPI from './profileAPI';
 import timelineBlocksAPI from './timelineBlocksAPI';
 import transportAPI from './transportAPI';
 import quizExtendedAPI from './quizExtendedAPI';
+import userDashboardAPI from './userDashboardAPI';
+import priceDriftAPI from './priceDriftAPI';
+import guidesAPI from './guidesAPI';
+import budgetAPI from './budgetAPI';
+import tripActivitiesAPI from './tripActivitiesAPI';
+import weatherAPI from './weatherAPI';
+import checkoutAPI from './checkoutAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -1227,6 +1375,13 @@ const voyance = {
   profile: profileAPI,
   timelineBlocks: timelineBlocksAPI,
   transport: transportAPI,
+  userDashboard: userDashboardAPI,
+  priceDrift: priceDriftAPI,
+  guides: guidesAPI,
+  budget: budgetAPI,
+  tripActivities: tripActivitiesAPI,
+  weather: weatherAPI,
+  checkout: checkoutAPI,
 };
 
 export default voyance;
