@@ -1439,6 +1439,7 @@ import * as destinationsExtendedAPI from './destinationsExtendedAPI';
 import * as plannerFlightsAPI from './plannerFlightsAPI';
 import * as priceMonitorAPI from './priceMonitorAPI';
 import * as saveTripAPI from './saveTripAPI';
+import itineraryAPI from './itineraryAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -1509,7 +1510,58 @@ const voyance = {
   plannerFlights: plannerFlightsAPI,
   priceMonitor: priceMonitorAPI,
   saveTrip: saveTripAPI,
+  itinerary: itineraryAPI,
 };
+
+// Itinerary API (enhanced itinerary generation)
+export { default as itineraryAPI } from './itineraryAPI';
+export {
+  // Types
+  type ItineraryPreferences,
+  type GenerateItineraryInput,
+  type ActivityVenue,
+  type ActivityTransport,
+  type ActivityCoordinates,
+  type ItineraryActivity,
+  type DayMeals,
+  type DayWeather,
+  type DayTransportation,
+  type DayNarrative,
+  type ItineraryDay,
+  type Itinerary,
+  type ItineraryStatus,
+  type ItineraryStatusResponse,
+  type RegenerateDayInput,
+  type JobStatusResponse,
+  
+  // API functions
+  generateItinerary,
+  generateNewItinerary,
+  generateItineraryNow,
+  getItinerary,
+  saveItinerary,
+  regenerateDay,
+  getJobStatus,
+  
+  // React Query hooks
+  useItinerary,
+  useGenerateItinerary,
+  useGenerateNewItinerary,
+  useSaveItinerary,
+  useRegenerateDay,
+  useJobStatus,
+  
+  // Helper functions
+  isItineraryReady,
+  isItineraryGenerating,
+  getStatusMessage,
+  formatWalkingDistance,
+  formatWalkingTime,
+  getWeatherIcon as getItineraryWeatherIcon,
+  formatTemperature as formatItineraryTemperature,
+  getPaceScoreLabel,
+  getPaceScoreColor,
+} from './itineraryAPI';
 
 // New API Services (from latest backend routes) - imported with aliases to avoid conflicts
 export * from './destinationImagesAPI';
