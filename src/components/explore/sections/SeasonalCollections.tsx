@@ -18,7 +18,7 @@ const collections = [
     id: 'autumn',
     title: 'Autumn',
     subtitle: 'Harvest & golden light',
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600',
+    image: 'https://images.unsplash.com/photo-1476820865390-c52aeebb9891?w=600',
   },
   {
     id: 'winter',
