@@ -185,14 +185,18 @@ export {
   type HomeHeroResponse,
   type FeatureCard,
   type FeatureCardsResponse,
+  type HowItWorksStep,
+  type HowItWorksResponse,
   
   // API functions
   getHomeHeroImage,
   getFeatureCards,
+  getHowItWorks,
   
   // React Query hooks
   useHomeHeroImage,
   useFeatureCards,
+  useHowItWorks,
 } from './contentAPI';
 
 // User API (profile, trips, onboarding)
@@ -405,6 +409,74 @@ export {
   usePopularRoutes,
 } from './multiCityAPI';
 
+// Flight Ranking API
+export { default as flightRankingAPI } from './flightRankingAPI';
+export {
+  // Types
+  type FlightRankingPreferences,
+  type AlternateAirports,
+  type FlightLayover,
+  type RankedFlight,
+  type FlightRankingMetadata,
+  type FlightRankingResponse,
+  type FlightRankingQueryParams,
+  type FlightRankingBodyParams,
+  
+  // API functions
+  getRankedFlights,
+  rankFlights,
+  
+  // React Query hooks
+  useRankedFlights,
+  useRankFlights,
+} from './flightRankingAPI';
+
+// Hotel Ranking API
+export { default as hotelRankingAPI } from './hotelRankingAPI';
+export {
+  // Types
+  type HotelUserPreferences,
+  type HotelLocation,
+  type RankedHotel,
+  type HotelRankingPagination,
+  type HotelRankingMetadata,
+  type HotelRankingResponse,
+  type HotelRankingQueryParams,
+  type HotelRankingBodyParams,
+  
+  // API functions
+  getRankedHotels,
+  rankHotels,
+  
+  // React Query hooks
+  useRankedHotels,
+  useInfiniteRankedHotels,
+  useRankHotels,
+} from './hotelRankingAPI';
+
+// Price Lock API
+export { default as priceLockAPI } from './priceLockAPI';
+export {
+  // Types
+  type PriceLockItemType,
+  type PriceLockStatus,
+  type CreatePriceLockInput,
+  type PriceLockData,
+  type PriceLockResponse,
+  type PriceLockStatusResponse,
+  
+  // API functions
+  createPriceLock,
+  getPriceLockStatus,
+  cancelPriceLock,
+  calculateTimeRemaining,
+  
+  // React Query hooks
+  usePriceLockStatus,
+  useCreatePriceLock,
+  useCancelPriceLock,
+} from './priceLockAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -423,6 +495,9 @@ import plannerAPI from './plannerAPI';
 import hotelAPI from './hotelAPI';
 import tripSharingAPI from './tripSharingAPI';
 import multiCityAPI from './multiCityAPI';
+import flightRankingAPI from './flightRankingAPI';
+import hotelRankingAPI from './hotelRankingAPI';
+import priceLockAPI from './priceLockAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -439,6 +514,9 @@ const voyance = {
   hotels: hotelAPI,
   sharing: tripSharingAPI,
   multiCity: multiCityAPI,
+  flightRanking: flightRankingAPI,
+  hotelRanking: hotelRankingAPI,
+  priceLock: priceLockAPI,
 };
 
 export default voyance;

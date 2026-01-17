@@ -81,6 +81,47 @@ export async function getFeatureCards(): Promise<FeatureCardsResponse> {
 }
 
 // ============================================================================
+// How It Works API
+// ============================================================================
+
+export interface HowItWorksStep {
+  headline: string;
+  subtext: string;
+  image: string;
+}
+
+export interface HowItWorksResponse {
+  steps: HowItWorksStep[];
+}
+
+/**
+ * Get how it works steps data
+ */
+export async function getHowItWorks(): Promise<HowItWorksResponse> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/howItWorks`, {
+      method: 'GET',
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error('[ContentAPI] Get how it works error:', error);
+    // Return default fallback
+    return {
+      steps: [
+        { headline: 'Step 1', subtext: 'Description for step 1', image: '/images/step1.jpg' },
+        { headline: 'Step 2', subtext: 'Description for step 2', image: '/images/step2.jpg' },
+        { headline: 'Step 3', subtext: 'Description for step 3', image: '/images/step3.jpg' },
+      ],
+    };
+  }
+}
+
+// ============================================================================
 // React Query Hooks
 // ============================================================================
 
@@ -102,6 +143,14 @@ export function useFeatureCards() {
   });
 }
 
+export function useHowItWorks() {
+  return useQuery({
+    queryKey: ['how-it-works'],
+    queryFn: getHowItWorks,
+    staleTime: Infinity, // Static content doesn't change
+  });
+}
+
 // ============================================================================
 // Export
 // ============================================================================
@@ -109,6 +158,7 @@ export function useFeatureCards() {
 const contentAPI = {
   getHomeHeroImage,
   getFeatureCards,
+  getHowItWorks,
 };
 
 export default contentAPI;

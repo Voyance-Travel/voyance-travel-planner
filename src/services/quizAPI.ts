@@ -370,12 +370,201 @@ export function useTravelDNA() {
 }
 
 // ============================================================================
+// Quiz Restore & Debug API
+// ============================================================================
+
+export interface QuizRestoreResponse {
+  success: boolean;
+  hasIncompleteSession: boolean;
+  session?: {
+    sessionId: string;
+    currentStep: number;
+    questionsAnswered: number;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  savedResponses?: Record<string, string | string[] | Record<string, unknown>>;
+  stepAnswers?: Record<string, Record<string, string | string[] | Record<string, unknown>>>;
+  message?: string;
+  error?: string;
+}
+
+export interface QuizResponsesResponse {
+  success: boolean;
+  sessionId: string;
+  responses: Array<{
+    field_id: string;
+    field_type: string;
+    answer_value: string;
+    display_label?: string;
+    step_id: string;
+    question_prompt?: string;
+    response_order: number;
+  }>;
+  count: number;
+}
+
+export interface QuizDebugInfo {
+  userId: string;
+  sessions: Array<{
+    id: string;
+    current_step: number;
+    questions_answered: number;
+    is_complete: boolean;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+  responsesByStep: Array<{
+    step_id: string;
+    count: number;
+  }>;
+}
+
+export interface QuizFinalizeSimpleResponse {
+  success: boolean;
+  travelDNA?: string;
+  data?: {
+    archetype: {
+      primary: string;
+      secondary?: string;
+      confidence: number;
+      rarity: string;
+    };
+  };
+  error?: string;
+}
+
+/**
+ * Restore an incomplete quiz session
+ */
+export async function restoreQuizSession(): Promise<QuizRestoreResponse> {
+  try {
+    const response = await quizApiRequest<QuizRestoreResponse>('/quiz/restore-session', {
+      method: 'GET',
+    });
+    return response;
+  } catch (error) {
+    console.error('[QuizAPI] Restore session error:', error);
+    return {
+      success: false,
+      hasIncompleteSession: false,
+      error: error instanceof Error ? error.message : 'Failed to restore session',
+    };
+  }
+}
+
+/**
+ * Get all responses for a specific quiz session
+ */
+export async function getQuizResponses(sessionId: string): Promise<QuizResponsesResponse> {
+  try {
+    const response = await quizApiRequest<QuizResponsesResponse>(`/quiz/responses/${sessionId}`, {
+      method: 'GET',
+    });
+    return response;
+  } catch (error) {
+    console.error('[QuizAPI] Get responses error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Debug endpoint: Get current session info
+ */
+export async function getQuizDebugInfo(): Promise<QuizDebugInfo> {
+  try {
+    const response = await quizApiRequest<QuizDebugInfo>('/quiz/debug/current-session', {
+      method: 'GET',
+    });
+    return response;
+  } catch (error) {
+    console.error('[QuizAPI] Debug info error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Debug endpoint: Force update a session to step 11 (complete)
+ */
+export async function forceCompleteQuiz(sessionId: string): Promise<{ success: boolean }> {
+  try {
+    const response = await quizApiRequest<{ success: boolean }>('/quiz/debug/force-update', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+    return response;
+  } catch (error) {
+    console.error('[QuizAPI] Force complete error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Simple finalization: Generate Travel DNA directly from responses
+ */
+export async function finalizeQuizSimple(sessionId?: string): Promise<QuizFinalizeSimpleResponse> {
+  try {
+    const response = await quizApiRequest<QuizFinalizeSimpleResponse>('/quiz/finalize-simple', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+    return response;
+  } catch (error) {
+    console.error('[QuizAPI] Finalize simple error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to finalize quiz',
+    };
+  }
+}
+
+// Additional React Query hooks for new endpoints
+export function useRestoreQuizSession() {
+  return useQuery({
+    queryKey: ['quiz-restore-session'],
+    queryFn: restoreQuizSession,
+    staleTime: 0, // Always check for latest session
+  });
+}
+
+export function useQuizResponses(sessionId: string | null) {
+  return useQuery({
+    queryKey: ['quiz-responses', sessionId],
+    queryFn: () => sessionId ? getQuizResponses(sessionId) : Promise.reject('No session'),
+    enabled: !!sessionId,
+    staleTime: 30_000,
+  });
+}
+
+export function useQuizDebugInfo() {
+  return useQuery({
+    queryKey: ['quiz-debug-info'],
+    queryFn: getQuizDebugInfo,
+    staleTime: 0, // Always fresh debug data
+  });
+}
+
+export function useFinalizeQuizSimple() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (sessionId?: string) => finalizeQuizSimple(sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['travel-dna'] });
+      queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
+      queryClient.invalidateQueries({ queryKey: ['quiz-restore-session'] });
+    },
+  });
+}
+
+// ============================================================================
 // Local Storage Helpers (for offline/fallback)
 // ============================================================================
 
 const QUIZ_SESSION_KEY = 'voyance_quiz_session';
 const QUIZ_ANSWERS_KEY = 'voyance_quiz_answers';
-
 export function saveQuizSessionLocally(sessionId: string, currentStep: number): void {
   try {
     localStorage.setItem(QUIZ_SESSION_KEY, JSON.stringify({ sessionId, currentStep }));
@@ -430,6 +619,13 @@ const quizAPI = {
   getQuizSession,
   finalizeQuiz,
   getTravelDNA,
+  
+  // Restore & debug
+  restoreQuizSession,
+  getQuizResponses,
+  getQuizDebugInfo,
+  forceCompleteQuiz,
+  finalizeQuizSimple,
   
   // Local storage helpers
   saveQuizSessionLocally,
