@@ -1440,6 +1440,7 @@ import * as plannerFlightsAPI from './plannerFlightsAPI';
 import * as priceMonitorAPI from './priceMonitorAPI';
 import * as saveTripAPI from './saveTripAPI';
 import itineraryAPI from './itineraryAPI';
+import diagnosticsAPI from './diagnosticsAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -1511,7 +1512,42 @@ const voyance = {
   priceMonitor: priceMonitorAPI,
   saveTrip: saveTripAPI,
   itinerary: itineraryAPI,
+  userDiagnostics: diagnosticsAPI,
 };
+
+// Diagnostics API (user diagnostics, system status)
+export { default as diagnosticsAPI } from './diagnosticsAPI';
+export {
+  // Types
+  type ProfileCompleteness,
+  type UserPreferenceSummary,
+  type UserDiagnostics,
+  type UserDiagnosticsResponse,
+  type SystemStatusResponse,
+  type DuplicateEntry,
+  type DuplicateCheckResponse,
+  type FixDuplicatesResponse,
+  
+  // API functions
+  getSystemStatus,
+  getUserDiagnostics,
+  getMyDiagnostics,
+  checkDuplicates,
+  fixDuplicates,
+  
+  // React Query hooks
+  useSystemStatus,
+  useUserDiagnostics,
+  useMyDiagnostics,
+  useDuplicateCheck,
+  useFixDuplicates,
+  
+  // Helper functions
+  getCompletionLabel,
+  getCompletionColor,
+  getStatusIndicator,
+  formatRecommendations,
+} from './diagnosticsAPI';
 
 // Itinerary API (enhanced itinerary generation)
 export { default as itineraryAPI } from './itineraryAPI';
