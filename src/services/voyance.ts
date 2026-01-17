@@ -917,6 +917,139 @@ export {
   useBudgetZone,
 } from './dashboardAPI';
 
+// Emotional Tags API
+export { default as emotionalTagsAPI } from './emotionalTagsAPI';
+export {
+  type EmotionalTag,
+  type AddTagInput,
+  type RemoveTagInput,
+  type TagsResponse,
+  type AddTagResponse,
+  getEmotionalTags,
+  addEmotionalTag,
+  removeEmotionalTag,
+  parseTagString,
+  formatTagString,
+  useEmotionalTags,
+  useAddEmotionalTag,
+  useRemoveEmotionalTag,
+} from './emotionalTagsAPI';
+
+// Must-Haves API
+export { default as mustHavesAPI } from './mustHavesAPI';
+export {
+  type MustHave,
+  type CreateMustHaveInput,
+  type UpdateMustHaveInput,
+  type DeleteMustHaveInput,
+  type MustHavesResponse,
+  type MustHaveResponse,
+  getMustHaves,
+  createMustHave,
+  updateMustHave,
+  deleteMustHave,
+  useMustHaves,
+  useCreateMustHave,
+  useUpdateMustHave,
+  useDeleteMustHave,
+} from './mustHavesAPI';
+
+// Meal Plans API
+export { default as mealPlansAPI } from './mealPlansAPI';
+export {
+  type MealPlanPrice,
+  type MealPlan,
+  type CreateMealPlanInput,
+  type UpdateMealPlanInput,
+  type DeleteMealPlanInput,
+  type SyncMealPlansInput,
+  type MealPricing,
+  type SyncMealPricingInput,
+  getMealPlans,
+  createMealPlan,
+  updateMealPlan,
+  deleteMealPlan,
+  syncMealPlans,
+  syncMealPricing,
+  useMealPlans,
+  useCreateMealPlan,
+  useUpdateMealPlan,
+  useDeleteMealPlan,
+  useSyncMealPlans,
+  useSyncMealPricing,
+} from './mealPlansAPI';
+
+// Maps API
+export { default as mapsAPI } from './mapsAPI';
+export {
+  type MapsDetailsInput,
+  type MapsReview,
+  type MapsDetailsResponse,
+  getMapsDetails,
+  useGetMapsDetails,
+} from './mapsAPI';
+
+// Manual Bookings API
+export { default as manualBookingsAPI } from './manualBookingsAPI';
+export {
+  type ManualBooking,
+  type CreateManualBookingInput,
+  type UpdateManualBookingInput,
+  type DeleteManualBookingInput,
+  getManualBookings,
+  createManualBooking,
+  updateManualBooking,
+  deleteManualBooking,
+  useManualBookings,
+  useCreateManualBooking,
+  useUpdateManualBooking,
+  useDeleteManualBooking,
+} from './manualBookingsAPI';
+
+// Itinerary Preview API
+export { default as itineraryPreviewAPI } from './itineraryPreviewAPI';
+export {
+  type BudgetTier as ItineraryBudgetTier,
+  type ActivityBlock,
+  type DayBlock,
+  type ItineraryPreviewInput,
+  type ItineraryPreviewResponse,
+  generateItineraryPreview,
+  calculateTotalCost,
+  getBudgetTierLabel,
+  getBudgetTierColor,
+  useGenerateItineraryPreview,
+} from './itineraryPreviewAPI';
+
+// Preferences V1 API
+export { default as preferencesV1API } from './preferencesV1API';
+export {
+  type BudgetTier as PreferencesBudgetTier,
+  type TravelPace,
+  type PlanningPreference,
+  type AccommodationStyle,
+  type SeatPreference,
+  type MobilityLevel,
+  type PreferenceSource,
+  type PreferencesSource,
+  type FullPreferences,
+  type PreferencesUpdate,
+  type PreferencesSection,
+  type TripOption,
+  type TripContext,
+  type ApplyPreferencesInput,
+  type ScoredTripOption,
+  type ApplyPreferencesResponse,
+  getFullPreferences,
+  getPreferencesSection,
+  updatePreferences,
+  applyPreferences,
+  useFullPreferences,
+  usePreferencesSection,
+  useUpdatePreferences,
+  useApplyPreferences,
+} from './preferencesV1API';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -953,6 +1086,13 @@ import dreamBuilderAPI from './dreamBuilderAPI';
 import disruptionAPI from './disruptionAPI';
 import destinationScoringAPI from './destinationScoringAPI';
 import dashboardAPI from './dashboardAPI';
+import emotionalTagsAPI from './emotionalTagsAPI';
+import mustHavesAPI from './mustHavesAPI';
+import mealPlansAPI from './mealPlansAPI';
+import mapsAPI from './mapsAPI';
+import manualBookingsAPI from './manualBookingsAPI';
+import itineraryPreviewAPI from './itineraryPreviewAPI';
+import preferencesV1API from './preferencesV1API';
 
 const voyance = {
   auth: voyanceAuth,
@@ -987,6 +1127,13 @@ const voyance = {
   disruption: disruptionAPI,
   destinationScoring: destinationScoringAPI,
   dashboard: dashboardAPI,
+  emotionalTags: emotionalTagsAPI,
+  mustHaves: mustHavesAPI,
+  mealPlans: mealPlansAPI,
+  maps: mapsAPI,
+  manualBookings: manualBookingsAPI,
+  itineraryPreview: itineraryPreviewAPI,
+  preferencesV1: preferencesV1API,
 };
 
 export default voyance;
