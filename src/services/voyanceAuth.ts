@@ -3,10 +3,21 @@
  * 
  * Integrates with Railway backend auth endpoints:
  * - /api/v1/auth/signup - Email registration
+ * - /api/v1/auth/register - Alias for signup
  * - /api/v1/auth/login - Email login
- * - /api/v1/auth/google - Google OAuth
+ * - /api/v1/auth/me - Get current user
+ * - /api/v1/auth/verify - Verify token
  * - /api/v1/auth/refresh - Token refresh
- * - /api/v1/auth/profile-safe - Get user profile
+ * - /api/v1/auth/logout - Logout and clear cookies
+ * - /api/v1/auth/change-password - Change password (authenticated)
+ * - /api/v1/auth/password/request - Request password reset
+ * - /api/v1/auth/password/reset - Reset password with token
+ * - /api/v1/auth/google - Google OAuth
+ * - /api/v1/auth/google/callback - Google OAuth callback
+ * - /api/v1/auth/profile-safe - Get user profile (safe endpoint)
+ * - /api/v1/auth/auth-health - Health check
+ * - /api/v1/auth/diagnostics/* - Diagnostic endpoints
+ * - /api/v1/auth/debug/* - Debug endpoints
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -120,7 +131,7 @@ export function clearTokens(): void {
 // API Helpers
 // ============================================================================
 
-async function getAuthHeader(): Promise<Record<string, string>> {
+export async function getAuthHeader(): Promise<Record<string, string>> {
   // Try Supabase JWT first (preferred for Lovable Cloud)
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
@@ -359,6 +370,43 @@ export async function checkAuth(): Promise<boolean> {
 }
 
 /**
+ * Get current user (canonical /me endpoint)
+ */
+export async function getCurrentUser(): Promise<{ success: boolean; user?: BackendUser; error?: string; code?: string }> {
+  try {
+    const response = await apiRequest<{
+      success: boolean;
+      user?: BackendUser;
+      code?: string;
+    }>('/api/v1/auth/me', { method: 'GET' });
+    return response;
+  } catch (error) {
+    console.error('[VoyanceAuth] Get current user error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get user',
+    };
+  }
+}
+
+/**
+ * Verify a token
+ */
+export async function verifyToken(token: string): Promise<{ valid: boolean; userId?: string; error?: string }> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    return response.json();
+  } catch (error) {
+    console.error('[VoyanceAuth] Verify token error:', error);
+    return { valid: false, error: error instanceof Error ? error.message : 'Verification failed' };
+  }
+}
+
+/**
  * Debug auth status (for development)
  */
 export async function debugAuthStatus(): Promise<Record<string, unknown>> {
@@ -371,6 +419,105 @@ export async function debugAuthStatus(): Promise<Record<string, unknown>> {
     return response.json();
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Debug failed' };
+  }
+}
+
+/**
+ * Debug current session (for development)
+ */
+export async function debugCurrentSession(): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/debug/current-session`, {
+      method: 'GET',
+      headers: await getAuthHeader(),
+      credentials: 'include',
+    });
+    return response.json();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Session debug failed' };
+  }
+}
+
+// ============================================================================
+// Diagnostics
+// ============================================================================
+
+export interface DiagnosticsResponse {
+  status: string;
+  database?: {
+    connected: boolean;
+    type: string;
+  };
+  users?: {
+    totalCount: number;
+    recentSignups: Array<{
+      id: string;
+      email: string;
+      provider: string;
+      createdAt: string;
+    }>;
+  };
+  timestamp: string;
+  error?: string;
+}
+
+/**
+ * Check Neon database auth diagnostics
+ */
+export async function checkNeonAuthDiagnostics(): Promise<DiagnosticsResponse> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/diagnostics/neon-auth`, {
+      method: 'GET',
+    });
+    return response.json();
+  } catch (error) {
+    return {
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Diagnostics failed',
+    };
+  }
+}
+
+/**
+ * Check auth endpoints health
+ */
+export async function checkAuthHealth(): Promise<{
+  status: string;
+  endpoints?: Array<{ path: string; method: string; registered: boolean }>;
+  features?: Record<string, unknown>;
+  timestamp: string;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/diagnostics/auth-health`, {
+      method: 'GET',
+    });
+    return response.json();
+  } catch (error) {
+    return {
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Health check failed',
+    };
+  }
+}
+
+/**
+ * Simple auth health check endpoint
+ */
+export async function authHealthCheck(): Promise<{ success: boolean; status: string; timestamp: string }> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/auth/auth-health`, {
+      method: 'GET',
+    });
+    return response.json();
+  } catch (error) {
+    return {
+      success: false,
+      status: 'error',
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 
@@ -469,12 +616,22 @@ const voyanceAuth = {
   signup,
   login,
   logout,
+  getCurrentUser,
+  verifyToken,
   getGoogleAuthUrl,
   googleCallback,
   refreshAccessToken,
   getProfile,
   checkAuth,
+  
+  // Debug
   debugAuthStatus,
+  debugCurrentSession,
+  
+  // Diagnostics
+  checkNeonAuthDiagnostics,
+  checkAuthHealth,
+  authHealthCheck,
   
   // Password reset
   requestPasswordReset,
