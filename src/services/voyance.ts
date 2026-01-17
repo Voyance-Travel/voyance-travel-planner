@@ -195,6 +195,99 @@ export {
   useFeatureCards,
 } from './contentAPI';
 
+// User API (profile, trips, onboarding)
+export { default as userAPI } from './userAPI';
+export {
+  // Types
+  type TripStats,
+  type TripStatsSummary,
+  type TripProfileData,
+  type TripCard,
+  type TripStatistics,
+  type TripMilestones,
+  type Achievements,
+  type OnboardingStatus,
+  
+  // Trip stats
+  getTripStats,
+  getTripSummary,
+  
+  // Profile trips
+  getProfileTrips,
+  getProfileTripStatistics,
+  getNextTrip,
+  getRecentTrips,
+  getTripMilestones,
+  
+  // Onboarding
+  getOnboardingStatus,
+  completeProfileGuide,
+  trackMilestone,
+  
+  // React Query hooks
+  useTripStats,
+  useTripSummary,
+  useProfileTrips,
+  useProfileTripStatistics,
+  useNextTrip,
+  useRecentTrips,
+  useTripMilestones,
+  useOnboardingStatus,
+  useCompleteProfileGuide,
+  useTrackMilestone,
+} from './userAPI';
+
+// Explore API (destinations, airports, photos)
+export { default as exploreAPI } from './exploreAPI';
+export {
+  // Types
+  type AlternateAirport,
+  type AlternateAirportsResponse,
+  type AlternateAirportsParams,
+  type ExploreDestination,
+  type ExploreBundle,
+  type DestinationsBundle,
+  
+  // Airports
+  findAlternateAirports,
+  
+  // Bundles
+  getExploreBundle,
+  getStaticExploreBundle,
+  getDestinationsBundle,
+  checkDestinationsBundleHealth,
+  
+  // Photo proxy
+  getProxiedPhotoUrl,
+  getStaticMapUrl,
+  
+  // React Query hooks
+  useAlternateAirports,
+  useFindAlternateAirports,
+  useExploreBundle,
+  useStaticExploreBundle,
+  useDestinationsBundle,
+} from './exploreAPI';
+
+// Contact API
+export { default as contactAPI } from './contactAPI';
+export {
+  // Types & Schemas
+  type SimpleContactInput,
+  type ContactFormInput,
+  type ContactResponse,
+  SimpleContactSchema,
+  ContactFormSchema,
+  
+  // API functions
+  submitSimpleContact,
+  submitContactForm,
+  
+  // React Query hooks
+  useSubmitSimpleContact,
+  useSubmitContactForm,
+} from './contactAPI';
+
 // Voyance API (trips, itinerary, preferences)
 export { default as voyanceAPI } from './voyanceAPI';
 
@@ -208,6 +301,9 @@ import quizSectionsAPI from './quizSectionsAPI';
 import voyanceDiagnostics from './voyanceDiagnostics';
 import connectionRiskAPI from './connectionRiskAPI';
 import contentAPI from './contentAPI';
+import userAPI from './userAPI';
+import exploreAPI from './exploreAPI';
+import contactAPI from './contactAPI';
 import voyanceAPI from './voyanceAPI';
 
 const voyance = {
@@ -217,6 +313,9 @@ const voyance = {
   diagnostics: voyanceDiagnostics,
   connections: connectionRiskAPI,
   content: contentAPI,
+  user: userAPI,
+  explore: exploreAPI,
+  contact: contactAPI,
   api: voyanceAPI,
 };
 
