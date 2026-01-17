@@ -1,4 +1,7 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { tripsAPI, itineraryAPI } from '@/services/voyanceAPI';
+import { useAuth } from './AuthContext';
 
 export interface TripBasics {
   destination?: string;
@@ -7,9 +10,12 @@ export interface TripBasics {
   endDate?: string;
   travelers?: number;
   tripType?: 'solo' | 'couple' | 'family' | 'group';
+  originCity?: string;
+  budgetTier?: string;
 }
 
 export interface FlightSelection {
+  id?: string;
   departure?: {
     airline: string;
     flightNumber: string;
@@ -57,12 +63,15 @@ export interface ItineraryDay {
 }
 
 export interface TripPlannerState {
+  tripId: string | null;
   step: number;
   basics: TripBasics;
   flights: FlightSelection | null;
   hotel: HotelSelection | null;
   itinerary: ItineraryDay[];
   totalPrice: number;
+  isSaving: boolean;
+  lastSaved: Date | null;
 }
 
 interface TripPlannerContextType {
@@ -76,21 +85,27 @@ interface TripPlannerContextType {
   removeActivity: (dayIndex: number, activityId: string) => void;
   calculateTotal: () => number;
   reset: () => void;
+  saveTrip: () => Promise<string | null>;
+  loadTrip: (tripId: string) => Promise<void>;
 }
 
 const initialState: TripPlannerState = {
+  tripId: null,
   step: 1,
   basics: {},
   flights: null,
   hotel: null,
   itinerary: [],
   totalPrice: 0,
+  isSaving: false,
+  lastSaved: null,
 };
 
 const TripPlannerContext = createContext<TripPlannerContextType | undefined>(undefined);
 
 export function TripPlannerProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<TripPlannerState>(initialState);
+  const { user, isAuthenticated } = useAuth();
 
   const setStep = (step: number) => {
     setState(prev => ({ ...prev, step }));
@@ -160,9 +175,178 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
     return total;
   };
 
+  /**
+   * Save trip to BOTH Supabase (primary) and Railway backend
+   */
+  const saveTrip = useCallback(async (): Promise<string | null> => {
+    if (!isAuthenticated || !user) {
+      console.warn('[TripPlanner] Cannot save: not authenticated');
+      return null;
+    }
+
+    if (!state.basics.destination || !state.basics.startDate || !state.basics.endDate) {
+      console.warn('[TripPlanner] Cannot save: missing required fields');
+      return null;
+    }
+
+    setState(prev => ({ ...prev, isSaving: true }));
+
+    try {
+      const tripName = `Trip to ${state.basics.destination}`;
+      
+      // 1. Save to Supabase (primary data store)
+      const supabaseTripData = {
+        user_id: user.id,
+        name: tripName,
+        destination: state.basics.destination,
+        start_date: state.basics.startDate,
+        end_date: state.basics.endDate,
+        travelers: state.basics.travelers || 1,
+        trip_type: state.basics.tripType || 'solo',
+        origin_city: state.basics.originCity,
+        budget_tier: state.basics.budgetTier || 'moderate',
+        status: 'planning' as const,
+        flight_selection: state.flights ? JSON.parse(JSON.stringify(state.flights)) : null,
+        hotel_selection: state.hotel ? JSON.parse(JSON.stringify(state.hotel)) : null,
+        itinerary_data: state.itinerary.length > 0 ? JSON.parse(JSON.stringify({ days: state.itinerary })) : null,
+        metadata: JSON.parse(JSON.stringify({
+          totalPrice: calculateTotal(),
+          lastStep: state.step,
+        })),
+      };
+
+      let tripId = state.tripId;
+
+      if (tripId) {
+        // Update existing trip
+        const { error } = await supabase
+          .from('trips')
+          .update({
+            ...supabaseTripData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', tripId);
+
+        if (error) throw error;
+      } else {
+        // Create new trip
+        const { data, error } = await supabase
+          .from('trips')
+          .insert([supabaseTripData])
+          .select('id')
+          .single();
+
+        if (error) throw error;
+        tripId = data.id;
+      }
+
+      // 2. Also sync to Railway backend (for itinerary generation)
+      try {
+        if (state.tripId) {
+          await tripsAPI.update(tripId!, {
+            name: tripName,
+            destination: state.basics.destination,
+            startDate: state.basics.startDate,
+            endDate: state.basics.endDate,
+            travelers: state.basics.travelers,
+            budgetRange: state.basics.budgetTier as 'tight' | 'moderate' | 'flexible' | 'luxury',
+            tripType: state.basics.tripType,
+            departureCity: state.basics.originCity,
+          });
+        } else {
+          await tripsAPI.create({
+            name: tripName,
+            destination: state.basics.destination,
+            startDate: state.basics.startDate,
+            endDate: state.basics.endDate,
+            travelers: state.basics.travelers,
+            budgetRange: state.basics.budgetTier as 'tight' | 'moderate' | 'flexible' | 'luxury',
+            tripType: state.basics.tripType,
+            departureCity: state.basics.originCity,
+          });
+        }
+      } catch (railwayError) {
+        // Don't fail if Railway sync fails - Supabase is primary
+        console.warn('[TripPlanner] Railway sync failed (non-critical):', railwayError);
+      }
+
+      setState(prev => ({ 
+        ...prev, 
+        tripId, 
+        isSaving: false, 
+        lastSaved: new Date() 
+      }));
+
+      console.log('[TripPlanner] Trip saved successfully:', tripId);
+      return tripId;
+    } catch (error) {
+      console.error('[TripPlanner] Save error:', error);
+      setState(prev => ({ ...prev, isSaving: false }));
+      return null;
+    }
+  }, [state, user, isAuthenticated, calculateTotal]);
+
+  /**
+   * Load trip from Supabase
+   */
+  const loadTrip = useCallback(async (tripId: string): Promise<void> => {
+    if (!isAuthenticated) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', tripId)
+        .single();
+
+      if (error) throw error;
+      if (!data) throw new Error('Trip not found');
+
+      const itineraryData = data.itinerary_data as { days?: ItineraryDay[] } | null;
+      const flightData = data.flight_selection as unknown as FlightSelection | null;
+      const hotelData = data.hotel_selection as unknown as HotelSelection | null;
+      const metadata = data.metadata as { lastStep?: number; totalPrice?: number } | null;
+
+      setState({
+        tripId: data.id,
+        step: metadata?.lastStep || 1,
+        basics: {
+          destination: data.destination,
+          startDate: data.start_date,
+          endDate: data.end_date,
+          travelers: data.travelers || 1,
+          tripType: data.trip_type as TripBasics['tripType'],
+          originCity: data.origin_city || undefined,
+          budgetTier: data.budget_tier || 'moderate',
+        },
+        flights: flightData,
+        hotel: hotelData,
+        itinerary: itineraryData?.days || [],
+        totalPrice: metadata?.totalPrice || 0,
+        isSaving: false,
+        lastSaved: new Date(data.updated_at),
+      });
+
+      console.log('[TripPlanner] Trip loaded:', tripId);
+    } catch (error) {
+      console.error('[TripPlanner] Load error:', error);
+    }
+  }, [isAuthenticated]);
+
   const reset = () => {
     setState(initialState);
   };
+
+  // Auto-save on significant changes (debounced)
+  useEffect(() => {
+    if (!state.tripId || !isAuthenticated) return;
+    
+    const timer = setTimeout(() => {
+      saveTrip();
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [state.basics, state.flights, state.hotel, state.step]);
 
   return (
     <TripPlannerContext.Provider
@@ -177,6 +361,8 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         removeActivity,
         calculateTotal,
         reset,
+        saveTrip,
+        loadTrip,
       }}
     >
       {children}
