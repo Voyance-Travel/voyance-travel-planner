@@ -1869,4 +1869,33 @@ export {
   getProtectedDayDetails,
 } from './emotionalTaggingAPI';
 
+// Progressive Itinerary Generation Hook
+export {
+  useProgressiveItinerary,
+  type ProgressStep,
+  type UserPreferences as ItineraryUserPreferences,
+  type ProgressiveGenerationResponse,
+  type ProgressiveItineraryState,
+} from '@/hooks/useProgressiveItinerary';
+
+// Itinerary Types (unified with backend) - aliased to avoid conflicts
+export {
+  type ActivityType as ItineraryActivityType,
+  type WeatherCondition as ItineraryWeatherCondition,
+  type TripStyle,
+  type TripPace,
+  type ActivityLocation as ItineraryActivityLocation,
+  type ItineraryActivity as FrontendItineraryActivity,
+  type DayItinerary,
+  type TripSummary,
+  type DestinationInfo as ItineraryDestinationInfo,
+  type FlightSegment as ItineraryFlightSegment,
+  type FlightInfo as ItineraryFlightInfo,
+  type HotelReview as ItineraryHotelReview,
+  type HotelInfo as ItineraryHotelInfo,
+  type SampleItineraryData,
+  convertBackendActivity,
+  convertBackendDay,
+} from '@/types/itinerary';
+
 export default voyance;
