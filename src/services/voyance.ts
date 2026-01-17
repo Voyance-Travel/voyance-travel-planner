@@ -638,6 +638,51 @@ export {
   useRegisteredRoutes,
 } from './systemHealthAPI';
 
+// Stripe API (test endpoints)
+export { default as stripeAPI } from './stripeAPI';
+export {
+  // Types
+  type StripeCustomerInfo,
+  type StripeTestCustomerResponse,
+  type StripeProduct,
+  type StripePrice,
+  type StripeTestProductsResponse,
+  
+  // API functions
+  testStripeCustomer,
+  getStripeProducts,
+  
+  // React Query hooks
+  useStripeCustomer,
+  useStripeProducts,
+  useTestStripeCustomer,
+} from './stripeAPI';
+
+// Quiz API - Additional exports for debug/restore
+export {
+  // Additional types
+  type QuizRestoreResponse,
+  type QuizResponsesResponse,
+  type QuizDebugInfo,
+  type QuizForceUpdateResponse,
+  type QuizTestStep11Response,
+  type QuizFinalizeSimpleResponse,
+  
+  // Additional API functions
+  restoreQuizSession,
+  getQuizResponses,
+  getQuizDebugInfo,
+  forceCompleteQuiz,
+  testQuizStep11,
+  finalizeQuizSimple,
+  
+  // Additional hooks
+  useRestoreQuizSession,
+  useQuizResponses,
+  useQuizDebugInfo,
+  useFinalizeQuizSimple,
+} from './quizAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -663,6 +708,7 @@ import tripIntelligenceAPI from './tripIntelligenceAPI';
 import { flightAPI } from './flightAPI';
 import hotelBookingAPI from './hotelBookingAPI';
 import systemHealthAPI from './systemHealthAPI';
+import stripeAPI from './stripeAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -686,6 +732,7 @@ const voyance = {
   flights: flightAPI,
   hotelBookings: hotelBookingAPI,
   systemHealth: systemHealthAPI,
+  stripe: stripeAPI,
 };
 
 export default voyance;
