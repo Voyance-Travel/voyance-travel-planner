@@ -75,6 +75,33 @@ async function callNeonDbDirect<T = unknown>(
   }
 }
 
+// Profiles API
+export interface Profile {
+  user_id: string;
+  email: string;
+  name: string | null;
+  avatar_url: string | null;
+  home_airport: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const profilesApi = {
+  get: async (userId: string) => {
+    return callNeonDbDirect<Profile[]>('/profiles', {
+      method: 'GET',
+      params: { userId },
+    });
+  },
+  
+  update: async (userId: string, profile: { email?: string; name?: string; avatarUrl?: string; homeAirport?: string }) => {
+    return callNeonDbDirect<Profile[]>('/profiles', {
+      method: 'PUT',
+      body: { userId, ...profile },
+    });
+  },
+};
+
 // Preferences API
 export const preferencesApi = {
   get: async (userId: string) => {
@@ -159,6 +186,7 @@ export const queryTable = async (
 };
 
 export default {
+  profiles: profilesApi,
   preferences: preferencesApi,
   trips: tripsApi,
   health: healthCheck,

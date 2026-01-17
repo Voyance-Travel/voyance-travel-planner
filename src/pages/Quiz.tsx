@@ -114,19 +114,25 @@ export default function Quiz() {
     return !!answer;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < questions.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      // Complete quiz
-      setPreferences({
-        style: answers.style as string,
-        budget: answers.budget as string,
-        pace: answers.pace as string,
-        interests: answers.interests as string[],
-        accommodation: answers.accommodation as string,
-      });
-      setIsComplete(true);
+      // Complete quiz - save to Neon
+      try {
+        await setPreferences({
+          style: answers.style as string,
+          budget: answers.budget as string,
+          pace: answers.pace as string,
+          interests: answers.interests as string[],
+          accommodation: answers.accommodation as string,
+        });
+        setIsComplete(true);
+      } catch (error) {
+        console.error('Failed to save preferences:', error);
+        // Still show completion even if save failed
+        setIsComplete(true);
+      }
     }
   };
 
