@@ -1,0 +1,115 @@
+/**
+ * Format a date for display
+ */
+export const formatDate = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
+/**
+ * Format a date as short form (e.g., "Jan 15")
+ */
+export const formatDateShort = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+/**
+ * Format a date with weekday (e.g., "Mon, Jan 15")
+ */
+export const formatDateWithWeekday = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+/**
+ * Get the number of days between two dates
+ */
+export const getDaysBetween = (start: string | Date, end: string | Date): number => {
+  const startDate = typeof start === 'string' ? new Date(start) : start;
+  const endDate = typeof end === 'string' ? new Date(end) : end;
+  const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+/**
+ * Add days to a date
+ */
+export const addDays = (date: string | Date, days: number): string => {
+  const d = typeof date === 'string' ? new Date(date) : new Date(date);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+};
+
+/**
+ * Get relative time string (e.g., "2 days ago", "in 3 hours")
+ */
+export const getRelativeTime = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) {
+    const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+    if (diffHours === 0) return 'now';
+    if (diffHours > 0) return `in ${diffHours} hour${diffHours === 1 ? '' : 's'}`;
+    return `${Math.abs(diffHours)} hour${Math.abs(diffHours) === 1 ? '' : 's'} ago`;
+  }
+  
+  if (diffDays > 0) return `in ${diffDays} day${diffDays === 1 ? '' : 's'}`;
+  return `${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'} ago`;
+};
+
+/**
+ * Check if a date is in the past
+ */
+export const isPast = (date: string | Date): boolean => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.getTime() < Date.now();
+};
+
+/**
+ * Check if a date is today
+ */
+export const isToday = (date: string | Date): boolean => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const today = new Date();
+  return (
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear()
+  );
+};
+
+/**
+ * Format date range (e.g., "Jan 15 - 22, 2025")
+ */
+export const formatDateRange = (start: string | Date, end: string | Date): string => {
+  const startDate = typeof start === 'string' ? new Date(start) : start;
+  const endDate = typeof end === 'string' ? new Date(end) : end;
+  
+  const sameMonth = startDate.getMonth() === endDate.getMonth();
+  const sameYear = startDate.getFullYear() === endDate.getFullYear();
+  
+  if (sameMonth && sameYear) {
+    return `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.getDate()}, ${endDate.getFullYear()}`;
+  }
+  
+  if (sameYear) {
+    return `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${endDate.getFullYear()}`;
+  }
+  
+  return `${formatDateShort(startDate)}, ${startDate.getFullYear()} - ${formatDateShort(endDate)}, ${endDate.getFullYear()}`;
+};
