@@ -683,6 +683,112 @@ export {
   useFinalizeQuizSimple,
 } from './quizAPI';
 
+// Activity Alternatives API
+export { default as activityAlternativesAPI } from './activityAlternativesAPI';
+export {
+  // Types
+  type TimeSlot,
+  type WeatherDependency,
+  type ActivityLocation,
+  type PreferenceProfile,
+  type AlternativeActivity,
+  type GetAlternativesInput,
+  type AlternativesResponse,
+  type SwapActivityInput,
+  type SwapActivityResponse,
+  type LockActivityInput,
+  type LockActivityResponse,
+  
+  // API functions
+  getActivityAlternatives,
+  swapActivity,
+  lockActivity,
+  unlockActivity,
+  
+  // React Query hooks
+  useActivityAlternatives,
+  useSwapActivity,
+  useLockActivity,
+  useUnlockActivity,
+} from './activityAlternativesAPI';
+
+// Preview API (teaser itineraries)
+export { default as previewAPI } from './previewAPI';
+export {
+  // Types
+  type PreviewActivity,
+  type PreviewHotel,
+  type PreviewPricing,
+  type PreviewData,
+  type PreviewUpgrade,
+  type GeneratePreviewInput,
+  type PreviewResponse,
+  type PreviewRemainingResponse,
+  
+  // API functions
+  generatePreview,
+  getPreviewRemaining,
+  
+  // React Query hooks
+  usePreviewRemaining,
+  useGeneratePreview,
+} from './previewAPI';
+
+// Trips Debug API
+export { default as tripsDebugAPI } from './tripsDebugAPI';
+export {
+  // Types
+  type StatusCount,
+  type TripSample,
+  type TripStatusRawResponse,
+  type TripStatusAnalysisResponse,
+  type DebugTrip,
+  type DebugTripsResponseResult,
+  type TableColumn,
+  type TripsTableCheckResponse,
+  
+  // API functions
+  getTripStatusRaw,
+  getTripStatusAnalysis,
+  getDebugTripsResponse,
+  getTripsTableCheck,
+  
+  // React Query hooks
+  useTripStatusRaw,
+  useTripStatusAnalysis,
+  useDebugTripsResponse,
+  useTripsTableCheck,
+} from './tripsDebugAPI';
+
+// Airport Link API
+export { default as airportLinkAPI } from './airportLinkAPI';
+export {
+  // Types
+  type AirportLinkResponse,
+  
+  // API functions
+  getAirportLink,
+  
+  // React Query hooks
+  useAirportLink,
+} from './airportLinkAPI';
+
+// Admin API
+export { default as adminAPI } from './adminAPI';
+export {
+  // Types
+  type StripeTransaction,
+  type AIMatch,
+  type AuditLogEntry,
+  type AdminStatusResponse,
+  
+  // API functions
+  getAdminStatus,
+  
+  // React Query hooks
+  useAdminStatus,
+} from './adminAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -709,6 +815,11 @@ import { flightAPI } from './flightAPI';
 import hotelBookingAPI from './hotelBookingAPI';
 import systemHealthAPI from './systemHealthAPI';
 import stripeAPI from './stripeAPI';
+import activityAlternativesAPI from './activityAlternativesAPI';
+import previewAPI from './previewAPI';
+import tripsDebugAPI from './tripsDebugAPI';
+import airportLinkAPI from './airportLinkAPI';
+import adminAPI from './adminAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -733,6 +844,11 @@ const voyance = {
   hotelBookings: hotelBookingAPI,
   systemHealth: systemHealthAPI,
   stripe: stripeAPI,
+  activityAlternatives: activityAlternativesAPI,
+  preview: previewAPI,
+  tripsDebug: tripsDebugAPI,
+  airportLink: airportLinkAPI,
+  admin: adminAPI,
 };
 
 export default voyance;
