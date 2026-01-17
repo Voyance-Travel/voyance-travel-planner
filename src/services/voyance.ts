@@ -1340,6 +1340,33 @@ export {
 // Audit Logs API
 export * from './auditLogsAPI';
 
+// Feature Flags API
+export * from './featureFlagsAPI';
+
+// Tags API
+export * from './tagsAPI';
+
+// Trip Budget & Companions API
+export * from './tripBudgetCompanionsAPI';
+
+// Booking API
+export * from './bookingAPI';
+
+// Connections Assessment API
+export * from './connectionsAssessmentAPI';
+
+// Destinations Extended API
+export * from './destinationsExtendedAPI';
+
+// Planner Flights API
+export * from './plannerFlightsAPI';
+
+// Price Monitor API
+export * from './priceMonitorAPI';
+
+// Save Trip API
+export * from './saveTripAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -1403,6 +1430,15 @@ import * as venuesAPI from './venuesAPI';
 import * as featuredDestinationsAPI from './featuredDestinationsAPI';
 import * as priceDriftExtendedAPI from './priceDriftExtendedAPI';
 import * as auditLogsAPI from './auditLogsAPI';
+import * as featureFlagsAPI from './featureFlagsAPI';
+import * as tagsAPI from './tagsAPI';
+import * as tripBudgetCompanionsAPI from './tripBudgetCompanionsAPI';
+import * as bookingAPI from './bookingAPI';
+import * as connectionsAssessmentAPI from './connectionsAssessmentAPI';
+import * as destinationsExtendedAPI from './destinationsExtendedAPI';
+import * as plannerFlightsAPI from './plannerFlightsAPI';
+import * as priceMonitorAPI from './priceMonitorAPI';
+import * as saveTripAPI from './saveTripAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -1464,6 +1500,15 @@ const voyance = {
   featuredDestinations: featuredDestinationsAPI,
   priceDriftExtended: priceDriftExtendedAPI,
   auditLogs: auditLogsAPI,
+  featureFlags: featureFlagsAPI,
+  tags: tagsAPI,
+  tripBudgetCompanions: tripBudgetCompanionsAPI,
+  booking: bookingAPI,
+  connectionsAssessment: connectionsAssessmentAPI,
+  destinationsExtended: destinationsExtendedAPI,
+  plannerFlights: plannerFlightsAPI,
+  priceMonitor: priceMonitorAPI,
+  saveTrip: saveTripAPI,
 };
 
 export default voyance;
