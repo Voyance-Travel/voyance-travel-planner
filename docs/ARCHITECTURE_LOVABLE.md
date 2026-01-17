@@ -204,12 +204,19 @@ To fully match original system, implement:
 
 ## Reference Documents
 
-See `/docs/` folder for original SOT documents:
+See [INDEX.md](./INDEX.md) for complete documentation index.
 
-- `airport-codes-database.md` - 879 airports, 152 countries
+### Key Lovable Docs
+- `SYSTEM_SOT.md` - Master source of truth
+- `ITINERARY_LOVABLE.md` - Itinerary system mapping
+- `PREFERENCES_LOVABLE.md` - Preferences system mapping
+
+### Reference Data
+- `airport-codes-database-full.md` - 879 airports, 152 countries
 - `TRAVEL_ARCHETYPES.md` - 25+ traveler personalities
-- `database-schema-reference.md` - Full original schema (60 tables)
-- `quiz-data-flow.md` - Detailed quiz flow
-- `PREFERENCES_DATA_FIELDS.md` - All preference fields
-- `BILLING_SYSTEM.md` - Stripe integration spec
-- `profile-system-source-of-truth.md` - Profile tabs spec
+
+### Original SOT (for reference)
+- `database-schema-reference.md` - Full original schema
+- `PREFERENCES_SYSTEM_SOT.md` - Complete preferences spec
+- `TRIP_PLANNER_INDEX.md` - Trip planner overview
+- `SOT_API_TO_UI_MAPPING.md` - API → UI field mapping
