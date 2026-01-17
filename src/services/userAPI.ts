@@ -720,6 +720,226 @@ export function useDeleteAvatar() {
 }
 
 // ============================================================================
+// User Identity API
+// ============================================================================
+
+export interface UserIdentity {
+  id: string;
+  email: string;
+  display_name: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  handle: string;
+  avatarUrl?: string | null;
+  loyaltyInfo: {
+    tier: string;
+    points: number;
+  };
+  preferences: {
+    travelDNA?: string | null;
+    quizCompleted: boolean;
+  };
+  status: {
+    emailVerified: boolean;
+    onboardingCompleted: boolean;
+  };
+  memberSince?: string;
+}
+
+export interface UserIdentityResponse {
+  success: boolean;
+  identity?: UserIdentity;
+  error?: string;
+}
+
+/**
+ * Get current user's identity information
+ */
+export async function getUserIdentity(): Promise<UserIdentityResponse> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/user/identity`, {
+    method: 'GET',
+    headers,
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+// React Query hook for user identity
+export function useUserIdentity(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['user-identity'],
+    queryFn: getUserIdentity,
+    staleTime: 5 * 60_000, // 5 minutes
+    enabled: options?.enabled !== false,
+  });
+}
+
+// ============================================================================
+// User Preferences API
+// ============================================================================
+
+export interface UserPreferences {
+  preferredCurrency?: string;
+  preferredLanguage?: string;
+  newsletterOptIn?: boolean;
+  dataCollectionOptIn?: boolean;
+  budgetPreference?: string;
+  pacePreference?: string;
+  accommodationPreference?: string;
+  transportPreference?: string[];
+  dietaryRestrictions?: string[];
+  accessibilityNeeds?: string[];
+  [key: string]: unknown;
+}
+
+export interface PreferencesResponse {
+  message: string;
+  preferences: UserPreferences;
+}
+
+/**
+ * Get user preferences
+ */
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/user/preferences`, {
+    method: 'GET',
+    headers,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  
+  const data = await response.json();
+  return data.preferences || data;
+}
+
+/**
+ * Update user preferences
+ */
+export async function updateUserPreferences(
+  preferences: Partial<UserPreferences>
+): Promise<PreferencesResponse> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/user/preferences`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(preferences),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+// React Query hooks for preferences
+export function useUserPreferences(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['user-preferences'],
+    queryFn: getUserPreferences,
+    staleTime: 5 * 60_000,
+    enabled: options?.enabled !== false,
+  });
+}
+
+export function useUpdateUserPreferences() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: updateUserPreferences,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
+      queryClient.invalidateQueries({ queryKey: ['user-identity'] });
+    },
+  });
+}
+
+// ============================================================================
+// GDPR API
+// ============================================================================
+
+export interface GDPRExportResponse {
+  status: 'success' | 'error';
+  message: string;
+  data?: unknown;
+}
+
+export interface GDPRDeleteResponse {
+  status: 'success' | 'error';
+  message: string;
+}
+
+/**
+ * Export user data (GDPR compliance)
+ */
+export async function exportUserData(): Promise<GDPRExportResponse> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/gdpr/export`, {
+    method: 'GET',
+    headers,
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Delete user account (GDPR compliance)
+ */
+export async function deleteUserAccount(): Promise<GDPRDeleteResponse> {
+  const headers = await getAuthHeader();
+  
+  const response = await fetch(`${BACKEND_URL}/api/v1/gdpr/delete-account`, {
+    method: 'DELETE',
+    headers,
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+// React Query hooks for GDPR
+export function useExportUserData() {
+  return useMutation({
+    mutationFn: exportUserData,
+  });
+}
+
+export function useDeleteUserAccount() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: deleteUserAccount,
+    onSuccess: () => {
+      // Clear all cached data on account deletion
+      queryClient.clear();
+    },
+  });
+}
+
+// ============================================================================
 // Export
 // ============================================================================
 
@@ -748,6 +968,17 @@ const userAPI = {
   getAvatar,
   updateAvatar,
   deleteAvatar,
+  
+  // Identity
+  getUserIdentity,
+  
+  // Preferences
+  getUserPreferences,
+  updateUserPreferences,
+  
+  // GDPR
+  exportUserData,
+  deleteUserAccount,
 };
 
 export default userAPI;
