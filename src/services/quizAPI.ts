@@ -420,6 +420,23 @@ export interface QuizDebugInfo {
     step_id: string;
     count: number;
   }>;
+  message?: string;
+}
+
+export interface QuizForceUpdateResponse {
+  success: boolean;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  usersTableUpdated?: boolean;
+  error?: string;
+}
+
+export interface QuizTestStep11Response {
+  success: boolean;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  usersUpdated?: boolean;
+  error?: string;
 }
 
 export interface QuizFinalizeSimpleResponse {
@@ -488,16 +505,38 @@ export async function getQuizDebugInfo(): Promise<QuizDebugInfo> {
 /**
  * Debug endpoint: Force update a session to step 11 (complete)
  */
-export async function forceCompleteQuiz(sessionId: string): Promise<{ success: boolean }> {
+export async function forceCompleteQuiz(sessionId: string): Promise<QuizForceUpdateResponse> {
   try {
-    const response = await quizApiRequest<{ success: boolean }>('/quiz/debug/force-update', {
+    const response = await quizApiRequest<QuizForceUpdateResponse>('/quiz/debug/force-update', {
       method: 'POST',
       body: JSON.stringify({ sessionId }),
     });
     return response;
   } catch (error) {
     console.error('[QuizAPI] Force complete error:', error);
-    throw error;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to force complete quiz',
+    };
+  }
+}
+
+/**
+ * Debug endpoint: Test step 11 update directly
+ */
+export async function testQuizStep11(sessionId: string): Promise<QuizTestStep11Response> {
+  try {
+    const response = await quizApiRequest<QuizTestStep11Response>('/quiz/test-step-11', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+    return response;
+  } catch (error) {
+    console.error('[QuizAPI] Test step 11 error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to test step 11',
+    };
   }
 }
 
@@ -620,11 +659,12 @@ const quizAPI = {
   finalizeQuiz,
   getTravelDNA,
   
-  // Restore & debug
+// Restore & debug
   restoreQuizSession,
   getQuizResponses,
   getQuizDebugInfo,
   forceCompleteQuiz,
+  testQuizStep11,
   finalizeQuizSimple,
   
   // Local storage helpers
