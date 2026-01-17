@@ -1,10 +1,25 @@
 # Voyance Architecture - Lovable Codebase
 
-**Last Updated**: 2025-01-17
+<!--
+@keywords: architecture, backend, frontend, API, edge function, Supabase, Neon, auth, data flow
+@category: CORE
+@searchTerms: how it works, system design, backend setup, API calls, authentication
+-->
+
+**Last Updated**: 2025-01-17  
+**Status**: ✅ Current  
+**See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [INDEX.md](./INDEX.md)
 
 This document adapts the original Voyance SOT documents for the Lovable codebase architecture.
 
+---
+
 ## Architecture Overview
+
+<!--
+@section: overview
+@keywords: diagram, layers, frontend, backend, database
+-->
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
@@ -19,31 +34,43 @@ This document adapts the original Voyance SOT documents for the Lovable codebase
 └─────────────────┘     └──────────────────┘     └─────────────┘
 ```
 
+---
+
 ## Key Differences from Original Backend
 
-| Original System | Lovable System |
-|-----------------|----------------|
-| Custom JWT auth | Supabase Auth |
-| Railway backend | Edge Functions |
-| Direct API calls | `supabase.functions.invoke()` |
-| `/api/v1/auth/*` endpoints | `/neon-db/*` paths |
-| Express.js routes | Deno.serve handlers |
+<!--
+@section: differences
+@keywords: Railway, Express, Deno, JWT, migration
+-->
+
+| Original System | Lovable System | Keywords |
+|-----------------|----------------|----------|
+| Custom JWT auth | Supabase Auth | auth, JWT, session |
+| Railway backend | Edge Functions | railway, deno, serverless |
+| Direct API calls | `supabase.functions.invoke()` | invoke, fetch |
+| `/api/v1/auth/*` | `/neon-db/*` | routes, endpoints |
+| Express.js routes | Deno.serve handlers | express, deno |
 
 ---
 
 ## API Endpoint Mapping
 
+<!--
+@section: api-mapping
+@keywords: endpoints, original, lovable, migration, routes
+-->
+
 ### Original → Lovable
 
-| Original Endpoint | Lovable Equivalent |
-|-------------------|-------------------|
-| `POST /api/v1/auth/signup` | `supabase.auth.signUp()` |
-| `POST /api/v1/auth/login` | `supabase.auth.signInWithPassword()` |
-| `GET /api/preferences` | `GET /neon-db/preferences?userId=X` |
-| `POST /api/preferences` | `PUT /neon-db/preferences` |
-| `GET /api/trips` | `GET /neon-db/trips?userId=X` |
-| `POST /api/trips` | `POST /neon-db/trips` |
-| `GET /api/profile` | `GET /neon-db/profiles?userId=X` |
+| Original Endpoint | Lovable Equivalent | Keywords |
+|-------------------|-------------------|----------|
+| `POST /api/v1/auth/signup` | `supabase.auth.signUp()` | signup, register |
+| `POST /api/v1/auth/login` | `supabase.auth.signInWithPassword()` | login, signin |
+| `GET /api/preferences` | `GET /neon-db/preferences?userId=X` | preferences, get |
+| `POST /api/preferences` | `PUT /neon-db/preferences` | preferences, save |
+| `GET /api/trips` | `GET /neon-db/trips?userId=X` | trips, list |
+| `POST /api/trips` | `POST /neon-db/trips` | trips, create |
+| `GET /api/profile` | `GET /neon-db/profiles?userId=X` | profile, get |
 
 ### Usage in Code
 
@@ -67,6 +94,11 @@ await tripsApi.create(userId, { destination: 'Tokyo', status: 'draft' });
 ---
 
 ## Data Flow Adaptations
+
+<!--
+@section: data-flow
+@keywords: quiz, auth, flow, save, session
+-->
 
 ### Quiz Flow (Simplified)
 
@@ -101,24 +133,29 @@ supabase.auth.signUp() → Session → AuthContext → Auto-managed by Supabase 
 
 ## Neon Database Tables
 
+<!--
+@section: neon-tables
+@keywords: tables, schema, SQL, profiles, preferences, trips
+-->
+
 ### Currently Used
 
-| Table | Purpose | Edge Function Path |
-|-------|---------|-------------------|
-| `profiles` | User profile data | `/profiles` |
-| `user_preferences` | Quiz results, travel style | `/preferences` |
-| `trips` | User trips | `/trips` |
+| Table | Purpose | Edge Function Path | Keywords |
+|-------|---------|-------------------|----------|
+| `profiles` | User profile data | `/profiles` | user, name, avatar |
+| `user_preferences` | Quiz results, travel style | `/preferences` | quiz, style, budget |
+| `trips` | User trips | `/trips` | trip, destination, dates |
 
 ### Schema (user_preferences)
 
 ```sql
 CREATE TABLE user_preferences (
   user_id UUID PRIMARY KEY,
-  travel_style TEXT,
-  budget TEXT,
-  pace TEXT,
-  interests TEXT[],
-  accommodation TEXT,
+  travel_style TEXT,    -- luxury, adventure, cultural, relaxation
+  budget TEXT,          -- budget, moderate, premium, luxury
+  pace TEXT,            -- slow, moderate, fast
+  interests TEXT[],     -- ['food', 'art', 'nature']
+  accommodation TEXT,   -- hotel, boutique, airbnb, hostel
   created_at TIMESTAMP,
   updated_at TIMESTAMP
 );
@@ -134,7 +171,7 @@ CREATE TABLE trips (
   start_date DATE,
   end_date DATE,
   travelers INTEGER DEFAULT 1,
-  status TEXT DEFAULT 'draft',
+  status TEXT DEFAULT 'draft',  -- draft, planning, booked, completed, cancelled
   data JSONB DEFAULT '{}',
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP
@@ -149,7 +186,7 @@ CREATE TABLE profiles (
   email TEXT,
   name TEXT,
   avatar_url TEXT,
-  home_airport TEXT,
+  home_airport TEXT,  -- IATA code
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP
 );
@@ -159,6 +196,11 @@ CREATE TABLE profiles (
 
 ## Frontend Architecture
 
+<!--
+@section: frontend
+@keywords: React, context, state, components, pages
+-->
+
 ### State Management
 
 ```
@@ -167,26 +209,31 @@ AuthContext (src/contexts/AuthContext.tsx)
 ├── session: Session | null
 ├── preferences: TravelPreferences
 └── Methods:
-    ├── login()
-    ├── signup()
-    ├── logout()
+    ├── login()        → Supabase Auth + Neon sync
+    ├── signup()       → Supabase Auth + profile create
+    ├── logout()       → Clear session
     ├── setPreferences() → Saves to Neon
     └── refreshUserData() → Fetches from Neon
 ```
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/services/neonDb.ts` | API client for Neon edge function |
-| `src/contexts/AuthContext.tsx` | Auth state + Neon data sync |
-| `src/pages/Quiz.tsx` | Quiz flow, saves to Neon on complete |
-| `src/pages/Profile.tsx` | Displays data from Neon |
-| `supabase/functions/neon-db/index.ts` | Edge function handlers |
+| File | Purpose | Keywords |
+|------|---------|----------|
+| `src/services/neonDb.ts` | API client for Neon edge function | API, fetch, invoke |
+| `src/contexts/AuthContext.tsx` | Auth state + Neon data sync | auth, user, session |
+| `src/pages/Quiz.tsx` | Quiz flow, saves to Neon on complete | quiz, questions |
+| `src/pages/Profile.tsx` | Displays data from Neon | profile, display |
+| `supabase/functions/neon-db/index.ts` | Edge function handlers | edge, routes |
 
 ---
 
 ## Future Enhancements
+
+<!--
+@section: future
+@keywords: todo, planned, enhancement, roadmap
+-->
 
 To fully match original system, implement:
 
@@ -202,21 +249,13 @@ To fully match original system, implement:
 
 ---
 
-## Reference Documents
+## Related Documents
 
-See [INDEX.md](./INDEX.md) for complete documentation index.
-
-### Key Lovable Docs
-- `SYSTEM_SOT.md` - Master source of truth
-- `ITINERARY_LOVABLE.md` - Itinerary system mapping
-- `PREFERENCES_LOVABLE.md` - Preferences system mapping
-
-### Reference Data
-- `airport-codes-database-full.md` - 879 airports, 152 countries
-- `TRAVEL_ARCHETYPES.md` - 25+ traveler personalities
-
-### Original SOT (for reference)
-- `database-schema-reference.md` - Full original schema
-- `PREFERENCES_SYSTEM_SOT.md` - Complete preferences spec
-- `TRIP_PLANNER_INDEX.md` - Trip planner overview
-- `SOT_API_TO_UI_MAPPING.md` - API → UI field mapping
+| Document | Purpose | Keywords |
+|----------|---------|----------|
+| [SYSTEM_SOT.md](./SYSTEM_SOT.md) | Master source of truth | main, canonical |
+| [ITINERARY_LOVABLE.md](./ITINERARY_LOVABLE.md) | Itinerary system | activities, days |
+| [PREFERENCES_LOVABLE.md](./PREFERENCES_LOVABLE.md) | Preferences system | quiz, style |
+| [airport-codes-database-full.md](./airport-codes-database-full.md) | 879 airports | IATA, cities |
+| [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) | 25+ traveler personalities | DNA, archetype |
+| [database-schema-reference.md](./database-schema-reference.md) | Full original schema | schema, tables |
