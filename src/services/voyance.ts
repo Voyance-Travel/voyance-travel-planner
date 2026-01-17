@@ -789,6 +789,134 @@ export {
   useAdminStatus,
 } from './adminAPI';
 
+// BDQ (Background Discovery Queue) API
+export { default as bdqAPI } from './bdqAPI';
+export {
+  // Types
+  type JobStatus,
+  type JobType,
+  type BDQJob,
+  type ListJobsParams,
+  type ListJobsResponse,
+  type CreateJobInput,
+  type CreateJobResponse,
+  type JobDetailsResponse,
+  type CancelJobResponse,
+  type QueueStats,
+  type QueueStatsResponse,
+  
+  // API functions
+  listBDQJobs,
+  createBDQJob,
+  getBDQJob,
+  cancelBDQJob,
+  getBDQStats,
+  
+  // React Query hooks
+  useBDQJobs,
+  useBDQJob,
+  useBDQStats,
+  useCreateBDQJob,
+  useCancelBDQJob,
+} from './bdqAPI';
+
+// DreamBuilder API
+export { default as dreamBuilderAPI } from './dreamBuilderAPI';
+export {
+  // Types
+  type DreamBuilderInput,
+  type DreamMatchDestination,
+  type DreamMatchResult,
+  type DreamBuilderSubmitResponse,
+  type DreamMatchResponse,
+  type DreamBuilderHealthResponse,
+  
+  // API functions
+  getDreamBuilderHealth,
+  submitDreamBuilder,
+  getDreamMatch,
+  
+  // React Query hooks
+  useDreamBuilderHealth,
+  useDreamMatch,
+  useSubmitDreamBuilder,
+} from './dreamBuilderAPI';
+
+// Disruption API
+export { default as disruptionAPI } from './disruptionAPI';
+export {
+  // Types
+  type DisruptionSeverity,
+  type DisruptionChannel,
+  type DisruptionType,
+  type DisruptionPrediction,
+  type PredictDisruptionInput,
+  type PredictDisruptionResponse,
+  type SubscribeInput,
+  type SubscribeResponse,
+  type UnsubscribeResponse,
+  type DisruptionHistoryItem,
+  type DisruptionHistoryResponse,
+  
+  // API functions
+  predictDisruptions,
+  subscribeToDisruptions,
+  unsubscribeFromDisruptions,
+  getDisruptionHistory,
+  getSeverityColor,
+  getSeverityLabel,
+  
+  // React Query hooks
+  useDisruptionPredictions,
+  useDisruptionHistory,
+  usePredictDisruptions,
+  useSubscribeToDisruptions,
+  useUnsubscribeFromDisruptions,
+} from './disruptionAPI';
+
+// Destination Scoring API
+export { default as destinationScoringAPI } from './destinationScoringAPI';
+export {
+  // Types
+  type PricingTier,
+  type ActivityLevel,
+  type DestinationToScore,
+  type ScoredDestination,
+  type ScoreDestinationsInput,
+  type ScoreDestinationsResponse,
+  
+  // API functions
+  scoreDestinations,
+  sortByScore,
+  getTopDestinations,
+  filterByMinScore,
+  
+  // React Query hooks
+  useScoreDestinations,
+} from './destinationScoringAPI';
+
+// Dashboard API
+export { default as dashboardAPI } from './dashboardAPI';
+export {
+  // Types
+  type SavedTrip,
+  type ActiveSession,
+  type DashboardResponse,
+  type BudgetZone,
+  type BudgetZoneThreshold,
+  type BudgetZoneResponse,
+  
+  // API functions
+  getDashboard,
+  getBudgetZone,
+  getBudgetZoneColor,
+  getBudgetZoneLabel,
+  
+  // React Query hooks
+  useDashboard,
+  useBudgetZone,
+} from './dashboardAPI';
+
 // ============================================================================
 // Unified Default Export
 // ============================================================================
@@ -820,6 +948,11 @@ import previewAPI from './previewAPI';
 import tripsDebugAPI from './tripsDebugAPI';
 import airportLinkAPI from './airportLinkAPI';
 import adminAPI from './adminAPI';
+import bdqAPI from './bdqAPI';
+import dreamBuilderAPI from './dreamBuilderAPI';
+import disruptionAPI from './disruptionAPI';
+import destinationScoringAPI from './destinationScoringAPI';
+import dashboardAPI from './dashboardAPI';
 
 const voyance = {
   auth: voyanceAuth,
@@ -849,6 +982,11 @@ const voyance = {
   tripsDebug: tripsDebugAPI,
   airportLink: airportLinkAPI,
   admin: adminAPI,
+  bdq: bdqAPI,
+  dreamBuilder: dreamBuilderAPI,
+  disruption: disruptionAPI,
+  destinationScoring: destinationScoringAPI,
+  dashboard: dashboardAPI,
 };
 
 export default voyance;
