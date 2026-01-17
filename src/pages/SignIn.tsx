@@ -14,8 +14,6 @@ export default function SignIn() {
   const location = useLocation();
   const { login } = useAuth();
 
-  const from = (location.state as any)?.from || '/profile';
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
@@ -23,7 +21,8 @@ export default function SignIn() {
     setIsLoading(true);
     await login(email);
     setIsLoading(false);
-    navigate(from);
+    // New users go to quiz, returning users go to profile
+    navigate('/quiz');
   };
 
   return (

@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 import Explore from "./pages/Explore";
 import DestinationDetail from "./pages/DestinationDetail";
 import SignIn from "./pages/SignIn";
+import TravelQuiz from "./pages/TravelQuiz";
 import Profile from "./pages/Profile";
 import TripPlanner from "./pages/TripPlanner";
 import StartPlanning from "./pages/StartPlanning";
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/explore" element={<Explore />} />
           <Route path="/destinations/:id" element={<DestinationDetail />} />
           <Route path="/signin" element={<SignIn />} />
+          <Route path="/quiz" element={<TravelQuiz />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/trip/new" element={<StartPlanning />} />
           <Route path="/trip/:tripId" element={<TripPlanner />} />
