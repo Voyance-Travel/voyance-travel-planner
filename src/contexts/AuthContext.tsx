@@ -1,7 +1,18 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { profilesApi, preferencesApi, Profile } from '@/services/neonDb';
+import { 
+  getProfile, 
+  getProfileLite,
+  updateProfile as updateProfileAPI,
+  type UserProfile,
+  type ProfileLite,
+} from '@/services/profileAPI';
+import {
+  getFullPreferences,
+  updatePreferences as updatePreferencesAPI,
+  type FullPreferences,
+} from '@/services/preferencesV1API';
 
 export interface User {
   id: string;
@@ -12,6 +23,11 @@ export interface User {
   createdAt: string;
   quizCompleted?: boolean;
   preferences?: TravelPreferences;
+  travelDNA?: {
+    type: string;
+    secondary?: string;
+    confidence?: number;
+  };
 }
 
 export interface TravelPreferences {
@@ -37,35 +53,40 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Transform Supabase user to our User type
-function transformUser(
+// Transform backend profile to our User type
+function transformProfile(
   supabaseUser: SupabaseUser | null, 
-  profile?: Profile | null,
-  preferences?: TravelPreferences | null
+  profile?: UserProfile | ProfileLite | null,
+  preferences?: Partial<FullPreferences> | null
 ): User | null {
   if (!supabaseUser) return null;
+  
+  const travelDNA = profile && 'travelDNA' in profile ? profile.travelDNA : null;
+  const hasCompletedQuiz = profile && 'hasCompletedQuiz' in profile 
+    ? profile.hasCompletedQuiz 
+    : profile && 'quizCompleted' in profile 
+      ? profile.quizCompleted 
+      : false;
   
   return {
     id: supabaseUser.id,
     email: supabaseUser.email || '',
-    name: profile?.name || supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0],
-    avatar: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
-    homeAirport: profile?.home_airport || undefined,
+    name: profile?.name || profile?.display_name || supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0],
+    avatar: profile?.avatarUrl || supabaseUser.user_metadata?.avatar_url,
+    homeAirport: preferences?.homeAirport || undefined,
     createdAt: supabaseUser.created_at,
-    quizCompleted: !!preferences,
-    preferences: preferences || undefined,
-  };
-}
-
-// Transform Neon preferences to our format
-function transformPreferences(neonPrefs: Record<string, unknown> | null): TravelPreferences | null {
-  if (!neonPrefs) return null;
-  return {
-    style: neonPrefs.travel_style as string || undefined,
-    budget: neonPrefs.budget as string || undefined,
-    pace: neonPrefs.pace as string || undefined,
-    interests: neonPrefs.interests as string[] || undefined,
-    accommodation: neonPrefs.accommodation as string || undefined,
+    quizCompleted: hasCompletedQuiz || !!preferences,
+    preferences: preferences ? {
+      style: preferences.accommodationStyle,
+      budget: preferences.budgetTier,
+      pace: preferences.travelPace,
+      accommodation: preferences.accommodationStyle,
+    } : undefined,
+    travelDNA: travelDNA ? {
+      type: typeof travelDNA === 'object' && 'type' in travelDNA ? String(travelDNA.type) : 'Explorer',
+      secondary: typeof travelDNA === 'object' && 'archetype' in travelDNA && travelDNA.archetype && typeof travelDNA.archetype === 'object' && 'secondary' in travelDNA.archetype ? String(travelDNA.archetype.secondary) : undefined,
+      confidence: typeof travelDNA === 'object' && 'archetype' in travelDNA && travelDNA.archetype && typeof travelDNA.archetype === 'object' && 'confidence' in travelDNA.archetype ? Number(travelDNA.archetype.confidence) : undefined,
+    } : undefined,
   };
 }
 
@@ -74,19 +95,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load user data from Neon
+  // Load user data from backend
   const loadUserData = async (supabaseUser: SupabaseUser) => {
     try {
-      console.log('[Auth] Loading user data from Neon for:', supabaseUser.id);
+      console.log('[Auth] Loading user data from backend for:', supabaseUser.id);
       
-      // Fetch profile and preferences in parallel
-      const [profileResult, prefsResult] = await Promise.all([
-        profilesApi.get(supabaseUser.id),
-        preferencesApi.get(supabaseUser.id),
+      // Fetch profile and preferences in parallel from Railway backend
+      const [profileResult, preferencesResult] = await Promise.allSettled([
+        getProfileLite(),
+        getFullPreferences(),
       ]);
       
-      const profile = profileResult.data?.[0] || null;
-      const preferences = transformPreferences(prefsResult.data?.[0] as Record<string, unknown> || null);
+      const profile = profileResult.status === 'fulfilled' && profileResult.value.success 
+        ? profileResult.value.profile 
+        : null;
+      const preferences = preferencesResult.status === 'fulfilled' 
+        ? preferencesResult.value 
+        : null;
       
       console.log('[Auth] Loaded profile:', profile);
       console.log('[Auth] Loaded preferences:', preferences);
@@ -98,14 +123,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Create or update profile in Neon
+  // Sync profile to backend on sign in
   const syncProfile = async (supabaseUser: SupabaseUser) => {
     try {
-      console.log('[Auth] Syncing profile to Neon for:', supabaseUser.id);
-      await profilesApi.update(supabaseUser.id, {
-        email: supabaseUser.email || '',
+      console.log('[Auth] Syncing profile to backend for:', supabaseUser.id);
+      await updateProfileAPI({
         name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name,
-        avatarUrl: supabaseUser.user_metadata?.avatar_url,
+        profileImage: supabaseUser.user_metadata?.avatar_url,
       });
     } catch (error) {
       console.error('[Auth] Error syncing profile:', error);
@@ -117,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session?.user) return;
     
     const { profile, preferences } = await loadUserData(session.user);
-    setUser(transformUser(session.user, profile, preferences));
+    setUser(transformProfile(session.user, profile, preferences));
   };
 
   useEffect(() => {
@@ -128,15 +152,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(newSession);
         
         if (newSession?.user) {
-          // Defer Neon calls to avoid deadlock
+          // Defer backend calls to avoid deadlock
           setTimeout(async () => {
-            // On sign up, create profile in Neon
+            // On sign up, sync profile to backend
             if (event === 'SIGNED_IN') {
               await syncProfile(newSession.user);
             }
             
             const { profile, preferences } = await loadUserData(newSession.user);
-            setUser(transformUser(newSession.user, profile, preferences));
+            setUser(transformProfile(newSession.user, profile, preferences));
             setIsLoading(false);
           }, 0);
         } else {
@@ -152,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (existingSession?.user) {
         const { profile, preferences } = await loadUserData(existingSession.user);
-        setUser(transformUser(existingSession.user, profile, preferences));
+        setUser(transformProfile(existingSession.user, profile, preferences));
       }
       
       setIsLoading(false);
@@ -175,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (data.user) {
       const { profile, preferences } = await loadUserData(data.user);
-      setUser(transformUser(data.user, profile, preferences));
+      setUser(transformProfile(data.user, profile, preferences));
     }
   };
 
@@ -200,20 +224,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Check if email confirmation is required
     if (data.user && !data.session) {
-      // Email confirmation required - user is created but not logged in
       throw new Error('Please check your email to confirm your account');
     }
     
-    // Create profile in Neon
+    // Sync profile to backend
     if (data.user) {
-      await profilesApi.update(data.user.id, {
-        email: email,
+      await updateProfileAPI({
         name: name,
       });
     }
     
     setSession(data.session);
-    setUser(transformUser(data.user, null, null));
+    setUser(transformProfile(data.user, null, null));
   };
 
   const logout = async () => {
@@ -229,12 +251,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       setUser({ ...user, ...updates });
       
-      // Sync to Neon
+      // Sync to backend
       if (session?.user) {
-        profilesApi.update(session.user.id, {
+        updateProfileAPI({
           name: updates.name,
-          avatarUrl: updates.avatar,
-          homeAirport: updates.homeAirport,
+          profileImage: updates.avatar,
         }).catch(console.error);
       }
     }
@@ -243,24 +264,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setPreferences = async (preferences: TravelPreferences) => {
     if (!user || !session?.user) return;
     
-    console.log('[Auth] Saving preferences to Neon:', preferences);
+    console.log('[Auth] Saving preferences to backend:', preferences);
     
-    // Save to Neon - cast to Record for API compatibility
-    const result = await preferencesApi.update(user.id, preferences as unknown as Record<string, unknown>);
-    
-    if (result.error) {
-      console.error('[Auth] Error saving preferences:', result.error);
-      throw new Error(result.error);
+    // Map to backend format and save
+    try {
+      await updatePreferencesAPI({
+        budgetTier: preferences.budget as 'budget' | 'moderate' | 'luxury' | 'premium',
+        travelPace: preferences.pace as 'relaxed' | 'moderate' | 'fast',
+        accommodationStyle: preferences.accommodation as 'hostel' | 'budget_hotel' | 'standard_hotel' | 'boutique' | 'luxury',
+      });
+      
+      console.log('[Auth] Preferences saved successfully');
+      
+      // Update local state
+      setUser({ 
+        ...user, 
+        preferences,
+        quizCompleted: true,
+      });
+    } catch (error) {
+      console.error('[Auth] Error saving preferences:', error);
+      throw error;
     }
-    
-    console.log('[Auth] Preferences saved successfully');
-    
-    // Update local state
-    setUser({ 
-      ...user, 
-      preferences,
-      quizCompleted: true,
-    });
   };
 
   return (
