@@ -1,0 +1,487 @@
+/**
+ * Trips Service - Supabase
+ * 
+ * Manages trips stored in Lovable Cloud (Supabase)
+ */
+
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type TripStatus = 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
+export type ItineraryStatus = 'not_started' | 'queued' | 'generating' | 'ready' | 'failed';
+
+// Raw database row type
+interface TripRow {
+  id: string;
+  user_id: string;
+  name: string;
+  origin_city: string | null;
+  destination: string;
+  destination_country: string | null;
+  start_date: string;
+  end_date: string;
+  travelers: number | null;
+  trip_type: string | null;
+  budget_tier: string | null;
+  status: string;
+  itinerary_status: string | null;
+  itinerary_data: Json | null;
+  flight_selection: Json | null;
+  hotel_selection: Json | null;
+  price_lock_expires_at: string | null;
+  metadata: Json | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Application-level Trip type
+export interface Trip {
+  id: string;
+  user_id: string;
+  name: string;
+  origin_city: string | null;
+  destination: string;
+  destination_country: string | null;
+  start_date: string;
+  end_date: string;
+  travelers: number;
+  trip_type: string;
+  budget_tier: string;
+  status: TripStatus;
+  itinerary_status: ItineraryStatus;
+  itinerary_data: ItineraryData | null;
+  flight_selection: FlightSelection | null;
+  hotel_selection: HotelSelection | null;
+  price_lock_expires_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItineraryData {
+  title?: string;
+  destination?: string;
+  days: ItineraryDay[];
+  highlights?: string[];
+  localTips?: string[];
+  generatedAt?: string;
+}
+
+export interface ItineraryDay {
+  dayNumber: number;
+  date?: string;
+  theme?: string;
+  activities: ItineraryActivity[];
+  weather?: {
+    high: number;
+    low: number;
+    condition: string;
+  };
+}
+
+export interface ItineraryActivity {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  startTime: string;
+  endTime: string;
+  duration: string;
+  location: string;
+  estimatedCost: { amount: number; currency: string };
+  bookingRequired: boolean;
+  tips?: string;
+  isLocked?: boolean;
+}
+
+export interface FlightSelection {
+  id?: string;
+  airline?: string;
+  flightNumber?: string;
+  departureAirport?: string;
+  arrivalAirport?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  price?: number;
+  currency?: string;
+}
+
+export interface HotelSelection {
+  id?: string;
+  name?: string;
+  address?: string;
+  starRating?: number;
+  pricePerNight?: number;
+  totalPrice?: number;
+  currency?: string;
+  roomType?: string;
+  imageUrl?: string;
+}
+
+export interface TripCreateInput {
+  name: string;
+  origin_city?: string;
+  destination: string;
+  destination_country?: string;
+  start_date: string;
+  end_date: string;
+  travelers?: number;
+  trip_type?: string;
+  budget_tier?: string;
+}
+
+export interface TripUpdateInput {
+  name?: string;
+  origin_city?: string;
+  destination?: string;
+  destination_country?: string;
+  start_date?: string;
+  end_date?: string;
+  travelers?: number;
+  trip_type?: string;
+  budget_tier?: string;
+  status?: TripStatus;
+  itinerary_status?: ItineraryStatus;
+  itinerary_data?: Json;
+  flight_selection?: Json;
+  hotel_selection?: Json;
+  price_lock_expires_at?: string;
+  metadata?: Json;
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Transform database row to application Trip type
+ */
+function transformTrip(row: TripRow): Trip {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    name: row.name,
+    origin_city: row.origin_city,
+    destination: row.destination,
+    destination_country: row.destination_country,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    travelers: row.travelers ?? 1,
+    trip_type: row.trip_type ?? 'vacation',
+    budget_tier: row.budget_tier ?? 'moderate',
+    status: (row.status as TripStatus) ?? 'draft',
+    itinerary_status: (row.itinerary_status as ItineraryStatus) ?? 'not_started',
+    itinerary_data: row.itinerary_data as unknown as ItineraryData | null,
+    flight_selection: row.flight_selection as unknown as FlightSelection | null,
+    hotel_selection: row.hotel_selection as unknown as HotelSelection | null,
+    price_lock_expires_at: row.price_lock_expires_at,
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+// ============================================================================
+// API FUNCTIONS
+// ============================================================================
+
+/**
+ * Get current user ID helper
+ */
+async function getCurrentUserId(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  return user.id;
+}
+
+/**
+ * Create a new trip
+ */
+export async function createTrip(input: TripCreateInput): Promise<Trip> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('trips')
+    .insert({
+      user_id: userId,
+      name: input.name,
+      origin_city: input.origin_city || null,
+      destination: input.destination,
+      destination_country: input.destination_country || null,
+      start_date: input.start_date,
+      end_date: input.end_date,
+      travelers: input.travelers || 1,
+      trip_type: input.trip_type || 'vacation',
+      budget_tier: input.budget_tier || 'moderate',
+      status: 'draft',
+      itinerary_status: 'not_started',
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Trips] Error creating trip:', error);
+    throw error;
+  }
+
+  return transformTrip(data as TripRow);
+}
+
+/**
+ * Get all trips for current user
+ */
+export async function getTrips(): Promise<Trip[]> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Trips] Error fetching trips:', error);
+    throw error;
+  }
+
+  return (data || []).map(row => transformTrip(row as TripRow));
+}
+
+/**
+ * Get a single trip by ID
+ */
+export async function getTrip(tripId: string): Promise<Trip | null> {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Trips] Error fetching trip:', error);
+    throw error;
+  }
+
+  return data ? transformTrip(data as TripRow) : null;
+}
+
+/**
+ * Update a trip
+ */
+export async function updateTrip(tripId: string, updates: TripUpdateInput): Promise<Trip> {
+  const { data, error } = await supabase
+    .from('trips')
+    .update(updates)
+    .eq('id', tripId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Trips] Error updating trip:', error);
+    throw error;
+  }
+
+  return transformTrip(data as TripRow);
+}
+
+/**
+ * Delete a trip
+ */
+export async function deleteTrip(tripId: string): Promise<void> {
+  const { error } = await supabase
+    .from('trips')
+    .delete()
+    .eq('id', tripId);
+
+  if (error) {
+    console.error('[Trips] Error deleting trip:', error);
+    throw error;
+  }
+}
+
+/**
+ * Save itinerary data to trip
+ */
+export async function saveItinerary(tripId: string, itinerary: ItineraryData): Promise<Trip> {
+  return updateTrip(tripId, {
+    itinerary_data: itinerary as unknown as Json,
+    itinerary_status: 'ready',
+  });
+}
+
+/**
+ * Save flight selection
+ */
+export async function saveFlightSelection(tripId: string, flight: FlightSelection): Promise<Trip> {
+  // Set price lock for 15 minutes
+  const priceLockExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  
+  return updateTrip(tripId, {
+    flight_selection: flight as unknown as Json,
+    price_lock_expires_at: priceLockExpires,
+  });
+}
+
+/**
+ * Save hotel selection
+ */
+export async function saveHotelSelection(tripId: string, hotel: HotelSelection): Promise<Trip> {
+  return updateTrip(tripId, {
+    hotel_selection: hotel as unknown as Json,
+  });
+}
+
+/**
+ * Get trips by status
+ */
+export async function getTripsByStatus(status: TripStatus): Promise<Trip[]> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', status)
+    .order('start_date', { ascending: true });
+
+  if (error) throw error;
+  return (data || []).map(row => transformTrip(row as TripRow));
+}
+
+/**
+ * Get upcoming trips
+ */
+export async function getUpcomingTrips(): Promise<Trip[]> {
+  const userId = await getCurrentUserId();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('start_date', today)
+    .in('status', ['draft', 'planning', 'booked'])
+    .order('start_date', { ascending: true });
+
+  if (error) throw error;
+  return (data || []).map(row => transformTrip(row as TripRow));
+}
+
+// ============================================================================
+// REACT QUERY HOOKS
+// ============================================================================
+
+export function useTrips() {
+  return useQuery({
+    queryKey: ['trips'],
+    queryFn: getTrips,
+    staleTime: 30_000,
+  });
+}
+
+export function useTrip(tripId: string | undefined) {
+  return useQuery({
+    queryKey: ['trip', tripId],
+    queryFn: () => getTrip(tripId!),
+    enabled: !!tripId,
+    staleTime: 30_000,
+  });
+}
+
+export function useUpcomingTrips() {
+  return useQuery({
+    queryKey: ['trips', 'upcoming'],
+    queryFn: getUpcomingTrips,
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateTrip() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createTrip,
+    onSuccess: () => {
+      toast.success('Trip created!');
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to create trip');
+    },
+  });
+}
+
+export function useUpdateTrip() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ tripId, updates }: { tripId: string; updates: TripUpdateInput }) =>
+      updateTrip(tripId, updates),
+    onSuccess: (_, { tripId }) => {
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to update trip');
+    },
+  });
+}
+
+export function useDeleteTrip() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: deleteTrip,
+    onSuccess: () => {
+      toast.success('Trip deleted');
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to delete trip');
+    },
+  });
+}
+
+export function useSaveItinerary() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ tripId, itinerary }: { tripId: string; itinerary: ItineraryData }) =>
+      saveItinerary(tripId, itinerary),
+    onSuccess: (_, { tripId }) => {
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+    },
+  });
+}
+
+export function useSaveFlightSelection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ tripId, flight }: { tripId: string; flight: FlightSelection }) =>
+      saveFlightSelection(tripId, flight),
+    onSuccess: (_, { tripId }) => {
+      toast.success('Flight selection saved');
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+    },
+  });
+}
+
+export function useSaveHotelSelection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ tripId, hotel }: { tripId: string; hotel: HotelSelection }) =>
+      saveHotelSelection(tripId, hotel),
+    onSuccess: (_, { tripId }) => {
+      toast.success('Hotel selection saved');
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+    },
+  });
+}
