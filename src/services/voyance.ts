@@ -1549,4 +1549,43 @@ export {
   type ConfirmBookingResponse as ConfirmBookingResponseV1,
 } from './bookingsV1API';
 
+// Friends API
+export * from './friendsAPI';
+
+// Activity Catalog API (with aliases to avoid conflicts)
+export {
+  searchCatalogActivities,
+  getCatalogActivity,
+  bulkSeedActivities,
+  useCatalogActivities,
+  useDestinationActivities,
+  useCatalogActivity,
+  useBulkSeedActivities,
+  type CatalogActivity,
+  type ActivitySearchParams as CatalogActivitySearchParams,
+  type BulkSeedParams,
+} from './activityCatalogAPI';
+
+// Destinations Canonical API (with aliases to avoid conflicts)
+export {
+  getCanonicalDestinations,
+  getCanonicalDestination,
+  getDestinationBySlug as getDestinationBySlugCanonical,
+  searchCanonicalDestinations,
+  getFeaturedCanonicalDestinations,
+  getTopDestinations as getTopDestinationsCanonical,
+  useCanonicalDestinations,
+  useInfiniteDestinations,
+  useCanonicalDestination,
+  useDestinationBySlug as useDestinationBySlugCanonical,
+  useDestinationSearch as useDestinationSearchCanonical,
+  useFeaturedDestinations as useFeaturedDestinationsCanonical,
+  useTopDestinations as useTopDestinationsCanonical,
+  type CanonicalDestination,
+  type DestinationSearchParams as CanonicalDestinationSearchParams,
+  type PaginatedDestinationsResponse,
+  type CostTier,
+  type DestinationTier,
+} from './destinationsCanonicalAPI';
+
 export default voyance;
