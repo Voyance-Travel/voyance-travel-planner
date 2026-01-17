@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, ChevronDown } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -18,11 +18,11 @@ export default function CinematicHero() {
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/60" />
+        <div className="absolute inset-0 bg-black/40" />
       </div>
 
       {/* Content */}
-      <div className="relative z-10 max-w-5xl mx-auto px-4 text-center text-white">
+      <div className="relative z-10 max-w-4xl mx-auto px-4 text-center text-white">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -33,36 +33,40 @@ export default function CinematicHero() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="text-sm md:text-base uppercase tracking-[0.2em] text-white/80 mb-6"
+            className="text-sm tracking-[0.25em] uppercase text-white/70 mb-8"
           >
-            AI-Powered Travel Planning
+            Intelligent Travel Planning
           </motion.p>
 
           {/* Main Headline */}
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-display font-bold mb-6 leading-tight">
-            Your dream trip,
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-display font-medium mb-6 leading-[1.1] tracking-tight">
+            Travel designed
             <br />
-            <span className="text-primary">designed for you</span>
+            with intention
           </h1>
 
           {/* Subheadline */}
-          <p className="text-lg md:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
-            Personalized itineraries crafted by AI, refined by travel experts. 
-            From flights to experiences—all in one seamless journey.
+          <p className="text-lg md:text-xl text-white/80 mb-12 max-w-xl mx-auto font-light leading-relaxed">
+            Research-driven itineraries that respect your time. 
+            Thoughtful recommendations with clear reasoning.
           </p>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button asChild size="lg" className="text-base px-8">
+            <Button 
+              asChild 
+              size="lg" 
+              className="text-base px-8 bg-white text-foreground hover:bg-white/90"
+            >
               <Link to={ROUTES.START}>
                 Start Planning
-                <ArrowRight className="ml-2 h-5 w-5" />
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button
               variant="outline"
               size="lg"
-              className="text-base px-8 border-white/30 text-white hover:bg-white/10"
+              className="text-base px-8 border-white/40 text-white bg-transparent hover:bg-white/10"
               asChild
             >
               <Link to={ROUTES.EXPLORE}>
@@ -76,11 +80,11 @@ export default function CinematicHero() {
       {/* Scroll Indicator */}
       <motion.button
         onClick={scrollToFeatures}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/60 hover:text-white transition-colors"
+        className="absolute bottom-12 left-1/2 -translate-x-1/2 text-white/50 hover:text-white transition-colors"
         animate={{ y: [0, 8, 0] }}
-        transition={{ repeat: Infinity, duration: 2 }}
+        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
       >
-        <ChevronDown className="h-8 w-8" />
+        <div className="w-[1px] h-16 bg-gradient-to-b from-white/60 to-transparent" />
       </motion.button>
     </section>
   );
