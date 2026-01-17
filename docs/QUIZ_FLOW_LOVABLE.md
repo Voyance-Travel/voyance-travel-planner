@@ -1,0 +1,192 @@
+# Quiz Flow - Lovable Adaptation
+
+**Adapted from**: quiz-data-flow.md
+
+This document describes how the quiz works in the Lovable codebase.
+
+---
+
+## Current Implementation (Simplified)
+
+### Flow Overview
+
+```
+/quiz route
+    │
+    ▼
+Quiz.tsx (5 questions)
+    │
+    ▼
+handleNext() on final step
+    │
+    ▼
+setPreferences() → Saves to Neon
+    │
+    ▼
+QuizCompletion screen
+    │
+    ▼
+Navigate to /profile
+```
+
+### Questions
+
+| Step | Question | Field | Options |
+|------|----------|-------|---------|
+| 1 | Travel style? | `style` | luxury, adventure, cultural, relaxation |
+| 2 | Budget? | `budget` | budget, moderate, premium, luxury |
+| 3 | Pace? | `pace` | slow, moderate, fast |
+| 4 | Interests? | `interests` | food, nature, art, nightlife, shopping, wellness |
+| 5 | Accommodation? | `accommodation` | hotel, boutique, airbnb, hostel |
+
+### Code Location
+
+```
+src/pages/Quiz.tsx          # Main quiz page
+src/components/quiz/        # Quiz UI components
+├── QuizProgress.tsx        # Progress indicator
+├── QuizOption.tsx          # Individual option card
+└── QuizCompletion.tsx      # Completion screen
+```
+
+---
+
+## Data Storage
+
+### On Quiz Completion
+
+```typescript
+// In Quiz.tsx handleNext()
+await setPreferences({
+  style: answers.style as string,
+  budget: answers.budget as string,
+  pace: answers.pace as string,
+  interests: answers.interests as string[],
+  accommodation: answers.accommodation as string,
+});
+```
+
+### AuthContext.setPreferences()
+
+```typescript
+// Saves to Neon via edge function
+const result = await preferencesApi.update(user.id, preferences);
+
+// Updates local state
+setUser({ 
+  ...user, 
+  preferences,
+  quizCompleted: true,
+});
+```
+
+---
+
+## Differences from Original System
+
+| Feature | Original | Lovable |
+|---------|----------|---------|
+| Steps | 11 | 5 |
+| Session tracking | quiz_sessions table | None (stateless) |
+| Response storage | quiz_responses table | Direct to preferences |
+| Resume support | Yes | No |
+| Travel DNA calc | Backend | Frontend (simple) |
+| Retake history | travel_dna_history | Overwrites previous |
+
+---
+
+## Future: Full Quiz Implementation
+
+To match original system:
+
+### 1. Add Quiz Tables in Neon
+
+```sql
+-- Quiz sessions
+CREATE TABLE quiz_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  quiz_version TEXT DEFAULT 'v1',
+  status TEXT DEFAULT 'in_progress',
+  current_step INTEGER DEFAULT 1,
+  total_steps INTEGER DEFAULT 11,
+  completion_percentage INTEGER DEFAULT 0,
+  started_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP,
+  is_complete BOOLEAN DEFAULT FALSE
+);
+
+-- Quiz responses
+CREATE TABLE quiz_responses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  session_id UUID REFERENCES quiz_sessions(id),
+  field_id TEXT NOT NULL,
+  field_type TEXT,
+  answer_value TEXT,
+  step_id INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### 2. Add Edge Function Endpoints
+
+```typescript
+// POST /neon-db/quiz/start
+// POST /neon-db/quiz/save-step
+// POST /neon-db/quiz/finalize
+// GET /neon-db/quiz/session?userId=X
+```
+
+### 3. Implement 11-Step Quiz
+
+From `quiz-data-flow.md`:
+- Steps 1-3: Travel style & pace
+- Steps 4-5: Budget & accommodation
+- Steps 6-7: Activities & interests
+- Steps 8-9: Food & mobility
+- Steps 10-11: Final preferences & confirmation
+
+### 4. Add Travel DNA Calculation
+
+Backend process that:
+1. Reads all quiz_responses
+2. Calculates archetype scores
+3. Determines primary/secondary archetype
+4. Generates confidence score
+5. Saves to travel_dna_profiles
+
+---
+
+## Travel DNA Archetypes
+
+From `TRAVEL_ARCHETYPES.md`, implement these 6 categories:
+
+1. **EXPLORER** - Discovery-driven
+2. **CONNECTOR** - Relationship-driven
+3. **ACHIEVER** - Goal-driven
+4. **RESTORER** - Wellness-driven
+5. **CURATOR** - Experience-driven
+6. **TRANSFORMER** - Change-driven
+
+Each has 4+ sub-archetypes for 25+ total personalities.
+
+### Simple Frontend Calculation (Current)
+
+```typescript
+// In Profile.tsx
+const archetype = user.preferences?.style === 'luxury' ? 'Refined Explorer' 
+                : user.preferences?.style === 'adventure' ? 'Bold Adventurer'
+                : user.preferences?.style === 'cultural' ? 'Culture Seeker'
+                : 'Mindful Traveler';
+```
+
+### Advanced Backend Calculation (Future)
+
+Would use quiz responses to calculate:
+- Primary archetype ID
+- Secondary archetype ID
+- Rarity level (common, moderate, uncommon, very rare)
+- Confidence percentage
+- Trait scores
+- Emotional drivers
