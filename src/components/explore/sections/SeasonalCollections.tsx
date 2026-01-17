@@ -1,58 +1,49 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { buildRoute } from '@/config/routes';
 
 const collections = [
   {
     id: 'spring',
-    emoji: '🌸',
-    title: 'Spring Escapes',
-    description: 'Cherry blossoms and mild weather',
-    destinations: ['kyoto', 'amsterdam', 'washington-dc'],
-    color: 'from-pink-400 to-rose-500',
+    title: 'Spring',
+    subtitle: 'Cherry blossoms & renewal',
+    image: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=600',
   },
   {
     id: 'summer',
-    emoji: '☀️',
-    title: 'Summer Adventures',
-    description: 'Beach getaways and outdoor thrills',
-    destinations: ['santorini', 'bali', 'amalfi'],
-    color: 'from-amber-400 to-orange-500',
+    title: 'Summer',
+    subtitle: 'Coastal escapes & long days',
+    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600',
   },
   {
     id: 'autumn',
-    emoji: '🍂',
-    title: 'Autumn Colors',
-    description: 'Foliage and harvest festivals',
-    destinations: ['new-england', 'bavaria', 'quebec'],
-    color: 'from-orange-400 to-red-500',
+    title: 'Autumn',
+    subtitle: 'Harvest & golden light',
+    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600',
   },
   {
     id: 'winter',
-    emoji: '❄️',
-    title: 'Winter Wonderlands',
-    description: 'Snow-capped mountains and cozy retreats',
-    destinations: ['iceland', 'swiss-alps', 'lapland'],
-    color: 'from-blue-400 to-cyan-500',
+    title: 'Winter',
+    subtitle: 'Alpine retreats & northern lights',
+    image: 'https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=600',
   },
 ];
 
 export default function SeasonalCollections() {
   return (
-    <section className="py-16 bg-background">
+    <section className="py-20 bg-background">
       <div className="max-w-7xl mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="mb-10"
+          className="mb-12"
         >
-          <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2">
+          <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase mb-3">
             Seasonal Collections
-          </h2>
-          <p className="text-muted-foreground">
-            Curated destinations for every time of year
           </p>
+          <h2 className="text-2xl md:text-3xl font-display font-semibold text-foreground">
+            Travel in rhythm with the world
+          </h2>
         </motion.div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -66,17 +57,22 @@ export default function SeasonalCollections() {
             >
               <Link
                 to={`/explore?season=${collection.id}`}
-                className="group block p-6 rounded-2xl bg-card border border-border hover:border-primary/50 hover:shadow-lg transition-all"
+                className="group block relative aspect-[3/4] rounded-lg overflow-hidden"
               >
-                <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br ${collection.color} text-2xl mb-4`}>
-                  {collection.emoji}
+                <img
+                  src={collection.image}
+                  alt={collection.title}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-5">
+                  <h3 className="text-xl font-display font-medium text-white mb-1">
+                    {collection.title}
+                  </h3>
+                  <p className="text-sm text-white/70">
+                    {collection.subtitle}
+                  </p>
                 </div>
-                <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors mb-1">
-                  {collection.title}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {collection.description}
-                </p>
               </Link>
             </motion.div>
           ))}
