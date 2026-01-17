@@ -2,7 +2,15 @@
  * Voyance Backend API Client
  * Base URL: https://voyance-backend.railway.app
  * Contract Version: v1 (schemaVersion: "v1")
+ * 
+ * Related services:
+ * - voyanceAuth.ts - Authentication (signup, login, Google OAuth)
+ * - quizAPI.ts - Quiz flow and Travel DNA
  */
+
+// Re-export auth and quiz APIs for convenience
+export { default as voyanceAuth } from './voyanceAuth';
+export { default as quizAPI } from './quizAPI';
 
 import { supabase } from '@/integrations/supabase/client';
 
