@@ -34,6 +34,21 @@ async function query(sql: string, params?: unknown[]) {
   }
 }
 
+// Ensure profiles table exists (for first-time setup)
+async function ensureProfilesTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS profiles (
+      user_id UUID PRIMARY KEY,
+      email TEXT,
+      name TEXT,
+      avatar_url TEXT,
+      home_airport TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -60,6 +75,7 @@ Deno.serve(async (req) => {
     switch (true) {
       // Health check
       case path === '/health' && req.method === 'GET': {
+        await ensureProfilesTable();
         const result = await query('SELECT NOW() as time');
         return new Response(
           JSON.stringify({ 
@@ -67,6 +83,65 @@ Deno.serve(async (req) => {
             database: result.error ? 'disconnected' : 'connected',
             time: (result.data?.[0] as Record<string, unknown>)?.time 
           }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get user profile
+      case path === '/profiles' && req.method === 'GET': {
+        const userId = url.searchParams.get('userId');
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        await ensureProfilesTable();
+        const result = await query(
+          'SELECT * FROM profiles WHERE user_id = $1',
+          [userId]
+        );
+        
+        return new Response(
+          JSON.stringify(result),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Create or update user profile
+      case path === '/profiles' && req.method === 'PUT': {
+        const { userId, email, name, avatarUrl, homeAirport } = (body || {}) as { 
+          userId?: string; 
+          email?: string;
+          name?: string;
+          avatarUrl?: string;
+          homeAirport?: string;
+        };
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        await ensureProfilesTable();
+        const result = await query(
+          `INSERT INTO profiles (user_id, email, name, avatar_url, home_airport, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())
+           ON CONFLICT (user_id) 
+           DO UPDATE SET 
+             email = COALESCE(EXCLUDED.email, profiles.email),
+             name = COALESCE(EXCLUDED.name, profiles.name),
+             avatar_url = COALESCE(EXCLUDED.avatar_url, profiles.avatar_url),
+             home_airport = COALESCE(EXCLUDED.home_airport, profiles.home_airport),
+             updated_at = NOW()
+           RETURNING *`,
+          [userId, email || null, name || null, avatarUrl || null, homeAirport || null]
+        );
+        
+        return new Response(
+          JSON.stringify(result),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
@@ -11,7 +11,8 @@ import {
   Plus,
   Compass,
   Star,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
@@ -20,66 +21,122 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
+import { tripsApi, Trip } from '@/services/neonDb';
+import { format } from 'date-fns';
 
 type TabType = 'overview' | 'trips' | 'preferences';
 
-// Mock data for trips
-const mockTrips = {
-  upcoming: [
-    {
-      id: '1',
-      destination: 'Kyoto, Japan',
-      dates: 'Mar 15 - Mar 22, 2025',
-      status: 'upcoming' as const,
-      image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
-      progress: 85,
-    },
-  ],
-  completed: [
-    {
-      id: '2',
-      destination: 'Santorini, Greece',
-      dates: 'Sep 5 - Sep 12, 2024',
-      status: 'completed' as const,
-      image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400',
-      rating: 5,
-    },
-    {
-      id: '3',
-      destination: 'Barcelona, Spain',
-      dates: 'Jun 10 - Jun 17, 2024',
-      status: 'completed' as const,
-      image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=400',
-      rating: 4,
-    },
-  ],
-  saved: [
-    {
-      id: '4',
-      destination: 'Reykjavik, Iceland',
-      dates: 'Planning...',
-      status: 'draft' as const,
-      image: 'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=400',
-    },
-  ],
-};
+interface DisplayTrip {
+  id: string;
+  destination: string;
+  dates: string;
+  status: 'upcoming' | 'completed' | 'draft';
+  image: string;
+  progress?: number;
+  rating?: number;
+}
+
+// Helper to get destination image
+function getDestinationImage(destination: string): string {
+  const images: Record<string, string> = {
+    'japan': 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
+    'kyoto': 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
+    'tokyo': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400',
+    'paris': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400',
+    'france': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400',
+    'italy': 'https://images.unsplash.com/photo-1534445867742-43195f401b6c?w=400',
+    'rome': 'https://images.unsplash.com/photo-1534445867742-43195f401b6c?w=400',
+    'greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400',
+    'santorini': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400',
+    'spain': 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=400',
+    'barcelona': 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=400',
+    'iceland': 'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=400',
+  };
+  
+  const lower = destination.toLowerCase();
+  for (const [key, url] of Object.entries(images)) {
+    if (lower.includes(key)) return url;
+  }
+  return 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400';
+}
+
+// Transform API trip to display format
+function transformTrip(trip: Trip): DisplayTrip {
+  const startDate = trip.start_date ? new Date(trip.start_date) : null;
+  const endDate = trip.end_date ? new Date(trip.end_date) : null;
+  
+  let dates = 'Planning...';
+  if (startDate && endDate) {
+    dates = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
+  }
+  
+  let status: 'upcoming' | 'completed' | 'draft' = 'draft';
+  if (trip.status === 'completed') {
+    status = 'completed';
+  } else if (trip.status === 'booked' || (startDate && startDate > new Date())) {
+    status = 'upcoming';
+  }
+  
+  return {
+    id: trip.id,
+    destination: trip.destination || 'Unknown Destination',
+    dates,
+    status,
+    image: getDestinationImage(trip.destination || ''),
+    progress: status === 'upcoming' ? 75 : undefined,
+    rating: status === 'completed' ? 4 : undefined,
+  };
+}
 
 export default function Profile() {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [trips, setTrips] = useState<DisplayTrip[]>([]);
+  const [isLoadingTrips, setIsLoadingTrips] = useState(true);
 
   // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate(ROUTES.SIGNIN);
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Load trips from Neon
+  useEffect(() => {
+    async function loadTrips() {
+      if (!user?.id) return;
+      
+      setIsLoadingTrips(true);
+      try {
+        const result = await tripsApi.list(user.id);
+        if (result.data) {
+          setTrips(result.data.map(transformTrip));
+        }
+      } catch (error) {
+        console.error('Failed to load trips:', error);
+      } finally {
+        setIsLoadingTrips(false);
+      }
+    }
+    
+    loadTrips();
+  }, [user?.id]);
+
   if (!isAuthenticated) {
-    navigate(ROUTES.SIGNIN);
     return null;
   }
 
+  // Compute stats from real trips
+  const upcomingTrips = trips.filter(t => t.status === 'upcoming');
+  const completedTrips = trips.filter(t => t.status === 'completed');
+  const savedTrips = trips.filter(t => t.status === 'draft');
+
   const stats = {
-    tripsCompleted: 2,
-    countriesVisited: 4,
-    daysOnTheRoad: 21,
-    upcomingTrips: 1,
+    tripsCompleted: completedTrips.length,
+    countriesVisited: completedTrips.length, // Simplified - would need real country data
+    daysOnTheRoad: completedTrips.length * 7, // Estimate
+    upcomingTrips: upcomingTrips.length,
   };
 
   const travelDNA = user?.preferences ? {
@@ -262,7 +319,7 @@ export default function Profile() {
             )}
 
             {/* Upcoming Trips */}
-            {mockTrips.upcoming.length > 0 && (
+            {upcomingTrips.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-foreground">Upcoming Trip</h2>
@@ -272,7 +329,7 @@ export default function Profile() {
                   </Button>
                 </div>
                 <div className="grid gap-4">
-                  {mockTrips.upcoming.map((trip) => (
+                  {upcomingTrips.map((trip) => (
                     <Link
                       key={trip.id}
                       to={`/trip/${trip.id}`}
@@ -289,18 +346,20 @@ export default function Profile() {
                           <Calendar className="h-3 w-3" />
                           {trip.dates}
                         </p>
-                        <div className="mt-3">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                            <span>Planning progress</span>
-                            <span>{trip.progress}%</span>
+                        {trip.progress && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                              <span>Planning progress</span>
+                              <span>{trip.progress}%</span>
+                            </div>
+                            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-primary rounded-full transition-all"
+                                style={{ width: `${trip.progress}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary rounded-full transition-all"
-                              style={{ width: `${trip.progress}%` }}
-                            />
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </Link>
                   ))}
@@ -309,11 +368,11 @@ export default function Profile() {
             )}
 
             {/* Recent Trips */}
-            {mockTrips.completed.length > 0 && (
+            {completedTrips.length > 0 && (
               <div>
                 <h2 className="text-lg font-semibold text-foreground mb-4">Recent Adventures</h2>
                 <div className="grid sm:grid-cols-2 gap-4">
-                  {mockTrips.completed.map((trip) => (
+                  {completedTrips.map((trip) => (
                     <Link
                       key={trip.id}
                       to={`/trip/${trip.id}`}
@@ -355,47 +414,58 @@ export default function Profile() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-10"
           >
-            {/* Upcoming */}
-            <div>
-              <h2 className="text-lg font-semibold text-foreground mb-4">Upcoming</h2>
-              {mockTrips.upcoming.length > 0 ? (
-                <div className="grid gap-4">
-                  {mockTrips.upcoming.map((trip) => (
-                    <TripCard key={trip.id} trip={trip} />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState message="No upcoming trips" action="Plan a Trip" />
-              )}
-            </div>
+            {/* Loading state */}
+            {isLoadingTrips && (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
 
-            {/* Completed */}
-            <div>
-              <h2 className="text-lg font-semibold text-foreground mb-4">Completed</h2>
-              {mockTrips.completed.length > 0 ? (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {mockTrips.completed.map((trip) => (
-                    <TripCard key={trip.id} trip={trip} />
-                  ))}
+            {!isLoadingTrips && (
+              <>
+                {/* Upcoming */}
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Upcoming</h2>
+                  {upcomingTrips.length > 0 ? (
+                    <div className="grid gap-4">
+                      {upcomingTrips.map((trip) => (
+                        <TripCard key={trip.id} trip={trip} />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState message="No upcoming trips" action="Plan a Trip" />
+                  )}
                 </div>
-              ) : (
-                <EmptyState message="No completed trips yet" />
-              )}
-            </div>
 
-            {/* Saved */}
-            <div>
-              <h2 className="text-lg font-semibold text-foreground mb-4">Saved Ideas</h2>
-              {mockTrips.saved.length > 0 ? (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {mockTrips.saved.map((trip) => (
-                    <TripCard key={trip.id} trip={trip} />
-                  ))}
+                {/* Completed */}
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Completed</h2>
+                  {completedTrips.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {completedTrips.map((trip) => (
+                        <TripCard key={trip.id} trip={trip} />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState message="No completed trips yet" />
+                  )}
                 </div>
-              ) : (
-                <EmptyState message="No saved trips" />
-              )}
-            </div>
+
+                {/* Saved */}
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Saved Ideas</h2>
+                  {savedTrips.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {savedTrips.map((trip) => (
+                        <TripCard key={trip.id} trip={trip} />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState message="No saved trips" />
+                  )}
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 
