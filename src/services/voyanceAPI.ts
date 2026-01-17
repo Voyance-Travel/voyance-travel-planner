@@ -18,7 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 // CONFIGURATION
 // =============================================================================
 
-const API_BASE_URL = 'https://voyance-backend.railway.app';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'https://voyance-backend.railway.app';
 
 // =============================================================================
 // TYPES - Backend Contract Types
