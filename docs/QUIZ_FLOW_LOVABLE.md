@@ -1,6 +1,10 @@
 # Quiz Flow - Lovable Adaptation
 
-**Adapted from**: quiz-data-flow.md
+**Last Updated**: January 2025  
+**Status**: ✅ Implemented (Simplified)  
+**See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [PREFERENCES_LOVABLE.md](./PREFERENCES_LOVABLE.md)
+
+> **Adapted from**: quiz-data-flow.md, PREFERENCES_DATA_FIELDS.md
 
 This document describes how the quiz works in the Lovable codebase.
 
@@ -190,3 +194,12 @@ Would use quiz responses to calculate:
 - Confidence percentage
 - Trait scores
 - Emotional drivers
+
+---
+
+## Related SOT Documents
+
+- [quiz-data-flow.md](./quiz-data-flow.md) - Full original quiz flow
+- [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) - 25+ travel personalities
+- [PREFERENCES_SYSTEM_SOT.md](./PREFERENCES_SYSTEM_SOT.md) - Preferences system
+- [profile-system-source-of-truth.md](./profile-system-source-of-truth.md) - Profile display

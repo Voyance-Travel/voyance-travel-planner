@@ -1,16 +1,22 @@
 # Itinerary System - Lovable Implementation Guide
 
-## Overview
-This document maps the original itinerary SOT documents to the Lovable codebase architecture.
+**Last Updated**: January 2025  
+**Status**: 🔧 Partially Implemented  
+**See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [INDEX.md](./INDEX.md)
+
+> This document maps the original itinerary SOT documents to the Lovable codebase architecture.
+
+---
 
 ## Architecture Comparison
 
-| Original System | Lovable Implementation |
-|----------------|------------------------|
-| Railway backend API | Neon DB via Edge Functions |
-| Direct backend calls | `itineraryApi` in `neonDb.ts` |
-| Session storage caching | Zustand store (`tripStore.ts`) |
-| Complex transformers | Clean backend → frontend flow |
+| Original System | Lovable Implementation | Status |
+|----------------|------------------------|--------|
+| Railway backend API | Neon DB via Edge Functions | ✅ Ready |
+| Direct backend calls | `itineraryApi` in `neonDb.ts` | 🔧 Needs endpoints |
+| Session storage caching | Zustand store (`tripStore.ts`) | ✅ Ready |
+| Complex transformers | Clean backend → frontend flow | ✅ Design |
+| OpenAI itinerary gen | Lovable AI Gateway | 📋 Planned |
 
 ## Current Implementation Status
 

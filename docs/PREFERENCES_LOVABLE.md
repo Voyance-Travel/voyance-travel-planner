@@ -1,6 +1,10 @@
 # Preferences System - Lovable Adaptation
 
-**Adapted from**: PREFERENCES_RECONCILIATION.md & PREFERENCES_DATA_FIELDS.md
+**Last Updated**: January 2025  
+**Status**: ✅ Core Implemented  
+**See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [INDEX.md](./INDEX.md)
+
+> **Adapted from**: PREFERENCES_RECONCILIATION.md, PREFERENCES_DATA_FIELDS.md, PREFERENCES_SYSTEM_SOT.md
 
 This document describes how preferences work in the Lovable codebase.
 
@@ -174,3 +178,13 @@ export interface FullTravelPreferences {
 3. **Phase 3**: Add food preferences table + quiz questions
 4. **Phase 4**: Add mobility preferences + quiz questions
 5. **Phase 5**: Implement Travel DNA calculation on backend
+
+---
+
+## Related SOT Documents
+
+- [PREFERENCES_SYSTEM_SOT.md](./PREFERENCES_SYSTEM_SOT.md) - Full original spec (371 lines)
+- [PREFERENCES_MAPPING_CONTRACT.md](./PREFERENCES_MAPPING_CONTRACT.md) - Field mappings
+- [PREFERENCES_FIELD_MAPPING.md](./PREFERENCES_FIELD_MAPPING.md) - UI to DB mapping
+- [PREFERENCES_RECONCILIATION_GUIDE.md](./PREFERENCES_RECONCILIATION_GUIDE.md) - Frontend changes
+- [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) - 25+ travel personalities
