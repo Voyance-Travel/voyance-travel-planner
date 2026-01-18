@@ -78,12 +78,24 @@ export default function PlannerBooking() {
       toast.error('No trip found');
       return;
     }
+    
+    // Check if user is authenticated - for demo/anonymous users, save to localStorage and show preview
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      toast.error('Please sign in to complete your booking');
-      navigate(`/signin?redirect=/planner/booking?tripId=${tripId}`);
+    const isAnonymous = !session;
+    
+    // For anonymous users, show a demo confirmation instead of real checkout
+    if (isAnonymous) {
+      toast.success('Demo booking confirmed! In production, you would sign in to complete payment.');
+      navigate('/trip-confirmation', { 
+        state: { 
+          tripId, 
+          destination: state.basics.destination,
+          isDemo: true 
+        } 
+      });
       return;
     }
+    
     setIsProcessing(true);
     setError(null);
     try {
@@ -139,13 +151,14 @@ export default function PlannerBooking() {
       <section className="min-h-screen bg-background">
         {/* Full-width Hero */}
         <div className="relative h-[40vh] min-h-[320px] overflow-hidden">
-          <DynamicDestinationPhotos 
+        <DynamicDestinationPhotos 
             destination={state.basics.destination || ''} 
             startDate={state.basics.startDate || ''} 
             endDate={state.basics.endDate || ''} 
             travelers={travelers}
             variant="hero"
             className="!rounded-none !h-full"
+            hideOverlayText={true}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
           
