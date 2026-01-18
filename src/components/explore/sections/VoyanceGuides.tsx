@@ -1,35 +1,13 @@
 import { motion } from 'framer-motion';
 import { Clock, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-const guides = [
-  {
-    id: '1',
-    title: 'The Ultimate Guide to Solo Travel in Japan',
-    excerpt: 'Everything you need to know about navigating Japan alone, from etiquette to hidden gems.',
-    readTime: '8 min read',
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
-    category: 'Solo Travel',
-  },
-  {
-    id: '2',
-    title: 'Best Time to Visit Each Greek Island',
-    excerpt: 'A seasonal breakdown of when to visit Santorini, Mykonos, Crete, and more.',
-    readTime: '6 min read',
-    image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400',
-    category: 'Seasonal',
-  },
-  {
-    id: '3',
-    title: 'Budget-Friendly Luxury: How to Travel Like a VIP',
-    excerpt: 'Insider tips for experiencing luxury travel without breaking the bank.',
-    readTime: '10 min read',
-    image: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=400',
-    category: 'Budget',
-  },
-];
+import { getFeaturedGuides, guides as allGuides } from '@/data/guides';
 
 export default function VoyanceGuides() {
+  // Use featured guides, or first 3 if none featured
+  const featuredGuides = getFeaturedGuides();
+  const displayGuides = featuredGuides.length > 0 ? featuredGuides.slice(0, 3) : allGuides.slice(0, 3);
+
   return (
     <section className="py-16 bg-muted/30">
       <div className="max-w-7xl mx-auto px-4">
@@ -48,7 +26,7 @@ export default function VoyanceGuides() {
             </p>
           </div>
           <Link
-            to="/guides"
+            to="/explore#guides"
             className="hidden md:flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             All guides
@@ -57,19 +35,22 @@ export default function VoyanceGuides() {
         </motion.div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {guides.map((guide, index) => (
+          {displayGuides.map((guide, index) => (
             <motion.article
-              key={guide.id}
+              key={guide.slug}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
               className="group"
             >
-              <Link to={`/guides/${guide.id}`} className="block">
+              <Link to={`/guides/${guide.slug}`} className="block">
                 <div className="relative aspect-[16/10] rounded-xl overflow-hidden mb-4">
                   <img
-                    src={guide.image}
+                    src={guide.coverImage.startsWith('/') 
+                      ? `https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&q=80`
+                      : guide.coverImage
+                    }
                     alt={guide.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
@@ -83,7 +64,7 @@ export default function VoyanceGuides() {
                   {guide.title}
                 </h3>
                 <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                  {guide.excerpt}
+                  {guide.summary}
                 </p>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
