@@ -11,7 +11,7 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: "hero" | "gallery" | "activity";
-  source: "google_places" | "lovable_ai" | "fallback";
+  source: "pexels" | "google_places" | "lovable_ai" | "fallback";
   width?: number;
   height?: number;
 }
@@ -21,6 +21,47 @@ interface RequestParams {
   destination?: string;
   imageType?: string;
   limit?: number;
+}
+
+async function getPexelsPhoto(destination: string, apiKey: string): Promise<DestinationImage | null> {
+  try {
+    console.log("[Images] Searching Pexels for:", destination);
+
+    const query = `${destination} landmark`;
+    const pexelsUrl = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&size=large`;
+
+    const res = await fetch(pexelsUrl, {
+      headers: {
+        Authorization: apiKey,
+      },
+    });
+
+    if (!res.ok) {
+      console.error("[Images] Pexels search error:", res.status);
+      return null;
+    }
+
+    const json = await res.json();
+    const photo = json?.photos?.[0];
+    const url = photo?.src?.large2x || photo?.src?.large || photo?.src?.original;
+    if (!url) {
+      console.log("[Images] No Pexels photos for:", destination);
+      return null;
+    }
+
+    return {
+      id: `pexels-${photo.id}`,
+      url,
+      alt: `${destination} - Photo`,
+      type: "hero",
+      source: "pexels",
+      width: photo.width,
+      height: photo.height,
+    };
+  } catch (error) {
+    console.error("[Images] Pexels error:", error);
+    return null;
+  }
 }
 
 async function getGooglePlacesPhoto(destination: string, apiKey: string): Promise<DestinationImage | null> {
@@ -223,6 +264,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const googleApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+    const pexelsApiKey = Deno.env.get("PEXELS_API_KEY");
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
     let resolvedDestination = destination;
@@ -239,8 +281,17 @@ serve(async (req) => {
 
     let images: DestinationImage[] = [];
 
-    // Priority 1: Google Places
-    if (googleApiKey) {
+    // Priority 1: Pexels (reliable for major cities)
+    if (pexelsApiKey) {
+      const pexelsImage = await getPexelsPhoto(resolvedDestination, pexelsApiKey);
+      if (pexelsImage) {
+        images = [pexelsImage];
+        console.log("[Images] Using Pexels image for:", resolvedDestination);
+      }
+    }
+
+    // Priority 2: Google Places
+    if (images.length === 0 && googleApiKey) {
       const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
       if (googleImage) {
         images = [googleImage];
@@ -248,7 +299,7 @@ serve(async (req) => {
       }
     }
 
-    // Priority 2: Lovable AI Generated
+    // Priority 3: Lovable AI Generated
     if (images.length === 0 && lovableApiKey) {
       const aiImage = await generateAIImage(resolvedDestination, lovableApiKey);
       if (aiImage) {

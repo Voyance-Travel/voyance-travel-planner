@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { 
-  CheckCircle, 
-  Loader2, 
-  AlertCircle, 
-  MapPin, 
-  Calendar, 
-  Users, 
-  Plane, 
+import {
+  CheckCircle,
+  Loader2,
+  AlertCircle,
+  MapPin,
+  Calendar,
+  Users,
+  Plane,
   Hotel,
   Download,
   Share2,
-  ArrowRight
+  ArrowRight,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -33,11 +33,47 @@ interface TripData {
   hotel_selection: any;
 }
 
+type DemoConfirmationState = {
+  isDemo?: boolean;
+  tripId?: string;
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  travelers?: number;
+};
+
+function getAnonymousTripFromStorage(tripId: string | undefined): TripData | null {
+  if (!tripId) return null;
+  try {
+    const raw = localStorage.getItem(`trip_${tripId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.destination || !parsed?.startDate || !parsed?.endDate) return null;
+
+    return {
+      id: tripId,
+      destination: parsed.destination,
+      start_date: parsed.startDate,
+      end_date: parsed.endDate,
+      travelers: parsed.travelers || 1,
+      status: 'booked',
+      flight_selection: null,
+      hotel_selection: null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function TripConfirmation() {
   const { tripId } = useParams();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
-  
+
+  const demoState = (location.state || {}) as DemoConfirmationState;
+  const isDemo = !!demoState.isDemo;
+
   const [isVerifying, setIsVerifying] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
   const [trip, setTrip] = useState<TripData | null>(null);
@@ -47,7 +83,7 @@ export default function TripConfirmation() {
   useEffect(() => {
     async function verifyPayment() {
       if (!sessionId) {
-        // No session ID, just load trip details
+        // No Stripe session ID (demo or direct navigation)
         await loadTrip();
         setIsVerifying(false);
         setIsVerified(true);
@@ -65,14 +101,14 @@ export default function TripConfirmation() {
           setIsVerified(true);
           setAmountPaid(data.amountPaid);
           await loadTrip();
-          
+
           // Trigger confetti
           confetti({
             particleCount: 100,
             spread: 70,
             origin: { y: 0.6 },
           });
-          
+
           toast.success('Booking confirmed! Check your email for details.');
         } else {
           setError(data?.error || 'Payment verification failed');
@@ -87,7 +123,8 @@ export default function TripConfirmation() {
 
     async function loadTrip() {
       if (!tripId) return;
-      
+
+      // 1) Try DB trip (signed-in / real flow)
       const { data, error } = await supabase
         .from('trips')
         .select('*')
@@ -96,10 +133,33 @@ export default function TripConfirmation() {
 
       if (!error && data) {
         setTrip(data as TripData);
+        return;
+      }
+
+      // 2) Demo/anonymous fallback (location state)
+      if (isDemo && demoState.destination && demoState.startDate && demoState.endDate) {
+        setTrip({
+          id: tripId,
+          destination: demoState.destination,
+          start_date: demoState.startDate,
+          end_date: demoState.endDate,
+          travelers: demoState.travelers || 1,
+          status: 'booked',
+          flight_selection: null,
+          hotel_selection: null,
+        });
+        return;
+      }
+
+      // 3) Demo/anonymous fallback (localStorage)
+      const stored = getAnonymousTripFromStorage(tripId);
+      if (stored) {
+        setTrip(stored);
       }
     }
 
     verifyPayment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, tripId]);
 
   // Loading state

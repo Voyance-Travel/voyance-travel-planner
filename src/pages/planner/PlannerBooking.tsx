@@ -85,13 +85,16 @@ export default function PlannerBooking() {
     
     // For anonymous users, show a demo confirmation instead of real checkout
     if (isAnonymous) {
-      toast.success('Demo booking confirmed! In production, you would sign in to complete payment.');
-      navigate('/trip-confirmation', { 
-        state: { 
-          tripId, 
+      toast.success('Demo confirmation shown — sign in to run a real payment test.');
+      navigate(`/trips/${tripId}/confirmation`, {
+        state: {
+          tripId,
           destination: state.basics.destination,
-          isDemo: true 
-        } 
+          startDate: state.basics.startDate,
+          endDate: state.basics.endDate,
+          travelers,
+          isDemo: true,
+        },
       });
       return;
     }
