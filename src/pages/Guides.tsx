@@ -74,7 +74,7 @@ const guides = [
     slug: 'road-trip-usa',
     title: 'Ultimate USA Road Trip',
     description: 'Plan the perfect American road trip. Routes, stops, and tips for an unforgettable journey.',
-    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1449034446853-66c86144b0ad?w=800&q=80',
     readTime: '22 min read',
     category: 'Road Trip',
     region: 'North America',

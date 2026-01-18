@@ -12,6 +12,7 @@ import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/h
 import { useAuth } from '@/contexts/AuthContext';
 import { UpgradePrompt } from '@/components/common/UpgradePrompt';
 import { Link } from 'react-router-dom';
+import { formatWeatherCondition } from '@/utils/textFormatting';
 
 interface ItineraryPreviewProps {
   tripId?: string;
@@ -402,7 +403,7 @@ export default function ItineraryPreview({
                   {day.weather && (
                     <div className="text-right text-sm text-muted-foreground">
                       <p>{day.weather.high}°/{day.weather.low}°</p>
-                      <p className="capitalize">{day.weather.condition}</p>
+                      <p>{formatWeatherCondition(day.weather.condition)}</p>
                     </div>
                   )}
                 </div>

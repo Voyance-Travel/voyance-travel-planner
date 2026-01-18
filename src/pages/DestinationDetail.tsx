@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { ActivityModal } from '@/components/ActivityModal';
 import { getDestinationById, getActivitiesByDestination, type Activity } from '@/lib/destinations';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatEnumDisplay } from '@/utils/textFormatting';
 
 export default function DestinationDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -311,8 +312,8 @@ export default function DestinationDetail() {
                           className="text-left p-5 bg-card rounded-xl border border-border hover:border-accent/50 hover:shadow-md transition-all group"
                         >
                           <div className="flex items-start justify-between mb-3">
-                            <Badge variant="secondary" className="text-xs capitalize">
-                              {activity.category}
+                            <Badge variant="secondary" className="text-xs">
+                              {formatEnumDisplay(activity.category)}
                             </Badge>
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               {activity.duration && (
