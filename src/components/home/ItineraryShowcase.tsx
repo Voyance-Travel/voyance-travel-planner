@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { MapPin, Clock, Star, ChevronRight } from 'lucide-react';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -8,31 +8,34 @@ import { ROUTES } from '@/config/routes';
 const itineraries = [
   {
     id: 'kyoto',
-    destination: 'Kyoto, Japan',
+    destination: 'Kyoto',
+    country: 'Japan',
     duration: '7 days',
-    rating: 4.9,
     image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800',
     category: 'Culture & Heritage',
+    tagline: 'Where tradition meets tranquility',
     highlights: ['Ancient temples', 'Traditional ryokans', 'Geisha districts', 'Tea ceremonies'],
     price: 2890,
   },
   {
     id: 'santorini',
-    destination: 'Santorini, Greece',
+    destination: 'Santorini',
+    country: 'Greece',
     duration: '5 days',
-    rating: 4.8,
     image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800',
     category: 'Romance & Relaxation',
+    tagline: 'Sunsets that redefine beauty',
     highlights: ['Sunset views', 'Wine tasting', 'Volcanic beaches', 'Boutique hotels'],
     price: 3250,
   },
   {
     id: 'iceland',
-    destination: 'Reykjavik, Iceland',
+    destination: 'Reykjavik',
+    country: 'Iceland',
     duration: '6 days',
-    rating: 4.9,
     image: 'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=800',
     category: 'Adventure & Nature',
+    tagline: 'Nature in its purest form',
     highlights: ['Northern Lights', 'Golden Circle', 'Blue Lagoon', 'Glacier hiking'],
     price: 3680,
   },
@@ -43,121 +46,143 @@ export default function ItineraryShowcase() {
   const activeItinerary = itineraries[activeIndex];
 
   return (
-    <section className="py-24 bg-background relative overflow-hidden">
-      {/* Decorative background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-secondary/20 to-transparent" />
-      <div className="absolute top-20 right-20 w-72 h-72 bg-ocean/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-20 left-20 w-56 h-56 bg-gold/5 rounded-full blur-3xl" />
-      
-      <div className="max-w-7xl mx-auto px-4 relative z-10">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-12"
-        >
-          <span className="inline-block px-4 py-1.5 rounded-full bg-gradient-to-r from-accent/20 to-gold/20 text-accent text-sm font-medium mb-4 border border-accent/20">
-            Featured Itineraries
-          </span>
-          <h2 className="text-3xl md:text-5xl font-display font-bold text-foreground mb-4">
-            Real trips, real experiences
-          </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Explore curated itineraries from travelers like you—or create your own.
-          </p>
-        </motion.div>
+    <section className="py-32 bg-background relative overflow-hidden">
+      {/* Editorial Section Header */}
+      <div className="max-w-7xl mx-auto px-8 md:px-16">
+        <div className="flex items-start justify-between mb-16">
+          <div>
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="flex items-center gap-4 mb-4"
+            >
+              <div className="w-8 h-px bg-primary" />
+              <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
+                Featured Journeys
+              </span>
+            </motion.div>
+            <motion.h2 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground"
+            >
+              Curated <em className="font-normal">for you</em>
+            </motion.h2>
+          </div>
+          
+          {/* Issue Number - Editorial Detail */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="hidden md:block text-right"
+          >
+            <span className="text-7xl font-serif text-muted/20">0{activeIndex + 1}</span>
+          </motion.div>
+        </div>
 
-        {/* Destination Tabs */}
-        <div className="flex flex-wrap justify-center gap-3 mb-10">
+        {/* Destination Navigation - Magazine Style */}
+        <div className="flex gap-1 mb-12 border-b border-border">
           {itineraries.map((itinerary, index) => (
             <button
               key={itinerary.id}
               onClick={() => setActiveIndex(index)}
-              className={`px-5 py-2.5 rounded-full font-medium text-sm transition-all ${
+              className={`relative px-6 py-4 font-sans text-sm tracking-wide transition-colors ${
                 activeIndex === index
-                  ? 'bg-gradient-to-r from-primary to-emerald text-white shadow-md'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {itinerary.destination}
+              {activeIndex === index && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                />
+              )}
             </button>
           ))}
         </div>
 
-        {/* Itinerary Card */}
+        {/* Itinerary Feature - Magazine Layout */}
         <motion.div
           key={activeItinerary.id}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid lg:grid-cols-2 gap-8 items-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="grid lg:grid-cols-12 gap-8 lg:gap-12"
         >
-          {/* Image */}
-          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden">
-            <img
-              src={activeItinerary.image}
-              alt={activeItinerary.destination}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute top-4 left-4 px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-sm font-medium">
-              {activeItinerary.category}
+          {/* Image - Large Editorial Image */}
+          <div className="lg:col-span-7 relative">
+            <div className="aspect-[4/5] lg:aspect-[3/4] relative overflow-hidden">
+              <img
+                src={activeItinerary.image}
+                alt={activeItinerary.destination}
+                className="w-full h-full object-cover"
+              />
+              {/* Category Badge */}
+              <div className="absolute top-6 left-6">
+                <span className="px-3 py-1.5 bg-white/95 backdrop-blur-sm text-xs tracking-[0.15em] uppercase font-sans text-foreground">
+                  {activeItinerary.category}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Content */}
-          <div>
-            <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <MapPin className="h-4 w-4" />
-                {activeItinerary.destination}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                {activeItinerary.duration}
-              </span>
-              <span className="flex items-center gap-1">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                {activeItinerary.rating}
+          {/* Content - Editorial Text */}
+          <div className="lg:col-span-5 flex flex-col justify-center py-8">
+            <div className="mb-6">
+              <span className="text-xs tracking-[0.2em] uppercase text-muted-foreground font-sans">
+                {activeItinerary.duration} — {activeItinerary.country}
               </span>
             </div>
 
-            <h3 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-4">
-              {activeItinerary.duration} in {activeItinerary.destination}
+            <h3 className="text-4xl md:text-5xl font-serif font-normal text-foreground mb-4">
+              {activeItinerary.destination}
             </h3>
 
-            <div className="mb-6">
-              <h4 className="text-sm font-medium text-foreground mb-3">Trip Highlights</h4>
-              <ul className="grid grid-cols-2 gap-2">
-                {activeItinerary.highlights.map((highlight) => (
-                  <li key={highlight} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <ChevronRight className="h-4 w-4 text-primary" />
-                    {highlight}
-                  </li>
-                ))}
-              </ul>
+            <p className="text-lg font-serif italic text-muted-foreground mb-8">
+              {activeItinerary.tagline}
+            </p>
+
+            {/* Highlights - Clean List */}
+            <div className="mb-10 space-y-3">
+              {activeItinerary.highlights.map((highlight, i) => (
+                <div key={highlight} className="flex items-center gap-4 text-sm text-foreground/80 font-sans">
+                  <span className="text-xs text-muted-foreground w-4">0{i + 1}</span>
+                  <span>{highlight}</span>
+                </div>
+              ))}
             </div>
 
-            <div className="flex items-center justify-between mb-6">
+            {/* Price & CTA */}
+            <div className="flex items-end justify-between pt-8 border-t border-border">
               <div>
-                <p className="text-sm text-muted-foreground">Starting from</p>
-                <p className="text-3xl font-bold text-foreground">
+                <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans block mb-1">
+                  From
+                </span>
+                <span className="text-3xl font-serif text-foreground">
                   ${activeItinerary.price.toLocaleString()}
-                  <span className="text-base font-normal text-muted-foreground">/person</span>
-                </p>
+                </span>
+                <span className="text-sm text-muted-foreground font-sans ml-1">/person</span>
               </div>
-            </div>
-
-            <div className="flex gap-3">
-              <Button asChild size="lg">
-                <Link to={ROUTES.ITINERARY.SAMPLE}>
-                  View Full Itinerary
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" asChild>
-                <Link to={ROUTES.START}>
-                  Customize This Trip
-                </Link>
-              </Button>
+              
+              <div className="flex gap-3">
+                <Button variant="outline" size="lg" className="font-sans" asChild>
+                  <Link to={ROUTES.ITINERARY.SAMPLE}>
+                    View Details
+                    <ArrowUpRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button size="lg" className="font-sans" asChild>
+                  <Link to={ROUTES.START}>
+                    Book Now
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </motion.div>
