@@ -189,25 +189,63 @@ Deno.serve(async (req) => {
         const parseJsonField = (field: unknown) => {
           if (!field || field === '') return null
           if (typeof field === 'string') {
-            try { return JSON.parse(field) } catch { return null }
+            try {
+              return JSON.parse(field)
+            } catch {
+              return null
+            }
           }
           return field
         }
-        
+
+        const normalizeTripStatus = (value: unknown) => {
+          const v = String(value ?? '')
+            .trim()
+            .toLowerCase()
+
+          // Allowed: draft | planning | booked | active | completed | cancelled
+          if (!v) return 'draft'
+          if (v === 'complete' || v === 'completed' || v === 'done') return 'completed'
+          if (v === 'cancel' || v === 'canceled' || v === 'cancelled') return 'cancelled'
+          if (v === 'in_progress' || v === 'in progress' || v === 'ongoing') return 'active'
+          if (v === 'plan' || v === 'planning') return 'planning'
+          if (v === 'book' || v === 'booked') return 'booked'
+          if (v === 'active') return 'active'
+          if (v === 'draft') return 'draft'
+
+          // Fallback to draft if unknown to avoid enum errors
+          return 'draft'
+        }
+
+        const normalizeItineraryStatus = (value: unknown) => {
+          const v = String(value ?? '')
+            .trim()
+            .toLowerCase()
+
+          // Allowed: not_started | queued | generating | ready | failed
+          if (!v) return 'not_started'
+          if (v === 'complete' || v === 'completed' || v === 'ready') return 'ready'
+          if (v === 'generating' || v === 'in_progress' || v === 'in progress') return 'generating'
+          if (v === 'queued') return 'queued'
+          if (v === 'failed' || v === 'error') return 'failed'
+          if (v === 'not_started' || v === 'not started') return 'not_started'
+          return 'not_started'
+        }
+
         return {
           id: row.id || crypto.randomUUID(),
           user_id: row.user_id,
           name: row.name || `Trip to ${row.destination}`,
           destination: row.destination,
           destination_country: row.destination_country || null,
-          origin_city: row.origin_city || null,
+          origin_city: row.origin_city || row.departure_city || null,
           start_date: row.start_date,
           end_date: row.end_date,
-          status: row.status || 'draft',
-          itinerary_status: row.itinerary_status || 'not_started',
+          status: normalizeTripStatus(row.status),
+          itinerary_status: normalizeItineraryStatus(row.itinerary_status),
           travelers: row.travelers ? parseInt(String(row.travelers)) : 1,
-          budget_tier: row.budget_tier || 'moderate',
-          trip_type: row.trip_type || 'vacation',
+          budget_tier: row.budget_tier || null,
+          trip_type: row.trip_type || null,
           flight_selection: parseJsonField(row.flight_selection),
           hotel_selection: parseJsonField(row.hotel_selection),
           itinerary_data: parseJsonField(row.itinerary_data),
