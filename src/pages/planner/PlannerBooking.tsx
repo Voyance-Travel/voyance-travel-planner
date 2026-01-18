@@ -155,37 +155,49 @@ export default function PlannerBooking() {
     <MainLayout>
       <Head title={`Book Trip to ${state.basics.destination} | Voyance`} />
       
-      <section className="pt-24 pb-16 min-h-screen bg-gradient-to-b from-background to-muted/30">
+      <section className="pt-24 pb-16 min-h-screen bg-gradient-to-b from-background to-secondary/20">
         <div className="max-w-6xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            {/* Editorial Header */}
-            <div className="text-center mb-12">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full text-primary text-sm font-medium mb-4"
-              >
-                <CheckCircle className="h-4 w-4" />
-                Your trip is ready to book
-              </motion.div>
-              <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
-                {state.basics.destination}
-              </h1>
-              <p className="text-lg text-muted-foreground flex items-center justify-center gap-2">
-                <Calendar className="h-5 w-5" />
-                {state.basics.startDate && state.basics.endDate ? (
-                  <>
-                    {format(new Date(state.basics.startDate), 'MMM d')} - {format(new Date(state.basics.endDate), 'MMM d, yyyy')}
-                  </>
-                ) : 'Dates not set'} 
-                <span className="text-muted-foreground/50">•</span>
-                <Users className="h-5 w-5" />
-                {travelers} traveler{travelers > 1 ? 's' : ''}
-              </p>
+            {/* Editorial Header with Destination Image */}
+            <div className="relative mb-12 rounded-2xl overflow-hidden h-64 md:h-80">
+              <img 
+                src={`https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80`}
+                alt={state.basics.destination}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate/90 via-slate/50 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium mb-3"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Ready to book
+                </motion.div>
+                <h1 className="text-4xl md:text-5xl font-serif font-normal text-white mb-2">
+                  {state.basics.destination}
+                </h1>
+                <p className="text-lg text-white/80 flex items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4" />
+                    {state.basics.startDate && state.basics.endDate ? (
+                      <>
+                        {format(new Date(state.basics.startDate), 'MMM d')} – {format(new Date(state.basics.endDate), 'MMM d, yyyy')}
+                      </>
+                    ) : 'Dates not set'} 
+                  </span>
+                  <span className="text-white/50">•</span>
+                  <span className="flex items-center gap-1.5">
+                    <Users className="h-4 w-4" />
+                    {travelers} traveler{travelers > 1 ? 's' : ''}
+                  </span>
+                </p>
+              </div>
             </div>
 
             <div className="grid lg:grid-cols-5 gap-8">
@@ -199,10 +211,10 @@ export default function PlannerBooking() {
                     transition={{ delay: 0.15 }}
                     className="bg-card rounded-2xl border border-border overflow-hidden"
                   >
-                    <div className="bg-gradient-to-r from-primary/5 to-transparent p-5 border-b border-border">
-                      <h2 className="text-lg font-semibold flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                          <Plane className="h-5 w-5 text-primary" />
+                    <div className="bg-slate p-5 border-b border-border">
+                      <h2 className="text-lg font-semibold flex items-center gap-3 text-slate-foreground">
+                        <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                          <Plane className="h-5 w-5" />
                         </div>
                         Flights
                       </h2>
@@ -270,10 +282,10 @@ export default function PlannerBooking() {
                     transition={{ delay: 0.2 }}
                     className="bg-card rounded-2xl border border-border overflow-hidden"
                   >
-                    <div className="bg-gradient-to-r from-primary/5 to-transparent p-5 border-b border-border">
+                    <div className="bg-secondary p-5 border-b border-border">
                       <h2 className="text-lg font-semibold flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                          <Hotel className="h-5 w-5 text-primary" />
+                        <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                          <Hotel className="h-5 w-5 text-foreground" />
                         </div>
                         Accommodation
                       </h2>
@@ -317,8 +329,8 @@ export default function PlannerBooking() {
                   transition={{ delay: 0.25 }}
                   className="bg-card rounded-2xl border border-border overflow-hidden sticky top-24"
                 >
-                  <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-6 border-b border-border">
-                    <h2 className="text-xl font-semibold">Your Trip Total</h2>
+                  <div className="bg-slate p-6">
+                    <h2 className="text-xl font-semibold text-slate-foreground">Your Trip Total</h2>
                   </div>
                   
                   <div className="p-6 space-y-4">
@@ -390,7 +402,7 @@ export default function PlannerBooking() {
                       <div className="flex justify-between items-baseline">
                         <span className="text-lg font-semibold">Total</span>
                         <div className="text-right">
-                          <span className="text-3xl font-bold text-primary">${grandTotal.toFixed(2)}</span>
+                          <span className="text-3xl font-bold text-slate">${grandTotal.toFixed(2)}</span>
                           <p className="text-xs text-muted-foreground">USD • Final price at checkout</p>
                         </div>
                       </div>
@@ -409,7 +421,7 @@ export default function PlannerBooking() {
                       onClick={handleCheckout}
                       disabled={isProcessing}
                       size="lg"
-                      className="w-full h-14 text-lg shadow-lg shadow-primary/20"
+                      className="w-full h-14 text-lg bg-slate text-slate-foreground hover:bg-slate/90"
                     >
                       {isProcessing ? (
                         <>
@@ -427,19 +439,19 @@ export default function PlannerBooking() {
                     {/* Trust badges */}
                     <div className="pt-4 space-y-3 border-t border-border">
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
                           <Lock className="h-4 w-4" />
                         </div>
                         <span>Secure payment via Stripe</span>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
                           <Shield className="h-4 w-4" />
                         </div>
                         <span>Your data is encrypted and protected</span>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
                           <CheckCircle className="h-4 w-4" />
                         </div>
                         <span>Free cancellation up to 24h before</span>
