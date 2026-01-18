@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, ChevronDown } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, ChevronDown, Loader2 } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -11,60 +11,66 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { ROUTES } from '@/config/routes';
-import { destinations } from '@/lib/destinations';
 import { cn } from '@/lib/utils';
+import { 
+  searchAirports, 
+  searchDestinations, 
+  getMajorAirports,
+  getFeaturedDestinations,
+  formatAirportDisplay,
+  formatDestinationDisplay,
+  type Airport,
+  type Destination
+} from '@/services/locationSearchAPI';
 
-// Create searchable locations from destinations
-const searchableLocations = destinations.map(d => ({
-  id: d.id,
-  city: d.city,
-  country: d.country,
-  display: `${d.city}, ${d.country}`,
-  image: d.imageUrl,
-}));
+// Debounce hook for search
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
-// Common origin cities
-const originCities = [
-  { id: 'atlanta', city: 'Atlanta', country: 'USA', display: 'Atlanta (ATL)' },
-  { id: 'los-angeles', city: 'Los Angeles', country: 'USA', display: 'Los Angeles (LAX)' },
-  { id: 'new-york-jfk', city: 'New York', country: 'USA', display: 'New York (JFK)' },
-  { id: 'chicago', city: 'Chicago', country: 'USA', display: 'Chicago (ORD)' },
-  { id: 'miami', city: 'Miami', country: 'USA', display: 'Miami (MIA)' },
-  { id: 'san-francisco', city: 'San Francisco', country: 'USA', display: 'San Francisco (SFO)' },
-  { id: 'london', city: 'London', country: 'UK', display: 'London (LHR)' },
-  { id: 'toronto', city: 'Toronto', country: 'Canada', display: 'Toronto (YYZ)' },
-];
-
-function LocationAutocomplete({
+// Airport Autocomplete - connects to Neon DB
+function AirportAutocomplete({
   value,
   onChange,
   placeholder,
-  locations,
-  showImages = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
-  locations: typeof searchableLocations | typeof originCities;
-  showImages?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value);
+  const [airports, setAirports] = useState<Airport[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const debouncedQuery = useDebounce(inputValue, 300);
 
-  const filteredLocations = useMemo(() => {
-    if (!inputValue.trim()) return locations.slice(0, 6);
-    const search = inputValue.toLowerCase();
-    return locations
-      .filter(l => 
-        l.city.toLowerCase().includes(search) || 
-        l.country.toLowerCase().includes(search)
-      )
-      .slice(0, 6);
-  }, [inputValue, locations]);
+  // Load major airports on mount
+  useEffect(() => {
+    getMajorAirports(30).then(setAirports);
+  }, []);
 
-  const handleSelect = (location: typeof locations[0]) => {
-    setInputValue(location.display);
-    onChange(location.display);
+  // Search as user types
+  useEffect(() => {
+    if (debouncedQuery.length >= 2) {
+      setLoading(true);
+      searchAirports(debouncedQuery, 15)
+        .then(setAirports)
+        .finally(() => setLoading(false));
+    } else if (debouncedQuery.length === 0) {
+      getMajorAirports(30).then(setAirports);
+    }
+  }, [debouncedQuery]);
+
+  const handleSelect = (airport: Airport) => {
+    const display = formatAirportDisplay(airport);
+    setInputValue(display);
+    onChange(display);
     setIsOpen(false);
   };
 
@@ -82,30 +88,138 @@ function LocationAutocomplete({
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
         className="h-14 text-lg bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40"
       />
-      {isOpen && filteredLocations.length > 0 && (
+      {isOpen && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden"
+          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden max-h-80 overflow-y-auto"
         >
-          {filteredLocations.map((location) => (
-            <button
-              key={location.id}
-              type="button"
-              className="w-full px-4 py-3 text-left hover:bg-primary/5 flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
-              onMouseDown={() => handleSelect(location)}
-            >
-              {showImages && 'image' in location && location.image && (
-                <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">
-                  <img src={location.image as string} alt="" className="w-full h-full object-cover" />
+          {loading ? (
+            <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Searching airports...
+            </div>
+          ) : airports.length > 0 ? (
+            airports.map((airport) => (
+              <button
+                key={airport.id}
+                type="button"
+                className="w-full px-4 py-3 text-left hover:bg-primary/5 flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
+                onMouseDown={() => handleSelect(airport)}
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <span className="text-sm font-bold text-primary">{airport.code}</span>
                 </div>
-              )}
-              <div>
-                <p className="font-medium">{location.city}</p>
-                <p className="text-sm text-muted-foreground">{location.country}</p>
-              </div>
-            </button>
-          ))}
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{airport.name}</p>
+                  <p className="text-sm text-muted-foreground">{airport.city}, {airport.country}</p>
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="px-4 py-6 text-center text-muted-foreground">
+              No airports found. Try a different search.
+            </div>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+// Destination Autocomplete - connects to Neon DB
+function DestinationAutocomplete({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const debouncedQuery = useDebounce(inputValue, 300);
+
+  // Load featured destinations on mount
+  useEffect(() => {
+    getFeaturedDestinations(12).then(setDestinations);
+  }, []);
+
+  // Search as user types
+  useEffect(() => {
+    if (debouncedQuery.length >= 2) {
+      setLoading(true);
+      searchDestinations(debouncedQuery, 15)
+        .then(setDestinations)
+        .finally(() => setLoading(false));
+    } else if (debouncedQuery.length === 0) {
+      getFeaturedDestinations(12).then(setDestinations);
+    }
+  }, [debouncedQuery]);
+
+  const handleSelect = (dest: Destination) => {
+    const display = formatDestinationDisplay(dest);
+    setInputValue(display);
+    onChange(display);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <Input
+        placeholder={placeholder}
+        value={inputValue}
+        onChange={(e) => {
+          setInputValue(e.target.value);
+          onChange(e.target.value);
+          setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+        className="h-14 text-lg bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40"
+      />
+      {isOpen && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden max-h-80 overflow-y-auto"
+        >
+          {loading ? (
+            <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Searching destinations...
+            </div>
+          ) : destinations.length > 0 ? (
+            destinations.map((dest) => (
+              <button
+                key={dest.id}
+                type="button"
+                className="w-full px-4 py-3 text-left hover:bg-primary/5 flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
+                onMouseDown={() => handleSelect(dest)}
+              >
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center shrink-0">
+                  <MapPin className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium truncate">{dest.city}</p>
+                    {dest.featured && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Popular</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">{dest.country}{dest.region ? ` • ${dest.region}` : ''}</p>
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="px-4 py-6 text-center text-muted-foreground">
+              No destinations found. Try a different search.
+            </div>
+          )}
         </motion.div>
       )}
     </div>
@@ -203,11 +317,10 @@ export default function Start() {
                   <Plane className="inline h-4 w-4 mr-1" />
                   Flying from
                 </label>
-                <LocationAutocomplete
+                <AirportAutocomplete
                   value={origin}
                   onChange={setOrigin}
-                  placeholder="Your departure city"
-                  locations={originCities}
+                  placeholder="Your departure city or airport"
                 />
               </div>
               
@@ -217,12 +330,10 @@ export default function Start() {
                   <MapPin className="inline h-4 w-4 mr-1" />
                   Flying to
                 </label>
-                <LocationAutocomplete
+                <DestinationAutocomplete
                   value={destination}
                   onChange={setDestination}
                   placeholder="Where do you want to explore?"
-                  locations={searchableLocations}
-                  showImages
                 />
               </div>
             </div>
