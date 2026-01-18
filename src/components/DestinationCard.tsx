@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 import type { Destination } from '@/lib/destinations';
 
 interface DestinationCardProps {
@@ -20,11 +21,11 @@ export function DestinationCard({ destination, index = 0 }: DestinationCardProps
       >
         {/* Image */}
         <div className="absolute inset-0 image-zoom">
-          <img 
-            src={destination.imageUrl} 
+          <DestinationHeroImage
+            destinationName={`${destination.city}, ${destination.country}`}
             alt={`${destination.city}, ${destination.country}`}
             className="w-full h-full object-cover"
-            loading="lazy"
+            overlayGradient=""
           />
         </div>
         

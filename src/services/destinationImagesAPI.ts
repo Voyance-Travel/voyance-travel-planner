@@ -51,35 +51,52 @@ export interface ImagesResponse {
 export async function getDestinationImages(
   params: GetImagesParams = {}
 ): Promise<DestinationImage[]> {
-  const queryParams = new URLSearchParams();
-  
-  if (params.destinationId) queryParams.set('destinationId', params.destinationId);
-  if (params.destination) queryParams.set('destination', params.destination);
-  if (params.imageType) queryParams.set('imageType', params.imageType);
-  if (params.limit) queryParams.set('limit', String(params.limit));
-  
-  const { data, error } = await supabase.functions.invoke(`destination-images?${queryParams.toString()}`);
-  
+  // Call backend function via POST body for reliability (no querystring invoke)
+  const { data, error } = await supabase.functions.invoke('destination-images', {
+    body: {
+      destinationId: params.destinationId,
+      destination: params.destination,
+      imageType: params.imageType,
+      limit: params.limit,
+    },
+  });
+
   if (error) {
-    console.error('[Images] Edge function error:', error);
+    console.error('[Images] Backend function error:', error);
     // Return empty array on error - UI should handle gracefully
     return [];
   }
-  
+
   return (data as ImagesResponse)?.images || [];
 }
 
 /**
  * Get hero image for a specific destination
  */
-export async function getHeroImage(destinationId: string, destinationName?: string): Promise<DestinationImage | null> {
+export async function getHeroImage(
+  destinationId: string,
+  destinationName?: string
+): Promise<DestinationImage | null> {
   const images = await getDestinationImages({
     destinationId,
     destination: destinationName,
     imageType: 'hero',
     limit: 1,
   });
-  
+
+  return images[0] || null;
+}
+
+/**
+ * Get hero image by destination name (when you don't have a backend destinationId)
+ */
+export async function getHeroImageByName(destination: string): Promise<DestinationImage | null> {
+  const images = await getDestinationImages({
+    destination,
+    imageType: 'hero',
+    limit: 1,
+  });
+
   return images[0] || null;
 }
 
@@ -132,8 +149,11 @@ export function useDestinationImages(params: GetImagesParams = {}) {
  */
 export function useHeroImage(destinationId: string | undefined, destinationName?: string) {
   return useQuery({
-    queryKey: ['hero-image', destinationId, destinationName],
-    queryFn: () => getHeroImage(destinationId!, destinationName),
+    queryKey: ['hero-image', destinationId || null, destinationName || null],
+    queryFn: () => {
+      if (destinationId) return getHeroImage(destinationId, destinationName);
+      return getHeroImageByName(destinationName!);
+    },
     enabled: !!destinationId || !!destinationName,
     staleTime: 1000 * 60 * 60, // 1 hour
   });
