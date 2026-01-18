@@ -46,8 +46,8 @@ import Settings from "./pages/Settings";
 
 // Pages - Trip Planning
 import Planner from "./pages/planner/Planner";
-import PlannerFlight from "./pages/planner/PlannerFlight";
-import PlannerHotel from "./pages/planner/PlannerHotel";
+import PlannerFlight from "./pages/planner/PlannerFlightEnhanced";
+import PlannerHotel from "./pages/planner/PlannerHotelEnhanced";
 import PlannerItinerary from "./pages/planner/PlannerItinerary";
 import PlannerBooking from "./pages/planner/PlannerBooking";
 
