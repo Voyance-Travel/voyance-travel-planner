@@ -34,6 +34,7 @@ import TravelMap from '@/components/profile/TravelMap';
 import SurpriseTripCard from '@/components/profile/SurpriseTripCard';
 import RotatingCoverPhoto from '@/components/profile/RotatingCoverPhoto';
 import FriendsSection from '@/components/profile/FriendsSection';
+import MemoryLane from '@/components/profile/MemoryLane';
 
 type TabType = 'overview' | 'trips' | 'preferences' | 'subscription';
 
@@ -474,6 +475,9 @@ export default function Profile() {
                 </div>
               </div>
             )}
+
+            {/* Memory Lane - Past Trip Reviews */}
+            <MemoryLane className="mt-12" />
           </motion.div>
         )}
 
