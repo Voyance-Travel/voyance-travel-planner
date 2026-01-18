@@ -21,16 +21,18 @@ const fallbackImages = [
   'https://images.unsplash.com/photo-1518730518541-d0843268c287?w=1200&q=80',
 ];
 
-// Region icons mapping
-const regionIcons: Record<string, string> = {
-  'Europe': '🏰',
-  'Asia': '🏯',
-  'North America': '🗽',
-  'South America': '🌄',
-  'Africa': '🦁',
-  'Oceania': '🏝️',
-  'Middle East': '🕌',
-  'Caribbean': '🏖️',
+// Region images mapping (replacing emojis with photos)
+const regionImages: Record<string, string> = {
+  'Europe': 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=100&h=100&fit=crop',
+  'Asia': 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=100&h=100&fit=crop',
+  'North America': 'https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=100&h=100&fit=crop',
+  'South America': 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=100&h=100&fit=crop',
+  'Africa': 'https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?w=100&h=100&fit=crop',
+  'Oceania': 'https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=100&h=100&fit=crop',
+  'Middle East': 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=100&h=100&fit=crop',
+  'Caribbean': 'https://images.unsplash.com/photo-1548574505-5e239809ee19?w=100&h=100&fit=crop',
+  'Central America': 'https://images.unsplash.com/photo-1518638150340-f706e86654de?w=100&h=100&fit=crop',
+  'Antarctica': 'https://images.unsplash.com/photo-1551415923-a2297c7fda79?w=100&h=100&fit=crop',
 };
 
 function getDestinationImage(destination: Destination, index: number): string {
@@ -47,7 +49,7 @@ export default function Destinations() {
   const [loading, setLoading] = useState(true);
   const [featuredDestinations, setFeaturedDestinations] = useState<Destination[]>([]);
   const [allDestinations, setAllDestinations] = useState<Destination[]>([]);
-  const [regions, setRegions] = useState<{ id: string; name: string; count: number; icon: string }[]>([]);
+  const [regions, setRegions] = useState<{ id: string; name: string; count: number; image: string }[]>([]);
   const [popularDestinations, setPopularDestinations] = useState<Destination[]>([]);
 
   useEffect(() => {
@@ -75,7 +77,7 @@ export default function Destinations() {
               id: regionName.toLowerCase().replace(/\s+/g, '-'),
               name: regionName,
               count: regionDestinations.length,
-              icon: regionIcons[regionName] || '🌍',
+              image: regionImages[regionName] || 'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=100&h=100&fit=crop',
             };
           })
         );
@@ -330,7 +332,7 @@ export default function Destinations() {
                     to={`/explore?region=${region.id}`}
                     className="flex items-center gap-4 p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-300"
                   >
-                    <span className="text-3xl">{region.icon}</span>
+                    <img src={region.image} alt={region.name} className="w-12 h-12 rounded-lg object-cover" />
                     <div className="flex-1">
                       <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
                         {region.name}
