@@ -11,28 +11,28 @@ const steps = [
     icon: Sparkles,
     title: 'Discover Your Travel DNA',
     description: 'Take our 5-minute quiz to uncover your unique travel personality. We\'ll learn about your pace, interests, budget, and dream experiences.',
-    image: 'https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=600&q=80',
+    image: 'https://images.unsplash.com/photo-1522199755839-a2bacb67c546?w=600&q=80',
     color: 'from-violet-500 to-purple-600',
   },
   {
     icon: Compass,
     title: 'Get Personalized Recommendations',
     description: 'Our AI matches you with destinations and experiences that resonate with who you are. No more generic itineraries—every suggestion is tailored to you.',
-    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600&q=80',
+    image: 'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&q=80',
     color: 'from-blue-500 to-cyan-600',
   },
   {
     icon: Calendar,
     title: 'Craft Your Perfect Itinerary',
     description: 'Watch as we build a day-by-day plan with the right mix of activities, dining, and downtime. Customize anything until it feels just right.',
-    image: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600&q=80',
+    image: 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?w=600&q=80',
     color: 'from-emerald-500 to-teal-600',
   },
   {
     icon: Plane,
     title: 'Book Everything in One Place',
     description: 'Flights, hotels, activities—all seamlessly bookable. Lock in your prices and get ready for an unforgettable journey.',
-    image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600&q=80',
+    image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&q=80',
     color: 'from-orange-500 to-rose-600',
   },
 ];
@@ -197,47 +197,73 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* Benefits */}
-      <section className="py-24 bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4">
+      {/* Benefits - Enhanced */}
+      <section className="py-24 bg-gradient-to-b from-muted/50 via-background to-muted/30 relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-0 left-0 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
+        
+        <div className="max-w-6xl mx-auto px-4 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
+              <Heart className="w-4 h-4" />
+              Loved by Travelers
+            </span>
+            <h2 className="text-3xl md:text-5xl font-display font-bold text-foreground mb-4">
               Why Travelers Love Voyance
             </h2>
-            <p className="text-lg text-muted-foreground">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               We handle the complexity so you can enjoy the journey
             </p>
           </motion.div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {benefits.map((benefit, index) => (
               <motion.div
                 key={benefit.title}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card p-6 rounded-2xl border border-border hover:border-primary/30 hover:shadow-lg transition-all group"
+                whileHover={{ y: -8, scale: 1.02 }}
+                className="group relative"
               >
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                  <benefit.icon className="h-6 w-6 text-primary" />
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative bg-card/80 backdrop-blur-sm p-8 rounded-3xl border border-border hover:border-primary/30 transition-all duration-300 h-full">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                    <benefit.icon className="h-7 w-7 text-primary" />
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground mb-3">{benefit.title}</h3>
+                  <p className="text-muted-foreground">{benefit.description}</p>
                 </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">{benefit.title}</h3>
-                <p className="text-muted-foreground text-sm">{benefit.description}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Promise Section - Replace testimonials */}
+      {/* Promise Section - Enhanced with imagery */}
       <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
+        {/* Gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-accent/20 via-transparent to-transparent" />
+        
+        {/* Decorative images */}
+        <div className="absolute top-0 right-0 w-1/3 h-full opacity-20">
+          <img 
+            src="https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=800&q=80" 
+            alt="" 
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-900" />
+        </div>
+        
         <div className="max-w-5xl mx-auto px-4 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -245,10 +271,14 @@ export default function HowItWorks() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-white/80 text-sm font-medium mb-4 border border-white/20">
+              <Shield className="w-4 h-4" />
+              Built on Trust
+            </span>
+            <h2 className="text-3xl md:text-5xl font-display font-bold text-white mb-4">
               Our Promise to You
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-lg text-white/60 max-w-2xl mx-auto">
               We're building Voyance on a foundation of honesty and transparency
             </p>
           </motion.div>
@@ -259,34 +289,65 @@ export default function HowItWorks() {
                 icon: Shield,
                 title: 'No Hidden Fees',
                 description: 'What you see is what you pay. We never add surprise charges or markups.',
+                color: 'from-emerald-500 to-teal-500',
               },
               {
                 icon: Heart,
                 title: 'Honest Recommendations',
-                description: 'Every suggestion is based on your preferences—not paid partnerships or sponsorships.',
+                description: 'Every suggestion is based on your preferences—not paid partnerships.',
+                color: 'from-rose-500 to-pink-500',
               },
               {
                 icon: Sparkles,
                 title: 'Genuinely Personalized',
                 description: 'Your itinerary is crafted for you, not recycled from a template.',
+                color: 'from-violet-500 to-purple-500',
               },
             ].map((promise, index) => (
               <motion.div
                 key={promise.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, y: 30, rotateX: 15 }}
+                whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-card/50 backdrop-blur p-8 rounded-2xl border border-border text-center hover:border-primary/30 transition-colors"
+                transition={{ delay: index * 0.15, duration: 0.6 }}
+                whileHover={{ y: -5, scale: 1.02 }}
+                className="group"
               >
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <promise.icon className="h-7 w-7 text-primary" />
+                <div className="relative h-full bg-white/5 backdrop-blur-lg p-8 rounded-3xl border border-white/10 hover:border-white/30 transition-all duration-300 overflow-hidden">
+                  {/* Gradient overlay on hover */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${promise.color} opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
+                  
+                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${promise.color} flex items-center justify-center mx-auto mb-6 shadow-lg shadow-black/20`}>
+                    <promise.icon className="h-7 w-7 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-3 text-center">{promise.title}</h3>
+                  <p className="text-white/60 text-center">{promise.description}</p>
                 </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">{promise.title}</h3>
-                <p className="text-muted-foreground text-sm">{promise.description}</p>
               </motion.div>
             ))}
           </div>
+          
+          {/* Trust indicators */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.4 }}
+            className="mt-16 flex flex-wrap items-center justify-center gap-8 text-white/40 text-sm"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-emerald-400" />
+              <span>No credit card required to explore</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-emerald-400" />
+              <span>Cancel anytime with full refund</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-emerald-400" />
+              <span>24/7 traveler support</span>
+            </div>
+          </motion.div>
         </div>
       </section>
       

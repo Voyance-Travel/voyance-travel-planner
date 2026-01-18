@@ -702,10 +702,63 @@ export default function Quiz() {
       />
       
       <div className="min-h-screen flex flex-col relative overflow-hidden">
-        {/* Background gradients */}
+        {/* Enhanced background with animated elements */}
         <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5 -z-10" />
-        <div className="fixed top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl -z-10" />
-        <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl -z-10" />
+        
+        {/* Floating orbs */}
+        <motion.div 
+          className="fixed top-20 left-[10%] w-72 h-72 bg-primary/15 rounded-full blur-3xl -z-10"
+          animate={{
+            x: [0, 30, 0],
+            y: [0, -20, 0],
+            scale: [1, 1.1, 1],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div 
+          className="fixed top-1/3 right-[5%] w-96 h-96 bg-accent/10 rounded-full blur-3xl -z-10"
+          animate={{
+            x: [0, -20, 0],
+            y: [0, 30, 0],
+            scale: [1, 0.9, 1],
+          }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div 
+          className="fixed bottom-20 left-1/3 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-10"
+          animate={{
+            x: [0, 40, 0],
+            y: [0, -30, 0],
+          }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+        />
+        
+        {/* Sparkle particles */}
+        {hasStarted && !isComplete && (
+          <div className="fixed inset-0 pointer-events-none -z-5 overflow-hidden">
+            {[...Array(12)].map((_, i) => (
+              <motion.div
+                key={i}
+                className="absolute w-1 h-1 bg-primary/40 rounded-full"
+                style={{
+                  left: `${10 + (i * 7) % 80}%`,
+                  top: `${5 + (i * 11) % 90}%`,
+                }}
+                animate={{
+                  opacity: [0, 1, 0],
+                  scale: [0, 1.5, 0],
+                  y: [0, -30, -60],
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  delay: i * 0.4,
+                  ease: "easeOut"
+                }}
+              />
+            ))}
+          </div>
+        )}
         
         <AnimatePresence mode="wait">
           {!hasStarted ? (
@@ -713,10 +766,11 @@ export default function Quiz() {
           ) : isComplete ? (
             <motion.div
               key="completion"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex-1 pt-20"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ duration: 0.5 }}
+              className="flex-1 pt-28"
             >
               <QuizCompletion onContinue={handleComplete} />
             </motion.div>
@@ -726,68 +780,137 @@ export default function Quiz() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex-1 flex flex-col pt-24 pb-8"
+              className="flex-1 flex flex-col pt-32 pb-8"
             >
               {/* Progress */}
               <div className="px-4 mb-10">
                 <QuizProgressBar currentStep={currentStep} totalSteps={totalSteps} />
               </div>
               
-              {/* Questions for this step */}
+              {/* Questions for this step with magical transitions */}
               <div className="flex-1 flex items-start justify-center px-4 overflow-y-auto">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -50 }}
+                    initial={{ opacity: 0, scale: 0.95, y: 30 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 1.02, y: -20 }}
                     transition={{ 
                       type: 'spring',
-                      stiffness: 300,
-                      damping: 30
+                      stiffness: 200,
+                      damping: 25,
+                      mass: 0.8,
                     }}
-                    className="max-w-2xl w-full space-y-12"
+                    className="max-w-2xl w-full space-y-12 relative"
                   >
+                    {/* Step transition sparkle burst */}
+                    <motion.div
+                      initial={{ opacity: 1, scale: 0 }}
+                      animate={{ opacity: 0, scale: 3 }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                    >
+                      <div className="w-20 h-20 bg-primary/20 rounded-full blur-xl" />
+                    </motion.div>
+                    
                     {stepQuestions.map((question, qIdx) => (
                       <div key={question.id} className={qIdx > 0 ? 'pt-10 border-t border-border/30' : ''}>
-                        {/* Question header */}
+                        {/* Question header with staggered reveal */}
                         <motion.div 
                           className="text-center mb-10"
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.1 + qIdx * 0.1 }}
+                          initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ 
+                            delay: 0.15 + qIdx * 0.1,
+                            type: 'spring',
+                            stiffness: 300,
+                            damping: 25
+                          }}
                         >
-                          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 text-primary text-xs font-semibold uppercase tracking-wider mb-5 border border-primary/20">
-                            {question.icon}
+                          {/* Animated category badge */}
+                          <motion.div 
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 text-primary text-xs font-semibold uppercase tracking-wider mb-5 border border-primary/20"
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ delay: 0.2 + qIdx * 0.1, type: 'spring', stiffness: 400 }}
+                          >
+                            <motion.span
+                              animate={{ rotate: [0, 10, -10, 0] }}
+                              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: qIdx * 0.5 }}
+                            >
+                              {question.icon}
+                            </motion.span>
                             {question.category}
-                          </div>
-                          <h1 className="text-2xl md:text-4xl font-serif font-bold text-foreground mb-3 leading-tight">
+                          </motion.div>
+                          
+                          {/* Title with letter animation feel */}
+                          <motion.h1 
+                            className="text-2xl md:text-4xl font-serif font-bold text-foreground mb-3 leading-tight"
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.25 + qIdx * 0.1 }}
+                          >
                             {question.title}
-                          </h1>
-                          <p className="text-muted-foreground text-lg">
+                          </motion.h1>
+                          
+                          <motion.p 
+                            className="text-muted-foreground text-lg"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.35 + qIdx * 0.1 }}
+                          >
                             {question.subtitle}
                             {question.optional && <span className="text-xs ml-2 text-muted-foreground/60">(optional)</span>}
-                          </p>
+                          </motion.p>
                         </motion.div>
                         
-                        {/* Options */}
-                        <div className={cn(
-                          'grid gap-4',
-                          question.options.length > 4 ? 'md:grid-cols-2' : ''
-                        )}>
+                        {/* Options with cascade reveal */}
+                        <motion.div 
+                          className={cn(
+                            'grid gap-4',
+                            question.options.length > 4 ? 'md:grid-cols-2' : ''
+                          )}
+                          initial="hidden"
+                          animate="visible"
+                          variants={{
+                            hidden: {},
+                            visible: {
+                              transition: {
+                                staggerChildren: 0.06,
+                                delayChildren: 0.3 + qIdx * 0.15,
+                              }
+                            }
+                          }}
+                        >
                           {question.options.map((option, index) => (
-                            <QuizOptionCard
+                            <motion.div
                               key={option.value}
-                              value={option.value}
-                              label={option.label}
-                              description={option.description}
-                              isSelected={isSelected(question.id, option.value)}
-                              onSelect={(val) => handleSelect(question.id, val, !!question.multiSelect)}
-                              index={index}
-                              isMultiSelect={question.multiSelect}
-                            />
+                              variants={{
+                                hidden: { opacity: 0, y: 20, scale: 0.95 },
+                                visible: { 
+                                  opacity: 1, 
+                                  y: 0, 
+                                  scale: 1,
+                                  transition: {
+                                    type: 'spring',
+                                    stiffness: 400,
+                                    damping: 30,
+                                  }
+                                }
+                              }}
+                            >
+                              <QuizOptionCard
+                                value={option.value}
+                                label={option.label}
+                                description={option.description}
+                                isSelected={isSelected(question.id, option.value)}
+                                onSelect={(val) => handleSelect(question.id, val, !!question.multiSelect)}
+                                index={index}
+                                isMultiSelect={question.multiSelect}
+                              />
+                            </motion.div>
                           ))}
-                        </div>
+                        </motion.div>
                       </div>
                     ))}
                   </motion.div>
