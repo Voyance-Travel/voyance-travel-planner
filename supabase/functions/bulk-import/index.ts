@@ -184,6 +184,39 @@ Deno.serve(async (req) => {
         created_at: row.created_at || new Date().toISOString(),
         updated_at: row.updated_at || new Date().toISOString(),
       }))
+    } else if (table === 'trips') {
+      processedRows = rows.map((row) => {
+        const parseJsonField = (field: unknown) => {
+          if (!field || field === '') return null
+          if (typeof field === 'string') {
+            try { return JSON.parse(field) } catch { return null }
+          }
+          return field
+        }
+        
+        return {
+          id: row.id || crypto.randomUUID(),
+          user_id: row.user_id,
+          name: row.name || `Trip to ${row.destination}`,
+          destination: row.destination,
+          destination_country: row.destination_country || null,
+          origin_city: row.origin_city || null,
+          start_date: row.start_date,
+          end_date: row.end_date,
+          status: row.status || 'draft',
+          itinerary_status: row.itinerary_status || 'not_started',
+          travelers: row.travelers ? parseInt(String(row.travelers)) : 1,
+          budget_tier: row.budget_tier || 'moderate',
+          trip_type: row.trip_type || 'vacation',
+          flight_selection: parseJsonField(row.flight_selection),
+          hotel_selection: parseJsonField(row.hotel_selection),
+          itinerary_data: parseJsonField(row.itinerary_data),
+          metadata: parseJsonField(row.metadata) || {},
+          price_lock_expires_at: row.price_lock_expires_at || null,
+          created_at: row.created_at || new Date().toISOString(),
+          updated_at: row.updated_at || new Date().toISOString(),
+        }
+      })
     } else if (table === 'trip_activities') {
       processedRows = rows.map((row) => ({
         id: row.id,

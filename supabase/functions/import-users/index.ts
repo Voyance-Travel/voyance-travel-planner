@@ -89,15 +89,17 @@ Deno.serve(async (req) => {
         }
 
         if (authUser?.user) {
-          // Update profile with additional data
+          // Update profile with additional data - handle empty strings as null
+          const handleValue = user.handle && user.handle.trim() !== '' ? user.handle : null;
+          
           const { error: profileError } = await supabase
             .from('profiles')
             .upsert({
               id: authUser.user.id,
               display_name: user.display_name || user.name || user.email.split('@')[0],
-              handle: user.handle,
-              avatar_url: user.avatar_url,
-              bio: user.bio,
+              handle: handleValue,
+              avatar_url: user.avatar_url && user.avatar_url.trim() !== '' ? user.avatar_url : null,
+              bio: user.bio && user.bio.trim() !== '' ? user.bio : null,
               quiz_completed: Boolean(user.quiz_completed),
               travel_dna: user.travel_dna ? { archetype: user.travel_dna } : null,
               updated_at: new Date().toISOString()
