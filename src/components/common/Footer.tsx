@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Compass, Instagram, Facebook } from 'lucide-react';
+import { Instagram, Facebook } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
 
 const footerLinks = {
@@ -11,13 +11,13 @@ const footerLinks = {
   ],
   explore: [
     { label: 'Destinations', href: ROUTES.DESTINATIONS },
-    { label: 'Travel Guides', href: ROUTES.EXPLORE },
+    { label: 'Travel Guides', href: `${ROUTES.EXPLORE}#guides` },
     { label: 'Travel Quiz', href: ROUTES.QUIZ },
   ],
   support: [
-    { label: 'Help Center', href: '#' },
-    { label: 'Contact Us', href: '#' },
-    { label: 'FAQ', href: '#' },
+    { label: 'Help Center', href: ROUTES.HELP_CENTER },
+    { label: 'Contact Us', href: ROUTES.CONTACT },
+    { label: 'FAQ', href: ROUTES.FAQ },
     { label: 'Privacy Policy', href: ROUTES.PRIVACY },
     { label: 'Terms of Service', href: ROUTES.TERMS },
   ],

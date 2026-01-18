@@ -1,11 +1,14 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
-import { motion } from 'framer-motion';
-import { MapPin, Clock, Briefcase, ChevronRight, Users, Code, Palette, TrendingUp } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MapPin, Clock, Briefcase, ChevronRight, ChevronDown, Users, Code, Palette, TrendingUp, Mail, Building, DollarSign, GraduationCap } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
-// Sample job postings
+const CONTACT_EMAIL = 'careers@voyance.travel';
+
+// Full job listings with details
 const jobs = [
   {
     id: '1',
@@ -13,7 +16,31 @@ const jobs = [
     department: 'Engineering',
     location: 'Remote',
     type: 'Full-time',
+    salary: '$140,000 - $180,000',
     description: 'Build beautiful, performant interfaces for our travel platform.',
+    fullDescription: `We're looking for a Senior Frontend Engineer to help build the future of travel planning. You'll work closely with our design and product teams to create delightful user experiences that help millions of travelers plan their dream trips.`,
+    responsibilities: [
+      'Build and maintain high-quality React components and features',
+      'Collaborate with designers to implement pixel-perfect UIs',
+      'Optimize application performance and user experience',
+      'Mentor junior engineers and conduct code reviews',
+      'Contribute to architectural decisions and technical strategy',
+    ],
+    requirements: [
+      '5+ years of experience with React and TypeScript',
+      'Strong understanding of modern CSS and responsive design',
+      'Experience with state management (Redux, Zustand, etc.)',
+      'Familiarity with testing frameworks (Jest, Playwright)',
+      'Excellent communication and collaboration skills',
+    ],
+    benefits: [
+      'Competitive salary and equity',
+      'Unlimited PTO',
+      'Remote-first culture',
+      'Health, dental, and vision insurance',
+      'Annual learning budget',
+      '$1,000 travel credit annually',
+    ],
   },
   {
     id: '2',
@@ -21,7 +48,31 @@ const jobs = [
     department: 'Product & Design',
     location: 'San Francisco, CA',
     type: 'Full-time',
+    salary: '$130,000 - $170,000',
     description: 'Design intuitive experiences that delight travelers worldwide.',
+    fullDescription: `Join our design team to craft beautiful, intuitive experiences for our travel planning platform. You'll own the end-to-end design process, from research and ideation to high-fidelity prototypes and production-ready designs.`,
+    responsibilities: [
+      'Lead design for key product areas and features',
+      'Conduct user research and usability testing',
+      'Create wireframes, prototypes, and high-fidelity designs',
+      'Collaborate with engineering to ensure design quality',
+      'Contribute to and evolve our design system',
+    ],
+    requirements: [
+      '4+ years of product design experience',
+      'Strong portfolio demonstrating UX and visual design skills',
+      'Proficiency with Figma and prototyping tools',
+      'Experience with user research methodologies',
+      'Understanding of accessibility standards',
+    ],
+    benefits: [
+      'Competitive salary and equity',
+      'Unlimited PTO',
+      'Hybrid work arrangement',
+      'Health, dental, and vision insurance',
+      'Annual learning budget',
+      '$1,000 travel credit annually',
+    ],
   },
   {
     id: '3',
@@ -29,7 +80,31 @@ const jobs = [
     department: 'Engineering',
     location: 'Remote',
     type: 'Full-time',
+    salary: '$160,000 - $200,000',
     description: 'Develop AI models that power personalized travel recommendations.',
+    fullDescription: `We're building an AI-first travel platform and need an ML Engineer to help develop and deploy the models that power our personalized recommendations. You'll work on everything from natural language processing to recommendation systems.`,
+    responsibilities: [
+      'Design and implement ML models for travel recommendations',
+      'Build and maintain ML infrastructure and pipelines',
+      'Collaborate with product to identify ML opportunities',
+      'Analyze data to improve model performance',
+      'Stay current with ML/AI research and best practices',
+    ],
+    requirements: [
+      '4+ years of ML engineering experience',
+      'Strong Python and ML framework expertise (PyTorch, TensorFlow)',
+      'Experience with NLP and recommendation systems',
+      'Understanding of ML ops and model deployment',
+      'MS or PhD in Computer Science or related field preferred',
+    ],
+    benefits: [
+      'Competitive salary and equity',
+      'Unlimited PTO',
+      'Remote-first culture',
+      'Health, dental, and vision insurance',
+      'Annual conference budget',
+      '$1,000 travel credit annually',
+    ],
   },
   {
     id: '4',
@@ -37,7 +112,31 @@ const jobs = [
     department: 'Marketing',
     location: 'New York, NY',
     type: 'Full-time',
+    salary: '$100,000 - $140,000',
     description: 'Drive user acquisition and engagement through creative campaigns.',
+    fullDescription: `We're looking for a Growth Marketing Manager to lead our user acquisition and retention efforts. You'll develop and execute strategies that drive sustainable growth while building our brand presence in the travel industry.`,
+    responsibilities: [
+      'Develop and execute multi-channel marketing campaigns',
+      'Manage paid acquisition across social, search, and display',
+      'Analyze campaign performance and optimize for ROI',
+      'Collaborate with product on growth experiments',
+      'Build and manage relationships with travel influencers',
+    ],
+    requirements: [
+      '4+ years of growth marketing experience',
+      'Experience with paid social and performance marketing',
+      'Strong analytical skills and data-driven mindset',
+      'Excellent written and verbal communication',
+      'Travel industry experience a plus',
+    ],
+    benefits: [
+      'Competitive salary and equity',
+      'Unlimited PTO',
+      'Hybrid work arrangement',
+      'Health, dental, and vision insurance',
+      'Marketing conference budget',
+      '$1,000 travel credit annually',
+    ],
   },
 ];
 
@@ -48,12 +147,33 @@ const departments = [
   { id: 'Marketing', name: 'Marketing', icon: TrendingUp },
 ];
 
+interface Job {
+  id: string;
+  title: string;
+  department: string;
+  location: string;
+  type: string;
+  salary: string;
+  description: string;
+  fullDescription: string;
+  responsibilities: string[];
+  requirements: string[];
+  benefits: string[];
+}
+
 export default function Careers() {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   const filteredJobs = selectedDepartment === 'all'
     ? jobs
     : jobs.filter(job => job.department === selectedDepartment);
+
+  const handleApply = (job: Job) => {
+    const subject = encodeURIComponent(`Application for ${job.title}`);
+    const body = encodeURIComponent(`Hi Voyance Team,\n\nI'm interested in applying for the ${job.title} position.\n\n[Please attach your resume and include a brief introduction about yourself]\n\nBest regards`);
+    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+  };
 
   return (
     <MainLayout>
@@ -65,6 +185,13 @@ export default function Careers() {
       {/* Hero */}
       <section className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
         <div className="max-w-4xl mx-auto px-4 text-center">
+          <motion.span
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="inline-block px-4 py-1.5 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4"
+          >
+            We're Hiring
+          </motion.span>
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -116,6 +243,7 @@ export default function Careers() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
+                onClick={() => setSelectedJob(job)}
                 className="group p-6 bg-card border border-border rounded-xl hover:border-primary/50 hover:shadow-md transition-all cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -138,6 +266,10 @@ export default function Careers() {
                       <span className="flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5" />
                         {job.type}
+                      </span>
+                      <span className="flex items-center gap-1 text-accent font-medium">
+                        <DollarSign className="h-3.5 w-3.5" />
+                        {job.salary}
                       </span>
                     </div>
                   </div>
@@ -164,11 +296,104 @@ export default function Careers() {
           <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
             We offer competitive salaries, equity, unlimited PTO, remote flexibility, and the chance to shape how the world travels.
           </p>
-          <Button variant="outline" size="lg">
-            Learn About Our Culture
+          <div className="grid sm:grid-cols-3 gap-6 mb-8">
+            {[
+              { icon: Building, title: 'Remote First', desc: 'Work from anywhere in the world' },
+              { icon: GraduationCap, title: 'Learning Budget', desc: '$2,000 annual learning stipend' },
+              { icon: MapPin, title: 'Travel Credit', desc: '$1,000 annual travel credit' },
+            ].map((perk, idx) => (
+              <div key={idx} className="bg-card border border-border rounded-xl p-6">
+                <perk.icon className="h-8 w-8 text-primary mx-auto mb-3" />
+                <h3 className="font-semibold mb-1">{perk.title}</h3>
+                <p className="text-sm text-muted-foreground">{perk.desc}</p>
+              </div>
+            ))}
+          </div>
+          <Button variant="outline" size="lg" asChild>
+            <a href={`mailto:${CONTACT_EMAIL}`}>
+              <Mail className="h-4 w-4 mr-2" />
+              Contact Careers Team
+            </a>
           </Button>
         </div>
       </section>
+
+      {/* Job Detail Dialog */}
+      <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {selectedJob && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl">{selectedJob.title}</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    <span className="flex items-center gap-1 text-sm">
+                      <Briefcase className="h-4 w-4" />
+                      {selectedJob.department}
+                    </span>
+                    <span className="flex items-center gap-1 text-sm">
+                      <MapPin className="h-4 w-4" />
+                      {selectedJob.location}
+                    </span>
+                    <span className="flex items-center gap-1 text-sm">
+                      <Clock className="h-4 w-4" />
+                      {selectedJob.type}
+                    </span>
+                    <span className="flex items-center gap-1 text-sm text-accent font-medium">
+                      <DollarSign className="h-4 w-4" />
+                      {selectedJob.salary}
+                    </span>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-6 mt-4">
+                <div>
+                  <h4 className="font-semibold mb-2">About the Role</h4>
+                  <p className="text-muted-foreground">{selectedJob.fullDescription}</p>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold mb-2">Responsibilities</h4>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                    {selectedJob.responsibilities.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold mb-2">Requirements</h4>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                    {selectedJob.requirements.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold mb-2">Benefits</h4>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                    {selectedJob.benefits.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button className="flex-1" onClick={() => handleApply(selectedJob)}>
+                    <Mail className="h-4 w-4 mr-2" />
+                    Apply Now
+                  </Button>
+                  <Button variant="outline" onClick={() => setSelectedJob(null)}>
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

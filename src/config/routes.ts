@@ -10,6 +10,11 @@ export const ROUTES = {
   CAREERS: '/careers',
   PRESS: '/press',
   
+  // Support pages
+  CONTACT: '/contact',
+  FAQ: '/faq',
+  HELP_CENTER: '/help',
+  
   // Auth routes
   SIGNIN: '/signin',
   SIGNUP: '/signup',

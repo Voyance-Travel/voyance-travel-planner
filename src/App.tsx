@@ -23,6 +23,8 @@ import HowItWorks from "./pages/HowItWorks";
 import Careers from "./pages/Careers";
 import Press from "./pages/Press";
 import Contact from "./pages/Contact";
+import FAQ from "./pages/FAQ";
+import HelpCenter from "./pages/HelpCenter";
 
 // Pages - Auth
 import SignIn from "./pages/SignIn";
@@ -86,6 +88,8 @@ const App = () => (
                 <Route path="/careers" element={<Careers />} />
                 <Route path="/press" element={<Press />} />
                 <Route path="/contact" element={<Contact />} />
+                <Route path="/faq" element={<FAQ />} />
+                <Route path="/help" element={<HelpCenter />} />
                 <Route path="/sample-itinerary" element={<SampleItinerary />} />
                 
                 {/* Auth Routes */}

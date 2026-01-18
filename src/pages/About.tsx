@@ -1,13 +1,17 @@
 import { motion } from 'framer-motion';
-import { Header } from '@/components/Header';
+import MainLayout from '@/components/layout/MainLayout';
 import { ArrowRight, MessageSquare, Users, Clock, Check, X, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import Head from '@/components/common/Head';
 
 export default function About() {
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
+    <MainLayout>
+      <Head
+        title="About Voyance | AI-Powered Travel Planning"
+        description="Learn about Voyance's mission to revolutionize travel planning with AI-powered personalization."
+      />
       
       {/* Hero Section */}
       <section className="relative pt-24 pb-16 overflow-hidden">
@@ -285,14 +289,6 @@ export default function About() {
           </Link>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="py-8 bg-primary text-primary-foreground">
-        <div className="container mx-auto px-6 flex items-center justify-between">
-          <span className="font-serif font-semibold"><span className="text-accent">V</span>oyance</span>
-          <p className="text-sm opacity-70">© 2026 Voyance. Thoughtful travel planning.</p>
-        </div>
-      </footer>
-    </div>
+    </MainLayout>
   );
 }
