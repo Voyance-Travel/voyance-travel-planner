@@ -327,6 +327,7 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     const offersData = await offersResponse.json();
     console.log('[Hotels] Got offers for', offersData.data?.length || 0, 'hotels');
 
+    // ============= AMADEUS SANDBOX FIX =============
     // If Amadeus returns empty offers, it's usually because the sandbox has limited availability
     // for the exact occupancy/date range. We'll retry with relaxed params to confirm offers exist.
     if (!offersData.data?.length) {
@@ -337,10 +338,11 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
             (1000 * 60 * 60 * 24)
         )
       );
+      const originalAdults = params.guests || 1;
 
-      console.log(
-        '[Hotels] No offers for requested params; retrying with relaxed params (1 adult, 1-night)'
-      );
+      console.log('[Hotels] ⚠️ Empty results detected - retrying with relaxed params', {
+        originalParams: { nights: originalNights, adults: originalAdults },
+      });
 
       const toISODate = (d: Date) => d.toISOString().split('T')[0];
       const relaxedCheckOut = (() => {
@@ -366,11 +368,22 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
       if (relaxedResp.ok) {
         const relaxedData = await relaxedResp.json();
         const relaxedCount = relaxedData.data?.length || 0;
-        console.log('[Hotels] Relaxed retry returned', relaxedCount, 'offers');
+        console.log('[Hotels] ✅ Relaxed retry returned', relaxedCount, 'offers');
 
         if (relaxedCount > 0) {
-          // Normalize using the relaxed 1-night params to get a real-ish pricePerNight,
-          // then extend it across the user's requested nights so the UI remains usable.
+          // PRICE SCALING FORMULA:
+          // - Nights: Linear scaling (7 nights = 7× price)
+          // - Guests: Square root scaling (3 guests ≈ 1.73× price)
+          //   Why sqrt? Additional guests share rooms/resources, not full linear cost
+          const nightsMultiplier = originalNights; // simplified was 1 night
+          const guestsMultiplier = Math.sqrt(originalAdults); // sqrt scaling for guests
+
+          console.log('[Hotels] Price scaling multipliers:', {
+            nightsMultiplier,
+            guestsMultiplier: guestsMultiplier.toFixed(2),
+            totalMultiplier: (nightsMultiplier * guestsMultiplier).toFixed(2),
+          });
+
           const relaxedParams: HotelSearchParams = {
             ...params,
             guests: 1,
@@ -379,17 +392,28 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
 
           return (relaxedData.data || []).map((hotelOffer: any) => {
             const normalized = normalizeHotelData(hotelOffer, hotelOffer.offers?.[0], relaxedParams);
-            const pricePerNight = Number(normalized.pricePerNight) || 150;
+            const basePrice = Number(normalized.pricePerNight) || 150;
+
+            // Scale the price: base × nights × sqrt(guests)
+            const scaledPricePerNight = Math.round(basePrice * guestsMultiplier);
+            const scaledTotalPrice = Math.round(scaledPricePerNight * originalNights);
+
+            console.log('[Hotels] Scaled price:', {
+              hotelId: normalized.id,
+              basePrice,
+              scaledPricePerNight,
+              scaledTotalPrice,
+            });
 
             return {
               ...normalized,
               checkIn: params.checkIn,
               checkOut: params.checkOut,
               nights: originalNights,
-              pricePerNight,
-              totalPrice: Math.round(pricePerNight * originalNights),
-              // add a hint for debugging/QA
+              pricePerNight: scaledPricePerNight,
+              totalPrice: scaledTotalPrice,
               source: 'amadeus',
+              _priceScaled: true, // Flag for debugging/QA
             };
           });
         }
