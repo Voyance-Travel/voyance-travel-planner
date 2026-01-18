@@ -15,7 +15,9 @@ import {
   CreditCard,
   Check,
   Crown,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  Zap
 } from 'lucide-react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
@@ -37,6 +39,23 @@ import FriendsSection from '@/components/profile/FriendsSection';
 import MemoryLane from '@/components/profile/MemoryLane';
 
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences';
+
+// One-time purchase config
+const ONE_TIME_PURCHASE = {
+  aiTrip: {
+    name: 'AI Trip Enhancement',
+    description: 'Unlock AI for a single trip',
+    price: 9.99,
+    priceId: 'price_1Sr3bCFYxIg9jcJUBqSZb4jZ',
+    productId: 'prod_TogzVmlCPr5Qio',
+    features: [
+      'AI-powered itinerary generation',
+      'Smart activity recommendations',
+      'Personalized day-by-day planning',
+      'Weather-aware scheduling',
+    ],
+  },
+};
 
 // Subscription tiers config
 const SUBSCRIPTION_TIERS = {
@@ -217,10 +236,10 @@ export default function Profile() {
     }
   }, [isAuthenticated]);
 
-  // Handle checkout
-  const handleCheckout = async (priceId: string) => {
+  // Handle checkout - supports both subscription and one-time payments
+  const handleCheckout = async (priceId: string, mode: 'subscription' | 'payment' = 'subscription') => {
     if (!isAuthenticated || !user) {
-      toast.error('Please sign in to subscribe');
+      toast.error('Please sign in to continue');
       navigate(ROUTES.SIGNIN);
       return;
     }
@@ -228,7 +247,7 @@ export default function Profile() {
     setIsCheckingOut(priceId);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { priceId, mode: 'subscription' },
+        body: { priceId, mode },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -656,6 +675,86 @@ export default function Profile() {
               </div>
             )}
 
+            {/* One-Time AI Purchase - Editorial Feature Card */}
+            <div className="relative">
+              <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-primary/50 via-accent/30 to-transparent" />
+              <div className="pl-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap className="h-4 w-4 text-primary" />
+                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                    One-Time Purchase
+                  </span>
+                </div>
+                
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="relative bg-gradient-to-br from-primary/5 via-card to-accent/5 rounded-xl border border-primary/20 overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-primary/10 to-transparent rounded-full blur-2xl transform translate-x-1/3 -translate-y-1/3" />
+                  
+                  <div className="relative p-6 md:p-8">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <Sparkles className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <h4 className="text-xl font-serif font-medium text-foreground">
+                              {ONE_TIME_PURCHASE.aiTrip.name}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              {ONE_TIME_PURCHASE.aiTrip.description}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 mt-4">
+                          {ONE_TIME_PURCHASE.aiTrip.features.map((feature) => (
+                            <span key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                              {feature}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col items-center md:items-end gap-3 shrink-0">
+                        <div className="text-center md:text-right">
+                          <span className="text-3xl font-serif font-medium text-foreground">
+                            ${ONE_TIME_PURCHASE.aiTrip.price}
+                          </span>
+                          <p className="text-xs text-muted-foreground mt-0.5">one-time</p>
+                        </div>
+                        <Button 
+                          onClick={() => handleCheckout(ONE_TIME_PURCHASE.aiTrip.priceId, 'payment')}
+                          disabled={isCheckingOut === ONE_TIME_PURCHASE.aiTrip.priceId}
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
+                        >
+                          {isCheckingOut === ONE_TIME_PURCHASE.aiTrip.priceId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Unlock AI
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">or subscribe</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
             {/* Subscription Plans - Editorial Grid */}
             <div>
               <div className="flex items-center justify-between mb-8">
@@ -663,7 +762,7 @@ export default function Profile() {
                   <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium block mb-1">
                     Membership Options
                   </span>
-                  <h3 className="text-xl font-serif text-foreground">Choose Your Journey</h3>
+                  <h3 className="text-xl font-serif text-foreground">Unlimited AI Access</h3>
                 </div>
               </div>
               
@@ -763,7 +862,7 @@ export default function Profile() {
                                 ? "bg-gradient-to-r from-slate to-slate/90 hover:from-slate/90 hover:to-slate text-slate-foreground" 
                                 : ""
                             )}
-                            onClick={() => handleCheckout(tier.priceId)}
+                            onClick={() => handleCheckout(tier.priceId, 'subscription')}
                             disabled={isCheckingOut === tier.priceId}
                           >
                             {isCheckingOut === tier.priceId ? (
