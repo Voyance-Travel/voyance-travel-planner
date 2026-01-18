@@ -62,7 +62,6 @@ export type Database = {
           bio: string | null
           created_at: string
           display_name: string | null
-          email: string | null
           handle: string | null
           home_airport: string | null
           id: string
@@ -77,7 +76,6 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
-          email?: string | null
           handle?: string | null
           home_airport?: string | null
           id: string
@@ -92,7 +90,6 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
-          email?: string | null
           handle?: string | null
           home_airport?: string | null
           id?: string

@@ -16,7 +16,6 @@ export interface Profile {
   id: string;
   handle: string | null;
   display_name: string | null;
-  email: string | null;
   avatar_url: string | null;
   bio: string | null;
   home_airport: string | null;
