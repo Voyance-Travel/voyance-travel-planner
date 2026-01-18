@@ -3,6 +3,9 @@ project_id = "jsxplunjjvxuejeouwob"
 [functions.bulk-import]
 verify_jwt = false
 
+[functions.calculate-travel-dna]
+verify_jwt = false
+
 [functions.check-subscription]
 verify_jwt = false
 

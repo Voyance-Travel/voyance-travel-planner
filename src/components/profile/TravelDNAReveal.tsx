@@ -31,12 +31,17 @@ interface TravelDNARevealProps {
 
 interface TravelDNAData {
   primary_archetype_name: string | null;
+  primary_archetype_display?: string | null;
+  primary_archetype_category?: string | null;
+  primary_archetype_tagline?: string | null;
   secondary_archetype_name: string | null;
+  secondary_archetype_display?: string | null;
   dna_confidence_score: number | null;
   dna_rarity: string | null;
   trait_scores: unknown;
   tone_tags: string[] | null;
   emotional_drivers: string[] | null;
+  perfect_trip_preview?: string | null;
   summary: string | null;
 }
 
@@ -348,7 +353,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         </Tabs>
       </div>
 
-      {/* Perfect Trip Preview - Editorial Quote Style */}
+      {/* Perfect Trip Preview - AI-Generated or Fallback */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -359,7 +364,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
           Your Perfect Trip
         </p>
         <blockquote className="text-xl md:text-2xl font-serif text-foreground/90 leading-relaxed italic">
-          "{narrative.perfectTripPreview}"
+          "{dnaData.perfect_trip_preview || narrative.perfectTripPreview}"
         </blockquote>
         <Button variant="link" asChild className="mt-4 px-0 gap-1 text-muted-foreground hover:text-foreground">
           <Link to={ROUTES.START}>
