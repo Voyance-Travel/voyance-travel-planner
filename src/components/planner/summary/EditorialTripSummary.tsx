@@ -174,7 +174,8 @@ export default function EditorialTripSummary({
             startDate={data.startDate} 
             endDate={data.endDate} 
             travelers={data.travelers} 
-            variant="hero" 
+            variant="hero"
+            hideOverlayText={true}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
           
