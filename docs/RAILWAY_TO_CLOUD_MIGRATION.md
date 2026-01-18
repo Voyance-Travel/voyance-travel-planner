@@ -173,14 +173,16 @@ export async function searchFlights(params) {
 
 ---
 
-## Secrets Required
+## Secrets Configured
 
 | Secret Name | Purpose | Status |
 |-------------|---------|--------|
-| AMADEUS_API_KEY | Flight/Hotel search | ❌ Need to add |
-| AMADEUS_API_SECRET | Flight/Hotel search | ❌ Need to add |
-| OPENWEATHER_API_KEY | Weather data | ❌ Need to add |
+| AMADEUS_API_KEY | Flight/Hotel search | ✅ Configured |
+| AMADEUS_API_SECRET | Flight/Hotel search | ✅ Configured |
+| GOOGLE_MAPS_API_KEY | Maps & Geocoding | ✅ Configured |
+| VIATOR_API_KEY | Activities/Tours | ✅ Configured |
 | STRIPE_SECRET_KEY | Payments | ✅ Already configured |
+| LOVABLE_API_KEY | AI features | ✅ Auto-configured |
 
 ---
 
