@@ -1,12 +1,12 @@
 /**
  * Editorial Preferences View
  * 
- * A magazine-style, read-optimized view of user travel preferences
- * with inline editing capabilities.
+ * A comprehensive preferences view with nested tabs for organizing
+ * the many preference questions into manageable sections.
  */
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
   Plane,
@@ -36,14 +36,40 @@ import {
   Book,
   ShoppingBag,
   Waves,
+  Zap,
+  Battery,
+  TreePine,
+  Eye,
+  Gift,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+// Preference categories for nested tabs
+const PREFERENCE_TABS = [
+  { id: 'travel-style', label: 'Travel Style', icon: Globe },
+  { id: 'flights', label: 'Flights', icon: Plane },
+  { id: 'accommodation', label: 'Accommodation', icon: Hotel },
+  { id: 'food', label: 'Food & Dining', icon: Utensils },
+  { id: 'accessibility', label: 'Accessibility', icon: Heart },
+  { id: 'planning', label: 'Planning', icon: Calendar },
+  { id: 'budget', label: 'Budget', icon: DollarSign },
+  { id: 'pacing', label: 'Pacing', icon: Battery },
+  { id: 'values', label: 'Values', icon: Leaf },
+  { id: 'memories', label: 'Memories', icon: Gift },
+] as const;
+
+type PreferenceTabId = typeof PREFERENCE_TABS[number]['id'];
 
 interface UserPreferences {
   // Travel Style
@@ -54,6 +80,7 @@ interface UserPreferences {
   travel_vibes?: string[] | null;
   interests?: string[] | null;
   primary_goal?: string | null;
+  planning_preference?: string | null;
   
   // Flight Preferences
   home_airport?: string | null;
@@ -61,6 +88,7 @@ interface UserPreferences {
   direct_flights_only?: boolean | null;
   flight_time_preference?: string | null;
   preferred_airlines?: string[] | null;
+  flight_preferences?: Record<string, unknown> | null;
   
   // Accommodation
   accommodation_style?: string | null;
@@ -79,7 +107,6 @@ interface UserPreferences {
   accessibility_needs?: string[] | null;
   
   // Planning Style
-  planning_preference?: string | null;
   trip_structure_preference?: string | null;
   schedule_flexibility?: string | null;
   daytime_bias?: string | null;
@@ -94,6 +121,9 @@ interface UserPreferences {
   climate_preferences?: string[] | null;
   weather_preferences?: string[] | null;
   
+  // Budget
+  budget_range?: { min?: number; max?: number } | null;
+  
   // Values
   eco_friendly?: boolean | null;
   
@@ -107,56 +137,15 @@ interface UserPreferences {
   // Meta
   quiz_completed?: boolean | null;
   personal_notes?: string | null;
+  sleep_schedule?: string | null;
 }
-
-// Display value mappings
-const PACE_DISPLAY: Record<string, string> = {
-  'relaxed': 'Relaxed & Easy',
-  'moderate': 'Balanced',
-  'fast': 'Fast-Paced',
-  'slow': 'Slow & Mindful',
-};
-
-const BUDGET_DISPLAY: Record<string, string> = {
-  'budget': 'Budget-Conscious',
-  'moderate': 'Moderate',
-  'luxury': 'Luxury',
-  'premium': 'Ultra-Premium',
-  'flexible': 'Flexible',
-};
-
-const ACCOMMODATION_DISPLAY: Record<string, string> = {
-  'hostel': 'Hostels & Social',
-  'budget_hotel': 'Budget Hotels',
-  'standard_hotel': 'Standard Hotels',
-  'boutique': 'Boutique & Unique',
-  'luxury': 'Luxury Properties',
-  'vacation_rental': 'Vacation Rentals',
-};
-
-const SEAT_DISPLAY: Record<string, string> = {
-  'window': 'Window',
-  'aisle': 'Aisle',
-  'middle': 'No Preference',
-  'no_preference': 'No Preference',
-};
-
-const INTEREST_ICONS: Record<string, React.ReactNode> = {
-  'adventure': <Mountain className="h-3.5 w-3.5" />,
-  'culture': <Book className="h-3.5 w-3.5" />,
-  'food': <Coffee className="h-3.5 w-3.5" />,
-  'nature': <Waves className="h-3.5 w-3.5" />,
-  'photography': <Camera className="h-3.5 w-3.5" />,
-  'nightlife': <Music className="h-3.5 w-3.5" />,
-  'shopping': <ShoppingBag className="h-3.5 w-3.5" />,
-  'relaxation': <Sun className="h-3.5 w-3.5" />,
-};
 
 export default function EditorialPreferencesView() {
   const { user } = useAuth();
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<PreferenceTabId>('travel-style');
 
   // Load preferences from Supabase
   useEffect(() => {
@@ -172,7 +161,7 @@ export default function EditorialPreferencesView() {
           .maybeSingle();
         
         if (error) throw error;
-        setPreferences(data);
+        setPreferences(data as UserPreferences);
       } catch (error) {
         console.error('Failed to load preferences:', error);
       } finally {
@@ -183,8 +172,8 @@ export default function EditorialPreferencesView() {
     loadPreferences();
   }, [user?.id]);
 
-  // Toggle preference
-  const handleToggle = async (field: keyof UserPreferences, value: boolean) => {
+  // Update a single preference
+  const updatePreference = async (field: string, value: unknown) => {
     if (!user?.id) return;
     
     setIsSaving(true);
@@ -197,7 +186,7 @@ export default function EditorialPreferencesView() {
       if (error) throw error;
       
       setPreferences(prev => prev ? { ...prev, [field]: value } : null);
-      toast.success('Preference updated');
+      toast.success('Preference saved');
     } catch (error) {
       console.error('Failed to update preference:', error);
       toast.error('Failed to save');
@@ -218,7 +207,7 @@ export default function EditorialPreferencesView() {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-12"
+      className="space-y-6"
     >
       {/* Header */}
       <div className="relative">
@@ -232,558 +221,875 @@ export default function EditorialPreferencesView() {
           </div>
           <h2 className="text-2xl font-serif text-foreground mb-2">Your Preferences</h2>
           <p className="text-sm text-muted-foreground max-w-lg">
-            These preferences shape every recommendation, from flights to activities.
+            The more you share, the more personalized your recommendations become.
           </p>
         </div>
       </div>
 
-      {/* Preferences Display */}
-      <div className="space-y-10">
-        /* Preferences Display */
-        <div className="space-y-10">
-          {/* Travel Style Section */}
-          <PreferenceSection
-            icon={Globe}
-            title="Travel Style"
-            subtitle="How you explore"
-          >
-            <div className="grid md:grid-cols-2 gap-6">
-              <PreferenceCard
-                label="Pace"
-                value={PACE_DISPLAY[preferences?.travel_pace || ''] || preferences?.travel_pace}
-                sublabel="Your ideal rhythm"
-              />
-              <PreferenceCard
-                label="Budget"
-                value={BUDGET_DISPLAY[preferences?.budget_tier || ''] || preferences?.budget_tier}
-                sublabel="Spending comfort zone"
-              />
-              <PreferenceCard
-                label="Activity Level"
-                value={preferences?.activity_level}
-                sublabel="Energy on trips"
-              />
-              <PreferenceCard
-                label="Primary Goal"
-                value={preferences?.primary_goal}
-                sublabel="What travel means to you"
-              />
-            </div>
-            
-            {/* Interests Tags */}
-            {preferences?.interests && preferences.interests.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-border">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block">
-                  Interests
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.interests.map((interest) => (
-                    <span
-                      key={interest}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted/50 rounded-full text-sm text-foreground capitalize"
-                    >
-                      {INTEREST_ICONS[interest.toLowerCase()] || <Compass className="h-3.5 w-3.5" />}
-                      {interest}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Travel Vibes */}
-            {preferences?.travel_vibes && preferences.travel_vibes.length > 0 && (
-              <div className="mt-4">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block">
-                  Vibes
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.travel_vibes.map((vibe) => (
-                    <span
-                      key={vibe}
-                      className="px-3 py-1 border border-border rounded-full text-sm text-muted-foreground capitalize"
-                    >
-                      {vibe}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </PreferenceSection>
-
-          {/* Flight Preferences */}
-          <PreferenceSection
-            icon={Plane}
-            title="Flight Preferences"
-            subtitle="Your flying comfort"
-          >
-            <div className="grid md:grid-cols-2 gap-6">
-              <PreferenceCard
-                label="Home Airport"
-                value={preferences?.home_airport?.toUpperCase()}
-                sublabel="Your departure base"
-                icon={<MapPin className="h-4 w-4" />}
-              />
-              <PreferenceCard
-                label="Seat Preference"
-                value={SEAT_DISPLAY[preferences?.seat_preference || ''] || preferences?.seat_preference}
-                sublabel="Where you sit"
-              />
-              <PreferenceCard
-                label="Flight Timing"
-                value={preferences?.flight_time_preference}
-                sublabel="Preferred departure times"
-                icon={<Clock className="h-4 w-4" />}
-              />
-              <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Direct Flights Only</span>
-                    <p className="text-xs text-muted-foreground mt-0.5">Avoid layovers when possible</p>
-                  </div>
-                  <Switch
-                    checked={preferences?.direct_flights_only || false}
-                    onCheckedChange={(checked) => handleToggle('direct_flights_only', checked)}
-                    disabled={isSaving}
-                  />
-                </div>
-              </div>
-            </div>
-            
-            {/* Preferred Airlines */}
-            {preferences?.preferred_airlines && preferences.preferred_airlines.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-border">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block">
-                  Preferred Airlines
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.preferred_airlines.map((airline) => (
-                    <span
-                      key={airline}
-                      className="px-3 py-1.5 bg-muted/50 rounded-full text-sm text-foreground"
-                    >
-                      {airline}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </PreferenceSection>
-
-          {/* Accommodation */}
-          <PreferenceSection
-            icon={Hotel}
-            title="Accommodation"
-            subtitle="Where you rest"
-          >
-            <div className="grid md:grid-cols-2 gap-6">
-              <PreferenceCard
-                label="Style"
-                value={ACCOMMODATION_DISPLAY[preferences?.accommodation_style || ''] || preferences?.accommodation_style}
-                sublabel="Your preferred type"
-              />
-              <PreferenceCard
-                label="Hotel Priority"
-                value={preferences?.hotel_vs_flight}
-                sublabel="What matters more"
-              />
-            </div>
-          </PreferenceSection>
-
-          {/* Food & Dining */}
-          <PreferenceSection
-            icon={Utensils}
-            title="Food & Dining"
-            subtitle="Culinary preferences"
-          >
-            <div className="grid md:grid-cols-2 gap-6">
-              <PreferenceCard
-                label="Dining Style"
-                value={preferences?.dining_style}
-                sublabel="How you like to eat"
-              />
-            </div>
-            
-            {/* Dietary Restrictions */}
-            {preferences?.dietary_restrictions && preferences.dietary_restrictions.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-border">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block">
-                  Dietary Restrictions
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.dietary_restrictions.map((item) => (
-                    <span
-                      key={item}
-                      className="px-3 py-1.5 bg-destructive/10 text-destructive rounded-full text-sm"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Food Preferences */}
-            <div className="mt-4 grid md:grid-cols-2 gap-4">
-              {preferences?.food_likes && preferences.food_likes.length > 0 && (
-                <div>
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block">
-                    Favorites
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {preferences.food_likes.map((item) => (
-                      <span
-                        key={item}
-                        className="px-2.5 py-1 bg-green-500/10 text-green-700 rounded-full text-xs"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {preferences?.food_dislikes && preferences.food_dislikes.length > 0 && (
-                <div>
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block">
-                    Avoid
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {preferences.food_dislikes.map((item) => (
-                      <span
-                        key={item}
-                        className="px-2.5 py-1 bg-muted rounded-full text-xs text-muted-foreground"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </PreferenceSection>
-
-          {/* Accessibility & Health */}
-          <PreferenceSection
-            icon={Heart}
-            title="Accessibility & Health"
-            subtitle="Special considerations"
-          >
-            <div className="grid md:grid-cols-2 gap-6">
-              <PreferenceCard
-                label="Mobility Level"
-                value={preferences?.mobility_level}
-                sublabel="Activity capability"
-              />
-              <PreferenceCard
-                label="Mobility Needs"
-                value={preferences?.mobility_needs}
-                sublabel="Specific requirements"
-              />
-            </div>
-            
-            {preferences?.accessibility_needs && preferences.accessibility_needs.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-border">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block">
-                  Accessibility Needs
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.accessibility_needs.map((need) => (
-                    <span
-                      key={need}
-                      className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm"
-                    >
-                      {need}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </PreferenceSection>
-
-          {/* Planning Style */}
-          <PreferenceSection
-            icon={Calendar}
-            title="Planning Style"
-            subtitle="How you organize trips"
-          >
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <PreferenceCard
-                label="Structure"
-                value={preferences?.trip_structure_preference}
-                sublabel="Level of planning"
-              />
-              <PreferenceCard
-                label="Flexibility"
-                value={preferences?.schedule_flexibility}
-                sublabel="Openness to change"
-              />
-              <PreferenceCard
-                label="Time of Day"
-                value={preferences?.daytime_bias}
-                sublabel="When you're most active"
-                icon={preferences?.daytime_bias?.toLowerCase().includes('morning') ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              />
-              <PreferenceCard
-                label="Downtime"
-                value={preferences?.downtime_ratio}
-                sublabel="Rest vs. activities"
-              />
-              <PreferenceCard
-                label="Trip Duration"
-                value={preferences?.trip_duration}
-                sublabel="Ideal trip length"
-              />
-              <PreferenceCard
-                label="Travel Frequency"
-                value={preferences?.travel_frequency}
-                sublabel="How often you travel"
-              />
-            </div>
-          </PreferenceSection>
-
-          {/* Trip Context */}
-          <PreferenceSection
-            icon={Users}
-            title="Trip Context"
-            subtitle="Who you travel with"
-          >
-            <div className="grid md:grid-cols-2 gap-6">
-              <PreferenceCard
-                label="Group Size"
-                value={preferences?.preferred_group_size}
-                sublabel="Typical party size"
-              />
-            </div>
-            
-            {preferences?.travel_companions && preferences.travel_companions.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-border">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block">
-                  Travel Companions
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.travel_companions.map((companion) => (
-                    <span
-                      key={companion}
-                      className="px-3 py-1.5 bg-muted/50 rounded-full text-sm text-foreground capitalize"
-                    >
-                      {companion}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Preferred Regions */}
-            {preferences?.preferred_regions && preferences.preferred_regions.length > 0 && (
-              <div className="mt-4">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block">
-                  Preferred Regions
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.preferred_regions.map((region) => (
-                    <span
-                      key={region}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted/50 rounded-full text-sm text-foreground"
-                    >
-                      <Globe className="h-3.5 w-3.5" />
-                      {region}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </PreferenceSection>
-
-          {/* Values & Sustainability */}
-          <PreferenceSection
-            icon={Leaf}
-            title="Values"
-            subtitle="What matters to you"
-          >
-            <div className="p-4 rounded-lg bg-muted/30 border border-border">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-green-500/10">
-                    <Leaf className="h-4 w-4 text-green-600" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Eco-Friendly Travel</span>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Prefer sustainable options and reduce environmental impact
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  checked={preferences?.eco_friendly || false}
-                  onCheckedChange={(checked) => handleToggle('eco_friendly', checked)}
-                  disabled={isSaving}
-                />
-              </div>
-            </div>
-          </PreferenceSection>
-
-          {/* Notifications */}
-          <PreferenceSection
-            icon={Bell}
-            title="Notifications"
-            subtitle="Stay informed"
-          >
-            <div className="space-y-3">
-              <NotificationToggle
-                label="Email Notifications"
-                description="Trip updates and confirmations"
-                checked={preferences?.email_notifications || false}
-                onChange={(checked) => handleToggle('email_notifications', checked)}
-                disabled={isSaving}
-              />
-              <NotificationToggle
-                label="Push Notifications"
-                description="Real-time alerts on your device"
-                checked={preferences?.push_notifications || false}
-                onChange={(checked) => handleToggle('push_notifications', checked)}
-                disabled={isSaving}
-              />
-              <NotificationToggle
-                label="Trip Reminders"
-                description="Upcoming trip notifications"
-                checked={preferences?.trip_reminders || false}
-                onChange={(checked) => handleToggle('trip_reminders', checked)}
-                disabled={isSaving}
-              />
-              <NotificationToggle
-                label="Price Alerts"
-                description="Price drops and deals"
-                checked={preferences?.price_alerts || false}
-                onChange={(checked) => handleToggle('price_alerts', checked)}
-                disabled={isSaving}
-              />
-              <NotificationToggle
-                label="Marketing Emails"
-                description="Travel inspiration and offers"
-                checked={preferences?.marketing_emails || false}
-                onChange={(checked) => handleToggle('marketing_emails', checked)}
-                disabled={isSaving}
-              />
-            </div>
-          </PreferenceSection>
-
-          {/* Personal Notes */}
-          {preferences?.personal_notes && (
-            <PreferenceSection
-              icon={Edit3}
-              title="Personal Notes"
-              subtitle="Additional details"
-            >
-              <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                <p className="text-sm text-foreground whitespace-pre-wrap">
-                  {preferences.personal_notes}
-                </p>
-              </div>
-            </PreferenceSection>
-          )}
-
-          {/* Update Button */}
-          <div className="pt-6 border-t border-border">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-foreground font-medium">Want to update your preferences?</p>
-                <p className="text-sm text-muted-foreground">Retake the travel quiz or edit individual sections.</p>
-              </div>
-              <Button variant="outline" asChild>
-                <Link to={ROUTES.QUIZ}>
-                  <Edit3 className="h-4 w-4 mr-2" />
-                  Retake Quiz
-                </Link>
-              </Button>
-            </div>
-          </div>
+      {/* Nested Tabs */}
+      <div className="border-b border-border">
+        <div className="flex gap-1 overflow-x-auto pb-px scrollbar-hide">
+          {PREFERENCE_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all",
+                  "border-b-2 -mb-px",
+                  isActive
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
+
+      {/* Tab Content */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+          className="min-h-[400px]"
+        >
+          {activeTab === 'travel-style' && (
+            <TravelStyleSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'flights' && (
+            <FlightsSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'accommodation' && (
+            <AccommodationSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'food' && (
+            <FoodSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'accessibility' && (
+            <AccessibilitySection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'planning' && (
+            <PlanningSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'budget' && (
+            <BudgetSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'pacing' && (
+            <PacingSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'values' && (
+            <ValuesSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+          {activeTab === 'memories' && (
+            <MemoriesSection 
+              preferences={preferences} 
+              onUpdate={updatePreference}
+              isSaving={isSaving}
+            />
+          )}
+        </motion.div>
+      </AnimatePresence>
     </motion.div>
   );
 }
 
-// Helper Components
+// ============================================================================
+// Section Components
+// ============================================================================
 
-interface PreferenceSectionProps {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
+interface SectionProps {
+  preferences: UserPreferences | null;
+  onUpdate: (field: string, value: unknown) => void;
+  isSaving: boolean;
 }
 
-function PreferenceSection({ icon: Icon, title, subtitle, children }: PreferenceSectionProps) {
+function TravelStyleSection({ preferences, onUpdate, isSaving }: SectionProps) {
   return (
-    <div className="relative">
-      <div className="absolute -left-4 top-0 w-px h-8 bg-border" />
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <Icon className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-serif font-medium text-foreground">{title}</h3>
-        </div>
-        <p className="text-sm text-muted-foreground pl-8">{subtitle}</p>
-      </div>
-      <div className="pl-8">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-interface PreferenceCardProps {
-  label: string;
-  value?: string | null;
-  sublabel?: string;
-  icon?: React.ReactNode;
-}
-
-function PreferenceCard({ label, value, sublabel, icon }: PreferenceCardProps) {
-  return (
-    <div className="p-4 rounded-lg bg-muted/30 border border-border">
-      <div className="flex items-start gap-3">
-        {icon && (
-          <div className="p-1.5 rounded bg-muted text-muted-foreground">
-            {icon}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground block mb-1">
-            {label}
-          </span>
-          <p className={cn(
-            "text-sm font-medium capitalize",
-            value ? "text-foreground" : "text-muted-foreground italic"
-          )}>
-            {value || 'Not set'}
-          </p>
-          {sublabel && (
-            <p className="text-xs text-muted-foreground mt-0.5">{sublabel}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface NotificationToggleProps {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-}
-
-function NotificationToggle({ label, description, checked, onChange, disabled }: NotificationToggleProps) {
-  return (
-    <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border">
-      <div>
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onChange}
-        disabled={disabled}
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Travel Style Preferences"
+        description="Help us understand how you like to explore"
       />
+      
+      {/* Travel Pace */}
+      <PreferenceGroup label="What's your travel pace?">
+        <RadioGroup
+          value={preferences?.travel_pace || ''}
+          onValueChange={(value) => onUpdate('travel_pace', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="relaxed" label="Relaxed" description="1-2 activities per day" />
+          <RadioOption value="moderate" label="Moderate" description="3-4 activities per day" />
+          <RadioOption value="active" label="Active" description="5+ activities per day" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Budget Preference */}
+      <PreferenceGroup label="Budget preference">
+        <RadioGroup
+          value={preferences?.budget_tier || ''}
+          onValueChange={(value) => onUpdate('budget_tier', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="budget" label="Budget-friendly" description="Focus on value and savings" />
+          <RadioOption value="moderate" label="Comfort" description="Balance of quality and price" />
+          <RadioOption value="luxury" label="Luxury experiences" description="Premium everything" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Planning Preference */}
+      <PreferenceGroup label="Planning preference">
+        <RadioGroup
+          value={preferences?.planning_preference || ''}
+          onValueChange={(value) => onUpdate('planning_preference', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="structured" label="Structured itinerary" description="Every day planned out" />
+          <RadioOption value="flexible" label="Flexible schedule" description="General plan with room to adapt" />
+          <RadioOption value="spontaneous" label="Spontaneous adventure" description="Go with the flow" />
+        </RadioGroup>
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function FlightsSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  const [airlinesToAvoid, setAirlinesToAvoid] = useState(
+    (preferences?.flight_preferences as Record<string, string>)?.airlines_to_avoid || ''
+  );
+
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Flight Preferences"
+        description="Customize your flying experience"
+      />
+      
+      {/* Home Airport */}
+      <PreferenceGroup label="Home Airport" required>
+        <Input
+          placeholder="LAX, JFK, ORD..."
+          value={preferences?.home_airport || ''}
+          onChange={(e) => onUpdate('home_airport', e.target.value.toUpperCase().slice(0, 3))}
+          maxLength={3}
+          className="max-w-[120px] uppercase"
+        />
+        <p className="text-xs text-muted-foreground mt-1">3-letter airport code</p>
+      </PreferenceGroup>
+
+      {/* Cabin Class */}
+      <PreferenceGroup label="Preferred Cabin Class">
+        <RadioGroup
+          value={(preferences?.flight_preferences as Record<string, string>)?.cabin_class || 'economy'}
+          onValueChange={(value) => onUpdate('flight_preferences', { 
+            ...preferences?.flight_preferences as Record<string, unknown>, 
+            cabin_class: value 
+          })}
+          className="grid sm:grid-cols-2 gap-3"
+        >
+          <RadioOption value="economy" label="Economy" />
+          <RadioOption value="premium_economy" label="Premium Economy" />
+          <RadioOption value="business" label="Business" />
+          <RadioOption value="first" label="First Class" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Seat Preference */}
+      <PreferenceGroup label="Seat Preference">
+        <RadioGroup
+          value={preferences?.seat_preference || ''}
+          onValueChange={(value) => onUpdate('seat_preference', value)}
+          className="grid sm:grid-cols-2 gap-3"
+        >
+          <RadioOption value="window" label="Window" description="Views and wall to lean on" />
+          <RadioOption value="aisle" label="Aisle" description="Easy access to move around" />
+          <RadioOption value="middle" label="Middle" description="Between two companions" />
+          <RadioOption value="no_preference" label="No Preference" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Direct Flights */}
+      <PreferenceGroup label="">
+        <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+          <div>
+            <span className="text-sm font-medium">Prefer direct flights only</span>
+            <p className="text-xs text-muted-foreground">Avoid layovers when possible</p>
+          </div>
+          <Switch
+            checked={preferences?.direct_flights_only || false}
+            onCheckedChange={(checked) => onUpdate('direct_flights_only', checked)}
+          />
+        </div>
+      </PreferenceGroup>
+
+      {/* Departure Time */}
+      <PreferenceGroup label="Preferred Departure Time">
+        <RadioGroup
+          value={preferences?.flight_time_preference || ''}
+          onValueChange={(value) => onUpdate('flight_time_preference', value)}
+          className="grid sm:grid-cols-2 gap-3"
+        >
+          <RadioOption value="early_am" label="Early AM" description="6-9am" />
+          <RadioOption value="midday" label="Midday" description="9am-12pm" />
+          <RadioOption value="afternoon" label="Afternoon" description="12-6pm" />
+          <RadioOption value="red_eye" label="Red-eye" description="After 10pm" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Airlines to Avoid */}
+      <PreferenceGroup label="Airlines to Avoid">
+        <Textarea
+          placeholder="List any airlines you prefer to avoid..."
+          value={airlinesToAvoid}
+          onChange={(e) => setAirlinesToAvoid(e.target.value)}
+          onBlur={() => onUpdate('flight_preferences', { 
+            ...preferences?.flight_preferences as Record<string, unknown>, 
+            airlines_to_avoid: airlinesToAvoid 
+          })}
+          className="resize-none"
+          rows={2}
+        />
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function AccommodationSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Accommodation Preferences"
+        description="Where you rest matters"
+      />
+      
+      {/* Accommodation Style */}
+      <PreferenceGroup label="Accommodation style">
+        <RadioGroup
+          value={preferences?.accommodation_style || ''}
+          onValueChange={(value) => onUpdate('accommodation_style', value)}
+          className="grid sm:grid-cols-2 gap-3"
+        >
+          <RadioOption value="hotel" label="Hotels 🏨" />
+          <RadioOption value="vacation_rental" label="Vacation Rentals 🏠" />
+          <RadioOption value="boutique" label="Boutique ✨" />
+          <RadioOption value="hostel" label="Hostels 🏕️" />
+          <RadioOption value="resort" label="Resorts 🏝️" />
+          <RadioOption value="luxury" label="Luxury Suites 👑" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Hotel vs Flight Priority */}
+      <PreferenceGroup label="When booking trips, I prefer to...">
+        <RadioGroup
+          value={preferences?.hotel_vs_flight || ''}
+          onValueChange={(value) => onUpdate('hotel_vs_flight', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="hotel" label="Prioritize hotel quality 🏨" description="I spend more time at the hotel" />
+          <RadioOption value="balanced" label="Balance both equally ⚖️" description="Both matter to me" />
+          <RadioOption value="flight" label="Prioritize flight options ✈️" description="The journey matters most" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Hotel Style */}
+      <PreferenceGroup label="Hotel Style">
+        <RadioGroup
+          value={preferences?.hotel_style || ''}
+          onValueChange={(value) => onUpdate('hotel_style', value)}
+          className="grid sm:grid-cols-2 gap-3"
+        >
+          <RadioOption value="modern" label="Modern & Sleek" />
+          <RadioOption value="classic" label="Classic & Traditional" />
+          <RadioOption value="unique" label="Unique & Boutique" />
+          <RadioOption value="no_preference" label="No Preference" />
+        </RadioGroup>
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function FoodSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  const dietaryOptions = [
+    'Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 
+    'Kosher', 'Halal', 'Nut allergy', 'Shellfish allergy'
+  ];
+
+  const toggleDietary = (item: string) => {
+    const current = preferences?.dietary_restrictions || [];
+    const updated = current.includes(item)
+      ? current.filter(d => d !== item)
+      : [...current, item];
+    onUpdate('dietary_restrictions', updated);
+  };
+
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Food & Dining Preferences"
+        description="Culinary adventures await"
+      />
+      
+      {/* Dietary Restrictions */}
+      <PreferenceGroup label="Dietary restrictions">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {dietaryOptions.map((option) => (
+            <label
+              key={option}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                preferences?.dietary_restrictions?.includes(option)
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <Checkbox
+                checked={preferences?.dietary_restrictions?.includes(option)}
+                onCheckedChange={() => toggleDietary(option)}
+              />
+              <span className="text-sm">{option}</span>
+            </label>
+          ))}
+        </div>
+      </PreferenceGroup>
+
+      {/* Dining Style */}
+      <PreferenceGroup label="Local cuisine adventure level">
+        <RadioGroup
+          value={preferences?.dining_style || ''}
+          onValueChange={(value) => onUpdate('dining_style', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="conservative" label="Conservative" description="I prefer cuisine similar to home" />
+          <RadioOption value="moderate" label="Moderate" description="I'll try some local dishes" />
+          <RadioOption value="adventurous" label="Adventurous" description="I want to try everything local" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Food Preferences */}
+      <div className="grid sm:grid-cols-2 gap-6">
+        <PreferenceGroup label="Favorite comfort food">
+          <Input
+            placeholder="Pizza, sushi, tacos..."
+            value={preferences?.food_likes?.join(', ') || ''}
+            onChange={(e) => onUpdate('food_likes', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          />
+        </PreferenceGroup>
+
+        <PreferenceGroup label="Foods to avoid">
+          <Input
+            placeholder="Spicy food, seafood..."
+            value={preferences?.food_dislikes?.join(', ') || ''}
+            onChange={(e) => onUpdate('food_dislikes', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          />
+        </PreferenceGroup>
+      </div>
+    </div>
+  );
+}
+
+function AccessibilitySection({ preferences, onUpdate, isSaving }: SectionProps) {
+  const accessibilityOptions = [
+    'Wheelchair accessible', 'Step-free access', 'Visual aids', 
+    'Hearing assistance', 'Service animal friendly'
+  ];
+
+  const toggleAccessibility = (item: string) => {
+    const current = preferences?.accessibility_needs || [];
+    const updated = current.includes(item)
+      ? current.filter(a => a !== item)
+      : [...current, item];
+    onUpdate('accessibility_needs', updated);
+  };
+
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Accessibility & Health"
+        description="We'll make sure your trip is comfortable"
+      />
+      
+      {/* Mobility Level */}
+      <PreferenceGroup label="Mobility level">
+        <RadioGroup
+          value={preferences?.mobility_level || ''}
+          onValueChange={(value) => onUpdate('mobility_level', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="full" label="Full mobility" description="No limitations" />
+          <RadioOption value="some" label="Some limitations" description="Can walk moderate distances" />
+          <RadioOption value="significant" label="Significant limitations" description="Limited walking ability" />
+          <RadioOption value="assistance" label="Require assistance" description="Need mobility aids" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Accessibility Needs */}
+      {preferences?.mobility_level && preferences.mobility_level !== 'full' && (
+        <PreferenceGroup label="Accessibility needs">
+          <div className="grid sm:grid-cols-2 gap-3">
+            {accessibilityOptions.map((option) => (
+              <label
+                key={option}
+                className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                  preferences?.accessibility_needs?.includes(option)
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                )}
+              >
+                <Checkbox
+                  checked={preferences?.accessibility_needs?.includes(option)}
+                  onCheckedChange={() => toggleAccessibility(option)}
+                />
+                <span className="text-sm">{option}</span>
+              </label>
+            ))}
+          </div>
+        </PreferenceGroup>
+      )}
+
+      {/* Special Considerations */}
+      <PreferenceGroup label="Special considerations or allergies">
+        <Textarea
+          placeholder="Any additional health considerations we should know about..."
+          value={preferences?.mobility_needs || ''}
+          onChange={(e) => onUpdate('mobility_needs', e.target.value)}
+          className="resize-none"
+          rows={3}
+        />
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function PlanningSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Planning Style"
+        description="How do you like to organize your adventures?"
+      />
+      
+      {/* AI Assistance Level */}
+      <PreferenceGroup label="AI assistance level">
+        <RadioGroup
+          value={preferences?.trip_structure_preference || ''}
+          onValueChange={(value) => onUpdate('trip_structure_preference', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="full_ai" label="Full AI planning 🤖" description="Let AI handle everything" />
+          <RadioOption value="collaborative" label="Collaborative planning 🤝" description="AI suggestions with your input" />
+          <RadioOption value="minimal" label="Minimal assistance 👤" description="I prefer to plan myself" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Recommendation Style */}
+      <PreferenceGroup label="Recommendation style">
+        <RadioGroup
+          value={preferences?.schedule_flexibility || ''}
+          onValueChange={(value) => onUpdate('schedule_flexibility', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="popular" label="Popular & well-reviewed" description="Tried and tested favorites" />
+          <RadioOption value="hidden" label="Off the beaten path" description="Hidden gems and local secrets" />
+          <RadioOption value="mix" label="Mix of both" description="Balance of popular and unique" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Booking Advance */}
+      <PreferenceGroup label="How far in advance do you book?">
+        <RadioGroup
+          value={preferences?.travel_frequency || ''}
+          onValueChange={(value) => onUpdate('travel_frequency', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="last_minute" label="Last minute" description="Less than 1 week" />
+          <RadioOption value="short" label="2-4 weeks advance" />
+          <RadioOption value="planned" label="1+ months advance" />
+        </RadioGroup>
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function BudgetSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  const budgetRange = preferences?.budget_range as { min?: number; max?: number } | null;
+  
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Budget & Spending"
+        description="Help us find options that fit your style"
+      />
+      
+      {/* Daily Budget Range */}
+      <PreferenceGroup label="Daily Budget Range (per person)">
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground">Minimum</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+              <Input
+                type="number"
+                placeholder="100"
+                value={budgetRange?.min || ''}
+                onChange={(e) => onUpdate('budget_range', { 
+                  ...budgetRange, 
+                  min: parseInt(e.target.value) || undefined 
+                })}
+                className="pl-7"
+              />
+            </div>
+          </div>
+          <span className="text-muted-foreground mt-6">—</span>
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground">Maximum</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+              <Input
+                type="number"
+                placeholder="500"
+                value={budgetRange?.max || ''}
+                onChange={(e) => onUpdate('budget_range', { 
+                  ...budgetRange, 
+                  max: parseInt(e.target.value) || undefined 
+                })}
+                className="pl-7"
+              />
+            </div>
+          </div>
+        </div>
+      </PreferenceGroup>
+
+      {/* When Do You Splurge */}
+      <PreferenceGroup label="When do you splurge?">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            'Arrival day',
+            'One special meal per trip',
+            'Spa/wellness day',
+            'Last night celebration',
+            'Never splurge',
+            'Every day is special'
+          ].map((option) => (
+            <label
+              key={option}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                preferences?.interests?.includes(option)
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <Checkbox
+                checked={preferences?.interests?.includes(option)}
+                onCheckedChange={(checked) => {
+                  const current = preferences?.interests || [];
+                  const updated = checked
+                    ? [...current, option]
+                    : current.filter(i => i !== option);
+                  onUpdate('interests', updated);
+                }}
+              />
+              <span className="text-sm">{option}</span>
+            </label>
+          ))}
+        </div>
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function PacingSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Pacing & Recovery"
+        description="Everyone recharges differently"
+      />
+      
+      {/* Active Hours */}
+      <PreferenceGroup label="Active hours per day">
+        <RadioGroup
+          value={preferences?.activity_level || ''}
+          onValueChange={(value) => onUpdate('activity_level', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="light" label="3-5 hours" description="Light touring" />
+          <RadioOption value="moderate" label="6-8 hours" description="Moderate pace" />
+          <RadioOption value="full" label="9+ hours" description="All day adventure" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Recovery Style */}
+      <PreferenceGroup label="How do you recover?">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            'Spa treatments',
+            'Alone time in room',
+            'Drinks & socializing',
+            'Early sleep',
+            'Light walking'
+          ].map((option) => (
+            <label
+              key={option}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                preferences?.travel_vibes?.includes(option)
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <Checkbox
+                checked={preferences?.travel_vibes?.includes(option)}
+                onCheckedChange={(checked) => {
+                  const current = preferences?.travel_vibes || [];
+                  const updated = checked
+                    ? [...current, option]
+                    : current.filter(v => v !== option);
+                  onUpdate('travel_vibes', updated);
+                }}
+              />
+              <span className="text-sm">{option}</span>
+            </label>
+          ))}
+        </div>
+      </PreferenceGroup>
+
+      {/* Jet Lag Profile */}
+      <PreferenceGroup label="Jet lag profile">
+        <RadioGroup
+          value={preferences?.sleep_schedule || ''}
+          onValueChange={(value) => onUpdate('sleep_schedule', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="adjusts_quickly" label="Adjusts quickly" description="I adapt within a day" />
+          <RadioOption value="needs_day" label="Needs full day to adjust" description="I need recovery time" />
+          <RadioOption value="avoids_changes" label="Avoids big time zone changes" description="I stick to similar zones" />
+          <RadioOption value="plans_recovery" label="Plans for jet lag recovery" description="I build in adjustment time" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Daytime Preference */}
+      <PreferenceGroup label="When are you most active?">
+        <RadioGroup
+          value={preferences?.daytime_bias || ''}
+          onValueChange={(value) => onUpdate('daytime_bias', value)}
+          className="grid sm:grid-cols-2 gap-3"
+        >
+          <RadioOption value="morning" label="Morning person 🌅" description="Early starts" />
+          <RadioOption value="evening" label="Night owl 🌙" description="Late nights" />
+          <RadioOption value="balanced" label="Balanced ⚖️" description="Flexible timing" />
+        </RadioGroup>
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function ValuesSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Values & Style"
+        description="What matters to you when you travel"
+      />
+      
+      {/* Environmental Concerns */}
+      <PreferenceGroup label="Environmental concerns">
+        <RadioGroup
+          value={preferences?.eco_friendly ? 'yes' : 'no'}
+          onValueChange={(value) => onUpdate('eco_friendly', value === 'yes')}
+          className="grid gap-3"
+        >
+          <RadioOption value="no" label="No specific concerns" />
+          <RadioOption value="yes" label="Prefer eco-friendly options" description="Lower environmental impact" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Cultural Immersion */}
+      <PreferenceGroup label="Cultural immersion level">
+        <RadioGroup
+          value={preferences?.primary_goal || ''}
+          onValueChange={(value) => onUpdate('primary_goal', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="deep" label="Deep cultural experiences" description="Living like a local" />
+          <RadioOption value="surface" label="Surface-level is fine" description="Quick cultural highlights" />
+          <RadioOption value="tourist" label="Tourist attractions preferred" description="Famous landmarks and sites" />
+          <RadioOption value="mix" label="Mix of both" description="Balance of local and touristy" />
+        </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Privacy Threshold */}
+      <PreferenceGroup label="Privacy threshold">
+        <RadioGroup
+          value={preferences?.preferred_group_size || ''}
+          onValueChange={(value) => onUpdate('preferred_group_size', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="social" label="Love meeting new people" description="Group tours and social activities" />
+          <RadioOption value="small" label="Small groups preferred" description="Intimate experiences" />
+          <RadioOption value="avoid_crowds" label="Avoid crowds when possible" description="Off-peak timing" />
+          <RadioOption value="private" label="Private experiences only" description="Just me and my group" />
+        </RadioGroup>
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+function MemoriesSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  return (
+    <div className="space-y-8">
+      <SectionHeader 
+        title="Trip Memories"
+        description="What makes travel special for you"
+      />
+      
+      {/* Trip Rituals */}
+      <PreferenceGroup label="Trip rituals & traditions">
+        <Textarea
+          placeholder="Always visit a local market on the first day, have a fancy dinner on the last night..."
+          value={preferences?.personal_notes || ''}
+          onChange={(e) => onUpdate('personal_notes', e.target.value)}
+          className="resize-none"
+          rows={3}
+        />
+      </PreferenceGroup>
+
+      {/* What Do You Collect */}
+      <PreferenceGroup label="What do you collect from travels?">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            'Photos & memories',
+            'Physical souvenirs',
+            'Recipes & local food',
+            'Stories & experiences'
+          ].map((option) => (
+            <label
+              key={option}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                preferences?.climate_preferences?.includes(option)
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <Checkbox
+                checked={preferences?.climate_preferences?.includes(option)}
+                onCheckedChange={(checked) => {
+                  const current = preferences?.climate_preferences || [];
+                  const updated = checked
+                    ? [...current, option]
+                    : current.filter(c => c !== option);
+                  onUpdate('climate_preferences', updated);
+                }}
+              />
+              <span className="text-sm">{option}</span>
+            </label>
+          ))}
+        </div>
+      </PreferenceGroup>
+    </div>
+  );
+}
+
+// ============================================================================
+// Helper Components
+// ============================================================================
+
+function SectionHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="pb-4 border-b border-border">
+      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
+}
+
+function PreferenceGroup({ 
+  label, 
+  required, 
+  children 
+}: { 
+  label: string; 
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      {label && (
+        <Label className="text-sm font-medium">
+          {label}
+          {required && <span className="text-destructive ml-1">*</span>}
+        </Label>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function RadioOption({ 
+  value, 
+  label, 
+  description 
+}: { 
+  value: string; 
+  label: string; 
+  description?: string;
+}) {
+  return (
+    <div className="flex items-start space-x-3">
+      <RadioGroupItem value={value} id={value} className="mt-1" />
+      <label htmlFor={value} className="flex-1 cursor-pointer">
+        <span className="text-sm font-medium">{label}</span>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </label>
     </div>
   );
 }
