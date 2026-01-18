@@ -281,16 +281,17 @@ serve(async (req) => {
 
     let images: DestinationImage[] = [];
 
-    // Priority 1: Pexels (reliable for major cities)
-    if (pexelsApiKey) {
-      const pexelsImage = await getPexelsPhoto(resolvedDestination, pexelsApiKey);
-      if (pexelsImage) {
-        images = [pexelsImage];
-        console.log("[Images] Using Pexels image for:", resolvedDestination);
+    // Priority 1: Lovable AI Generated (best quality, always preferred)
+    if (lovableApiKey) {
+      console.log("[Images] Generating Lovable AI image for:", resolvedDestination);
+      const aiImage = await generateAIImage(resolvedDestination, lovableApiKey);
+      if (aiImage) {
+        images = [aiImage];
+        console.log("[Images] ✅ Using AI-generated image for:", resolvedDestination);
       }
     }
 
-    // Priority 2: Google Places
+    // Priority 2: Google Places (fallback for real photos)
     if (images.length === 0 && googleApiKey) {
       const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
       if (googleImage) {
@@ -299,16 +300,7 @@ serve(async (req) => {
       }
     }
 
-    // Priority 3: Lovable AI Generated
-    if (images.length === 0 && lovableApiKey) {
-      const aiImage = await generateAIImage(resolvedDestination, lovableApiKey);
-      if (aiImage) {
-        images = [aiImage];
-        console.log("[Images] Using AI-generated image for:", resolvedDestination);
-      }
-    }
-
-    // Priority 3: Gradient fallback
+    // Priority 3: Gradient fallback (last resort)
     if (images.length === 0) {
       images = [generateFallbackGradient(resolvedDestination)];
       console.log("[Images] Using gradient fallback for:", resolvedDestination);
