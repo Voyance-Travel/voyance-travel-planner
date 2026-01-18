@@ -89,6 +89,24 @@ Deno.serve(async (req) => {
         }
 
         if (authUser?.user) {
+          // Store legacy user ID mapping if the original had an ID
+          if (user.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) {
+            const { error: mappingError } = await supabase
+              .from('user_id_mappings')
+              .upsert({
+                legacy_user_id: user.id,
+                user_id: authUser.user.id,
+                email: user.email,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'legacy_user_id' })
+
+            if (mappingError) {
+              console.error('User ID mapping error:', mappingError)
+            } else {
+              console.log(`Mapped legacy ${user.id} → ${authUser.user.id}`)
+            }
+          }
+
           // Update profile with additional data - handle empty strings as null
           const handleValue = user.handle && user.handle.trim() !== '' ? user.handle : null;
           
