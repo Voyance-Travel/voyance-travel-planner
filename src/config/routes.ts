@@ -40,6 +40,7 @@ export const ROUTES = {
     ROOT: '/planner',
     FLIGHT: '/planner/flight',
     HOTEL: '/planner/hotel',
+    SUMMARY: '/planner/summary',
     ITINERARY: '/planner/itinerary',
     BOOKING: '/planner/booking',
   },

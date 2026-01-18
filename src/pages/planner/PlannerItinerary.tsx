@@ -102,7 +102,7 @@ export default function PlannerItinerary() {
 
   const handleBack = () => {
     const params = new URLSearchParams(searchParams);
-    navigate(`/planner/hotel?${params.toString()}`);
+    navigate(`/planner/summary?${params.toString()}`);
   };
 
   if (isLoading) {
