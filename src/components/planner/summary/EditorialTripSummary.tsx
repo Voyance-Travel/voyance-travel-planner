@@ -166,9 +166,9 @@ export default function EditorialTripSummary({
       animate={{ opacity: 1 }} 
       className="print:max-w-none"
     >
-      {/* Full-bleed Hero */}
-      <div className="relative -mx-4 md:-mx-8 lg:-mx-16 mb-12">
-        <div className="relative h-[45vh] min-h-[400px] max-h-[500px] overflow-hidden">
+      {/* Full-bleed Hero - extend into the nav area */}
+      <div className="relative -mx-4 md:-mx-8 lg:-mx-16 -mt-6 mb-12">
+        <div className="relative h-[50vh] min-h-[420px] max-h-[520px] overflow-hidden">
           <DynamicDestinationPhotos 
             destination={data.destination} 
             startDate={data.startDate} 
