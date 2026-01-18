@@ -1,33 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { UserPlus, Mail, Users, Search, Check, X, Sparkles } from 'lucide-react';
+import { UserPlus, Mail, Users, Search, Check, X, Sparkles, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { useUsersSearch, type UserSearchResult } from '@/services/usersSearchAPI';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface GuestLinkModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  maxGuests?: number;
+  maxGuests: number;
   currentTravelers: number;
+  onGuestsConfirmed?: (guests: LinkedGuest[]) => void;
 }
 
-interface LinkedGuest {
+export interface LinkedGuest {
   id: string;
   name: string;
   email: string;
   avatar?: string;
   preferencesMatch?: number;
+  isVoyanceUser?: boolean;
+}
+
+// Debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
 }
 
 export default function GuestLinkModal({
   open,
   onOpenChange,
-  maxGuests = 4,
+  maxGuests,
   currentTravelers,
+  onGuestsConfirmed,
 }: GuestLinkModalProps) {
   const [activeTab, setActiveTab] = useState<'invite' | 'search'>('invite');
   const [email, setEmail] = useState('');
@@ -35,7 +50,18 @@ export default function GuestLinkModal({
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [isInviting, setIsInviting] = useState(false);
 
-  const remainingSlots = maxGuests - currentTravelers + 1 - linkedGuests.length;
+  // Calculate max guests allowed (travelers count minus 1 for the primary traveler)
+  const maxLinkedGuests = Math.max(0, currentTravelers - 1);
+  const remainingSlots = maxLinkedGuests - linkedGuests.length;
+
+  // Debounced search query for API
+  const debouncedSearch = useDebounce(searchQuery, 300);
+  const { data: searchResults, isLoading: isSearching } = useUsersSearch(debouncedSearch, open);
+
+  // Filter out already linked guests from search results
+  const filteredResults = (searchResults || []).filter(
+    (user) => !linkedGuests.some((g) => g.id === user.id)
+  );
 
   const handleInviteByEmail = async () => {
     if (!email || !email.includes('@')) {
@@ -44,25 +70,52 @@ export default function GuestLinkModal({
     }
 
     if (remainingSlots <= 0) {
-      toast.error(`Maximum ${maxGuests} travelers allowed`);
+      toast.error(`Maximum ${maxLinkedGuests} additional travelers allowed for a group of ${currentTravelers}`);
+      return;
+    }
+
+    // Check if email already linked
+    if (linkedGuests.some(g => g.email.toLowerCase() === email.toLowerCase())) {
+      toast.error('This email is already linked');
       return;
     }
 
     setIsInviting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // TODO: In production, this would send an actual invite email
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     const newGuest: LinkedGuest = {
-      id: `guest-${Date.now()}`,
+      id: `email-${Date.now()}`,
       name: email.split('@')[0],
       email,
-      preferencesMatch: Math.floor(Math.random() * 30) + 70, // 70-100% match
+      isVoyanceUser: false,
     };
     
     setLinkedGuests(prev => [...prev, newGuest]);
     setEmail('');
     setIsInviting(false);
-    toast.success(`Invitation sent to ${email}`);
+    toast.success(`Invitation will be sent to ${email}`);
+  };
+
+  const handleSelectUser = (user: UserSearchResult) => {
+    if (remainingSlots <= 0) {
+      toast.error(`Maximum ${maxLinkedGuests} additional travelers allowed`);
+      return;
+    }
+
+    const newGuest: LinkedGuest = {
+      id: user.id,
+      name: user.name,
+      email: user.email || '',
+      avatar: user.avatar,
+      preferencesMatch: Math.floor(Math.random() * 30) + 70, // TODO: Calculate from actual preferences
+      isVoyanceUser: true,
+    };
+
+    setLinkedGuests(prev => [...prev, newGuest]);
+    setSearchQuery('');
+    toast.success(`${user.name} linked to your trip`);
   };
 
   const handleRemoveGuest = (guestId: string) => {
@@ -71,11 +124,22 @@ export default function GuestLinkModal({
   };
 
   const handleConfirm = () => {
+    if (onGuestsConfirmed) {
+      onGuestsConfirmed(linkedGuests);
+    }
     if (linkedGuests.length > 0) {
       toast.success(`${linkedGuests.length} guest${linkedGuests.length > 1 ? 's' : ''} linked to your trip!`);
     }
     onOpenChange(false);
   };
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+      setEmail('');
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,7 +150,7 @@ export default function GuestLinkModal({
             Link Travel Companions
           </DialogTitle>
           <DialogDescription>
-            Invite friends to join your trip. We'll match travel preferences for optimal group planning.
+            Invite {maxLinkedGuests > 0 ? `up to ${maxLinkedGuests}` : 'no'} additional traveler{maxLinkedGuests !== 1 ? 's' : ''} for your group of {currentTravelers}.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,8 +158,8 @@ export default function GuestLinkModal({
           {/* Linked Guests List */}
           {linkedGuests.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Linked guests</p>
-              <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Linked guests ({linkedGuests.length}/{maxLinkedGuests})</p>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
                 {linkedGuests.map((guest) => (
                   <motion.div
                     key={guest.id}
@@ -105,16 +169,21 @@ export default function GuestLinkModal({
                     className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
-                        {guest.name.charAt(0).toUpperCase()}
-                      </div>
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={guest.avatar} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                          {guest.name.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                       <div>
                         <p className="text-sm font-medium">{guest.name}</p>
-                        <p className="text-xs text-muted-foreground">{guest.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {guest.isVoyanceUser ? 'Voyance member' : guest.email}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {guest.preferencesMatch && (
+                      {guest.preferencesMatch && guest.isVoyanceUser && (
                         <Badge variant="secondary" className="gap-1 text-xs">
                           <Sparkles className="h-3 w-3" />
                           {guest.preferencesMatch}% match
@@ -133,7 +202,14 @@ export default function GuestLinkModal({
             </div>
           )}
 
-          {remainingSlots > 0 ? (
+          {maxLinkedGuests === 0 ? (
+            <div className="p-4 bg-muted/50 rounded-lg text-center">
+              <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground">
+                Solo trip selected. Increase travelers to add companions.
+              </p>
+            </div>
+          ) : remainingSlots > 0 ? (
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'invite' | 'search')}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="invite" className="gap-1.5">
@@ -167,23 +243,62 @@ export default function GuestLinkModal({
 
               <TabsContent value="search" className="space-y-3 pt-3">
                 <Input
-                  placeholder="Search by name or Voyance handle..."
+                  placeholder="Search by name or handle..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <div className="h-32 flex items-center justify-center border border-dashed border-border rounded-lg">
-                  <div className="text-center text-muted-foreground">
-                    <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Search for Voyance users</p>
-                    <p className="text-xs">Connect with friends who have accounts</p>
-                  </div>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  {isSearching ? (
+                    <div className="h-32 flex items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : filteredResults.length > 0 ? (
+                    <div className="max-h-48 overflow-y-auto">
+                      {filteredResults.map((user) => (
+                        <button
+                          key={user.id}
+                          onClick={() => handleSelectUser(user)}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors border-b border-border last:border-0"
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={user.avatar} />
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                              {user.name.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="text-left flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{user.name}</p>
+                            {user.username && (
+                              <p className="text-xs text-muted-foreground">@{user.username}</p>
+                            )}
+                          </div>
+                          <UserPlus className="h-4 w-4 text-primary flex-shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : searchQuery.length >= 2 ? (
+                    <div className="h-32 flex items-center justify-center">
+                      <div className="text-center text-muted-foreground">
+                        <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No users found</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-32 flex items-center justify-center">
+                      <div className="text-center text-muted-foreground">
+                        <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">Search for Voyance users</p>
+                        <p className="text-xs">Type at least 2 characters</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>
           ) : (
             <div className="p-4 bg-muted/50 rounded-lg text-center">
               <p className="text-sm text-muted-foreground">
-                Maximum travelers reached ({maxGuests})
+                All {maxLinkedGuests} companion slots filled
               </p>
             </div>
           )}
@@ -191,7 +306,11 @@ export default function GuestLinkModal({
           {/* Footer */}
           <div className="flex items-center justify-between pt-4 border-t border-border">
             <p className="text-sm text-muted-foreground">
-              {remainingSlots > 0 ? `${remainingSlots} spot${remainingSlots > 1 ? 's' : ''} remaining` : 'No spots remaining'}
+              {remainingSlots > 0 
+                ? `${remainingSlots} spot${remainingSlots !== 1 ? 's' : ''} remaining` 
+                : maxLinkedGuests === 0 
+                  ? 'Solo trip' 
+                  : 'All spots filled'}
             </p>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>

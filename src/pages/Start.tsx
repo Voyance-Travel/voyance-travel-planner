@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, Heart, Briefcase, Mountain, Sparkles, UserPlus } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, Heart, Briefcase, Mountain, Palmtree, UserPlus } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -18,7 +18,9 @@ import {
   formatAirportDisplay,
   type Airport,
 } from '@/services/locationSearchAPI';
-import GuestLinkModal from '@/components/planner/GuestLinkModal';
+import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Debounce hook for search
 function useDebounce<T>(value: T, delay: number): T {
@@ -175,7 +177,7 @@ const tripTypes = [
   { id: 'romantic', label: 'Romantic', icon: Heart, description: 'Couples getaway' },
   { id: 'business', label: 'Business', icon: Briefcase, description: 'Work travel' },
   { id: 'adventure', label: 'Adventure', icon: Mountain, description: 'Explore & discover' },
-  { id: 'leisure', label: 'Leisure', icon: Sparkles, description: 'Relax & unwind' },
+  { id: 'leisure', label: 'Leisure', icon: Palmtree, description: 'Relax & unwind' },
 ];
 
 // Featured destinations with editorial imagery
@@ -189,7 +191,7 @@ const featuredDestinations = [
 ];
 
 export default function Start() {
-  const { state: plannerState, setBasics } = useTripPlanner();
+  const { state: plannerState, setBasics, saveTrip } = useTripPlanner();
   const { user } = useAuth();
   const navigate = useNavigate();
   
@@ -203,7 +205,13 @@ export default function Start() {
   );
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [tripType, setTripType] = useState<string>('leisure');
+  const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   const today = startOfToday();
+
+  // Debounced values for auto-save
+  const debouncedOrigin = useDebounce(origin, 1000);
+  const debouncedDestination = useDebounce(destination, 1000);
 
   useEffect(() => {
     if (plannerState.basics.destination && plannerState.basics.destination !== destination) {
@@ -230,7 +238,45 @@ export default function Start() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plannerState.basics]);
 
-  const handleStart = () => {
+  // Auto-save trip data to database when form values change
+  const autoSaveTripData = useCallback(async () => {
+    if (!user) return; // Only save for authenticated users
+    
+    // Only save if we have meaningful data
+    if (!debouncedDestination && !debouncedOrigin && !startDate && !endDate) return;
+
+    setIsSaving(true);
+    try {
+      const tripData = {
+        destination: debouncedDestination || undefined,
+        originCity: debouncedOrigin || undefined,
+        startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
+        endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+        travelers,
+        budgetTier: 'moderate',
+      };
+
+      // Update context first
+      setBasics(tripData);
+
+      // If we have minimum required data (destination + dates), save to database
+      if (debouncedDestination && startDate && endDate) {
+        await saveTrip();
+        console.log('[Start] Trip auto-saved to database');
+      }
+    } catch (error) {
+      console.error('[Start] Auto-save error:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [user, debouncedDestination, debouncedOrigin, startDate, endDate, travelers, setBasics, saveTrip]);
+
+  // Trigger auto-save when debounced values change
+  useEffect(() => {
+    autoSaveTripData();
+  }, [debouncedDestination, debouncedOrigin, startDate, endDate, travelers]);
+
+  const handleStart = async () => {
     if (!destination || !startDate || !endDate) return;
 
     const start = format(startDate, 'yyyy-MM-dd');
@@ -244,6 +290,34 @@ export default function Start() {
       originCity: origin,
       budgetTier: 'moderate',
     });
+
+    // Save trip to database before navigating
+    if (user) {
+      const tripId = await saveTrip();
+      if (tripId) {
+        console.log('[Start] Trip saved before navigation:', tripId);
+        
+        // Save linked guests as collaborators if we have a trip ID
+        if (linkedGuests.length > 0) {
+          for (const guest of linkedGuests) {
+            if (guest.isVoyanceUser) {
+              try {
+                await supabase.from('trip_collaborators').insert({
+                  trip_id: tripId,
+                  user_id: guest.id,
+                  permission: 'contributor',
+                  invited_by: user.id,
+                  accepted_at: new Date().toISOString(),
+                });
+              } catch (err) {
+                console.error('[Start] Error adding collaborator:', err);
+              }
+            }
+          }
+          toast.success(`Trip saved with ${linkedGuests.length} companion${linkedGuests.length > 1 ? 's' : ''}`);
+        }
+      }
+    }
 
     const params = new URLSearchParams();
     params.set('destination', destination);
@@ -263,7 +337,12 @@ export default function Start() {
     setGuestModalOpen(true);
   };
 
+  const handleGuestsConfirmed = (guests: LinkedGuest[]) => {
+    setLinkedGuests(guests);
+  };
+
   const isFormValid = destination && startDate && endDate;
+
 
   return (
     <MainLayout>
@@ -441,13 +520,15 @@ export default function Start() {
                         </button>
                       ))}
                       <span className="text-sm text-muted-foreground ml-2">
-                        {travelers > 1 && travelers <= 4 && (
+                        {travelers > 1 && (
                           <button 
                             onClick={handleAddGuest}
                             className="flex items-center gap-1 text-primary hover:underline"
                           >
                             <UserPlus className="h-3.5 w-3.5" />
-                            Link guest
+                            {linkedGuests.length > 0 
+                              ? `${linkedGuests.length} linked` 
+                              : 'Link guests'}
                           </button>
                         )}
                       </span>
@@ -483,6 +564,14 @@ export default function Start() {
                   })}
                 </div>
               </div>
+
+              {/* Save indicator */}
+              {isSaving && user && (
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              )}
 
               {/* CTA Button */}
               <Button
@@ -546,8 +635,9 @@ export default function Start() {
       <GuestLinkModal
         open={guestModalOpen}
         onOpenChange={setGuestModalOpen}
-        maxGuests={4}
+        maxGuests={travelers}
         currentTravelers={travelers}
+        onGuestsConfirmed={handleGuestsConfirmed}
       />
     </MainLayout>
   );
