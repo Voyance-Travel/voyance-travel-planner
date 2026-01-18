@@ -17,6 +17,16 @@ interface TripDetails {
   budgetTier?: string;
 }
 
+interface UserPreferenceInsights {
+  loved_activity_types: Record<string, number>;
+  disliked_activity_types: Record<string, number>;
+  loved_categories: Record<string, number>;
+  disliked_categories: Record<string, number>;
+  preferred_times: Record<string, number>;
+  preferred_pace: string | null;
+  insights_summary: string | null;
+}
+
 interface GenerationRequest {
   tripId: string;
   dayNumber: number;
@@ -33,6 +43,7 @@ interface GenerationRequest {
     budget?: string;
   };
   previousDayActivities?: string[];
+  userId?: string; // For fetching learned preferences
 }
 
 interface Activity {
@@ -61,6 +72,84 @@ interface GeneratedDay {
   };
 }
 
+// Helper to get learned preferences
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getLearnedPreferences(supabase: any, userId: string): Promise<UserPreferenceInsights | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_preference_insights')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (error) {
+      console.error('[generate-itinerary] Error fetching preferences:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (e) {
+    console.error('[generate-itinerary] Failed to get preferences:', e);
+    return null;
+  }
+}
+
+// Build preference context for AI prompt
+function buildPreferenceContext(insights: UserPreferenceInsights | null): string {
+  if (!insights) return '';
+  
+  const parts: string[] = [];
+  
+  // Get top loved activity types
+  const lovedTypes = Object.entries(insights.loved_activity_types || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([type]) => type.replace(/_/g, ' '));
+  
+  if (lovedTypes.length > 0) {
+    parts.push(`This traveler LOVES: ${lovedTypes.join(', ')} activities. Prioritize these.`);
+  }
+  
+  // Get disliked activity types
+  const dislikedTypes = Object.entries(insights.disliked_activity_types || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([type]) => type.replace(/_/g, ' '));
+  
+  if (dislikedTypes.length > 0) {
+    parts.push(`AVOID or minimize: ${dislikedTypes.join(', ')} activities.`);
+  }
+  
+  // Get loved categories
+  const lovedCategories = Object.entries(insights.loved_categories || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([cat]) => cat.replace(/_/g, ' '));
+  
+  if (lovedCategories.length > 0) {
+    parts.push(`Favorite categories: ${lovedCategories.join(', ')}.`);
+  }
+  
+  // Get disliked categories
+  const dislikedCategories = Object.entries(insights.disliked_categories || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([cat]) => cat.replace(/_/g, ' '));
+  
+  if (dislikedCategories.length > 0) {
+    parts.push(`Categories to avoid: ${dislikedCategories.join(', ')}.`);
+  }
+  
+  // Add pace preference
+  if (insights.preferred_pace) {
+    parts.push(`Preferred pace: ${insights.preferred_pace}.`);
+  }
+  
+  if (parts.length === 0) return '';
+  
+  return `\n\n🎯 PERSONALIZED PREFERENCES (based on past trip feedback):\n${parts.join('\n')}`;
+}
+
 const SYSTEM_PROMPT = `You are an expert travel planner with deep knowledge of destinations worldwide. Generate detailed, personalized day itineraries that feel authentic and locally-informed.
 
 Your itineraries should:
@@ -70,10 +159,12 @@ Your itineraries should:
 - Include local hidden gems alongside popular attractions
 - Provide practical tips for each activity
 - Account for travel time between activities
+- STRONGLY prioritize activities the traveler has loved in the past
+- AVOID activity types the traveler has disliked
 
 Format times as HH:MM (24-hour). Costs should be in USD equivalent.`;
 
-function buildDayPrompt(request: GenerationRequest): string {
+function buildDayPrompt(request: GenerationRequest, preferenceContext: string): string {
   const { dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities } = request;
   
   let prompt = `Generate a detailed itinerary for Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
@@ -85,11 +176,16 @@ ${budgetTier ? `Budget: ${budgetTier}` : ''}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.interests?.length ? `Interests: ${preferences.interests.join(', ')}` : ''}`;
 
+  // Add personalized preference context
+  prompt += preferenceContext;
+
   if (previousDayActivities?.length) {
     prompt += `\n\nActivities already planned on previous days (avoid repeating): ${previousDayActivities.join(', ')}`;
   }
 
-  prompt += `\n\nGenerate 4-6 activities for this day, including meals. Start around 9:00 and end by 21:00-22:00.`;
+  prompt += `\n\nGenerate 4-6 activities for this day, including meals. Start around 9:00 and end by 21:00-22:00.
+  
+IMPORTANT: If personalized preferences are provided above, heavily weight your recommendations toward loved activity types and away from disliked ones.`;
 
   return prompt;
 }
@@ -138,7 +234,8 @@ const activityTool = {
                   lat: { type: "number" },
                   lng: { type: "number" }
                 }
-              }
+              },
+              type: { type: "string", description: "Specific activity type (museum, restaurant, park, etc.)" }
             },
             required: ["id", "name", "description", "category", "startTime", "endTime", "duration", "location", "estimatedCost", "bookingRequired"]
           }
@@ -172,6 +269,10 @@ serve(async (req) => {
       );
     }
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
     const body = await req.json();
     const { action, ...params } = body;
 
@@ -179,7 +280,19 @@ serve(async (req) => {
 
     if (action === 'generate-day') {
       const request = params as GenerationRequest;
-      const prompt = buildDayPrompt(request);
+      
+      // Fetch learned preferences if userId is provided
+      let preferenceContext = '';
+      if (request.userId) {
+        console.log(`[generate-itinerary] Fetching learned preferences for user ${request.userId}`);
+        const insights = await getLearnedPreferences(supabase, request.userId);
+        if (insights && insights.loved_activity_types && Object.keys(insights.loved_activity_types).length > 0) {
+          preferenceContext = buildPreferenceContext(insights);
+          console.log(`[generate-itinerary] Applied preference context:`, preferenceContext);
+        }
+      }
+      
+      const prompt = buildDayPrompt(request, preferenceContext);
 
       console.log(`[generate-itinerary] Generating day ${request.dayNumber} for ${request.destination}`);
 
@@ -252,18 +365,14 @@ serve(async (req) => {
           success: true, 
           day: generatedDay,
           dayNumber: request.dayNumber,
-          totalDays: request.totalDays
+          totalDays: request.totalDays,
+          usedPersonalization: !!preferenceContext
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (action === 'get-trip') {
-      // Fetch trip details from database
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
       const { tripId } = params;
       const { data: trip, error } = await supabase
         .from('trips')
@@ -297,10 +406,6 @@ serve(async (req) => {
     }
 
     if (action === 'save-itinerary') {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
       const { tripId, itinerary } = params;
 
       // Save to trips.itinerary_data (JSONB)

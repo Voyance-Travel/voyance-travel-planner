@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { Button } from '@/components/ui/button';
+import { NotificationBell } from '@/components/common/NotificationBell';
 
 // Elegant V logo component - adapts to transparent/solid nav states
 const VoyanceLogo = ({ isTransparent }: { isTransparent: boolean }) => (
@@ -151,6 +152,11 @@ export default function TopNav() {
           <div className="hidden lg:flex items-center gap-4">
             {isAuthenticated ? (
               <>
+                {/* Notification Bell */}
+                <div className={isTransparent ? '[&_button]:text-white [&_button]:hover:bg-white/10' : ''}>
+                  <NotificationBell />
+                </div>
+
                 <Button
                   variant={isTransparent ? 'outline' : 'default'}
                   size="sm"

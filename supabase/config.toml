@@ -62,3 +62,9 @@ verify_jwt = false
 
 [functions.test-email]
 verify_jwt = false
+
+[functions.analyze-preferences]
+verify_jwt = false
+
+[functions.trip-notifications]
+verify_jwt = false

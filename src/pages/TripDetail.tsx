@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LiveItineraryView } from '@/components/itinerary/LiveItineraryView';
 import { supabase } from '@/integrations/supabase/client';
+import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Trip = Tables<'trips'>;
@@ -48,6 +49,7 @@ export default function TripDetail() {
   const [activities, setActivities] = useState<TripActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const scheduleNotifications = useScheduleNotifications();
 
   useEffect(() => {
     async function fetchTripData() {
@@ -83,12 +85,18 @@ export default function TripDetail() {
         const endDate = parseISO(tripData.end_date);
 
         if (tripData.status === 'booked' && isAfter(now, startDate) && isBefore(now, endDate)) {
-          // Trip should be active
+          // Trip should be active - update status and schedule notifications
           await supabase
             .from('trips')
             .update({ status: 'active' })
             .eq('id', tripId);
           setTrip(prev => prev ? { ...prev, status: 'active' } : null);
+          
+          // Schedule notifications for the active trip
+          scheduleNotifications.mutate({ 
+            tripId, 
+            userId: tripData.user_id 
+          });
         } else if ((tripData.status === 'active' || tripData.status === 'booked') && isAfter(now, endDate)) {
           // Trip should be completed
           await supabase
