@@ -15,7 +15,9 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    const { table, rows } = await req.json()
+    const body = await req.json()
+    const table = body.table
+    const rows = body.rows || body.data // Accept both "rows" and "data"
     
     if (!table || !rows || !Array.isArray(rows)) {
       return new Response(
