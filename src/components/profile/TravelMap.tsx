@@ -309,65 +309,6 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
             }}
           />
           
-          {/* Journey Lines connecting visited destinations */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-            <defs>
-              <linearGradient id="journeyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#0ABAB5" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#10B981" stopOpacity="0.8" />
-              </linearGradient>
-              <linearGradient id="glowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#0ABAB5" stopOpacity="1" />
-                <stop offset="50%" stopColor="#10B981" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.6" />
-              </linearGradient>
-            </defs>
-            <g className="journey-lines">
-              {filteredDestinations
-                .filter(dest => dest.visited)
-                .map((destination, index, visitedDests) => {
-                  if (index === visitedDests.length - 1) return null;
-                  const nextDest = visitedDests[index + 1];
-                  const start = equirectangularProjection(destination.lat, destination.lng);
-                  const end = equirectangularProjection(nextDest.lat, nextDest.lng);
-                  const startX = parseFloat(start.left);
-                  const startY = parseFloat(start.top);
-                  const endX = parseFloat(end.left);
-                  const endY = parseFloat(end.top);
-                  
-                  return (
-                    <g key={`journey-${destination.id}-${nextDest.id}`}>
-                      {/* Dashed journey line */}
-                      <motion.line
-                        x1={`${startX}%`}
-                        y1={`${startY}%`}
-                        x2={`${endX}%`}
-                        y2={`${endY}%`}
-                        stroke="url(#journeyGradient)"
-                        strokeWidth="2"
-                        strokeDasharray="5,5"
-                        initial={{ pathLength: 0, opacity: 0 }}
-                        animate={{ pathLength: 1, opacity: 0.6 }}
-                        transition={{ duration: 1.5, delay: index * 0.3 }}
-                      />
-                      {/* Glowing trail */}
-                      <motion.line
-                        x1={`${startX}%`}
-                        y1={`${startY}%`}
-                        x2={`${endX}%`}
-                        y2={`${endY}%`}
-                        stroke="url(#glowGradient)"
-                        strokeWidth="1"
-                        strokeDasharray="3,10"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: [0, 0.4, 0] }}
-                        transition={{ duration: 3, repeat: Infinity, delay: index * 0.3 + 1 }}
-                      />
-                    </g>
-                  );
-                })}
-            </g>
-          </svg>
           
           {/* Travel pins positioned with real coordinates */}
           {filteredDestinations.map((destination, index) => {
