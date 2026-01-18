@@ -1,7 +1,7 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Mail, Download, Building2, Users, Globe, Award, FileText, Palette, Loader2 } from 'lucide-react';
+import { Mail, Download, Building2, Globe, FileText, Palette, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -9,9 +9,7 @@ import { CONTACT_CONFIG } from '@/config/contact';
 import { 
   generatePressKitPDF, 
   companyInfo, 
-  keyStats, 
-  leadership, 
-  pressHighlights 
+  keyStats
 } from '@/utils/pressKitGenerator';
 
 export default function Press() {
@@ -108,53 +106,6 @@ export default function Press() {
           </div>
         </div>
       </section>
-
-      {/* Leadership */}
-      <section className="py-16 bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-2xl font-semibold mb-8 text-center">Leadership Team</h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            {leadership.map((person, index) => (
-              <motion.div
-                key={person.name}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="p-6 bg-card border border-border rounded-xl"
-              >
-                <div className="w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mb-4">
-                  <Users className="h-8 w-8 text-white" />
-                </div>
-                <h3 className="font-semibold text-lg">{person.name}</h3>
-                <p className="text-primary text-sm mb-3">{person.title}</p>
-                <p className="text-sm text-muted-foreground">{person.bio}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Press Highlights */}
-      <section className="py-16">
-        <div className="max-w-4xl mx-auto px-4">
-          <h2 className="text-2xl font-semibold mb-8 text-center">Press Highlights</h2>
-          <div className="space-y-4">
-            {pressHighlights.map((highlight, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="flex items-center gap-4 p-4 bg-card border border-border rounded-xl"
-              >
-                <Award className="h-6 w-6 text-primary shrink-0" />
-                <p className="font-medium">{highlight}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Download & Contact */}
       <section className="py-16 bg-gradient-to-br from-primary/10 to-accent/10">
         <div className="max-w-4xl mx-auto px-4">
