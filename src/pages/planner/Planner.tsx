@@ -131,46 +131,75 @@ export default function Planner() {
     return steps.indexOf(step);
   };
 
-  // Save trip to Supabase and get tripId
+  // Save trip - works for both authenticated and anonymous users
   const saveTrip = async (): Promise<string | null> => {
-    if (!isAuthenticated || !user) {
-      toast.error('Please sign in to continue');
-      navigate('/signin');
-      return null;
+    // For anonymous users, save to Neon via edge function
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    
+    // Get or create anonymous session
+    let sessionId = localStorage.getItem('voyance_anonymous_session');
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem('voyance_anonymous_session', sessionId);
     }
 
     try {
-      const tripData = {
-        user_id: user.id,
-        name: formData.name || `Trip to ${formData.destination}`,
-        destination: formData.destination,
-        start_date: formData.startDate,
-        end_date: formData.endDate,
-        travelers: formData.travelers,
-        origin_city: formData.departureCity,
-        status: 'planning' as const,
-      };
+      // For authenticated users, save to Supabase
+      if (isAuthenticated && user) {
+        const tripData = {
+          user_id: user.id,
+          name: formData.name || `Trip to ${formData.destination}`,
+          destination: formData.destination,
+          start_date: formData.startDate,
+          end_date: formData.endDate,
+          travelers: formData.travelers,
+          origin_city: formData.departureCity,
+          status: 'planning' as const,
+        };
 
-      if (formData.tripId) {
-        // Update existing
-        const { error } = await supabase
-          .from('trips')
-          .update({ ...tripData, updated_at: new Date().toISOString() })
-          .eq('id', formData.tripId);
-        
-        if (error) throw error;
-        return formData.tripId;
+        if (formData.tripId) {
+          const { error } = await supabase
+            .from('trips')
+            .update({ ...tripData, updated_at: new Date().toISOString() })
+            .eq('id', formData.tripId);
+          
+          if (error) throw error;
+          return formData.tripId;
+        } else {
+          const { data, error } = await supabase
+            .from('trips')
+            .insert([tripData])
+            .select('id')
+            .single();
+
+          if (error) throw error;
+          updateFormData({ tripId: data.id });
+          return data.id;
+        }
       } else {
-        // Create new
-        const { data, error } = await supabase
-          .from('trips')
-          .insert([tripData])
-          .select('id')
-          .single();
+        // For anonymous users, save to Neon
+        const response = await fetch(`${supabaseUrl}/functions/v1/neon-db/trips/anonymous`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey,
+          },
+          body: JSON.stringify({
+            sessionId,
+            origin: formData.departureCity,
+            destination: formData.destination,
+            startDate: formData.startDate,
+            endDate: formData.endDate,
+            travelers: formData.travelers,
+          }),
+        });
 
-        if (error) throw error;
-        updateFormData({ tripId: data.id });
-        return data.id;
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+        
+        console.log('[Planner] Saved anonymous trip to Neon:', result.sessionId);
+        return result.sessionId;
       }
     } catch (err) {
       console.error('Failed to save trip:', err);

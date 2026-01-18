@@ -184,6 +184,171 @@ Deno.serve(async (req) => {
       );
     }
 
+    // PUBLIC: Create anonymous trip (no auth required)
+    // Generates a temporary session ID for tracking
+    if (path === '/trips/anonymous' && req.method === 'POST') {
+      let body: Record<string, unknown> | null = null;
+      try {
+        body = await req.json();
+      } catch {
+        return new Response(
+          JSON.stringify({ error: 'Invalid JSON body' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { 
+        origin, 
+        destination, 
+        startDate, 
+        endDate, 
+        travelers = 1,
+        sessionId 
+      } = body as {
+        origin?: string;
+        destination?: string;
+        startDate?: string;
+        endDate?: string;
+        travelers?: number;
+        sessionId?: string;
+      };
+
+      if (!destination || !startDate || !endDate) {
+        return new Response(
+          JSON.stringify({ error: 'destination, startDate, and endDate are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Generate or use provided session ID
+      const tripSessionId = sessionId || crypto.randomUUID();
+
+      const result = await query(
+        `INSERT INTO anonymous_trips (
+          session_id, origin_city, destination, start_date, end_date, travelers, status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'draft', NOW(), NOW())
+        ON CONFLICT (session_id) DO UPDATE SET
+          origin_city = EXCLUDED.origin_city,
+          destination = EXCLUDED.destination,
+          start_date = EXCLUDED.start_date,
+          end_date = EXCLUDED.end_date,
+          travelers = EXCLUDED.travelers,
+          updated_at = NOW()
+        RETURNING *`,
+        [tripSessionId, origin || null, destination, startDate, endDate, travelers]
+      );
+
+      if (result.error) {
+        // Table might not exist, try creating it
+        if (result.error.includes('does not exist')) {
+          await query(`
+            CREATE TABLE IF NOT EXISTS anonymous_trips (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              session_id TEXT UNIQUE NOT NULL,
+              origin_city TEXT,
+              destination TEXT NOT NULL,
+              start_date DATE NOT NULL,
+              end_date DATE NOT NULL,
+              travelers INTEGER DEFAULT 1,
+              status TEXT DEFAULT 'draft',
+              flight_data JSONB,
+              hotel_data JSONB,
+              metadata JSONB DEFAULT '{}',
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+          `);
+          // Retry insert
+          const retryResult = await query(
+            `INSERT INTO anonymous_trips (
+              session_id, origin_city, destination, start_date, end_date, travelers, status, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'draft', NOW(), NOW())
+            RETURNING *`,
+            [tripSessionId, origin || null, destination, startDate, endDate, travelers]
+          );
+          return new Response(
+            JSON.stringify({ data: retryResult.data, sessionId: tripSessionId, error: retryResult.error }),
+            { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ error: result.error }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`[neon-db] Anonymous trip created: ${tripSessionId}`);
+      return new Response(
+        JSON.stringify({ data: result.data, sessionId: tripSessionId, error: null }),
+        { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // PUBLIC: Get anonymous trip by session ID
+    if (path.startsWith('/trips/anonymous/') && req.method === 'GET') {
+      const sessionId = path.replace('/trips/anonymous/', '');
+      
+      const result = await query(
+        'SELECT * FROM anonymous_trips WHERE session_id = $1',
+        [sessionId]
+      );
+
+      return new Response(
+        JSON.stringify({ data: result.data, error: result.error }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // PUBLIC: Update anonymous trip
+    if (path.startsWith('/trips/anonymous/') && req.method === 'PUT') {
+      const sessionId = path.replace('/trips/anonymous/', '');
+      let body: Record<string, unknown> | null = null;
+      try {
+        body = await req.json();
+      } catch {
+        body = {};
+      }
+
+      const updates = body as Record<string, unknown>;
+      const allowedFields = ['origin_city', 'destination', 'start_date', 'end_date', 'travelers', 'flight_data', 'hotel_data', 'metadata', 'status'];
+      const setClause: string[] = [];
+      const values: unknown[] = [];
+      let paramIndex = 1;
+
+      for (const field of allowedFields) {
+        if (field in updates) {
+          if (field === 'flight_data' || field === 'hotel_data' || field === 'metadata') {
+            setClause.push(`${field} = $${paramIndex}::jsonb`);
+            values.push(JSON.stringify(updates[field]));
+          } else {
+            setClause.push(`${field} = $${paramIndex}`);
+            values.push(updates[field]);
+          }
+          paramIndex++;
+        }
+      }
+
+      if (setClause.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'No valid fields to update' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      setClause.push('updated_at = NOW()');
+      values.push(sessionId);
+
+      const result = await query(
+        `UPDATE anonymous_trips SET ${setClause.join(', ')} WHERE session_id = $${paramIndex} RETURNING *`,
+        values
+      );
+
+      return new Response(
+        JSON.stringify({ data: result.data, error: result.error }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // All other endpoints require authentication
     const { user, error: authError } = await authenticateUser(req);
     if (!user) {

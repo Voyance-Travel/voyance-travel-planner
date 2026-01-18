@@ -103,85 +103,29 @@ const App = () => (
                 <Route path="/reset-password" element={<ResetPassword />} />
                 
                 {/* Onboarding Routes */}
-                <Route path="/welcome" element={
-                  <ProtectedRoute>
-                    <Welcome />
-                  </ProtectedRoute>
-                } />
+                <Route path="/welcome" element={<Welcome />} />
                 <Route path="/start" element={<Start />} />
-                <Route path="/quiz" element={
-                  <ProtectedRoute>
-                    <Quiz />
-                  </ProtectedRoute>
-                } />
+                <Route path="/quiz" element={<Quiz />} />
                 
-                {/* Profile Routes */}
-                <Route path="/profile" element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                } />
-                <Route path="/profile/edit" element={
-                  <ProtectedRoute>
-                    <ProfileEdit />
-                  </ProtectedRoute>
-                } />
-                <Route path="/profile/settings" element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                } />
+                {/* Profile Routes - Open for testing */}
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/profile/edit" element={<ProfileEdit />} />
+                <Route path="/profile/settings" element={<Settings />} />
                 
-                {/* Trip Planning Routes */}
-                <Route path="/planner" element={
-                  <ProtectedRoute>
-                    <Planner />
-                  </ProtectedRoute>
-                } />
-                <Route path="/planner/flight" element={
-                  <ProtectedRoute>
-                    <PlannerFlight />
-                  </ProtectedRoute>
-                } />
-                <Route path="/planner/hotel" element={
-                  <ProtectedRoute>
-                    <PlannerHotel />
-                  </ProtectedRoute>
-                } />
-                <Route path="/planner/itinerary" element={
-                  <ProtectedRoute>
-                    <PlannerItinerary />
-                  </ProtectedRoute>
-                } />
-                <Route path="/planner/booking" element={
-                  <ProtectedRoute>
-                    <PlannerBooking />
-                  </ProtectedRoute>
-                } />
+                {/* Trip Planning Routes - Open for testing */}
+                <Route path="/planner" element={<Planner />} />
+                <Route path="/planner/flight" element={<PlannerFlight />} />
+                <Route path="/planner/hotel" element={<PlannerHotel />} />
+                <Route path="/planner/itinerary" element={<PlannerItinerary />} />
+                <Route path="/planner/booking" element={<PlannerBooking />} />
                 
-                {/* Trip Management Routes */}
-                <Route path="/trip/dashboard" element={
-                  <ProtectedRoute>
-                    <TripDashboard />
-                  </ProtectedRoute>
-                } />
-                <Route path="/trip/:tripId" element={
-                  <ProtectedRoute>
-                    <TripDetail />
-                  </ProtectedRoute>
-                } />
-                <Route path="/trips/:tripId/confirmation" element={
-                  <ProtectedRoute>
-                    <TripConfirmation />
-                  </ProtectedRoute>
-                } />
+                {/* Trip Management Routes - Open for testing */}
+                <Route path="/trip/dashboard" element={<TripDashboard />} />
+                <Route path="/trip/:tripId" element={<TripDetail />} />
+                <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
                 
-                {/* Itinerary Routes */}
-                <Route path="/itinerary/:id" element={
-                  <ProtectedRoute>
-                    <ItineraryView />
-                  </ProtectedRoute>
-                } />
+                {/* Itinerary Routes - Open for testing */}
+                <Route path="/itinerary/:id" element={<ItineraryView />} />
                 
                 {/* Legal Routes */}
                 <Route path="/privacy" element={<Privacy />} />
