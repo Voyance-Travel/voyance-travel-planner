@@ -1,7 +1,7 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Clock, Briefcase, ChevronRight, ChevronDown, Users, Code, Palette, TrendingUp, Mail, Building, DollarSign, GraduationCap } from 'lucide-react';
+import { MapPin, Clock, Briefcase, ChevronRight, Users, Code, Palette, TrendingUp, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -15,7 +15,6 @@ const jobs = [
     department: 'Engineering',
     location: 'Remote',
     type: 'Full-time',
-    salary: '$140,000 - $180,000',
     description: 'Build beautiful, performant interfaces for our travel platform.',
     fullDescription: `We're looking for a Senior Frontend Engineer to help build the future of travel planning. You'll work closely with our design and product teams to create delightful user experiences that help millions of travelers plan their dream trips.`,
     responsibilities: [
@@ -32,22 +31,13 @@ const jobs = [
       'Familiarity with testing frameworks (Jest, Playwright)',
       'Excellent communication and collaboration skills',
     ],
-    benefits: [
-      'Competitive salary and equity',
-      'Unlimited PTO',
-      'Remote-first culture',
-      'Health, dental, and vision insurance',
-      'Annual learning budget',
-      '$1,000 travel credit annually',
-    ],
   },
   {
     id: '2',
     title: 'Product Designer',
     department: 'Product & Design',
-    location: 'San Francisco, CA',
+    location: 'Remote',
     type: 'Full-time',
-    salary: '$130,000 - $170,000',
     description: 'Design intuitive experiences that delight travelers worldwide.',
     fullDescription: `Join our design team to craft beautiful, intuitive experiences for our travel planning platform. You'll own the end-to-end design process, from research and ideation to high-fidelity prototypes and production-ready designs.`,
     responsibilities: [
@@ -64,14 +54,6 @@ const jobs = [
       'Experience with user research methodologies',
       'Understanding of accessibility standards',
     ],
-    benefits: [
-      'Competitive salary and equity',
-      'Unlimited PTO',
-      'Hybrid work arrangement',
-      'Health, dental, and vision insurance',
-      'Annual learning budget',
-      '$1,000 travel credit annually',
-    ],
   },
   {
     id: '3',
@@ -79,7 +61,6 @@ const jobs = [
     department: 'Engineering',
     location: 'Remote',
     type: 'Full-time',
-    salary: '$160,000 - $200,000',
     description: 'Develop AI models that power personalized travel recommendations.',
     fullDescription: `We're building an AI-first travel platform and need an ML Engineer to help develop and deploy the models that power our personalized recommendations. You'll work on everything from natural language processing to recommendation systems.`,
     responsibilities: [
@@ -96,22 +77,13 @@ const jobs = [
       'Understanding of ML ops and model deployment',
       'MS or PhD in Computer Science or related field preferred',
     ],
-    benefits: [
-      'Competitive salary and equity',
-      'Unlimited PTO',
-      'Remote-first culture',
-      'Health, dental, and vision insurance',
-      'Annual conference budget',
-      '$1,000 travel credit annually',
-    ],
   },
   {
     id: '4',
     title: 'Growth Marketing Manager',
     department: 'Marketing',
-    location: 'New York, NY',
+    location: 'Remote',
     type: 'Full-time',
-    salary: '$100,000 - $140,000',
     description: 'Drive user acquisition and engagement through creative campaigns.',
     fullDescription: `We're looking for a Growth Marketing Manager to lead our user acquisition and retention efforts. You'll develop and execute strategies that drive sustainable growth while building our brand presence in the travel industry.`,
     responsibilities: [
@@ -127,14 +99,6 @@ const jobs = [
       'Strong analytical skills and data-driven mindset',
       'Excellent written and verbal communication',
       'Travel industry experience a plus',
-    ],
-    benefits: [
-      'Competitive salary and equity',
-      'Unlimited PTO',
-      'Hybrid work arrangement',
-      'Health, dental, and vision insurance',
-      'Marketing conference budget',
-      '$1,000 travel credit annually',
     ],
   },
 ];
@@ -152,12 +116,10 @@ interface Job {
   department: string;
   location: string;
   type: string;
-  salary: string;
   description: string;
   fullDescription: string;
   responsibilities: string[];
   requirements: string[];
-  benefits: string[];
 }
 
 export default function Careers() {
@@ -266,10 +228,6 @@ export default function Careers() {
                         <Clock className="h-3.5 w-3.5" />
                         {job.type}
                       </span>
-                      <span className="flex items-center gap-1 text-accent font-medium">
-                        <DollarSign className="h-3.5 w-3.5" />
-                        {job.salary}
-                      </span>
                     </div>
                   </div>
                   <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -290,24 +248,11 @@ export default function Careers() {
       <section className="py-16 bg-muted/30">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-display font-bold text-foreground mb-4">
-            Why Voyance?
+            Join a Growing Team
           </h2>
           <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-            We offer competitive salaries, equity, unlimited PTO, remote flexibility, and the chance to shape how the world travels.
+            We're an early-stage startup building something meaningful. Join us and help shape how the world travels.
           </p>
-          <div className="grid sm:grid-cols-3 gap-6 mb-8">
-            {[
-              { icon: Building, title: 'Remote First', desc: 'Work from anywhere in the world' },
-              { icon: GraduationCap, title: 'Learning Budget', desc: '$2,000 annual learning stipend' },
-              { icon: MapPin, title: 'Travel Credit', desc: '$1,000 annual travel credit' },
-            ].map((perk, idx) => (
-              <div key={idx} className="bg-card border border-border rounded-xl p-6">
-                <perk.icon className="h-8 w-8 text-primary mx-auto mb-3" />
-                <h3 className="font-semibold mb-1">{perk.title}</h3>
-                <p className="text-sm text-muted-foreground">{perk.desc}</p>
-              </div>
-            ))}
-          </div>
           <Button variant="outline" size="lg" asChild>
             <a href={`mailto:${CONTACT_CONFIG.CAREERS_EMAIL}`}>
               <Mail className="h-4 w-4 mr-2" />
@@ -338,10 +283,6 @@ export default function Careers() {
                       <Clock className="h-4 w-4" />
                       {selectedJob.type}
                     </span>
-                    <span className="flex items-center gap-1 text-sm text-accent font-medium">
-                      <DollarSign className="h-4 w-4" />
-                      {selectedJob.salary}
-                    </span>
                   </div>
                 </DialogDescription>
               </DialogHeader>
@@ -365,15 +306,6 @@ export default function Careers() {
                   <h4 className="font-semibold mb-2">Requirements</h4>
                   <ul className="list-disc list-inside text-muted-foreground space-y-1">
                     {selectedJob.requirements.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                
-                <div>
-                  <h4 className="font-semibold mb-2">Benefits</h4>
-                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
-                    {selectedJob.benefits.map((item, i) => (
                       <li key={i}>{item}</li>
                     ))}
                   </ul>
