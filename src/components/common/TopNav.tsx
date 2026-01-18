@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Menu, 
   X, 
-  Compass, 
   User, 
   MapPin, 
   Settings, 
@@ -15,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { Button } from '@/components/ui/button';
+import voyanceLogo from '@/assets/voyance-logo.png';
 
 const navLinks = [
   { href: ROUTES.EXPLORE, label: 'Explore' },
@@ -101,7 +101,7 @@ export default function TopNav() {
               isTransparent ? 'text-white' : 'text-foreground'
             }`}
           >
-            <Compass className="h-6 w-6" />
+            <img src={voyanceLogo} alt="Voyance" className="h-8 w-8 object-contain" />
             <span>Voyance</span>
           </Link>
 
