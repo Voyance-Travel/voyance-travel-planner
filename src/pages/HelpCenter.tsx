@@ -16,8 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-
-const CONTACT_EMAIL = 'hello@voyance.travel';
+import { CONTACT_CONFIG } from '@/config/contact';
 
 const helpCategories = [
   {
@@ -85,7 +84,7 @@ export default function HelpCenter() {
       />
       
       {/* Hero */}
-      <section className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+      <section className="pt-32 pb-16 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
@@ -198,9 +197,9 @@ export default function HelpCenter() {
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
-                <a href={`mailto:${CONTACT_EMAIL}`} className="gap-2">
+                <a href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`} className="gap-2">
                   <Mail className="h-4 w-4" />
-                  Email Us
+                  {CONTACT_CONFIG.SUPPORT_EMAIL}
                 </a>
               </Button>
             </div>

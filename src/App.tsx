@@ -18,6 +18,7 @@ import Home from "./pages/Home";
 import Explore from "./pages/Explore";
 import Destinations from "./pages/Destinations";
 import DestinationDetail from "./pages/DestinationDetail";
+import Guides from "./pages/Guides";
 import GuideDetail from "./pages/GuideDetail";
 import About from "./pages/About";
 import HowItWorks from "./pages/HowItWorks";
@@ -84,6 +85,7 @@ const App = () => (
                 <Route path="/explore" element={<Explore />} />
                 <Route path="/destinations" element={<Destinations />} />
                 <Route path="/destination/:slug" element={<DestinationDetail />} />
+                <Route path="/guides" element={<Guides />} />
                 <Route path="/guides/:slug" element={<GuideDetail />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/how-it-works" element={<HowItWorks />} />

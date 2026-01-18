@@ -11,7 +11,7 @@ const footerLinks = {
   ],
   explore: [
     { label: 'Destinations', href: ROUTES.DESTINATIONS },
-    { label: 'Travel Guides', href: `${ROUTES.EXPLORE}#guides` },
+    { label: 'Travel Guides', href: ROUTES.GUIDES },
     { label: 'Travel Quiz', href: ROUTES.QUIZ },
   ],
   support: [

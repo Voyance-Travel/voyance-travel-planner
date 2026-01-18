@@ -7,8 +7,7 @@ import { Input } from '@/components/ui/input';
 import { useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Link } from 'react-router-dom';
-
-const CONTACT_EMAIL = 'hello@voyance.travel';
+import { CONTACT_CONFIG } from '@/config/contact';
 
 const faqCategories = [
   {
@@ -122,7 +121,7 @@ export default function FAQ() {
       />
       
       {/* Hero */}
-      <section className="pt-24 pb-12 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+      <section className="pt-32 pb-12 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
@@ -225,9 +224,9 @@ export default function FAQ() {
               <Link to="/contact">Contact Us</Link>
             </Button>
             <Button variant="outline" asChild>
-              <a href={`mailto:${CONTACT_EMAIL}`} className="gap-2">
+              <a href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`} className="gap-2">
                 <Mail className="h-4 w-4" />
-                {CONTACT_EMAIL}
+                {CONTACT_CONFIG.SUPPORT_EMAIL}
               </a>
             </Button>
           </div>

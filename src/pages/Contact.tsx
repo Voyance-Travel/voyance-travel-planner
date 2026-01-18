@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
+import { CONTACT_CONFIG } from "@/config/contact";
 const contactSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   email: z.string().email("Please enter a valid email"),
@@ -85,7 +85,7 @@ const Contact = () => {
 
       <div className="min-h-screen bg-background">
         {/* Hero Section */}
-        <section className="relative py-20 px-4 bg-gradient-to-b from-muted/50 to-background">
+        <section className="relative pt-32 pb-16 px-4 bg-gradient-to-b from-muted/50 to-background">
           <div className="container max-w-4xl mx-auto text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -232,11 +232,11 @@ const Contact = () => {
                 Prefer email? Reach us directly at:
               </p>
               <a
-                href="mailto:hello@voyance.travel"
+                href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`}
                 className="inline-flex items-center gap-2 text-primary hover:underline"
               >
                 <Mail className="w-4 h-4" />
-                hello@voyance.travel
+                {CONTACT_CONFIG.SUPPORT_EMAIL}
               </a>
             </motion.div>
           </div>

@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import { CONTACT_CONFIG } from '@/config/contact';
 
 // Backend base URL
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
