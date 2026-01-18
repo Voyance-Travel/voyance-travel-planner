@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { UserPlus, Mail, Users, Search, Check, X, Sparkles, Loader2 } from 'lucide-react';
+import { UserPlus, Mail, Users, Check, X, Sparkles, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { useUsersSearch, type UserSearchResult } from '@/services/usersSearchAPI';
+import { useFriends, type FriendWithProfile } from '@/services/supabase/friends';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface GuestLinkModalProps {
@@ -27,16 +27,6 @@ export interface LinkedGuest {
   isVoyanceUser?: boolean;
 }
 
-// Debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
-}
-
 export default function GuestLinkModal({
   open,
   onOpenChange,
@@ -44,24 +34,42 @@ export default function GuestLinkModal({
   currentTravelers,
   onGuestsConfirmed,
 }: GuestLinkModalProps) {
-  const [activeTab, setActiveTab] = useState<'invite' | 'search'>('invite');
+  const [activeTab, setActiveTab] = useState<'friends' | 'invite'>('friends');
   const [email, setEmail] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [isInviting, setIsInviting] = useState(false);
+
+  // Fetch approved friends
+  const { data: friendsData, isLoading: isLoadingFriends } = useFriends();
+  const friends = friendsData || [];
 
   // Calculate max guests allowed (travelers count minus 1 for the primary traveler)
   const maxLinkedGuests = Math.max(0, currentTravelers - 1);
   const remainingSlots = maxLinkedGuests - linkedGuests.length;
 
-  // Debounced search query for API
-  const debouncedSearch = useDebounce(searchQuery, 300);
-  const { data: searchResults, isLoading: isSearching } = useUsersSearch(debouncedSearch, open);
-
-  // Filter out already linked guests from search results
-  const filteredResults = (searchResults || []).filter(
-    (user) => !linkedGuests.some((g) => g.id === user.id)
+  // Filter out already linked friends
+  const availableFriends = friends.filter(
+    (f) => !linkedGuests.some((g) => g.id === f.friend.id)
   );
+
+  const handleSelectFriend = (friend: FriendWithProfile) => {
+    if (remainingSlots <= 0) {
+      toast.error(`Maximum ${maxLinkedGuests} additional travelers allowed`);
+      return;
+    }
+
+    const newGuest: LinkedGuest = {
+      id: friend.friend.id,
+      name: friend.friend.display_name || friend.friend.handle || 'Friend',
+      email: '', // Email not exposed for privacy
+      avatar: friend.friend.avatar_url || undefined,
+      preferencesMatch: Math.floor(Math.random() * 30) + 70, // TODO: Calculate from actual preferences
+      isVoyanceUser: true,
+    };
+
+    setLinkedGuests(prev => [...prev, newGuest]);
+    toast.success(`${newGuest.name} added to your trip`);
+  };
 
   const handleInviteByEmail = async () => {
     if (!email || !email.includes('@')) {
@@ -82,7 +90,7 @@ export default function GuestLinkModal({
 
     setIsInviting(true);
     
-    // TODO: In production, this would send an actual invite email
+    // TODO: In production, this would send an actual invite email via edge function
     await new Promise(resolve => setTimeout(resolve, 500));
     
     const newGuest: LinkedGuest = {
@@ -96,26 +104,6 @@ export default function GuestLinkModal({
     setEmail('');
     setIsInviting(false);
     toast.success(`Invitation will be sent to ${email}`);
-  };
-
-  const handleSelectUser = (user: UserSearchResult) => {
-    if (remainingSlots <= 0) {
-      toast.error(`Maximum ${maxLinkedGuests} additional travelers allowed`);
-      return;
-    }
-
-    const newGuest: LinkedGuest = {
-      id: user.id,
-      name: user.name,
-      email: user.email || '',
-      avatar: user.avatar,
-      preferencesMatch: Math.floor(Math.random() * 30) + 70, // TODO: Calculate from actual preferences
-      isVoyanceUser: true,
-    };
-
-    setLinkedGuests(prev => [...prev, newGuest]);
-    setSearchQuery('');
-    toast.success(`${user.name} linked to your trip`);
   };
 
   const handleRemoveGuest = (guestId: string) => {
@@ -136,7 +124,6 @@ export default function GuestLinkModal({
   // Reset state when modal closes
   useEffect(() => {
     if (!open) {
-      setSearchQuery('');
       setEmail('');
     }
   }, [open]);
@@ -150,7 +137,7 @@ export default function GuestLinkModal({
             Link Travel Companions
           </DialogTitle>
           <DialogDescription>
-            Invite {maxLinkedGuests > 0 ? `up to ${maxLinkedGuests}` : 'no'} additional traveler{maxLinkedGuests !== 1 ? 's' : ''} for your group of {currentTravelers}.
+            Add {maxLinkedGuests > 0 ? `up to ${maxLinkedGuests}` : 'no'} companion{maxLinkedGuests !== 1 ? 's' : ''} from your friends or invite by email.
           </DialogDescription>
         </DialogHeader>
 
@@ -178,7 +165,7 @@ export default function GuestLinkModal({
                       <div>
                         <p className="text-sm font-medium">{guest.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {guest.isVoyanceUser ? 'Voyance member' : guest.email}
+                          {guest.isVoyanceUser ? 'Voyance friend' : guest.email}
                         </p>
                       </div>
                     </div>
@@ -210,17 +197,68 @@ export default function GuestLinkModal({
               </p>
             </div>
           ) : remainingSlots > 0 ? (
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'invite' | 'search')}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'friends' | 'invite')}>
               <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="friends" className="gap-1.5">
+                  <Users className="h-4 w-4" />
+                  My Friends
+                </TabsTrigger>
                 <TabsTrigger value="invite" className="gap-1.5">
                   <Mail className="h-4 w-4" />
                   Invite by Email
                 </TabsTrigger>
-                <TabsTrigger value="search" className="gap-1.5">
-                  <Search className="h-4 w-4" />
-                  Search Voyance
-                </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="friends" className="space-y-3 pt-3">
+                <div className="border border-border rounded-lg overflow-hidden">
+                  {isLoadingFriends ? (
+                    <div className="h-40 flex items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : availableFriends.length > 0 ? (
+                    <div className="max-h-48 overflow-y-auto">
+                      {availableFriends.map((friendship) => (
+                        <button
+                          key={friendship.id}
+                          onClick={() => handleSelectFriend(friendship)}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors border-b border-border last:border-0"
+                        >
+                          <Avatar className="h-9 w-9">
+                            <AvatarImage src={friendship.friend.avatar_url || undefined} />
+                            <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                              {(friendship.friend.display_name || friendship.friend.handle || 'F').charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="text-left flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {friendship.friend.display_name || friendship.friend.handle || 'Friend'}
+                            </p>
+                            {friendship.friend.handle && (
+                              <p className="text-xs text-muted-foreground">@{friendship.friend.handle}</p>
+                            )}
+                          </div>
+                          <UserPlus className="h-4 w-4 text-primary flex-shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : friends.length === 0 ? (
+                    <div className="h-40 flex items-center justify-center">
+                      <div className="text-center text-muted-foreground px-4">
+                        <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm font-medium">No friends yet</p>
+                        <p className="text-xs mt-1">Add friends from your profile to invite them to trips</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-40 flex items-center justify-center">
+                      <div className="text-center text-muted-foreground">
+                        <Check className="h-8 w-8 mx-auto mb-2 text-primary opacity-70" />
+                        <p className="text-sm">All friends already added</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
 
               <TabsContent value="invite" className="space-y-3 pt-3">
                 <div className="flex gap-2">
@@ -237,62 +275,8 @@ export default function GuestLinkModal({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  They'll receive an email to join your trip. If they have a Voyance account, their preferences will be matched.
+                  They'll receive an email invitation to join your trip. If they create a Voyance account, their preferences will be matched automatically.
                 </p>
-              </TabsContent>
-
-              <TabsContent value="search" className="space-y-3 pt-3">
-                <Input
-                  placeholder="Search by name or handle..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <div className="border border-border rounded-lg overflow-hidden">
-                  {isSearching ? (
-                    <div className="h-32 flex items-center justify-center">
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : filteredResults.length > 0 ? (
-                    <div className="max-h-48 overflow-y-auto">
-                      {filteredResults.map((user) => (
-                        <button
-                          key={user.id}
-                          onClick={() => handleSelectUser(user)}
-                          className="w-full flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors border-b border-border last:border-0"
-                        >
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={user.avatar} />
-                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                              {user.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="text-left flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{user.name}</p>
-                            {user.username && (
-                              <p className="text-xs text-muted-foreground">@{user.username}</p>
-                            )}
-                          </div>
-                          <UserPlus className="h-4 w-4 text-primary flex-shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-                  ) : searchQuery.length >= 2 ? (
-                    <div className="h-32 flex items-center justify-center">
-                      <div className="text-center text-muted-foreground">
-                        <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No users found</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-32 flex items-center justify-center">
-                      <div className="text-center text-muted-foreground">
-                        <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">Search for Voyance users</p>
-                        <p className="text-xs">Type at least 2 characters</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </TabsContent>
             </Tabs>
           ) : (
