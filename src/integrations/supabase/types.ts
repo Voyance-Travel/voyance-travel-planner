@@ -209,6 +209,113 @@ export type Database = {
         }
         Relationships: []
       }
+      quiz_responses: {
+        Row: {
+          answer_value: string
+          created_at: string | null
+          display_label: string | null
+          field_id: string
+          field_type: string
+          id: string
+          question_prompt: string | null
+          quiz_version: string | null
+          response_order: number | null
+          session_id: string | null
+          step_id: string | null
+          user_id: string
+        }
+        Insert: {
+          answer_value: string
+          created_at?: string | null
+          display_label?: string | null
+          field_id: string
+          field_type: string
+          id?: string
+          question_prompt?: string | null
+          quiz_version?: string | null
+          response_order?: number | null
+          session_id?: string | null
+          step_id?: string | null
+          user_id: string
+        }
+        Update: {
+          answer_value?: string
+          created_at?: string | null
+          display_label?: string | null
+          field_id?: string
+          field_type?: string
+          id?: string
+          question_prompt?: string | null
+          quiz_version?: string | null
+          response_order?: number | null
+          session_id?: string | null
+          step_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_responses_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_sessions: {
+        Row: {
+          completed_at: string | null
+          completion_percentage: number | null
+          created_at: string | null
+          current_step: number | null
+          device_type: string | null
+          id: string
+          is_complete: boolean | null
+          last_activity_at: string | null
+          quiz_version: string
+          started_at: string | null
+          status: string | null
+          total_steps: number | null
+          updated_at: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completion_percentage?: number | null
+          created_at?: string | null
+          current_step?: number | null
+          device_type?: string | null
+          id?: string
+          is_complete?: boolean | null
+          last_activity_at?: string | null
+          quiz_version?: string
+          started_at?: string | null
+          status?: string | null
+          total_steps?: number | null
+          updated_at?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completion_percentage?: number | null
+          created_at?: string | null
+          current_step?: number | null
+          device_type?: string | null
+          id?: string
+          is_complete?: boolean | null
+          last_activity_at?: string | null
+          quiz_version?: string
+          started_at?: string | null
+          status?: string | null
+          total_steps?: number | null
+          updated_at?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       saved_items: {
         Row: {
           created_at: string
@@ -238,6 +345,97 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      travel_dna_history: {
+        Row: {
+          created_at: string | null
+          id: string
+          profile_snapshot: Json
+          quiz_session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          profile_snapshot: Json
+          quiz_session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          profile_snapshot?: Json
+          quiz_session_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_dna_history_quiz_session_id_fkey"
+            columns: ["quiz_session_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      travel_dna_profiles: {
+        Row: {
+          calculated_at: string | null
+          created_at: string | null
+          dna_confidence_score: number | null
+          dna_rarity: string | null
+          emotional_drivers: string[] | null
+          id: string
+          primary_archetype_name: string | null
+          secondary_archetype_name: string | null
+          session_id: string | null
+          summary: string | null
+          tone_tags: string[] | null
+          trait_scores: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          calculated_at?: string | null
+          created_at?: string | null
+          dna_confidence_score?: number | null
+          dna_rarity?: string | null
+          emotional_drivers?: string[] | null
+          id?: string
+          primary_archetype_name?: string | null
+          secondary_archetype_name?: string | null
+          session_id?: string | null
+          summary?: string | null
+          tone_tags?: string[] | null
+          trait_scores?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          calculated_at?: string | null
+          created_at?: string | null
+          dna_confidence_score?: number | null
+          dna_rarity?: string | null
+          emotional_drivers?: string[] | null
+          id?: string
+          primary_archetype_name?: string | null
+          secondary_archetype_name?: string | null
+          session_id?: string | null
+          summary?: string | null
+          tone_tags?: string[] | null
+          trait_scores?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_dna_profiles_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trip_collaborators: {
         Row: {
@@ -401,46 +599,169 @@ export type Database = {
       }
       user_preferences: {
         Row: {
+          accessibility_needs: string[] | null
           accommodation_style: string | null
+          activity_level: string | null
+          activity_weights: Json | null
+          airport_radius_miles: number | null
+          budget_range: Json | null
           budget_tier: string | null
+          climate_preferences: string[] | null
+          communication_style: string | null
+          completed_at: string | null
           created_at: string
+          daytime_bias: string | null
           dietary_restrictions: string[] | null
+          dining_style: string | null
+          direct_flights_only: boolean | null
+          downtime_ratio: string | null
+          eco_friendly: boolean | null
+          emotional_drivers: string[] | null
+          flight_preferences: Json | null
+          flight_time_preference: string | null
+          food_dislikes: string[] | null
+          food_likes: string[] | null
           home_airport: string | null
+          hotel_style: string | null
+          hotel_vs_flight: string | null
           id: string
           interests: string[] | null
+          loyalty_programs: string[] | null
+          mobility_level: string | null
           mobility_needs: string | null
+          personal_notes: string | null
+          planning_preference: string | null
           preferred_airlines: string[] | null
+          preferred_group_size: string | null
+          preferred_regions: string[] | null
+          primary_goal: string | null
+          quiz_completed: boolean | null
+          quiz_version: string | null
+          schedule_flexibility: string | null
+          seat_preference: string | null
+          sleep_schedule: string | null
+          travel_companions: string[] | null
+          travel_frequency: string | null
           travel_pace: string | null
+          travel_style: string | null
+          travel_vibes: string[] | null
+          traveler_type: string | null
+          trip_duration: string | null
+          trip_structure_preference: string | null
           updated_at: string
           user_id: string
+          vibe: string | null
+          weather_preferences: string[] | null
         }
         Insert: {
+          accessibility_needs?: string[] | null
           accommodation_style?: string | null
+          activity_level?: string | null
+          activity_weights?: Json | null
+          airport_radius_miles?: number | null
+          budget_range?: Json | null
           budget_tier?: string | null
+          climate_preferences?: string[] | null
+          communication_style?: string | null
+          completed_at?: string | null
           created_at?: string
+          daytime_bias?: string | null
           dietary_restrictions?: string[] | null
+          dining_style?: string | null
+          direct_flights_only?: boolean | null
+          downtime_ratio?: string | null
+          eco_friendly?: boolean | null
+          emotional_drivers?: string[] | null
+          flight_preferences?: Json | null
+          flight_time_preference?: string | null
+          food_dislikes?: string[] | null
+          food_likes?: string[] | null
           home_airport?: string | null
+          hotel_style?: string | null
+          hotel_vs_flight?: string | null
           id?: string
           interests?: string[] | null
+          loyalty_programs?: string[] | null
+          mobility_level?: string | null
           mobility_needs?: string | null
+          personal_notes?: string | null
+          planning_preference?: string | null
           preferred_airlines?: string[] | null
+          preferred_group_size?: string | null
+          preferred_regions?: string[] | null
+          primary_goal?: string | null
+          quiz_completed?: boolean | null
+          quiz_version?: string | null
+          schedule_flexibility?: string | null
+          seat_preference?: string | null
+          sleep_schedule?: string | null
+          travel_companions?: string[] | null
+          travel_frequency?: string | null
           travel_pace?: string | null
+          travel_style?: string | null
+          travel_vibes?: string[] | null
+          traveler_type?: string | null
+          trip_duration?: string | null
+          trip_structure_preference?: string | null
           updated_at?: string
           user_id: string
+          vibe?: string | null
+          weather_preferences?: string[] | null
         }
         Update: {
+          accessibility_needs?: string[] | null
           accommodation_style?: string | null
+          activity_level?: string | null
+          activity_weights?: Json | null
+          airport_radius_miles?: number | null
+          budget_range?: Json | null
           budget_tier?: string | null
+          climate_preferences?: string[] | null
+          communication_style?: string | null
+          completed_at?: string | null
           created_at?: string
+          daytime_bias?: string | null
           dietary_restrictions?: string[] | null
+          dining_style?: string | null
+          direct_flights_only?: boolean | null
+          downtime_ratio?: string | null
+          eco_friendly?: boolean | null
+          emotional_drivers?: string[] | null
+          flight_preferences?: Json | null
+          flight_time_preference?: string | null
+          food_dislikes?: string[] | null
+          food_likes?: string[] | null
           home_airport?: string | null
+          hotel_style?: string | null
+          hotel_vs_flight?: string | null
           id?: string
           interests?: string[] | null
+          loyalty_programs?: string[] | null
+          mobility_level?: string | null
           mobility_needs?: string | null
+          personal_notes?: string | null
+          planning_preference?: string | null
           preferred_airlines?: string[] | null
+          preferred_group_size?: string | null
+          preferred_regions?: string[] | null
+          primary_goal?: string | null
+          quiz_completed?: boolean | null
+          quiz_version?: string | null
+          schedule_flexibility?: string | null
+          seat_preference?: string | null
+          sleep_schedule?: string | null
+          travel_companions?: string[] | null
+          travel_frequency?: string | null
           travel_pace?: string | null
+          travel_style?: string | null
+          travel_vibes?: string[] | null
+          traveler_type?: string | null
+          trip_duration?: string | null
+          trip_structure_preference?: string | null
           updated_at?: string
           user_id?: string
+          vibe?: string | null
+          weather_preferences?: string[] | null
         }
         Relationships: []
       }

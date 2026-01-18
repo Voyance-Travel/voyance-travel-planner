@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
@@ -10,6 +10,13 @@ import { QuizOption } from '@/components/quiz/QuizOption';
 import { QuizCompletion } from '@/components/quiz/QuizCompletion';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { 
+  submitQuizComplete, 
+  createQuizSession, 
+  updateQuizSession,
+  saveQuizResponse,
+  type TravelDNAPayload 
+} from '@/utils/quizMapping';
 
 const questions = [
   {
@@ -80,21 +87,68 @@ export default function Quiz() {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [isComplete, setIsComplete] = useState(false);
-  const { setPreferences } = useAuth();
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [travelDNA, setTravelDNA] = useState<TravelDNAPayload | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user, setPreferences } = useAuth();
   const navigate = useNavigate();
 
   const question = questions[currentStep];
   const stepTitles = questions.map(q => q.shortTitle);
 
-  const handleSelect = (value: string) => {
+  // Initialize quiz session when user is available
+  useEffect(() => {
+    const initSession = async () => {
+      if (user && !sessionId) {
+        const newSessionId = await createQuizSession({
+          userId: user.id,
+          quizVersion: 'v3',
+          currentStep: 1,
+          totalSteps: questions.length,
+          completionPercentage: 0,
+          status: 'in_progress',
+          userAgent: navigator.userAgent,
+          deviceType: /Mobile|Android|iPhone/.test(navigator.userAgent) ? 'mobile' : 'desktop',
+        });
+        setSessionId(newSessionId);
+      }
+    };
+    initSession();
+  }, [user, sessionId]);
+
+  const handleSelect = async (value: string) => {
+    let newAnswers: Record<string, string | string[]>;
+    
     if (question.multiSelect) {
       const current = (answers[question.id] as string[]) || [];
       const newValue = current.includes(value)
         ? current.filter(v => v !== value)
         : [...current, value];
-      setAnswers({ ...answers, [question.id]: newValue });
+      newAnswers = { ...answers, [question.id]: newValue };
     } else {
-      setAnswers({ ...answers, [question.id]: value });
+      newAnswers = { ...answers, [question.id]: value };
+    }
+    
+    setAnswers(newAnswers);
+
+    // Save response to database in background
+    if (user) {
+      const responseValue = question.multiSelect 
+        ? (newAnswers[question.id] as string[])
+        : value;
+      
+      saveQuizResponse(
+        user.id,
+        sessionId,
+        {
+          questionId: question.id,
+          value: responseValue,
+          displayLabel: question.options.find(o => o.value === value)?.label,
+          stepId: `step-${currentStep + 1}`,
+          questionPrompt: question.title,
+        },
+        currentStep + 1
+      );
     }
   };
 
@@ -116,10 +170,29 @@ export default function Quiz() {
 
   const handleNext = async () => {
     if (currentStep < questions.length - 1) {
-      setCurrentStep(currentStep + 1);
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
+      
+      // Update session progress
+      if (sessionId) {
+        updateQuizSession(sessionId, {
+          currentStep: nextStep + 1,
+          completionPercentage: Math.round(((nextStep + 1) / questions.length) * 100),
+        });
+      }
     } else {
-      // Complete quiz - save to Neon
+      // Complete quiz - save to database using new mapping layer
+      setIsSubmitting(true);
       try {
+        if (user) {
+          const result = await submitQuizComplete(user.id, answers, sessionId);
+          
+          if (result.success) {
+            setTravelDNA(result.dna);
+          }
+        }
+        
+        // Also save to legacy auth context for backward compatibility
         await setPreferences({
           style: answers.style as string,
           budget: answers.budget as string,
@@ -127,11 +200,14 @@ export default function Quiz() {
           interests: answers.interests as string[],
           accommodation: answers.accommodation as string,
         });
+        
         setIsComplete(true);
       } catch (error) {
         console.error('Failed to save preferences:', error);
         // Still show completion even if save failed
         setIsComplete(true);
+      } finally {
+        setIsSubmitting(false);
       }
     }
   };
@@ -247,11 +323,20 @@ export default function Quiz() {
                   </Button>
                   <Button
                     onClick={handleNext}
-                    disabled={!canProceed()}
+                    disabled={!canProceed() || isSubmitting}
                     className="gap-2 h-12 px-8 bg-primary hover:bg-primary/90"
                   >
-                    {currentStep === questions.length - 1 ? 'Complete' : 'Continue'}
-                    <ArrowRight className="h-4 w-4" />
+                    {isSubmitting ? (
+                      <>
+                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        {currentStep === questions.length - 1 ? 'Complete' : 'Continue'}
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
                   </Button>
                 </div>
               </motion.div>
