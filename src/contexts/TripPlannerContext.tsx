@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { tripsAPI, itineraryAPI } from '@/services/voyanceAPI';
+import { getTrips, getTrip, createTrip, updateTrip } from '@/services/voyanceAPI';
 import { useAuth } from './AuthContext';
 
 // Anonymous session management

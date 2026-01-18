@@ -1,20 +1,11 @@
 /**
  * Voyance Profile API Service
  * 
- * Integrates with Railway backend profile endpoints:
- * - GET /api/user/profile - Full user profile with preferences
- * - PUT /api/user/profile - Update user profile
- * - PATCH /api/user/profile/:field - Update single profile field
- * - GET /api/profile-stable - Stable profile (anti-flicker)
- * - GET /api/user/profile-lite - Lightweight profile
- * - GET /api/user/travel-dna-details - Detailed Travel DNA
- * - GET /v1/profile - Profile data for trip defaults
+ * All profile operations go through Supabase directly.
  */
 
+import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // Types
@@ -91,294 +82,145 @@ export interface ProfileResponse {
     code: string;
     message: string;
   };
-  _warning?: string;
-  session?: {
-    userId: string;
-    email: string;
-    provider?: string;
-    timestamp: string;
-  };
-}
-
-export interface ProfileLite {
-  id: string;
-  email: string;
-  name?: string;
-  display_name?: string;
-  handle?: string;
-  avatarUrl?: string;
-  hasCompletedQuiz: boolean;
-  quizCompletedAt?: string;
-  travelDNA?: {
-    type: string;
-    secondary?: string;
-    confidence?: number;
-    rarity?: string;
-    preferences?: TravelDNAPreferences;
-  } | null;
-  memberSince?: string;
-}
-
-export interface ProfileLiteResponse {
-  success: boolean;
-  profile?: ProfileLite;
-  error?: string;
-  code?: string;
-}
-
-export interface TravelDNADetails {
-  archetype: {
-    primary: string;
-    secondary?: string;
-    confidence?: number;
-    rarity?: string;
-  };
-  personality: {
-    emotionalDrivers?: string[];
-    travelerType?: string;
-    activityLevel?: string;
-    interests?: Record<string, unknown>;
-  };
-  preferences: {
-    pace?: string;
-    budget?: string;
-    planning?: string;
-    accommodation?: string;
-  };
-  traits?: Record<string, number>;
-  primaryGoal?: string;
-  identityClass?: string;
-  calculatedAt?: string;
-}
-
-export interface TravelDNADetailsResponse {
-  success: boolean;
-  travelDNA?: TravelDNADetails;
-  error?: string;
-  code?: string;
-}
-
-export interface ProfileUpdateInput {
-  name?: string;
-  handle?: string;
-  profileImage?: string;
-  bio?: string;
-}
-
-export interface ProfileUpdateResponse {
-  success: boolean;
-  profile?: UserProfile;
-  message?: string;
-  error?: string;
-  code?: string;
-}
-
-export interface ProfileFieldUpdateInput {
-  value: string | boolean | string[] | number;
-}
-
-export interface ProfileDataResponse {
-  defaultOriginCity?: string;
-  homeAirportIata?: string;
-}
-
-export interface SessionVerifyResponse {
-  valid: boolean;
-  userId?: string;
-  email?: string;
-  timestamp: string;
 }
 
 // ============================================================================
-// API Helpers
+// API Functions
 // ============================================================================
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  return { 'Content-Type': 'application/json' };
-}
-
-async function profileApiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
-
-// ============================================================================
-// Profile API
-// ============================================================================
-
-/**
- * Get full user profile with preferences and Travel DNA
- */
 export async function getProfile(): Promise<ProfileResponse> {
   try {
-    const response = await profileApiRequest<ProfileResponse>('/api/user/profile');
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Get profile error:', error);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return { success: true, authenticated: false, profile: null };
+    }
+    
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      return {
+        success: false,
+        authenticated: true,
+        profile: null,
+        error: { code: 'FETCH_ERROR', message: error.message },
+      };
+    }
+    
+    // Get preferences
+    const { data: preferences } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+    
+    const userProfile: UserProfile = {
+      id: user.id,
+      email: user.email || '',
+      name: profile?.display_name || user.user_metadata?.name,
+      display_name: profile?.display_name,
+      avatarUrl: profile?.avatar_url,
+      bio: profile?.bio,
+      handle: profile?.handle,
+      quizCompleted: profile?.quiz_completed ?? false,
+      travelDNA: profile?.travel_dna as TravelDNA | null,
+      createdAt: profile?.created_at || user.created_at,
+      preferences: preferences ? {
+        id: preferences.id,
+        userId: preferences.user_id,
+        budget: preferences.budget_tier || undefined,
+        travelStyle: preferences.travel_style || undefined,
+        pace: preferences.travel_pace || undefined,
+        hotelStyle: preferences.hotel_style || undefined,
+        vibe: preferences.vibe || undefined,
+        climate: preferences.climate_preferences || undefined,
+        preferredRegions: preferences.preferred_regions || undefined,
+        dietaryRestrictions: preferences.dietary_restrictions || undefined,
+        tripDuration: preferences.trip_duration || undefined,
+        ecoFriendly: preferences.eco_friendly ?? undefined,
+      } : null,
+    };
+    
+    return { success: true, authenticated: true, profile: userProfile };
+  } catch (err) {
     return {
       success: false,
       authenticated: false,
       profile: null,
-      error: {
-        code: 'FETCH_ERROR',
-        message: error instanceof Error ? error.message : 'Failed to fetch profile',
-      },
+      error: { code: 'NETWORK_ERROR', message: err instanceof Error ? err.message : 'Failed to fetch profile' },
     };
   }
 }
 
-/**
- * Get stable profile (anti-flicker endpoint)
- */
-export async function getStableProfile(): Promise<ProfileResponse> {
+export async function updateProfile(updates: {
+  displayName?: string;
+  bio?: string;
+  handle?: string;
+  avatarUrl?: string;
+  homeAirport?: string;
+}): Promise<ProfileResponse> {
   try {
-    const response = await profileApiRequest<ProfileResponse>('/api/profile-stable');
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Get stable profile error:', error);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, authenticated: false, profile: null, error: { code: 'NOT_AUTH', message: 'Not authenticated' } };
+    }
+    
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.displayName !== undefined) dbUpdates.display_name = updates.displayName;
+    if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
+    if (updates.handle !== undefined) dbUpdates.handle = updates.handle;
+    if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
+    if (updates.homeAirport !== undefined) dbUpdates.home_airport = updates.homeAirport;
+    
+    const { error } = await supabase
+      .from('profiles')
+      .update(dbUpdates)
+      .eq('id', user.id);
+    
+    if (error) {
+      return { success: false, authenticated: true, profile: null, error: { code: 'UPDATE_FAILED', message: error.message } };
+    }
+    
+    return getProfile();
+  } catch (err) {
     return {
       success: false,
       authenticated: false,
       profile: null,
-      error: {
-        code: 'FETCH_ERROR',
-        message: error instanceof Error ? error.message : 'Failed to fetch stable profile',
-      },
+      error: { code: 'NETWORK_ERROR', message: err instanceof Error ? err.message : 'Failed to update profile' },
     };
   }
 }
 
-/**
- * Get lightweight profile (faster loading)
- */
-export async function getProfileLite(): Promise<ProfileLiteResponse> {
+export async function updatePreferences(preferences: Partial<UserPreferences>): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await profileApiRequest<ProfileLiteResponse>('/api/user/profile-lite');
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Get profile lite error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch profile',
-      code: 'FETCH_ERROR',
-    };
-  }
-}
-
-/**
- * Get detailed Travel DNA information
- */
-export async function getTravelDNADetails(): Promise<TravelDNADetailsResponse> {
-  try {
-    const response = await profileApiRequest<TravelDNADetailsResponse>('/api/user/travel-dna-details');
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Get travel DNA details error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch Travel DNA details',
-      code: 'FETCH_ERROR',
-    };
-  }
-}
-
-/**
- * Get profile data for trip defaults (origin city, home airport)
- */
-export async function getProfileData(): Promise<ProfileDataResponse> {
-  try {
-    const response = await profileApiRequest<ProfileDataResponse>('/v1/profile');
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Get profile data error:', error);
-    return {
-      defaultOriginCity: '',
-      homeAirportIata: undefined,
-    };
-  }
-}
-
-/**
- * Update user profile
- */
-export async function updateProfile(data: ProfileUpdateInput): Promise<ProfileUpdateResponse> {
-  try {
-    const response = await profileApiRequest<ProfileUpdateResponse>('/api/user/profile', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Update profile error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update profile',
-      code: 'UPDATE_ERROR',
-    };
-  }
-}
-
-/**
- * Update a single profile field
- */
-export async function updateProfileField(
-  field: string,
-  input: ProfileFieldUpdateInput
-): Promise<ProfileUpdateResponse> {
-  try {
-    const response = await profileApiRequest<ProfileUpdateResponse>(`/api/user/profile/${field}`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Update profile field error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update profile field',
-      code: 'UPDATE_ERROR',
-    };
-  }
-}
-
-/**
- * Verify session is valid
- */
-export async function verifySession(): Promise<SessionVerifyResponse> {
-  try {
-    const response = await profileApiRequest<SessionVerifyResponse>('/api/verify-session');
-    return response;
-  } catch (error) {
-    console.error('[ProfileAPI] Verify session error:', error);
-    return {
-      valid: false,
-      timestamp: new Date().toISOString(),
-    };
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+    
+    const dbUpdates: Record<string, unknown> = { user_id: user.id };
+    if (preferences.budget !== undefined) dbUpdates.budget_tier = preferences.budget;
+    if (preferences.travelStyle !== undefined) dbUpdates.travel_style = preferences.travelStyle;
+    if (preferences.pace !== undefined) dbUpdates.travel_pace = preferences.pace;
+    if (preferences.hotelStyle !== undefined) dbUpdates.hotel_style = preferences.hotelStyle;
+    if (preferences.vibe !== undefined) dbUpdates.vibe = preferences.vibe;
+    if (preferences.climate !== undefined) dbUpdates.climate_preferences = preferences.climate;
+    if (preferences.preferredRegions !== undefined) dbUpdates.preferred_regions = preferences.preferredRegions;
+    if (preferences.dietaryRestrictions !== undefined) dbUpdates.dietary_restrictions = preferences.dietaryRestrictions;
+    if (preferences.tripDuration !== undefined) dbUpdates.trip_duration = preferences.tripDuration;
+    if (preferences.ecoFriendly !== undefined) dbUpdates.eco_friendly = preferences.ecoFriendly;
+    
+    const { error } = await supabase
+      .from('user_preferences')
+      .upsert(dbUpdates, { onConflict: 'user_id' });
+    
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update preferences' };
   }
 }
 
@@ -386,66 +228,11 @@ export async function verifySession(): Promise<SessionVerifyResponse> {
 // React Query Hooks
 // ============================================================================
 
-const profileKeys = {
-  all: ['profile'] as const,
-  profile: () => [...profileKeys.all, 'full'] as const,
-  stable: () => [...profileKeys.all, 'stable'] as const,
-  lite: () => [...profileKeys.all, 'lite'] as const,
-  travelDNA: () => [...profileKeys.all, 'travel-dna'] as const,
-  data: () => [...profileKeys.all, 'data'] as const,
-  session: () => [...profileKeys.all, 'session'] as const,
-};
-
 export function useProfile() {
   return useQuery({
-    queryKey: profileKeys.profile(),
+    queryKey: ['profile'],
     queryFn: getProfile,
-    staleTime: 5 * 60_000, // 5 minutes
-    gcTime: 30 * 60_000, // 30 minutes
-  });
-}
-
-export function useStableProfile() {
-  return useQuery({
-    queryKey: profileKeys.stable(),
-    queryFn: getStableProfile,
-    staleTime: 30_000, // 30 seconds - more aggressive caching to prevent flicker
-    gcTime: 5 * 60_000,
-    retry: 1,
-    retryDelay: 1000,
-  });
-}
-
-export function useProfileLite() {
-  return useQuery({
-    queryKey: profileKeys.lite(),
-    queryFn: getProfileLite,
-    staleTime: 2 * 60_000, // 2 minutes
-  });
-}
-
-export function useTravelDNADetails() {
-  return useQuery({
-    queryKey: profileKeys.travelDNA(),
-    queryFn: getTravelDNADetails,
-    staleTime: 5 * 60_000,
-  });
-}
-
-export function useProfileData() {
-  return useQuery({
-    queryKey: profileKeys.data(),
-    queryFn: getProfileData,
-    staleTime: 10 * 60_000, // 10 minutes - this data changes infrequently
-  });
-}
-
-export function useVerifySession() {
-  return useQuery({
-    queryKey: profileKeys.session(),
-    queryFn: verifySession,
-    staleTime: 30_000, // 30 seconds
-    refetchInterval: 60_000, // Check every minute
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
@@ -455,31 +242,31 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: updateProfile,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: profileKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
     },
   });
 }
 
-export function useUpdateProfileField() {
+export function useUpdatePreferences() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: ({ field, input }: { field: string; input: ProfileFieldUpdateInput }) =>
-      updateProfileField(field, input),
+    mutationFn: updatePreferences,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: profileKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+      queryClient.invalidateQueries({ queryKey: ['preferences'] });
     },
   });
 }
 
-// Default export
-export default {
+// ============================================================================
+// Default Export
+// ============================================================================
+
+const profileAPI = {
   getProfile,
-  getStableProfile,
-  getProfileLite,
-  getTravelDNADetails,
-  getProfileData,
   updateProfile,
-  updateProfileField,
-  verifySession,
+  updatePreferences,
 };
+
+export default profileAPI;

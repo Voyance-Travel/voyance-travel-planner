@@ -1,24 +1,15 @@
 /**
- * Voyance Backend API Client
- * Base URL: https://voyance-backend.railway.app
- * Contract Version: v1 (schemaVersion: "v1")
+ * Voyance API Client
  * 
- * Related services:
- * - voyanceAuth.ts - Authentication (signup, login, Google OAuth)
- * - quizAPI.ts - Quiz flow and Travel DNA
+ * All backend calls now go through Supabase (direct queries or Edge Functions).
+ * This file provides backward-compatible exports for existing code.
  */
+
+import { supabase } from '@/integrations/supabase/client';
 
 // Re-export auth and quiz APIs for convenience
 export { default as voyanceAuth } from './voyanceAuth';
 export { default as quizAPI } from './quizAPI';
-
-import { supabase } from '@/integrations/supabase/client';
-
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
-
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'https://voyance-backend.railway.app';
 
 // =============================================================================
 // TYPES - Backend Contract Types
@@ -99,500 +90,295 @@ export interface BackendTrip {
   // Metadata
   metadata?: Record<string, unknown>;
   
-  // References
-  itineraryId?: string;
-  source?: string;
-  quizSessionId?: string;
-  
   // Timestamps
   createdAt: string;
   updatedAt: string;
-  bookedAt?: string;
-  completedAt?: string;
-  cancelledAt?: string;
 }
 
-export interface CreateTripRequest {
-  name: string;
-  destination: string;
-  startDate?: string;
-  endDate?: string;
-  totalDays?: number;
-  travelers?: number;
-  budgetRange?: BudgetPreference;
-  emotionalTags?: string[];
-  tripType?: string;
-  departureCity?: string;
-  description?: string;
-  notes?: string;
-  specialRequests?: string;
-  metadata?: Record<string, unknown>;
-}
+// =============================================================================
+// API FUNCTIONS - All use Supabase directly
+// =============================================================================
 
-export interface UpdateTripRequest {
-  name?: string;
-  destination?: string;
-  startDate?: string;
-  endDate?: string;
-  totalDays?: number;
-  travelers?: number;
-  budgetRange?: BudgetPreference;
-  emotionalTags?: string[];
-  tripType?: string;
-  departureCity?: string;
-  description?: string;
-  notes?: string;
-  specialRequests?: string;
-  status?: TripStatus;
-  metadata?: Record<string, unknown>;
-}
-
-export interface ListTripsParams {
-  status?: TripStatus;
+/**
+ * Get user's trips from Supabase
+ */
+export async function getTrips(params?: {
+  status?: string;
   limit?: number;
   offset?: number;
-  sortBy?: 'startDate' | 'createdAt' | 'updatedAt' | 'name';
-  sortOrder?: 'asc' | 'desc';
-}
-
-// Itinerary Types
-export type ItineraryStatus = 'not_started' | 'queued' | 'running' | 'ready' | 'failed' | 'empty';
-
-export interface ItineraryActivity {
-  id: string;
-  name: string;
-  description?: string;
-  category?: string;
-  duration?: string;
-  durationMinutes?: number;
-  startTime?: string;
-  endTime?: string;
-  location?: {
-    name?: string;
-    address?: string;
-    lat?: number;
-    lng?: number;
-  };
-  cost?: {
-    amount?: number;
-    currency?: string;
-  };
-  imageUrl?: string;
-  bookingUrl?: string;
-  tips?: string[];
-  isBooked?: boolean;
-  isLocked?: boolean;
-}
-
-export interface ItineraryDay {
-  dayNumber: number;
-  date: string;
-  title?: string;
-  theme?: string;
-  description?: string;
-  activities: ItineraryActivity[];
-  totalEstimatedCost?: number;
-  mealsIncluded?: number;
-  pacingLevel?: PacePreference;
-}
-
-export interface ItineraryOverview {
-  budgetBreakdown?: {
-    accommodation?: number;
-    food?: number;
-    activities?: number;
-    transportation?: number;
-    total?: number;
-    currency?: string;
-  };
-  highlights?: string[];
-  localTips?: string[];
-  transportationTips?: string[];
-}
-
-export interface ItineraryResponse {
-  success: boolean;
-  status: ItineraryStatus;
-  schemaVersion: string;
-  tripId: string;
-  destination: string;
-  title: string;
-  totalDays: number;
-  itineraryId?: string;
+}): Promise<{ trips: BackendTrip[]; total: number }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
   
-  // Days array at ROOT level (not nested!)
-  days?: ItineraryDay[];
+  let query = supabase
+    .from('trips')
+    .select('*', { count: 'exact' })
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
   
-  // Generation progress
-  progress?: number;
-  percentComplete?: number;
-  message?: string;
-  
-  // Metadata
-  generatedAt?: string;
-  lastModified?: string;
-  preferences?: Partial<UserPreferences>;
-  metadata?: {
-    correlationId?: string;
-    jobId?: string;
-    aiModel?: string;
-    version?: string;
-  };
-  overview?: ItineraryOverview;
-  
-  // Flags
-  preventedRegeneration?: boolean;
-  hasItinerary?: boolean;
-  
-  // Error info
-  error?: string;
-}
-
-// API Response Types
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-export interface PaginatedResponse<T> {
-  success: boolean;
-  data: T[];
-  pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-  };
-}
-
-// =============================================================================
-// API CLIENT
-// =============================================================================
-
-async function getAuthToken(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token || null;
-}
-
-async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = await getAuthToken();
-  
-  if (!token) {
-    throw new Error('Authentication required. Please sign in.');
+  if (params?.status) {
+    query = query.eq('status', params.status);
   }
   
-  const url = `${API_BASE_URL}${endpoint}`;
-  
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-  
-  const result = await response.json();
-  
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('Session expired. Please sign in again.');
-    }
-    if (response.status === 404) {
-      throw new Error('Resource not found.');
-    }
-    throw new Error(result.error || result.message || `Request failed: ${response.status}`);
+  if (params?.limit) {
+    query = query.limit(params.limit);
   }
   
-  return result;
+  if (params?.offset) {
+    query = query.range(params.offset, params.offset + (params.limit || 10) - 1);
+  }
+  
+  const { data, error, count } = await query;
+  
+  if (error) throw new Error(error.message);
+  
+  // Transform to BackendTrip format
+  const trips: BackendTrip[] = (data || []).map(trip => ({
+    id: trip.id,
+    userId: trip.user_id,
+    name: trip.name,
+    destination: trip.destination,
+    status: trip.status as TripStatus,
+    tripType: trip.trip_type || undefined,
+    startDate: trip.start_date,
+    endDate: trip.end_date,
+    travelers: trip.travelers || undefined,
+    budgetRange: trip.budget_tier as BudgetPreference | undefined,
+    departureCity: trip.origin_city || undefined,
+    metadata: trip.metadata as Record<string, unknown> | undefined,
+    createdAt: trip.created_at,
+    updatedAt: trip.updated_at,
+  }));
+  
+  return { trips, total: count || 0 };
 }
 
-// =============================================================================
-// TRIPS API
-// =============================================================================
-
-export const tripsAPI = {
-  /**
-   * Create a new trip
-   */
-  async create(trip: CreateTripRequest): Promise<BackendTrip> {
-    const response = await apiRequest<ApiResponse<BackendTrip>>('/api/v1/trips', {
-      method: 'POST',
-      body: JSON.stringify(trip),
-    });
-    
-    if (!response.success || !response.data) {
-      throw new Error(response.error || 'Failed to create trip');
-    }
-    
-    return response.data;
-  },
+/**
+ * Get single trip by ID
+ */
+export async function getTrip(tripId: string): Promise<BackendTrip> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
   
-  /**
-   * List all trips for current user
-   */
-  async list(params: ListTripsParams = {}): Promise<{ trips: BackendTrip[]; pagination: { total: number; limit: number; offset: number } }> {
-    const queryParams = new URLSearchParams();
-    if (params.status) queryParams.set('status', params.status);
-    if (params.limit) queryParams.set('limit', params.limit.toString());
-    if (params.offset) queryParams.set('offset', params.offset.toString());
-    if (params.sortBy) queryParams.set('sortBy', params.sortBy);
-    if (params.sortOrder) queryParams.set('sortOrder', params.sortOrder);
-    
-    const queryString = queryParams.toString();
-    const endpoint = `/api/v1/trips${queryString ? `?${queryString}` : ''}`;
-    
-    const response = await apiRequest<PaginatedResponse<BackendTrip>>(endpoint);
-    
-    return {
-      trips: response.data,
-      pagination: response.pagination,
-    };
-  },
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .eq('user_id', user.id)
+    .single();
   
-  /**
-   * Get a single trip by ID
-   */
-  async get(tripId: string): Promise<BackendTrip> {
-    const response = await apiRequest<ApiResponse<BackendTrip>>(`/api/v1/trips/${tripId}`);
-    
-    if (!response.success || !response.data) {
-      throw new Error(response.error || 'Trip not found');
-    }
-    
-    return response.data;
-  },
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Trip not found');
   
-  /**
-   * Update an existing trip
-   */
-  async update(tripId: string, updates: UpdateTripRequest): Promise<BackendTrip> {
-    const response = await apiRequest<ApiResponse<BackendTrip>>(`/api/v1/trips/${tripId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(updates),
-    });
-    
-    if (!response.success || !response.data) {
-      throw new Error(response.error || 'Failed to update trip');
-    }
-    
-    return response.data;
-  },
-  
-  /**
-   * Delete a trip
-   */
-  async delete(tripId: string): Promise<void> {
-    const response = await apiRequest<ApiResponse<null>>(`/api/v1/trips/${tripId}`, {
-      method: 'DELETE',
-    });
-    
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to delete trip');
-    }
-  },
-};
-
-// =============================================================================
-// ITINERARY API
-// =============================================================================
-
-export const itineraryAPI = {
-  /**
-   * Generate itinerary or return existing one
-   * Returns 200 if exists, 202 if queued for generation
-   */
-  async generateNow(tripId: string, force = false): Promise<ItineraryResponse> {
-    const endpoint = `/api/v1/trips/${tripId}/itinerary/generate-now${force ? '?force=true' : ''}`;
-    
-    const response = await apiRequest<ItineraryResponse>(endpoint, {
-      method: 'POST',
-    });
-    
-    // Validate schemaVersion
-    if (response.schemaVersion !== 'v1') {
-      console.warn(`Unexpected schemaVersion: ${response.schemaVersion}`);
-    }
-    
-    return response;
-  },
-  
-  /**
-   * Get current itinerary or generation status
-   * Poll this endpoint every 3-5 seconds when status is 'queued' or 'running'
-   */
-  async get(tripId: string): Promise<ItineraryResponse> {
-    const response = await apiRequest<ItineraryResponse>(`/api/v1/trips/${tripId}/itinerary`);
-    
-    // Validate schemaVersion
-    if (response.schemaVersion !== 'v1') {
-      console.warn(`Unexpected schemaVersion: ${response.schemaVersion}`);
-    }
-    
-    return response;
-  },
-  
-  /**
-   * Poll for itinerary generation completion
-   * Returns when status is 'ready' or 'failed'
-   */
-  async pollUntilReady(
-    tripId: string,
-    options: {
-      pollIntervalMs?: number;
-      timeoutMs?: number;
-      onProgress?: (response: ItineraryResponse) => void;
-    } = {}
-  ): Promise<ItineraryResponse> {
-    // Increase default polling interval to 5 seconds (was 3)
-    const { pollIntervalMs = 5000, timeoutMs = 300000, onProgress } = options;
-    
-    return new Promise((resolve, reject) => {
-      const startTime = Date.now();
-      let currentInterval = pollIntervalMs;
-      let consecutiveErrors = 0;
-      
-      const poll = async () => {
-        try {
-          const response = await this.get(tripId);
-          
-          // Reset on success
-          consecutiveErrors = 0;
-          currentInterval = pollIntervalMs;
-          
-          if (onProgress) {
-            onProgress(response);
-          }
-          
-          if (response.status === 'ready') {
-            resolve(response);
-            return;
-          }
-          
-          if (response.status === 'failed') {
-            reject(new Error(response.error || 'Itinerary generation failed'));
-            return;
-          }
-          
-          if (Date.now() - startTime > timeoutMs) {
-            reject(new Error('Itinerary generation timed out'));
-            return;
-          }
-          
-          // Continue polling for 'queued', 'running', 'not_started'
-          setTimeout(poll, currentInterval);
-        } catch (error) {
-          // Exponential backoff on errors
-          consecutiveErrors++;
-          currentInterval = Math.min(pollIntervalMs * Math.pow(2, consecutiveErrors), 60000);
-          console.log(`[VoyanceAPI] Poll error, backoff to ${currentInterval}ms (attempt ${consecutiveErrors})`);
-          
-          // Give up after too many errors
-          if (consecutiveErrors > 10) {
-            reject(error);
-            return;
-          }
-          
-          setTimeout(poll, currentInterval);
-        }
-      };
-      
-      poll();
-    });
-  },
-};
-
-// =============================================================================
-// USER PREFERENCES API
-// =============================================================================
-
-export const preferencesAPI = {
-  /**
-   * Get user preferences
-   */
-  async get(): Promise<UserPreferences> {
-    try {
-      const response = await apiRequest<ApiResponse<UserPreferences>>('/api/v1/user/preferences');
-      
-      if (response.success && response.data) {
-        return response.data;
-      }
-      
-      // Return defaults if not set
-      return getDefaultPreferences();
-    } catch (error) {
-      console.warn('Failed to fetch preferences, using defaults:', error);
-      return getDefaultPreferences();
-    }
-  },
-  
-  /**
-   * Create or update user preferences
-   */
-  async save(preferences: Partial<Omit<UserPreferences, 'userId' | 'createdAt' | 'updatedAt'>>): Promise<UserPreferences> {
-    const response = await apiRequest<ApiResponse<UserPreferences>>('/api/v1/user/preferences', {
-      method: 'POST',
-      body: JSON.stringify(preferences),
-    });
-    
-    if (!response.success || !response.data) {
-      throw new Error(response.error || 'Failed to save preferences');
-    }
-    
-    return response.data;
-  },
-};
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-export function getDefaultPreferences(): UserPreferences {
   return {
-    userId: '',
-    budget: 'moderate',
-    pace: 'balanced',
-    style: 'mixed',
-    comfort: 'standard',
-    planning: 'flexible',
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    destination: data.destination,
+    status: data.status as TripStatus,
+    tripType: data.trip_type || undefined,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    travelers: data.travelers || undefined,
+    budgetRange: data.budget_tier as BudgetPreference | undefined,
+    departureCity: data.origin_city || undefined,
+    metadata: data.metadata as Record<string, unknown> | undefined,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
   };
 }
 
 /**
- * Check if user is authenticated with backend
+ * Create a new trip
  */
-export async function isAuthenticated(): Promise<boolean> {
-  const token = await getAuthToken();
-  return !!token;
+export async function createTrip(input: {
+  name: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  tripType?: string;
+  travelers?: number;
+  originCity?: string;
+  budgetTier?: string;
+}): Promise<BackendTrip> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const { data, error } = await supabase
+    .from('trips')
+    .insert({
+      user_id: user.id,
+      name: input.name,
+      destination: input.destination,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      trip_type: input.tripType,
+      travelers: input.travelers,
+      origin_city: input.originCity,
+      budget_tier: input.budgetTier,
+      status: 'draft',
+    })
+    .select()
+    .single();
+  
+  if (error) throw new Error(error.message);
+  
+  return {
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    destination: data.destination,
+    status: data.status as TripStatus,
+    tripType: data.trip_type || undefined,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    travelers: data.travelers || undefined,
+    budgetRange: data.budget_tier as BudgetPreference | undefined,
+    departureCity: data.origin_city || undefined,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
 }
 
 /**
- * Health check for backend
+ * Update a trip
  */
-export async function healthCheck(): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/health`);
-    return response.ok;
-  } catch {
-    return false;
+export async function updateTrip(tripId: string, updates: Partial<{
+  name: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  tripType: string;
+  travelers: number;
+  originCity: string;
+  budgetTier: string;
+  status: string;
+}>): Promise<BackendTrip> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const dbUpdates: Record<string, unknown> = {};
+  if (updates.name) dbUpdates.name = updates.name;
+  if (updates.destination) dbUpdates.destination = updates.destination;
+  if (updates.startDate) dbUpdates.start_date = updates.startDate;
+  if (updates.endDate) dbUpdates.end_date = updates.endDate;
+  if (updates.tripType) dbUpdates.trip_type = updates.tripType;
+  if (updates.travelers) dbUpdates.travelers = updates.travelers;
+  if (updates.originCity) dbUpdates.origin_city = updates.originCity;
+  if (updates.budgetTier) dbUpdates.budget_tier = updates.budgetTier;
+  if (updates.status) dbUpdates.status = updates.status;
+  
+  const { data, error } = await supabase
+    .from('trips')
+    .update(dbUpdates)
+    .eq('id', tripId)
+    .eq('user_id', user.id)
+    .select()
+    .single();
+  
+  if (error) throw new Error(error.message);
+  
+  return {
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    destination: data.destination,
+    status: data.status as TripStatus,
+    tripType: data.trip_type || undefined,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    travelers: data.travelers || undefined,
+    budgetRange: data.budget_tier as BudgetPreference | undefined,
+    departureCity: data.origin_city || undefined,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+/**
+ * Delete a trip
+ */
+export async function deleteTrip(tripId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const { error } = await supabase
+    .from('trips')
+    .delete()
+    .eq('id', tripId)
+    .eq('user_id', user.id);
+  
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Get user preferences
+ */
+export async function getPreferences(): Promise<UserPreferences | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  
+  const { data, error } = await supabase
+    .from('user_preferences')
+    .select('*')
+    .eq('user_id', user.id)
+    .single();
+  
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching preferences:', error);
+    return null;
   }
+  
+  if (!data) return null;
+  
+  return {
+    userId: data.user_id,
+    budget: (data.budget_tier || 'moderate') as BudgetPreference,
+    pace: (data.travel_pace || 'balanced') as PacePreference,
+    style: (data.travel_style || 'mixed') as StylePreference,
+    comfort: (data.accommodation_style || 'standard') as ComfortPreference,
+    planning: (data.planning_preference || 'flexible') as PlanningPreference,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+/**
+ * Update user preferences
+ */
+export async function updatePreferences(prefs: Partial<UserPreferences>): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const updates: Record<string, unknown> = {};
+  if (prefs.budget) updates.budget_tier = prefs.budget;
+  if (prefs.pace) updates.travel_pace = prefs.pace;
+  if (prefs.style) updates.travel_style = prefs.style;
+  if (prefs.comfort) updates.accommodation_style = prefs.comfort;
+  if (prefs.planning) updates.planning_preference = prefs.planning;
+  
+  const { error } = await supabase
+    .from('user_preferences')
+    .upsert({
+      user_id: user.id,
+      ...updates,
+    }, { onConflict: 'user_id' });
+  
+  if (error) throw new Error(error.message);
 }
 
 // =============================================================================
-// EXPORT ALL
+// DEFAULT EXPORT
 // =============================================================================
 
-export const voyanceAPI = {
-  trips: tripsAPI,
-  itinerary: itineraryAPI,
-  preferences: preferencesAPI,
-  isAuthenticated,
-  healthCheck,
-  getDefaultPreferences,
+const voyanceAPI = {
+  getTrips,
+  getTrip,
+  createTrip,
+  updateTrip,
+  deleteTrip,
+  getPreferences,
+  updatePreferences,
 };
 
 export default voyanceAPI;
