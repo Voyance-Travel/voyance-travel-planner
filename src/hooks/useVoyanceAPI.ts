@@ -1,25 +1,66 @@
 /**
- * React Query hooks for Voyance Backend API
- * Provides data fetching, caching, and mutations for trips, itineraries, and preferences
+ * React Query hooks for Voyance API
+ * All data fetching goes directly through Supabase
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  voyanceAPI,
-  tripsAPI,
-  itineraryAPI,
-  preferencesAPI,
-  type BackendTrip,
-  type CreateTripRequest,
-  type UpdateTripRequest,
-  type ListTripsParams,
-  type ItineraryResponse,
-  type UserPreferences,
-  type ItineraryStatus,
-} from '@/services/voyanceAPI';
+import { useCallback, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+export interface BackendTrip {
+  id: string;
+  user_id: string;
+  name: string;
+  destination: string;
+  destination_country?: string;
+  start_date: string;
+  end_date: string;
+  trip_type?: string;
+  travelers?: number;
+  budget_tier?: string;
+  origin_city?: string;
+  status: string;
+  flight_selection?: unknown;
+  hotel_selection?: unknown;
+  itinerary_data?: unknown;
+  metadata?: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTripRequest {
+  name: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  tripType?: string;
+  travelers?: number;
+  originCity?: string;
+  budgetTier?: string;
+}
+
+export interface UpdateTripRequest {
+  name?: string;
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  tripType?: string;
+  travelers?: number;
+  originCity?: string;
+  budgetTier?: string;
+  status?: string;
+}
+
+export interface ListTripsParams {
+  status?: string;
+  limit?: number;
+}
 
 // =============================================================================
 // QUERY KEYS
@@ -46,100 +87,163 @@ export const queryKeys = {
 // TRIPS HOOKS
 // =============================================================================
 
-/**
- * Fetch all trips for the current user
- */
 export function useTrips(params: ListTripsParams = {}) {
   const { user } = useAuth();
   
   return useQuery({
     queryKey: queryKeys.trips.list(params),
-    queryFn: () => tripsAPI.list(params),
+    queryFn: async () => {
+      if (!user) throw new Error('Not authenticated');
+      
+      let query = supabase
+        .from('trips')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (params.status) {
+        query = query.eq('status', params.status);
+      }
+      if (params.limit) {
+        query = query.limit(params.limit);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return { trips: data || [], total: data?.length || 0 };
+    },
     enabled: !!user,
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 30 * 1000,
   });
 }
 
-/**
- * Fetch a single trip by ID
- */
-export function useTrip(tripId: string | undefined) {
+export function useTrip(tripId: string | null) {
   const { user } = useAuth();
   
   return useQuery({
     queryKey: queryKeys.trips.detail(tripId || ''),
-    queryFn: () => tripsAPI.get(tripId!),
-    enabled: !!user && !!tripId,
-    staleTime: 60 * 1000, // 1 minute
+    queryFn: async () => {
+      if (!tripId || !user) return null;
+      
+      const { data, error } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', tripId)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tripId && !!user,
+    staleTime: 60 * 1000,
   });
 }
 
-/**
- * Create a new trip
- */
 export function useCreateTrip() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   return useMutation({
-    mutationFn: (trip: CreateTripRequest) => tripsAPI.create(trip),
-    onSuccess: (newTrip) => {
-      // Invalidate trips list
-      queryClient.invalidateQueries({ queryKey: queryKeys.trips.all });
+    mutationFn: async (input: CreateTripRequest) => {
+      if (!user) throw new Error('Not authenticated');
       
-      // Add to cache
-      queryClient.setQueryData(queryKeys.trips.detail(newTrip.id), newTrip);
+      const { data, error } = await supabase
+        .from('trips')
+        .insert({
+          user_id: user.id,
+          name: input.name,
+          destination: input.destination,
+          start_date: input.startDate,
+          end_date: input.endDate,
+          trip_type: input.tripType,
+          travelers: input.travelers,
+          origin_city: input.originCity,
+          budget_tier: input.budgetTier,
+          status: 'draft',
+        })
+        .select()
+        .single();
       
-      toast.success('Trip created successfully!');
+      if (error) throw error;
+      return data;
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to create trip');
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.trips.all });
+      toast.success('Trip created!');
+    },
+    onError: (error) => {
+      toast.error('Failed to create trip');
+      console.error('[useCreateTrip] Error:', error);
     },
   });
 }
 
-/**
- * Update an existing trip
- */
 export function useUpdateTrip() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   return useMutation({
-    mutationFn: ({ tripId, updates }: { tripId: string; updates: UpdateTripRequest }) =>
-      tripsAPI.update(tripId, updates),
-    onSuccess: (updatedTrip) => {
-      // Update cache
-      queryClient.setQueryData(queryKeys.trips.detail(updatedTrip.id), updatedTrip);
+    mutationFn: async ({ tripId, updates }: { tripId: string; updates: UpdateTripRequest }) => {
+      if (!user) throw new Error('Not authenticated');
       
-      // Invalidate list to refresh
-      queryClient.invalidateQueries({ queryKey: queryKeys.trips.list() });
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.name) dbUpdates.name = updates.name;
+      if (updates.destination) dbUpdates.destination = updates.destination;
+      if (updates.startDate) dbUpdates.start_date = updates.startDate;
+      if (updates.endDate) dbUpdates.end_date = updates.endDate;
+      if (updates.tripType) dbUpdates.trip_type = updates.tripType;
+      if (updates.travelers) dbUpdates.travelers = updates.travelers;
+      if (updates.originCity) dbUpdates.origin_city = updates.originCity;
+      if (updates.budgetTier) dbUpdates.budget_tier = updates.budgetTier;
+      if (updates.status) dbUpdates.status = updates.status;
       
-      toast.success('Trip updated successfully!');
+      const { data, error } = await supabase
+        .from('trips')
+        .update(dbUpdates)
+        .eq('id', tripId)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to update trip');
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(data.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trips.all });
+      toast.success('Trip updated!');
+    },
+    onError: (error) => {
+      toast.error('Failed to update trip');
+      console.error('[useUpdateTrip] Error:', error);
     },
   });
 }
 
-/**
- * Delete a trip
- */
 export function useDeleteTrip() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   return useMutation({
-    mutationFn: (tripId: string) => tripsAPI.delete(tripId),
-    onSuccess: (_, tripId) => {
-      // Remove from cache
-      queryClient.removeQueries({ queryKey: queryKeys.trips.detail(tripId) });
+    mutationFn: async (tripId: string) => {
+      if (!user) throw new Error('Not authenticated');
       
-      // Invalidate list
-      queryClient.invalidateQueries({ queryKey: queryKeys.trips.all });
+      const { error } = await supabase
+        .from('trips')
+        .delete()
+        .eq('id', tripId)
+        .eq('user_id', user.id);
       
-      toast.success('Trip deleted successfully!');
+      if (error) throw error;
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete trip');
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.trips.all });
+      toast.success('Trip deleted');
+    },
+    onError: (error) => {
+      toast.error('Failed to delete trip');
+      console.error('[useDeleteTrip] Error:', error);
     },
   });
 }
@@ -148,129 +252,113 @@ export function useDeleteTrip() {
 // ITINERARY HOOKS
 // =============================================================================
 
-/**
- * Fetch itinerary for a trip
- */
-export function useItinerary(tripId: string | undefined) {
+export function useItinerary(tripId: string | null) {
   const { user } = useAuth();
   
   return useQuery({
     queryKey: queryKeys.itinerary.detail(tripId || ''),
-    queryFn: () => itineraryAPI.get(tripId!),
-    enabled: !!user && !!tripId,
-    staleTime: 60 * 1000, // 1 minute
+    queryFn: async () => {
+      if (!tripId || !user) return null;
+      
+      const { data, error } = await supabase
+        .from('trips')
+        .select('itinerary_data, itinerary_status')
+        .eq('id', tripId)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (error) throw error;
+      return data?.itinerary_data;
+    },
+    enabled: !!tripId && !!user,
+    staleTime: 60 * 1000,
   });
 }
 
-/**
- * Generate itinerary with polling
- */
 export function useGenerateItinerary() {
   const queryClient = useQueryClient();
-  const [isPolling, setIsPolling] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<ItineraryStatus | null>(null);
-  const abortRef = useRef(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   
-  const mutation = useMutation({
-    mutationFn: async ({ tripId, force = false }: { tripId: string; force?: boolean }) => {
-      abortRef.current = false;
-      setIsPolling(true);
-      setProgress(0);
-      setStatus('queued');
-      
-      // Start generation
-      const initialResponse = await itineraryAPI.generateNow(tripId, force);
-      
-      // If already ready, return immediately
-      if (initialResponse.status === 'ready') {
-        setIsPolling(false);
-        setProgress(100);
-        setStatus('ready');
-        return initialResponse;
-      }
-      
-      // Poll until ready
-      const result = await itineraryAPI.pollUntilReady(tripId, {
-        pollIntervalMs: 3000,
-        timeoutMs: 300000,
-        onProgress: (response) => {
-          if (abortRef.current) return;
-          setProgress(response.progress || response.percentComplete || 0);
-          setStatus(response.status);
-        },
+  const generate = useCallback(async (params: {
+    tripId: string;
+    destination: string;
+    startDate: string;
+    endDate: string;
+    travelers?: number;
+    tripType?: string;
+    budgetTier?: string;
+  }) => {
+    setIsGenerating(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+        body: params,
       });
       
-      setIsPolling(false);
-      setProgress(100);
-      setStatus('ready');
-      return result;
-    },
-    onSuccess: (result, { tripId }) => {
-      // Update cache
-      queryClient.setQueryData(queryKeys.itinerary.detail(tripId), result);
+      if (error) throw error;
       
-      // Also invalidate trip to get updated itineraryId
-      queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.itinerary.detail(params.tripId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(params.tripId) });
       
-      toast.success('Itinerary generated successfully!');
-    },
-    onError: (error: Error) => {
-      setIsPolling(false);
-      setStatus('failed');
-      toast.error(error.message || 'Failed to generate itinerary');
-    },
-  });
+      return data;
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [queryClient]);
   
-  const abort = useCallback(() => {
-    abortRef.current = true;
-    setIsPolling(false);
-  }, []);
-  
-  return {
-    ...mutation,
-    isPolling,
-    progress,
-    status,
-    abort,
-  };
+  return { generate, isGenerating };
 }
 
 // =============================================================================
 // PREFERENCES HOOKS
 // =============================================================================
 
-/**
- * Fetch user preferences
- */
 export function usePreferences() {
   const { user } = useAuth();
   
   return useQuery({
     queryKey: queryKeys.preferences.user(),
-    queryFn: () => preferencesAPI.get(),
+    queryFn: async () => {
+      if (!user) return null;
+      
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      return data;
+    },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
-/**
- * Save user preferences
- */
 export function useSavePreferences() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   return useMutation({
-    mutationFn: (preferences: Partial<Omit<UserPreferences, 'userId' | 'createdAt' | 'updatedAt'>>) =>
-      preferencesAPI.save(preferences),
-    onSuccess: (updatedPrefs) => {
-      // Update cache
-      queryClient.setQueryData(queryKeys.preferences.user(), updatedPrefs);
+    mutationFn: async (preferences: Record<string, unknown>) => {
+      if (!user) throw new Error('Not authenticated');
       
-      toast.success('Preferences saved successfully!');
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.id,
+          ...preferences,
+        }, { onConflict: 'user_id' });
+      
+      if (error) throw error;
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to save preferences');
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.all });
+      toast.success('Preferences saved');
+    },
+    onError: (error) => {
+      toast.error('Failed to save preferences');
+      console.error('[useSavePreferences] Error:', error);
     },
   });
 }
@@ -279,72 +367,71 @@ export function useSavePreferences() {
 // UTILITY HOOKS
 // =============================================================================
 
-/**
- * Check backend health
- */
 export function useBackendHealth() {
   return useQuery({
     queryKey: queryKeys.health,
-    queryFn: () => voyanceAPI.healthCheck(),
-    staleTime: 60 * 1000, // 1 minute
-    retry: 1,
+    queryFn: async () => {
+      // Just check if we can connect to Supabase
+      const { error } = await supabase.from('destinations').select('id').limit(1);
+      return { healthy: !error };
+    },
+    staleTime: 60 * 1000,
+    retry: false,
   });
 }
 
-/**
- * Check if user is authenticated with backend
- */
 export function useIsAuthenticated() {
   const { user } = useAuth();
-  const [isReady, setIsReady] = useState(false);
-  
-  useEffect(() => {
-    if (user) {
-      voyanceAPI.isAuthenticated().then(setIsReady);
-    } else {
-      setIsReady(false);
-    }
-  }, [user]);
-  
-  return isReady;
+  return !!user;
 }
 
 // =============================================================================
 // PREFETCH HELPERS
 // =============================================================================
 
-/**
- * Prefetch trips list
- */
 export function usePrefetchTrips() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
-  return useCallback(
-    (params?: ListTripsParams) => {
-      queryClient.prefetchQuery({
-        queryKey: queryKeys.trips.list(params),
-        queryFn: () => tripsAPI.list(params),
-        staleTime: 30 * 1000,
-      });
-    },
-    [queryClient]
-  );
+  return useCallback(() => {
+    if (!user) return;
+    
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.trips.list({}),
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        return { trips: data || [], total: data?.length || 0 };
+      },
+    });
+  }, [queryClient, user]);
 }
 
-/**
- * Prefetch a single trip
- */
 export function usePrefetchTrip() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
-  return useCallback(
-    (tripId: string) => {
-      queryClient.prefetchQuery({
-        queryKey: queryKeys.trips.detail(tripId),
-        queryFn: () => tripsAPI.get(tripId),
-        staleTime: 60 * 1000,
-      });
-    },
-    [queryClient]
-  );
+  return useCallback((tripId: string) => {
+    if (!user) return;
+    
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.trips.detail(tripId),
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('id', tripId)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (error) throw error;
+        return data;
+      },
+    });
+  }, [queryClient, user]);
 }

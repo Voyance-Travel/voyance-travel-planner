@@ -2,7 +2,6 @@
  * Voyance API Client
  * 
  * All backend calls now go through Supabase (direct queries or Edge Functions).
- * This file provides backward-compatible exports for existing code.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -15,7 +14,7 @@ export { default as quizAPI } from './quizAPI';
 // TYPES - Backend Contract Types
 // =============================================================================
 
-// Preference Enums (5 core preferences implemented)
+// Preference Enums
 export type BudgetPreference = 'tight' | 'moderate' | 'flexible' | 'luxury';
 export type PacePreference = 'relaxed' | 'balanced' | 'packed';
 export type StylePreference = 'local' | 'tourist' | 'mixed';
@@ -23,7 +22,7 @@ export type ComfortPreference = 'basic' | 'standard' | 'premium';
 export type PlanningPreference = 'structured' | 'flexible' | 'spontaneous';
 
 // Trip Status Enum
-export type TripStatus = 'draft' | 'planned' | 'booked' | 'confirmed' | 'upcoming' | 'completed' | 'cancelled';
+export type TripStatus = 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
 
 // User Preferences
 export interface UserPreferences {
@@ -52,45 +51,25 @@ export interface BackendTrip {
   description?: string;
   status: TripStatus;
   tripType?: string;
-  
-  // Destination
   destinationId?: string;
   destination: string;
   departureCity?: string;
-  
-  // Dates
   startDate?: string;
   endDate?: string;
   totalDays?: number;
-  
-  // Travelers
   travelers?: number;
   travelerType?: string;
-  
-  // Budget
   budgetRange?: BudgetPreference;
   estimatedCost?: number;
   currency?: string;
-  
-  // Characteristics
   emotionalTags?: string[];
   primaryGoal?: string;
-  
-  // User content
   notes?: string;
   specialRequests?: string;
-  
-  // Booking
   bookingReference?: string;
-  
-  // Sharing
   sharedWith?: string[];
   isPublic?: boolean;
-  
-  // Metadata
   metadata?: Record<string, unknown>;
-  
-  // Timestamps
   createdAt: string;
   updatedAt: string;
 }
@@ -99,9 +78,6 @@ export interface BackendTrip {
 // API FUNCTIONS - All use Supabase directly
 // =============================================================================
 
-/**
- * Get user's trips from Supabase
- */
 export async function getTrips(params?: {
   status?: string;
   limit?: number;
@@ -117,7 +93,7 @@ export async function getTrips(params?: {
     .order('created_at', { ascending: false });
   
   if (params?.status) {
-    query = query.eq('status', params.status);
+    query = query.eq('status', params.status as TripStatus);
   }
   
   if (params?.limit) {
@@ -132,7 +108,6 @@ export async function getTrips(params?: {
   
   if (error) throw new Error(error.message);
   
-  // Transform to BackendTrip format
   const trips: BackendTrip[] = (data || []).map(trip => ({
     id: trip.id,
     userId: trip.user_id,
@@ -153,9 +128,6 @@ export async function getTrips(params?: {
   return { trips, total: count || 0 };
 }
 
-/**
- * Get single trip by ID
- */
 export async function getTrip(tripId: string): Promise<BackendTrip> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -188,9 +160,6 @@ export async function getTrip(tripId: string): Promise<BackendTrip> {
   };
 }
 
-/**
- * Create a new trip
- */
 export async function createTrip(input: {
   name: string;
   destination: string;
@@ -216,7 +185,7 @@ export async function createTrip(input: {
       travelers: input.travelers,
       origin_city: input.originCity,
       budget_tier: input.budgetTier,
-      status: 'draft',
+      status: 'draft' as const,
     })
     .select()
     .single();
@@ -240,9 +209,6 @@ export async function createTrip(input: {
   };
 }
 
-/**
- * Update a trip
- */
 export async function updateTrip(tripId: string, updates: Partial<{
   name: string;
   destination: string;
@@ -295,9 +261,6 @@ export async function updateTrip(tripId: string, updates: Partial<{
   };
 }
 
-/**
- * Delete a trip
- */
 export async function deleteTrip(tripId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -311,9 +274,6 @@ export async function deleteTrip(tripId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/**
- * Get user preferences
- */
 export async function getPreferences(): Promise<UserPreferences | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -343,9 +303,6 @@ export async function getPreferences(): Promise<UserPreferences | null> {
   };
 }
 
-/**
- * Update user preferences
- */
 export async function updatePreferences(prefs: Partial<UserPreferences>): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');

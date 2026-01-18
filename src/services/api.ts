@@ -77,71 +77,6 @@ export async function getAuthHeader(): Promise<Record<string, string>> {
 }
 
 // ============================================================================
-// Supabase Direct Queries
-// ============================================================================
-
-export async function queryTable<T>(
-  table: string,
-  options?: {
-    select?: string;
-    filter?: Record<string, unknown>;
-    order?: { column: string; ascending?: boolean };
-    limit?: number;
-    single?: boolean;
-  }
-): Promise<T | T[] | null> {
-  let query = supabase.from(table).select(options?.select || '*');
-  
-  if (options?.filter) {
-    for (const [key, value] of Object.entries(options.filter)) {
-      query = query.eq(key, value);
-    }
-  }
-  
-  if (options?.order) {
-    query = query.order(options.order.column, { ascending: options.order.ascending ?? true });
-  }
-  
-  if (options?.limit) {
-    query = query.limit(options.limit);
-  }
-  
-  if (options?.single) {
-    const { data, error } = await query.single();
-    if (error && error.code !== 'PGRST116') throw new ApiError(error.message, 400, error.code);
-    return data as T | null;
-  }
-  
-  const { data, error } = await query;
-  if (error) throw new ApiError(error.message, 400, error.code);
-  return data as T[];
-}
-
-export async function insertRow<T>(
-  table: string,
-  row: Record<string, unknown>
-): Promise<T> {
-  const { data, error } = await supabase.from(table).insert(row).select().single();
-  if (error) throw new ApiError(error.message, 400, error.code);
-  return data as T;
-}
-
-export async function updateRow<T>(
-  table: string,
-  id: string,
-  updates: Record<string, unknown>
-): Promise<T> {
-  const { data, error } = await supabase.from(table).update(updates).eq('id', id).select().single();
-  if (error) throw new ApiError(error.message, 400, error.code);
-  return data as T;
-}
-
-export async function deleteRow(table: string, id: string): Promise<void> {
-  const { error } = await supabase.from(table).delete().eq('id', id);
-  if (error) throw new ApiError(error.message, 400, error.code);
-}
-
-// ============================================================================
 // Utility Functions
 // ============================================================================
 
@@ -156,7 +91,7 @@ export function handleApiError(error: unknown): string {
 }
 
 // ============================================================================
-// Export common patterns
+// Export Supabase client for convenience
 // ============================================================================
 
 export { supabase } from '@/integrations/supabase/client';

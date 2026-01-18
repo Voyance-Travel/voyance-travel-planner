@@ -1,12 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  getProfile, 
-  updateProfile as updateProfileAPI,
-  updatePreferences as updatePreferencesAPI,
-  type UserProfile,
-} from '@/services/profileAPI';
 
 export interface User {
   id: string;
@@ -47,39 +41,34 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Transform backend profile to our User type
+// Transform Supabase data to our User type
 function transformProfile(
   supabaseUser: SupabaseUser | null, 
-  profile?: UserProfile | ProfileLite | null,
-  preferences?: Partial<FullPreferences> | null
+  profile?: { display_name?: string; avatar_url?: string; quiz_completed?: boolean; travel_dna?: unknown } | null,
+  preferences?: { budget_tier?: string; travel_pace?: string; accommodation_style?: string; home_airport?: string } | null
 ): User | null {
   if (!supabaseUser) return null;
   
-  const travelDNA = profile && 'travelDNA' in profile ? profile.travelDNA : null;
-  const hasCompletedQuiz = profile && 'hasCompletedQuiz' in profile 
-    ? profile.hasCompletedQuiz 
-    : profile && 'quizCompleted' in profile 
-      ? profile.quizCompleted 
-      : false;
+  const travelDNA = profile?.travel_dna as Record<string, unknown> | null;
   
   return {
     id: supabaseUser.id,
     email: supabaseUser.email || '',
-    name: profile?.name || profile?.display_name || supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0],
-    avatar: profile?.avatarUrl || supabaseUser.user_metadata?.avatar_url,
-    homeAirport: preferences?.homeAirport || undefined,
+    name: profile?.display_name || supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0],
+    avatar: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
+    homeAirport: preferences?.home_airport || undefined,
     createdAt: supabaseUser.created_at,
-    quizCompleted: hasCompletedQuiz || !!preferences,
+    quizCompleted: profile?.quiz_completed || false,
     preferences: preferences ? {
-      style: preferences.accommodationStyle,
-      budget: preferences.budgetTier,
-      pace: preferences.travelPace,
-      accommodation: preferences.accommodationStyle,
+      style: preferences.accommodation_style,
+      budget: preferences.budget_tier,
+      pace: preferences.travel_pace,
+      accommodation: preferences.accommodation_style,
     } : undefined,
     travelDNA: travelDNA ? {
       type: typeof travelDNA === 'object' && 'type' in travelDNA ? String(travelDNA.type) : 'Explorer',
-      secondary: typeof travelDNA === 'object' && 'archetype' in travelDNA && travelDNA.archetype && typeof travelDNA.archetype === 'object' && 'secondary' in travelDNA.archetype ? String(travelDNA.archetype.secondary) : undefined,
-      confidence: typeof travelDNA === 'object' && 'archetype' in travelDNA && travelDNA.archetype && typeof travelDNA.archetype === 'object' && 'confidence' in travelDNA.archetype ? Number(travelDNA.archetype.confidence) : undefined,
+      secondary: typeof travelDNA === 'object' && 'archetype' in travelDNA && travelDNA.archetype && typeof travelDNA.archetype === 'object' && 'secondary' in (travelDNA.archetype as Record<string, unknown>) ? String((travelDNA.archetype as Record<string, unknown>).secondary) : undefined,
+      confidence: typeof travelDNA === 'object' && 'archetype' in travelDNA && travelDNA.archetype && typeof travelDNA.archetype === 'object' && 'confidence' in (travelDNA.archetype as Record<string, unknown>) ? Number((travelDNA.archetype as Record<string, unknown>).confidence) : undefined,
     } : undefined,
   };
 }
@@ -136,22 +125,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Load user data from backend
+  // Load user data directly from Supabase
   const loadUserData = async (supabaseUser: SupabaseUser) => {
     try {
-      console.log('[Auth] Loading user data from backend for:', supabaseUser.id);
+      console.log('[Auth] Loading user data from Supabase for:', supabaseUser.id);
       
-      // Fetch profile and preferences in parallel from Railway backend
+      // Fetch profile and preferences in parallel from Supabase
       const [profileResult, preferencesResult] = await Promise.allSettled([
-        getProfileLite(),
-        getFullPreferences(),
+        supabase.from('profiles').select('*').eq('id', supabaseUser.id).single(),
+        supabase.from('user_preferences').select('*').eq('user_id', supabaseUser.id).single(),
       ]);
       
-      const profile = profileResult.status === 'fulfilled' && profileResult.value.success 
-        ? profileResult.value.profile 
+      const profile = profileResult.status === 'fulfilled' && !profileResult.value.error 
+        ? profileResult.value.data 
         : null;
-      const preferences = preferencesResult.status === 'fulfilled' 
-        ? preferencesResult.value 
+      const preferences = preferencesResult.status === 'fulfilled' && !preferencesResult.value.error
+        ? preferencesResult.value.data 
         : null;
       
       console.log('[Auth] Loaded profile:', profile);
@@ -164,20 +153,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Sync profile to backend on sign in
+  // Sync profile to Supabase on sign in
   const syncProfile = async (supabaseUser: SupabaseUser) => {
     try {
-      console.log('[Auth] Syncing profile to backend for:', supabaseUser.id);
-      await updateProfileAPI({
-        name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name,
-        profileImage: supabaseUser.user_metadata?.avatar_url,
-      });
+      console.log('[Auth] Syncing profile to Supabase for:', supabaseUser.id);
+      await supabase.from('profiles').upsert({
+        id: supabaseUser.id,
+        display_name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name,
+        avatar_url: supabaseUser.user_metadata?.avatar_url,
+      }, { onConflict: 'id' });
     } catch (error) {
       console.error('[Auth] Error syncing profile:', error);
     }
   };
 
-  // Refresh user data from backend
+  // Refresh user data from Supabase
   const refreshUserData = async () => {
     if (!session?.user) return;
     
@@ -185,44 +175,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(transformProfile(session.user, profile, preferences));
   };
 
+  // Initialize auth state
   useEffect(() => {
-    // Skip real auth if demo mode is active
+    // Skip if demo mode
     if (isDemoMode) return;
 
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, newSession) => {
-        console.log('[Auth] Auth state changed:', event);
-        setSession(newSession);
-        
-        if (newSession?.user) {
-          // Defer backend calls to avoid deadlock
-          setTimeout(async () => {
-            // On sign up, sync profile to backend
-            if (event === 'SIGNED_IN') {
-              await syncProfile(newSession.user);
-            }
-            
-            const { profile, preferences } = await loadUserData(newSession.user);
-            setUser(transformProfile(newSession.user, profile, preferences));
-            setIsLoading(false);
-          }, 0);
-        } else {
-          setUser(null);
-          setIsLoading(false);
-        }
+    // Get initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const { profile, preferences } = await loadUserData(session.user);
+        setUser(transformProfile(session.user, profile, preferences));
       }
-    );
+      setSession(session);
+      setIsLoading(false);
+    });
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
-      setSession(existingSession);
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Auth] Auth state changed:', event);
       
-      if (existingSession?.user) {
-        const { profile, preferences } = await loadUserData(existingSession.user);
-        setUser(transformProfile(existingSession.user, profile, preferences));
+      if (session?.user) {
+        // On sign in, sync profile and load data
+        if (event === 'SIGNED_IN') {
+          await syncProfile(session.user);
+        }
+        
+        const { profile, preferences } = await loadUserData(session.user);
+        setUser(transformProfile(session.user, profile, preferences));
+      } else {
+        setUser(null);
       }
       
+      setSession(session);
       setIsLoading(false);
     });
 
@@ -240,7 +226,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     setSession(data.session);
-    
     if (data.user) {
       const { profile, preferences } = await loadUserData(data.user);
       setUser(transformProfile(data.user, profile, preferences));
@@ -248,13 +233,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signup = async (email: string, password: string, name?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl,
         data: {
           name: name,
           full_name: name,
@@ -271,13 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Please check your email to confirm your account');
     }
     
-    // Sync profile to backend
-    if (data.user) {
-      await updateProfileAPI({
-        name: name,
-      });
-    }
-    
+    // Profile is created automatically via trigger
     setSession(data.session);
     setUser(transformProfile(data.user, null, null));
   };
@@ -301,12 +277,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       setUser({ ...user, ...updates });
       
-      // Sync to backend
+      // Sync to Supabase
       if (session?.user) {
-        updateProfileAPI({
-          name: updates.name,
-          profileImage: updates.avatar,
-        }).catch(console.error);
+        supabase.from('profiles').update({
+          display_name: updates.name,
+          avatar_url: updates.avatar,
+        }).eq('id', session.user.id).then(({ error }) => {
+          if (error) console.error('[Auth] Error updating profile:', error);
+        });
       }
     }
   };
@@ -314,28 +292,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setPreferences = async (preferences: TravelPreferences) => {
     if (!user || !session?.user) return;
     
-    console.log('[Auth] Saving preferences to backend:', preferences);
+    console.log('[Auth] Saving preferences to Supabase:', preferences);
     
-    // Map to backend format and save
-    try {
-      await updatePreferencesAPI({
-        budgetTier: preferences.budget as 'budget' | 'moderate' | 'luxury' | 'premium',
-        travelPace: preferences.pace as 'relaxed' | 'moderate' | 'fast',
-        accommodationStyle: preferences.accommodation as 'hostel' | 'budget_hotel' | 'standard_hotel' | 'boutique' | 'luxury',
-      });
-      
-      console.log('[Auth] Preferences saved successfully');
-      
-      // Update local state
-      setUser({ 
-        ...user, 
-        preferences,
-        quizCompleted: true,
-      });
-    } catch (error) {
+    // Save to Supabase
+    const { error } = await supabase.from('user_preferences').upsert({
+      user_id: session.user.id,
+      budget_tier: preferences.budget,
+      travel_pace: preferences.pace,
+      accommodation_style: preferences.accommodation,
+    }, { onConflict: 'user_id' });
+    
+    if (error) {
       console.error('[Auth] Error saving preferences:', error);
       throw error;
     }
+    
+    console.log('[Auth] Preferences saved successfully');
+    
+    // Update local state
+    setUser({ 
+      ...user, 
+      preferences: { ...user.preferences, ...preferences } 
+    });
   };
 
   return (
@@ -343,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
-        isAuthenticated: !!session || isDemoMode,
+        isAuthenticated: !!user,
         isLoading,
         login,
         signup,
@@ -365,5 +343,3 @@ export function useAuth() {
   }
   return context;
 }
-
-export default AuthContext;

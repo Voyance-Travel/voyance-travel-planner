@@ -118,6 +118,19 @@ export async function getProfile(): Promise<ProfileResponse> {
       .eq('user_id', user.id)
       .single();
     
+    // Parse travel DNA safely
+    let travelDNA: TravelDNA | null = null;
+    if (profile?.travel_dna && typeof profile.travel_dna === 'object') {
+      const dna = profile.travel_dna as Record<string, unknown>;
+      travelDNA = {
+        type: typeof dna.type === 'string' ? dna.type : 'Explorer',
+        archetype: dna.archetype as TravelDNAArchetype | undefined,
+        traits: Array.isArray(dna.traits) ? dna.traits as string[] : undefined,
+        preferences: dna.preferences as TravelDNAPreferences | undefined,
+        emotionalDrivers: Array.isArray(dna.emotionalDrivers) ? dna.emotionalDrivers as string[] : undefined,
+      };
+    }
+    
     const userProfile: UserProfile = {
       id: user.id,
       email: user.email || '',
@@ -127,7 +140,7 @@ export async function getProfile(): Promise<ProfileResponse> {
       bio: profile?.bio,
       handle: profile?.handle,
       quizCompleted: profile?.quiz_completed ?? false,
-      travelDNA: profile?.travel_dna as TravelDNA | null,
+      travelDNA,
       createdAt: profile?.created_at || user.created_at,
       preferences: preferences ? {
         id: preferences.id,
