@@ -71,6 +71,192 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_catalog: {
+        Row: {
+          ai_generated: boolean | null
+          category: string | null
+          cost_usd: number | null
+          created_at: string
+          description: string | null
+          destination_id: string | null
+          estimated_duration_hours: number | null
+          id: string
+          location: Json | null
+          source: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          ai_generated?: boolean | null
+          category?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          description?: string | null
+          destination_id?: string | null
+          estimated_duration_hours?: number | null
+          id?: string
+          location?: Json | null
+          source?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          ai_generated?: boolean | null
+          category?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          description?: string | null
+          destination_id?: string | null
+          estimated_duration_hours?: number | null
+          id?: string
+          location?: Json | null
+          source?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      airports: {
+        Row: {
+          city: string | null
+          code: string
+          country: string | null
+          created_at: string
+          distance_km: number | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          code: string
+          country?: string | null
+          created_at?: string
+          distance_km?: number | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          code?: string
+          country?: string | null
+          created_at?: string
+          distance_km?: number | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      attractions: {
+        Row: {
+          address: string | null
+          average_rating: number | null
+          category: string | null
+          created_at: string
+          crowd_patterns: Json | null
+          description: string | null
+          destination_id: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          opening_hours: Json | null
+          peak_hours: Json | null
+          price_range: Json | null
+          subcategory: string | null
+          tags: Json | null
+          updated_at: string
+          visit_duration_mins: number | null
+        }
+        Insert: {
+          address?: string | null
+          average_rating?: number | null
+          category?: string | null
+          created_at?: string
+          crowd_patterns?: Json | null
+          description?: string | null
+          destination_id?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          opening_hours?: Json | null
+          peak_hours?: Json | null
+          price_range?: Json | null
+          subcategory?: string | null
+          tags?: Json | null
+          updated_at?: string
+          visit_duration_mins?: number | null
+        }
+        Update: {
+          address?: string | null
+          average_rating?: number | null
+          category?: string | null
+          created_at?: string
+          crowd_patterns?: Json | null
+          description?: string | null
+          destination_id?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          opening_hours?: Json | null
+          peak_hours?: Json | null
+          price_range?: Json | null
+          subcategory?: string | null
+          tags?: Json | null
+          updated_at?: string
+          visit_duration_mins?: number | null
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          action_type: string | null
+          actor: string | null
+          created_at: string
+          id: string
+          metadata: Json | null
+          target: string | null
+          target_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          action_type?: string | null
+          actor?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target?: string | null
+          target_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          action_type?: string | null
+          actor?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target?: string | null
+          target_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       destination_images: {
         Row: {
           alt_text: string | null
