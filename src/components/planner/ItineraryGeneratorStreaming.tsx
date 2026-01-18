@@ -1,0 +1,269 @@
+/**
+ * Streaming Itinerary Generator Component
+ * 
+ * Shows real-time progress as each day is generated using Lovable AI.
+ * Provides visual feedback with day cards appearing as they're created.
+ */
+
+import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, Calendar, MapPin, Sparkles, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useLovableItinerary, GenerationPreferences } from '@/hooks/useLovableItinerary';
+import type { DayItinerary } from '@/types/itinerary';
+
+interface ItineraryGeneratorStreamingProps {
+  tripId: string;
+  onComplete?: (days: DayItinerary[]) => void;
+  preferences?: GenerationPreferences;
+  autoStart?: boolean;
+}
+
+export function ItineraryGeneratorStreaming({
+  tripId,
+  onComplete,
+  preferences,
+  autoStart = true,
+}: ItineraryGeneratorStreamingProps) {
+  const {
+    loading,
+    progress,
+    currentStep,
+    currentDay,
+    totalDays,
+    message,
+    days,
+    error,
+    hasExistingItinerary,
+    generationDuration,
+    checkExisting,
+    generateItinerary,
+    regenerate,
+    cancel,
+    clearError,
+  } = useLovableItinerary(tripId);
+
+  // Check for existing itinerary on mount, then auto-start if needed
+  useEffect(() => {
+    const init = async () => {
+      const exists = await checkExisting();
+      if (!exists && autoStart) {
+        generateItinerary(preferences);
+      }
+    };
+    init();
+  }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notify parent when complete
+  useEffect(() => {
+    if (currentStep === 'complete' && days.length > 0) {
+      onComplete?.(days);
+    }
+  }, [currentStep, days, onComplete]);
+
+  // Error state
+  if (error) {
+    return (
+      <Card className="border-destructive/50 bg-destructive/5">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center text-center gap-4">
+            <AlertCircle className="w-12 h-12 text-destructive" />
+            <div>
+              <h3 className="font-semibold text-lg text-destructive">Generation Failed</h3>
+              <p className="text-muted-foreground mt-1">{message}</p>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={clearError}>
+                Cancel
+              </Button>
+              <Button onClick={() => regenerate(preferences)}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Loading/generating state
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        {/* Progress Header */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="relative">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Sparkles className="w-4 h-4 text-primary absolute -top-1 -right-1" />
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-medium">{message}</span>
+                  <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
+                </div>
+                <Progress value={progress} className="h-2" />
+              </div>
+            </div>
+            
+            {currentStep === 'generating' && totalDays > 0 && (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Calendar className="w-4 h-4" />
+                <span>Day {currentDay} of {totalDays}</span>
+              </div>
+            )}
+
+            <div className="flex justify-center mt-4">
+              <Button variant="ghost" size="sm" onClick={cancel}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Streaming Day Cards */}
+        <AnimatePresence mode="popLayout">
+          {days.map((day, index) => (
+            <motion.div
+              key={day.dayNumber}
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.4, delay: index * 0.1 }}
+            >
+              <StreamingDayCard day={day} isNew={index === days.length - 1} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
+        {/* Placeholder for next day */}
+        {currentDay > 0 && currentDay <= totalDays && days.length < currentDay && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-8"
+          >
+            <div className="flex items-center justify-center gap-3 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Generating Day {currentDay}...</span>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    );
+  }
+
+  // Complete state
+  if (currentStep === 'complete' && days.length > 0) {
+    return (
+      <div className="space-y-6">
+        {/* Success Header */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <CheckCircle className="w-8 h-8 text-primary" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg">Your Itinerary is Ready!</h3>
+                <p className="text-sm text-muted-foreground">
+                  {days.length} days planned
+                  {generationDuration && ` • Generated in ${(generationDuration / 1000).toFixed(1)}s`}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => regenerate(preferences)}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Regenerate
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Day Cards */}
+        <div className="space-y-4">
+          {days.map((day) => (
+            <StreamingDayCard key={day.dayNumber} day={day} isNew={false} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Idle state - show start button
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex flex-col items-center text-center gap-4">
+          <Sparkles className="w-12 h-12 text-primary" />
+          <div>
+            <h3 className="font-semibold text-lg">Generate Your Itinerary</h3>
+            <p className="text-muted-foreground mt-1">
+              Our AI will create a personalized day-by-day plan for your trip
+            </p>
+          </div>
+          <Button onClick={() => generateItinerary(preferences)} size="lg">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Start Planning
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Sub-component for day cards
+function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean }) {
+  return (
+    <Card className={isNew ? 'ring-2 ring-primary/50' : ''}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-primary" />
+            Day {day.dayNumber}: {day.theme}
+          </CardTitle>
+          {isNew && (
+            <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
+              Just added
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">{day.date}</p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {day.activities.slice(0, 4).map((activity, idx) => (
+            <div key={activity.id} className="flex items-start gap-3">
+              <div className="w-12 text-xs text-muted-foreground font-mono">
+                {activity.time}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{activity.title}</div>
+                <div className="text-sm text-muted-foreground flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  <span className="truncate">{activity.location.name}</span>
+                </div>
+              </div>
+              <div className="text-sm font-medium text-primary">
+                ${activity.cost}
+              </div>
+            </div>
+          ))}
+          {day.activities.length > 4 && (
+            <div className="text-sm text-muted-foreground text-center pt-2 border-t">
+              +{day.activities.length - 4} more activities
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between mt-4 pt-3 border-t text-sm text-muted-foreground">
+          <span>{day.estimatedWalkingTime} walking</span>
+          <span className="font-medium text-foreground">
+            Total: ${day.totalCost}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default ItineraryGeneratorStreaming;
