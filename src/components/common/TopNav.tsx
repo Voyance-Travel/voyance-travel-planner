@@ -14,7 +14,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { Button } from '@/components/ui/button';
-import voyanceLogo from '@/assets/voyance-logo.png';
+
+// Elegant V logo component - adapts to transparent/solid nav states
+const VoyanceLogo = ({ isTransparent }: { isTransparent: boolean }) => (
+  <span 
+    className={`font-serif text-2xl font-semibold leading-none transition-colors ${
+      isTransparent ? 'text-white' : 'text-primary'
+    }`}
+    style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+  >
+    V
+  </span>
+);
 
 const navLinks = [
   { href: ROUTES.EXPLORE, label: 'Explore' },
@@ -97,11 +108,11 @@ export default function TopNav() {
           {/* Logo */}
           <Link
             to={ROUTES.HOME}
-            className={`flex items-center gap-2 font-display text-xl font-semibold transition-colors ${
+            className={`flex items-center gap-2.5 font-display text-xl font-semibold transition-colors ${
               isTransparent ? 'text-white' : 'text-foreground'
             }`}
           >
-            <img src={voyanceLogo} alt="Voyance" className="h-8 w-8 object-contain" />
+            <VoyanceLogo isTransparent={isTransparent} />
             <span>Voyance</span>
           </Link>
 
