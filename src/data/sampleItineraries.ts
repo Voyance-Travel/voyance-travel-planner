@@ -19,14 +19,14 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           airport: 'LAX',
           city: 'Los Angeles',
           time: '11:35 PM',
-          date: 'Nov 15, 2024',
+          date: 'Nov 15, 2026',
           terminal: 'B'
         },
         arrival: {
           airport: 'DPS',
           city: 'Denpasar, Bali',
           time: '11:30 AM',
-          date: 'Nov 17, 2024',
+          date: 'Nov 17, 2026',
           terminal: 'International'
         },
         duration: '19h 55m',
@@ -41,14 +41,14 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           airport: 'DPS',
           city: 'Denpasar, Bali',
           time: '2:15 PM',
-          date: 'Nov 22, 2024',
+          date: 'Nov 22, 2026',
           terminal: 'International'
         },
         arrival: {
           airport: 'LAX',
           city: 'Los Angeles',
           time: '10:25 PM',
-          date: 'Nov 22, 2024',
+          date: 'Nov 22, 2026',
           terminal: 'B'
         },
         duration: '18h 10m',
@@ -60,8 +60,8 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
     hotelInfo: {
       name: 'Villa Amrita Ubud',
       type: 'Luxury Private Villa',
-      checkIn: 'Nov 17, 2024 (3:00 PM)',
-      checkOut: 'Nov 22, 2024 (12:00 PM)',
+      checkIn: 'Nov 17, 2026 (3:00 PM)',
+      checkOut: 'Nov 22, 2026 (12:00 PM)',
       nights: 5,
       rooms: '1 Two-Bedroom Villa with Private Pool',
       amenities: ['Private Infinity Pool', 'Personal Butler', 'Spa Services', 'Private Chef Available', 'Airport Transfer Included'],
@@ -89,12 +89,12 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
       ]
     },
     destinationInfo: {
-      overview: "Bali is Indonesia's spiritual heart, where ancient Hindu traditions blend seamlessly with stunning natural beauty.",
-      culturalNotes: "Balinese Hinduism shapes daily life with colorful ceremonies and intricate temple architecture.",
-      bestTime: "April to October (dry season) offers the best weather.",
-      currency: "Indonesian Rupiah (IDR) - 1 USD ≈ 15,000 IDR",
-      language: "Bahasa Indonesia and Balinese. English widely spoken.",
-      tips: "Dress modestly when visiting temples, always use your right hand for giving/receiving."
+      overview: "Bali is Indonesia's spiritual heart, where ancient Hindu traditions blend seamlessly with stunning natural beauty. Known as the 'Island of the Gods,' Bali offers a unique combination of sacred temples perched on dramatic cliffsides, emerald rice terraces sculpted by generations of farmers, and world-class wellness retreats nestled in jungle settings. From the artistic hub of Ubud to the serene beaches of the south, every corner reveals layers of culture, spirituality, and natural wonder.",
+      culturalNotes: "Balinese Hinduism (Agama Hindu Dharma) shapes every aspect of daily life. You'll witness colorful ceremonies with incense, flower offerings (canang sari), and gamelan music daily. The Balinese believe in maintaining harmony between three realms: the gods (dewa), humans (manusa), and nature (bhuta). Temple etiquette is important—always wear a sarong and sash, don't point your feet at shrines, and never stand higher than a priest. When entering villages, you may see offerings at doorsteps; avoid stepping on them. The Balinese are incredibly warm, but physical affection in public should be minimal. The left hand is considered unclean—use your right hand for giving and receiving.",
+      bestTime: "April to October (dry season) offers the best weather with sunny days and cooler nights. The wet season (November-March) brings afternoon showers but fewer tourists and lush landscapes. Avoid Nyepi (Day of Silence, usually in March) if you want to explore—the entire island shuts down for 24 hours. However, experiencing Nyepi preparations is extraordinary.",
+      currency: "Indonesian Rupiah (IDR) - 1 USD ≈ 15,000 IDR. Large denominations are common (50,000-100,000 notes). ATMs are widespread in tourist areas but may charge fees. Many upscale establishments accept credit cards, but cash is essential for local warungs, markets, and offerings.",
+      language: "Bahasa Indonesia is the national language, and Balinese is spoken locally. English is widely understood in tourist areas. Learning a few phrases (terima kasih = thank you, selamat pagi = good morning) is deeply appreciated. The Balinese often speak softly and indirectly—aggressive communication is considered rude.",
+      tips: "Dress modestly when visiting temples (sarong and sash required—often available for rent). Always use your right hand for giving and receiving. Don't touch anyone's head—it's considered the most sacred part of the body. Bargaining is expected at markets but keep it friendly. Download Grab or Gojek for transport. Drink only bottled water. Carry small notes for tips and offerings. Book spa treatments in advance during peak season. Respect the 'pecalang' (traditional security guards) during ceremonies."
     },
     days: [
       {
@@ -516,8 +516,8 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
       outbound: {
         airline: 'United Airlines',
         flightNumber: 'UA 32',
-        departure: { airport: 'LAX', city: 'Los Angeles', time: '10:50 AM', date: 'Dec 1, 2024', terminal: '7' },
-        arrival: { airport: 'NRT', city: 'Tokyo Narita', time: '4:25 PM', date: 'Dec 2, 2024', terminal: '1' },
+        departure: { airport: 'LAX', city: 'Los Angeles', time: '10:50 AM', date: 'Dec 1, 2026', terminal: '7' },
+        arrival: { airport: 'NRT', city: 'Tokyo Narita', time: '4:25 PM', date: 'Dec 2, 2026', terminal: '1' },
         duration: '11h 35m',
         stops: 'Non-stop',
         seats: ['31A (Window)', '31B (Middle)'],
@@ -526,8 +526,8 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
       return: {
         airline: 'United Airlines', 
         flightNumber: 'UA 33',
-        departure: { airport: 'NRT', city: 'Tokyo Narita', time: '5:00 PM', date: 'Dec 7, 2024', terminal: '1' },
-        arrival: { airport: 'LAX', city: 'Los Angeles', time: '9:10 AM', date: 'Dec 7, 2024', terminal: '7' },
+        departure: { airport: 'NRT', city: 'Tokyo Narita', time: '5:00 PM', date: 'Dec 7, 2026', terminal: '1' },
+        arrival: { airport: 'LAX', city: 'Los Angeles', time: '9:10 AM', date: 'Dec 7, 2026', terminal: '7' },
         duration: '10h 10m',
         stops: 'Non-stop',
         seats: ['31A (Window)', '31B (Middle)'],
@@ -537,8 +537,8 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
     hotelInfo: {
       name: 'The Peninsula Tokyo',
       type: 'Luxury Hotel',
-      checkIn: 'Dec 2, 2024 (3:00 PM)',
-      checkOut: 'Dec 7, 2024 (12:00 PM)',
+      checkIn: 'Dec 2, 2026 (3:00 PM)',
+      checkOut: 'Dec 7, 2026 (12:00 PM)',
       nights: 5,
       rooms: '1 Deluxe King Room with City View',
       amenities: ['Spa & Wellness Center', 'Rooftop Bar', 'Michelin Star Restaurant', 'Fitness Center'],
@@ -556,12 +556,12 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
       ]
     },
     destinationInfo: {
-      overview: "Tokyo seamlessly blends cutting-edge technology with ancient traditions.",
-      culturalNotes: "Japanese culture values respect, punctuality, and cleanliness.",
-      bestTime: "March to May (cherry blossom season) and October to November.",
-      currency: "Japanese Yen (JPY) - 1 USD ≈ 150 JPY",
-      language: "Japanese. English signage common in tourist areas.",
-      tips: "Cash is king. Get a Suica/Pasmo card. Don't tip."
+      overview: "Tokyo is a city of contrasts where neon-lit skyscrapers tower over ancient shrines, and cutting-edge robotics share space with centuries-old tea ceremonies. As the world's most populous metropolitan area, Tokyo offers endless discoveries—from the serene gardens of the Imperial Palace to the organized chaos of Shibuya Crossing, from Michelin-starred kaiseki to perfect bowls of ramen in narrow alleyways. Each of Tokyo's 23 wards has its own distinct personality, making every day an adventure into a different facet of Japanese culture.",
+      culturalNotes: "Japanese culture emphasizes 'wa' (harmony), respect, and attention to detail. Punctuality is sacred—trains are timed to the second. Remove shoes when entering homes, traditional restaurants, and temples (look for genkan entrance areas). Bowing is the standard greeting; the deeper the bow, the more respect shown. Speaking loudly in public, especially on trains, is considered rude—you'll notice most people use silent mode on phones. When exchanging business cards, use both hands and study the card before putting it away respectfully. Tipping is not practiced and can even be considered insulting. The concept of 'omotenashi' (selfless hospitality) means service will often exceed expectations without expecting anything extra in return.",
+      bestTime: "March to May (cherry blossom season, peaks late March/early April) and October to November (autumn colors, comfortable temperatures). Summer (June-August) is hot, humid, and crowded with festivals. Winter is mild but magical for illuminations. Golden Week (late April/early May), Obon (mid-August), and New Year are extremely busy domestic travel periods.",
+      currency: "Japanese Yen (JPY) - 1 USD ≈ 150 JPY. Japan is still largely a cash society. Many restaurants, small shops, and izakayas don't accept cards. 7-Eleven and post office ATMs accept foreign cards. Convenience stores (konbini) are excellent for quick, quality food and services 24/7.",
+      language: "Japanese is the primary language. English signage is common in tourist areas and on public transport, but conversational English is limited. Download Google Translate with offline Japanese and the camera feature for reading menus. Learn basic phrases: 'sumimasen' (excuse me), 'arigatou gozaimasu' (thank you very much), 'oishii' (delicious).",
+      tips: "Get a Suica or Pasmo IC card immediately for seamless train travel. Never eat while walking—find a bench or designated area. Queue patiently and orderly everywhere. Don't blow your nose in public; step away. Tattoos may restrict access to onsens (hot springs) and some traditional establishments. Always carry a small towel (tenugui)—many restrooms lack paper towels. Pocket wifi or eSIM is essential. Most restaurants display plastic food models (sampuru) outside—pointing is perfectly acceptable for ordering."
     },
     days: [
       {
