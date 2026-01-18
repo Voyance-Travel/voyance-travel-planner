@@ -111,6 +111,113 @@ Deno.serve(async (req) => {
         alt_text: row.alt_text || null,
         is_hero: row.is_hero === true || row.is_hero === 'true',
       }))
+    } else if (table === 'destinations') {
+      processedRows = rows.map((row) => {
+        const parseJsonField = (field: unknown) => {
+          if (!field) return null
+          if (typeof field === 'string') {
+            try { return JSON.parse(field) } catch { return field }
+          }
+          return field
+        }
+        
+        return {
+          id: row.id,
+          city: row.city,
+          country: row.country,
+          region: row.region || null,
+          timezone: row.timezone || null,
+          currency_code: row.currency_code || null,
+          description: row.description || null,
+          temperature_range: row.temperature_range || null,
+          seasonality: row.seasonality || null,
+          best_time_to_visit: row.best_time_to_visit || null,
+          cost_tier: row.cost_tier || null,
+          known_for: parseJsonField(row.known_for) || [],
+          points_of_interest: parseJsonField(row.points_of_interest) || [],
+          stock_image_url: row.stock_image_url || null,
+          featured: row.featured === true || row.featured === 'true',
+          tier: row.tier ? parseInt(String(row.tier)) : 1,
+          alternative_names: parseJsonField(row.alternative_names) || [],
+          safe_search_keywords: parseJsonField(row.safe_search_keywords) || [],
+          default_transport_modes: parseJsonField(row.default_transport_modes) || [],
+          dynamic_weather: parseJsonField(row.dynamic_weather),
+          dynamic_currency_conversion: parseJsonField(row.dynamic_currency_conversion),
+          seasonal_events: parseJsonField(row.seasonal_events) || {},
+          last_content_update: row.last_content_update || null,
+          last_weather_update: row.last_weather_update || null,
+          last_currency_update: row.last_currency_update || null,
+          population: row.population ? parseInt(String(row.population)) : 0,
+          tags: parseJsonField(row.tags) || [],
+          google_place_id: row.google_place_id || null,
+          airport_codes: parseJsonField(row.airport_codes),
+          currency_data: parseJsonField(row.currency_data),
+          weather_data: parseJsonField(row.weather_data),
+          enrichment_status: parseJsonField(row.enrichment_status) || {},
+          last_enriched: row.last_enriched || null,
+          enrichment_priority: row.enrichment_priority ? parseInt(String(row.enrichment_priority)) : 0,
+          coordinates: parseJsonField(row.coordinates),
+          airport_lookup_codes: row.airport_lookup_codes || null,
+          created_at: row.created_at || new Date().toISOString(),
+          updated_at: row.updated_at || new Date().toISOString(),
+        }
+      })
+    } else if (table === 'guides') {
+      processedRows = rows.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        subtitle: row.subtitle || null,
+        author: row.author || null,
+        image_url: row.image_url || null,
+        excerpt: row.excerpt || null,
+        content: typeof row.content === 'string' ? JSON.parse(row.content) : (row.content || {}),
+        category: row.category || null,
+        reading_time: row.reading_time ? parseInt(String(row.reading_time)) : null,
+        destination_city: row.destination_city || null,
+        destination_country: row.destination_country || null,
+        tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []),
+        featured: row.featured === true || row.featured === 'true',
+        published: row.published === true || row.published === 'true',
+        created_at: row.created_at || new Date().toISOString(),
+        updated_at: row.updated_at || new Date().toISOString(),
+      }))
+    } else if (table === 'trip_activities') {
+      processedRows = rows.map((row) => ({
+        id: row.id,
+        trip_id: row.trip_id || row.itinerary_id || null,
+        itinerary_day_id: row.itinerary_day_id || null,
+        type: row.type || 'activity',
+        title: row.title,
+        description: row.description || null,
+        start_time: row.start_time || null,
+        end_time: row.end_time || null,
+        venue_id: row.venue_id || null,
+        location: row.location || null,
+        address: row.address || null,
+        latitude: row.latitude ? parseFloat(String(row.latitude)) : null,
+        longitude: row.longitude ? parseFloat(String(row.longitude)) : null,
+        place_id: row.place_id || null,
+        block_order: row.block_order ? parseInt(String(row.block_order)) : 0,
+        locked: row.locked === true || row.locked === 'true',
+        recommendation_score: row.recommendation_score ? parseFloat(String(row.recommendation_score)) : null,
+        added_by_user: row.added_by_user === true || row.added_by_user === 'true',
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {}),
+        booking_status: row.booking_status || 'not_booked',
+        booking_required: row.booking_required === true || row.booking_required === 'true',
+        cost: row.cost ? parseFloat(String(row.cost)) : null,
+        currency: row.currency || 'USD',
+        tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []),
+        photos: typeof row.photos === 'string' ? JSON.parse(row.photos) : (row.photos || []),
+        operating_hours: row.operating_hours ? (typeof row.operating_hours === 'string' ? JSON.parse(row.operating_hours) : row.operating_hours) : null,
+        transportation: row.transportation ? (typeof row.transportation === 'string' ? JSON.parse(row.transportation) : row.transportation) : null,
+        verified: row.verified === true || row.verified === 'true',
+        verification_confidence: row.verification_confidence ? parseInt(String(row.verification_confidence)) : null,
+        rating_value: row.rating_value ? parseFloat(String(row.rating_value)) : null,
+        rating_count: row.rating_count ? parseInt(String(row.rating_count)) : null,
+        created_at: row.created_at || new Date().toISOString(),
+        updated_at: row.updated_at || new Date().toISOString(),
+      }))
     }
 
     const { error } = await supabase
