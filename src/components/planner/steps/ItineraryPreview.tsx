@@ -1,13 +1,17 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Plane, Hotel, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Plane, Hotel, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Crown, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useItinerary, useGenerateItinerary, isItineraryReady, isItineraryGenerating, getStatusMessage } from '@/services/itineraryAPI';
 import { convertBackendDay } from '@/types/itinerary';
 import type { DayItinerary } from '@/types/itinerary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/hooks/useEntitlements';
+import { useAuth } from '@/contexts/AuthContext';
+import { UpgradePrompt } from '@/components/common/UpgradePrompt';
+import { Link } from 'react-router-dom';
 
 interface ItineraryPreviewProps {
   tripId?: string;
@@ -134,6 +138,17 @@ export default function ItineraryPreview({
   onBack,
   isLoading: isSubmitting,
 }: ItineraryPreviewProps) {
+  const { isAuthenticated } = useAuth();
+  const { entitlements, isLoading: isLoadingEntitlements, isPaid } = useEntitlements();
+  const consumeUsage = useConsumeUsage();
+  const [hasConsumedQuota, setHasConsumedQuota] = useState(false);
+
+  // Check entitlements
+  const canGenerate = canUse(entitlements, 'ai.itinerary.generate');
+  const canRegenerate = canUse(entitlements, 'ai.itinerary.regenerate');
+  const remainingGenerations = getRemainingQuota(entitlements, 'ai.itinerary.generate_quota_month');
+  const showReasoning = canUse(entitlements, 'ai.itinerary.reasoning');
+
   // Fetch itinerary from API with auto-polling during generation
   const { 
     data: itineraryResponse, 
@@ -144,12 +159,21 @@ export default function ItineraryPreview({
   
   const generateMutation = useGenerateItinerary();
   
-  // Auto-trigger generation if no itinerary exists
+  // Auto-trigger generation if no itinerary exists AND user has quota
   useEffect(() => {
-    if (tripId && itineraryResponse?.status === 'not_started') {
-      generateMutation.mutate({ tripId });
+    if (tripId && itineraryResponse?.status === 'not_started' && canGenerate && !hasConsumedQuota) {
+      // Consume quota before generating
+      consumeUsage.mutate(
+        { metricKey: 'ai.itinerary.generate', amount: 1 },
+        {
+          onSuccess: () => {
+            setHasConsumedQuota(true);
+            generateMutation.mutate({ tripId });
+          },
+        }
+      );
     }
-  }, [tripId, itineraryResponse?.status]);
+  }, [tripId, itineraryResponse?.status, canGenerate, hasConsumedQuota]);
 
   // Convert API days to frontend format
   const days: DayItinerary[] = itineraryResponse?.itinerary?.days?.map(convertBackendDay) || [];
@@ -160,12 +184,58 @@ export default function ItineraryPreview({
   const progress = itineraryResponse?.progress;
   const statusMessage = status ? getStatusMessage(status, progress) : '';
 
-  // Handle retry
+  // Handle retry/regenerate
   const handleRetry = () => {
-    if (tripId) {
+    if (!tripId) return;
+    
+    // For regeneration, check entitlement
+    if (isReady && !canRegenerate) {
+      return; // Button should be disabled anyway
+    }
+    
+    // Consume quota if regenerating (not initial generation failure)
+    if (isReady) {
+      consumeUsage.mutate(
+        { metricKey: 'ai.itinerary.regenerate', amount: 1 },
+        { onSuccess: () => generateMutation.mutate({ tripId }) }
+      );
+    } else {
       generateMutation.mutate({ tripId });
     }
   };
+
+  // Check if user can generate (has quota)
+  if (!isLoadingEntitlements && !canGenerate && !isReady && !isGenerating) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-4xl mx-auto"
+      >
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-display font-medium text-foreground mb-2">
+            Your Trip Preview
+          </h1>
+          <p className="text-muted-foreground">
+            AI itinerary for {tripDetails.destination}
+          </p>
+        </div>
+        
+        <UpgradePrompt
+          feature="AI itinerary generations"
+          reason={remainingGenerations === 0 ? 'limit_reached' : 'disabled'}
+          remaining={remainingGenerations ?? undefined}
+          limit={entitlements?.['ai.itinerary.generate_quota_month']?.limit}
+        />
+        
+        <div className="flex justify-start mt-8">
+          <Button variant="outline" onClick={onBack} className="h-12 px-6">
+            Back
+          </Button>
+        </div>
+      </motion.div>
+    );
+  }
 
   // Show loading state
   if (isFetching && !itineraryResponse) {
