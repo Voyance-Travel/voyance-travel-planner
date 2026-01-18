@@ -14,12 +14,13 @@ import {
   AlertCircle,
   Shield,
   Lock,
-  Eye,
   Star,
+  ArrowRight,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -135,32 +136,36 @@ export default function PlannerBooking() {
     <MainLayout>
       <Head title={`Book Trip to ${state.basics.destination} | Voyance`} />
 
-      <section className="py-10 min-h-screen bg-background">
-        <div className="max-w-7xl mx-auto px-6 lg:px-10">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            {/* Hero - using destination-specific image */}
-            <div className="relative mb-12 rounded-3xl overflow-hidden h-64 md:h-80">
-              <DynamicDestinationPhotos 
-                destination={state.basics.destination || ''} 
-                startDate={state.basics.startDate || ''} 
-                endDate={state.basics.endDate || ''} 
-                travelers={travelers}
-                variant="hero"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-8 text-foreground">
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 backdrop-blur-sm rounded-full text-sm font-medium mb-3"
-                >
-                  <CheckCircle className="h-4 w-4 text-primary" />
+      <section className="min-h-screen bg-background">
+        {/* Full-width Hero */}
+        <div className="relative h-[40vh] min-h-[320px] overflow-hidden">
+          <DynamicDestinationPhotos 
+            destination={state.basics.destination || ''} 
+            startDate={state.basics.startDate || ''} 
+            endDate={state.basics.endDate || ''} 
+            travelers={travelers}
+            variant="hero"
+            className="!rounded-none !h-full"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+          
+          {/* Hero Content */}
+          <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12">
+            <div className="max-w-6xl mx-auto">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+              >
+                <Badge variant="secondary" className="mb-4 gap-1.5">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
                   Ready to book
-                </motion.div>
-                <h1 className="text-4xl md:text-5xl font-serif font-normal text-foreground mb-2">{state.basics.destination}</h1>
-                <p className="text-lg text-muted-foreground flex items-center gap-3">
-                  <span className="flex items-center gap-1.5">
+                </Badge>
+                <h1 className="text-4xl md:text-6xl font-serif font-light text-foreground mb-3">
+                  {state.basics.destination}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground">
+                  <span className="flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
                     {state.basics.startDate && state.basics.endDate ? (
                       <>
@@ -168,150 +173,244 @@ export default function PlannerBooking() {
                       </>
                     ) : 'Dates not set'}
                   </span>
-                  <span className="text-muted-foreground/50">•</span>
-                  <span className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
                     {travelers} traveler{travelers > 1 ? 's' : ''}
                   </span>
-                </p>
-              </div>
+                  <span className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    {nights} nights
+                  </span>
+                </div>
+              </motion.div>
             </div>
+          </div>
+        </div>
 
-            <div className="grid lg:grid-cols-5 gap-10">
-              {/* Left: Details */}
-              <div className="lg:col-span-3 space-y-8">
-                {/* Flights */}
-                {state.flights && (
-                  <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Plane className="w-4 h-4 text-primary" />
-                      <h2 className="font-medium text-muted-foreground uppercase text-xs tracking-wide">Flights</h2>
-                    </div>
-                    {state.flights.departure && (
-                      <div className="bg-card rounded-2xl border border-border p-5 flex items-center justify-between">
-                        <div className="flex items-center gap-6">
-                          <div>
-                            <p className="text-xs text-muted-foreground uppercase">Outbound</p>
-                            <p className="font-semibold">{state.flights.departure.airline}</p>
-                          </div>
-                          <div className="h-8 w-px bg-border" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">{state.flights.departure.cabin && `${state.flights.departure.cabin} class`}</p>
-                            <p className="text-xs text-muted-foreground">{state.flights.departure.departureTime} → {state.flights.departure.arrivalTime}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold">${state.flights.departure.price.toFixed(2)}</p>
-                          <p className="text-xs text-muted-foreground">per person</p>
-                        </div>
-                      </div>
-                    )}
-                    {state.flights.return && (
-                      <div className="bg-card rounded-2xl border border-border p-5 flex items-center justify-between">
-                        <div className="flex items-center gap-6">
-                          <div>
-                            <p className="text-xs text-muted-foreground uppercase">Return</p>
-                            <p className="font-semibold">{state.flights.return.airline}</p>
-                          </div>
-                          <div className="h-8 w-px bg-border" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">{state.flights.return.cabin && `${state.flights.return.cabin} class`}</p>
-                            <p className="text-xs text-muted-foreground">{state.flights.return.departureTime} → {state.flights.return.arrivalTime}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold">${state.flights.return.price.toFixed(2)}</p>
-                          <p className="text-xs text-muted-foreground">per person</p>
-                        </div>
-                      </div>
-                    )}
-                  </motion.section>
-                )}
-
-                {/* Hotel */}
-                {state.hotel && (
-                  <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Hotel className="w-4 h-4 text-primary" />
-                      <h2 className="font-medium text-muted-foreground uppercase text-xs tracking-wide">Accommodation</h2>
-                    </div>
-                    <div className="bg-card rounded-2xl border border-border overflow-hidden flex">
-                      {state.hotel.imageUrl && (
-                        <img src={state.hotel.imageUrl} alt={state.hotel.name} className="w-28 h-28 object-cover shrink-0" />
-                      )}
-                      <div className="p-5 flex-1">
-                        <h3 className="font-semibold text-lg">{state.hotel.name}</h3>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                          <MapPin className="h-4 w-4" />
-                          {state.hotel.location}
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">{state.hotel.roomType} • {nights} night{nights > 1 ? 's' : ''}</p>
-                      </div>
-                      <div className="p-5 text-right flex flex-col justify-between">
-                        <p className="text-lg font-bold">${hotelTotal.toFixed(2)}</p>
-                        <p className="text-xs text-muted-foreground">${state.hotel.pricePerNight}/night</p>
-                      </div>
-                    </div>
-                  </motion.section>
-                )}
-              </div>
-
-              {/* Right: Payment Summary */}
-              <div className="lg:col-span-2">
+        {/* Main Content */}
+        <div className="max-w-6xl mx-auto px-6 lg:px-10 py-10">
+          <div className="grid lg:grid-cols-3 gap-8">
+            
+            {/* Left Column - Trip Details */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* Flights Section */}
+              {state.flights && (state.flights.departure || state.flights.return) && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.25 }}
-                  className="sticky top-24 bg-card rounded-2xl border border-border overflow-hidden"
+                  transition={{ delay: 0.15 }}
                 >
-                  <div className="bg-primary p-6">
-                    <h2 className="text-xl font-semibold text-primary-foreground">Your Trip Total</h2>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Plane className="w-4 h-4 text-primary" />
+                    </div>
+                    <h2 className="text-lg font-medium">Flights</h2>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {state.flights.departure && (
+                      <div className="group relative bg-gradient-to-r from-muted/50 to-transparent rounded-xl p-5 hover:from-muted transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-5">
+                            <div className="text-center">
+                              <p className="text-2xl font-light">{state.flights.departure.departureTime}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{state.basics.originCity?.split(' ')[0] || 'Origin'}</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <div className="w-12 h-px bg-border" />
+                              <ArrowRight className="w-4 h-4" />
+                              <div className="w-12 h-px bg-border" />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-2xl font-light">{state.flights.departure.arrivalTime}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{state.basics.destination?.split(' ')[0] || 'Destination'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-muted-foreground">{state.flights.departure.airline}</p>
+                            <Badge variant="outline" className="mt-1 text-xs font-normal">
+                              {state.flights.departure.cabin?.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="absolute right-5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-lg font-semibold">${state.flights.departure.price}</span>
+                          <span className="text-xs text-muted-foreground">/person</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {state.flights.return && (
+                      <div className="group relative bg-gradient-to-r from-muted/50 to-transparent rounded-xl p-5 hover:from-muted transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-5">
+                            <div className="text-center">
+                              <p className="text-2xl font-light">{state.flights.return.departureTime}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{state.basics.destination?.split(' ')[0] || 'Destination'}</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <div className="w-12 h-px bg-border" />
+                              <ArrowRight className="w-4 h-4" />
+                              <div className="w-12 h-px bg-border" />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-2xl font-light">{state.flights.return.arrivalTime}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{state.basics.originCity?.split(' ')[0] || 'Origin'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-muted-foreground">{state.flights.return.airline}</p>
+                            <Badge variant="outline" className="mt-1 text-xs font-normal">
+                              {state.flights.return.cabin?.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="absolute right-5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-lg font-semibold">${state.flights.return.price}</span>
+                          <span className="text-xs text-muted-foreground">/person</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Hotel Section */}
+              {state.hotel && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-secondary/50 flex items-center justify-center">
+                      <Hotel className="w-4 h-4 text-secondary-foreground" />
+                    </div>
+                    <h2 className="text-lg font-medium">Accommodation</h2>
+                  </div>
+                  
+                  <div className="group relative bg-gradient-to-r from-muted/50 to-transparent rounded-xl p-5 hover:from-muted transition-colors">
+                    <div className="flex gap-5">
+                      {state.hotel.imageUrl && (
+                        <div className="w-24 h-24 rounded-lg overflow-hidden shrink-0">
+                          <img src={state.hotel.imageUrl} alt={state.hotel.name} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-xl font-medium mb-1">{state.hotel.name}</h3>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mb-2">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5" />
+                            {state.hotel.location}
+                          </span>
+                          <span className="flex items-center gap-0.5">
+                            {[...Array(Math.round(state.hotel.rating / 2) || 4)].map((_, i) => (
+                              <Star key={i} className="h-3 w-3 fill-primary text-primary" />
+                            ))}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{state.hotel.roomType}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-2xl font-light">${state.hotel.pricePerNight}</p>
+                        <p className="text-xs text-muted-foreground">per night</p>
+                        <p className="text-sm text-muted-foreground mt-2">{nights} nights total</p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Trust Signals */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="flex flex-wrap gap-6 pt-4"
+              >
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Lock className="h-4 w-4" />
+                  <span>Secure payment</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Shield className="h-4 w-4" />
+                  <span>Encrypted data</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Free cancellation 24h before</span>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Right Column - Payment Summary */}
+            <div className="lg:col-span-1">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+                className="sticky top-24"
+              >
+                <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-lg">
+                  {/* Summary Header */}
+                  <div className="p-6 bg-gradient-to-br from-primary/5 to-transparent">
+                    <h2 className="text-lg font-medium mb-1">Trip Total</h2>
+                    <p className="text-4xl font-light">${grandTotal.toFixed(2)}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      ${(grandTotal / travelers).toFixed(2)} per person
+                    </p>
                   </div>
 
-                  <div className="p-6 space-y-5">
+                  {/* Breakdown */}
+                  <div className="p-6 space-y-4 text-sm">
                     {flightSubtotal > 0 && (
                       <div className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Flights</p>
-                        <div className="space-y-1.5 pl-4 border-l-2 border-primary/20 text-sm">
-                          <div className="flex justify-between"><span className="text-muted-foreground">Outbound × {travelers}</span><span>${outboundFlightBase.toFixed(2)}</span></div>
-                          <div className="flex justify-between"><span className="text-muted-foreground">Return × {travelers}</span><span>${returnFlightBase.toFixed(2)}</span></div>
-                          <div className="flex justify-between text-muted-foreground/80"><span>Taxes & carrier fees (est.)</span><span>${flightTaxes.toFixed(2)}</span></div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Flights ({travelers}×)</span>
+                          <span>${flightSubtotal.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-muted-foreground/70">
+                          <span>Taxes & fees</span>
+                          <span>${flightTaxes.toFixed(2)}</span>
                         </div>
                       </div>
                     )}
+                    
                     {hotelSubtotal > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Accommodation</p>
-                        <div className="space-y-1.5 pl-4 border-l-2 border-secondary/20 text-sm">
-                          <div className="flex justify-between"><span className="text-muted-foreground">{nights} nights × ${state.hotel?.pricePerNight}/night</span><span>${hotelSubtotal.toFixed(2)}</span></div>
-                          <div className="flex justify-between text-muted-foreground/80"><span>Taxes & resort fees (est.)</span><span>${hotelTaxes.toFixed(2)}</span></div>
+                      <div className="space-y-2 pt-3 border-t border-border/50">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Hotel ({nights} nights)</span>
+                          <span>${hotelSubtotal.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-muted-foreground/70">
+                          <span>Taxes & fees</span>
+                          <span>${hotelTaxes.toFixed(2)}</span>
                         </div>
                       </div>
                     )}
+                    
                     {activitiesTotal > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Experiences</p>
-                        <div className="pl-4 border-l-2 border-secondary/20 text-sm">
-                          <div className="flex justify-between"><span className="text-muted-foreground">Activities & tours</span><span>${activitiesTotal.toFixed(2)}</span></div>
+                      <div className="pt-3 border-t border-border/50">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Activities</span>
+                          <span>${activitiesTotal.toFixed(2)}</span>
                         </div>
                       </div>
                     )}
-                    <div className="border-t border-dashed border-border pt-4 space-y-2 text-sm">
-                      <div className="flex justify-between"><span className="text-muted-foreground">Total estimated taxes & fees</span><span>${totalTaxes.toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Voyance concierge fee</span><span>${serviceFee.toFixed(2)}</span></div>
-                    </div>
-                    <div className="border-t border-border pt-5">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-lg font-semibold">Total</span>
-                        <div className="text-right">
-                          <span className="text-3xl font-bold text-foreground">${grandTotal.toFixed(2)}</span>
-                          <p className="text-xs text-muted-foreground">USD • Final price at checkout</p>
-                        </div>
+                    
+                    <div className="pt-3 border-t border-border/50">
+                      <div className="flex justify-between text-muted-foreground/70">
+                        <span>Service fee</span>
+                        <span>${serviceFee.toFixed(2)}</span>
                       </div>
                     </div>
+                  </div>
 
+                  {/* Action */}
+                  <div className="p-6 pt-0 space-y-4">
                     {error && (
-                      <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl">
+                      <div className="p-3 bg-destructive/10 rounded-lg">
                         <p className="text-sm text-destructive flex items-center gap-2">
                           <AlertCircle className="h-4 w-4 shrink-0" />
                           {error}
@@ -319,48 +418,28 @@ export default function PlannerBooking() {
                       </div>
                     )}
 
-                    <Button onClick={handleCheckout} disabled={isProcessing} size="lg" className="w-full h-14 text-lg">
+                    <Button onClick={handleCheckout} disabled={isProcessing} size="lg" className="w-full h-14 text-lg gap-2">
                       {isProcessing ? (
                         <>
-                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          <Loader2 className="h-5 w-5 animate-spin" />
                           Processing...
                         </>
                       ) : (
                         <>
-                          <CreditCard className="h-5 w-5 mr-2" />
+                          <CreditCard className="h-5 w-5" />
                           Complete Booking
                         </>
                       )}
                     </Button>
-
-                    <div className="pt-5 space-y-3 border-t border-border">
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0"><Lock className="h-4 w-4" /></div>
-                        <span>Secure payment via Stripe</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0"><Shield className="h-4 w-4" /></div>
-                        <span>Your data is encrypted and protected</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0"><CheckCircle className="h-4 w-4" /></div>
-                        <span>Free cancellation up to 24h before</span>
-                      </div>
-                    </div>
+                    
+                    <p className="text-xs text-center text-muted-foreground">
+                      Secure checkout powered by Stripe
+                    </p>
                   </div>
-                </motion.div>
-              </div>
+                </div>
+              </motion.div>
             </div>
-
-            {/* Footer Actions */}
-            <div className="mt-12 flex flex-wrap gap-4">
-              <Button variant="outline" onClick={() => navigate(-1)}>← Back to Trip Summary</Button>
-              <Button variant="secondary" onClick={() => navigate(`/planner/itinerary?tripId=${tripId}`)} disabled={!tripId}>
-                <Eye className="h-4 w-4 mr-2" />
-                Preview Itinerary
-              </Button>
-            </div>
-          </motion.div>
+          </div>
         </div>
       </section>
     </MainLayout>
