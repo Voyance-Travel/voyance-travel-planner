@@ -373,19 +373,37 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
 // ============================================================================
 
 export function useItinerary(tripId: string | null, options?: { refetchInterval?: number }) {
+  // Track consecutive errors for exponential backoff
+  const errorCountRef = { current: 0 };
+  const baseInterval = options?.refetchInterval || 5000; // Start at 5 seconds (was 3)
+  
   return useQuery({
     queryKey: ['itinerary', tripId],
     queryFn: () => getItinerary(tripId!),
     enabled: !!tripId,
     refetchInterval: (query) => {
-      // Poll while generating
+      // Poll while generating with exponential backoff on errors
       const status = query.state.data?.status;
+      
+      // Handle errors with exponential backoff
+      if (query.state.error) {
+        errorCountRef.current++;
+        const backoffInterval = Math.min(baseInterval * Math.pow(2, errorCountRef.current), 60000);
+        console.log(`[Itinerary] Error backoff: ${backoffInterval}ms (attempt ${errorCountRef.current})`);
+        return backoffInterval;
+      }
+      
+      // Reset error count on success
+      errorCountRef.current = 0;
+      
       if (status === 'generating' || status === 'running' || status === 'queued') {
-        return options?.refetchInterval || 3000; // 3 seconds
+        return baseInterval; // 5 seconds
       }
       return false;
     },
     staleTime: 30 * 1000, // 30 seconds
+    // Stop retrying after 5 minutes of polling
+    retry: (failureCount) => failureCount < 60,
   });
 }
 
@@ -445,14 +463,25 @@ export function useRegenerateDay() {
 }
 
 export function useJobStatus(jobId: string | null) {
+  const errorCountRef = { current: 0 };
+  
   return useQuery({
     queryKey: ['job-status', jobId],
     queryFn: () => getJobStatus(jobId!),
     enabled: !!jobId,
     refetchInterval: (query) => {
       const state = query.state.data?.state;
+      
+      // Exponential backoff on errors
+      if (query.state.error) {
+        errorCountRef.current++;
+        return Math.min(5000 * Math.pow(2, errorCountRef.current), 60000);
+      }
+      
+      errorCountRef.current = 0;
+      
       if (state === 'waiting' || state === 'active') {
-        return 2000; // Poll every 2 seconds while running
+        return 5000; // Poll every 5 seconds while running (was 2)
       }
       return false;
     },

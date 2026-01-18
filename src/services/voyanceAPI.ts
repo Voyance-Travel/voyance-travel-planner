@@ -448,14 +448,21 @@ export const itineraryAPI = {
       onProgress?: (response: ItineraryResponse) => void;
     } = {}
   ): Promise<ItineraryResponse> {
-    const { pollIntervalMs = 3000, timeoutMs = 300000, onProgress } = options;
+    // Increase default polling interval to 5 seconds (was 3)
+    const { pollIntervalMs = 5000, timeoutMs = 300000, onProgress } = options;
     
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
+      let currentInterval = pollIntervalMs;
+      let consecutiveErrors = 0;
       
       const poll = async () => {
         try {
           const response = await this.get(tripId);
+          
+          // Reset on success
+          consecutiveErrors = 0;
+          currentInterval = pollIntervalMs;
           
           if (onProgress) {
             onProgress(response);
@@ -477,9 +484,20 @@ export const itineraryAPI = {
           }
           
           // Continue polling for 'queued', 'running', 'not_started'
-          setTimeout(poll, pollIntervalMs);
+          setTimeout(poll, currentInterval);
         } catch (error) {
-          reject(error);
+          // Exponential backoff on errors
+          consecutiveErrors++;
+          currentInterval = Math.min(pollIntervalMs * Math.pow(2, consecutiveErrors), 60000);
+          console.log(`[VoyanceAPI] Poll error, backoff to ${currentInterval}ms (attempt ${consecutiveErrors})`);
+          
+          // Give up after too many errors
+          if (consecutiveErrors > 10) {
+            reject(error);
+            return;
+          }
+          
+          setTimeout(poll, currentInterval);
         }
       };
       
