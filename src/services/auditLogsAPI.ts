@@ -1,13 +1,11 @@
 /**
  * Audit Logs API Service
  * 
- * Admin endpoint for viewing audit logs.
+ * Uses Supabase audit_logs table directly.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.voyance.travel';
 
 // ============================================================================
 // TYPES
@@ -35,42 +33,50 @@ export interface AuditLogsParams {
 // API FUNCTIONS
 // ============================================================================
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` };
-  }
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
 /**
- * Get audit logs (admin only)
+ * Get audit logs from Supabase
  */
 export async function getAuditLogs(params?: AuditLogsParams): Promise<AuditLog[]> {
-  const headers = await getAuthHeader();
-  const queryParams = new URLSearchParams();
+  let query = supabase
+    .from('audit_logs')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-  if (params?.actionType) queryParams.set('actionType', params.actionType);
-  if (params?.actor) queryParams.set('actor', params.actor);
-  if (params?.targetId) queryParams.set('targetId', params.targetId);
-  if (params?.from) queryParams.set('from', params.from);
-  if (params?.to) queryParams.set('to', params.to);
-  if (params?.limit) queryParams.set('limit', params.limit.toString());
-
-  const url = `${API_BASE_URL}/api/v1/audit/logs${queryParams.toString() ? `?${queryParams}` : ''}`;
-
-  const response = await fetch(url, { headers });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Fetch failed' }));
-    throw new Error(error.error || 'Failed to fetch audit logs');
+  if (params?.actionType) {
+    query = query.eq('action_type', params.actionType);
+  }
+  if (params?.actor) {
+    query = query.eq('actor', params.actor);
+  }
+  if (params?.targetId) {
+    query = query.eq('target_id', params.targetId);
+  }
+  if (params?.from) {
+    query = query.gte('created_at', params.from);
+  }
+  if (params?.to) {
+    query = query.lte('created_at', params.to);
+  }
+  if (params?.limit) {
+    query = query.limit(params.limit);
+  } else {
+    query = query.limit(100);
   }
 
-  return response.json();
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message || 'Failed to fetch audit logs');
+  }
+
+  return (data || []).map(log => ({
+    id: log.id,
+    actionType: log.action_type || log.action,
+    actor: log.actor || 'system',
+    targetId: log.target_id || undefined,
+    metadata: log.metadata as Record<string, unknown> | undefined,
+    createdAt: log.created_at,
+  }));
 }
 
 // ============================================================================

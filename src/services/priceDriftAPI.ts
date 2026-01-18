@@ -1,16 +1,11 @@
 /**
  * Voyance Price Drift API Service
  * 
- * Integrates with Railway backend price drift endpoints:
- * - POST /api/v1/price-drift/track - Start tracking price changes
- * - GET /api/v1/price-drift/:id/status - Get price status and history
- * - POST /api/v1/price-drift/:id/stop - Stop tracking
+ * Price tracking - stub implementation for future feature.
+ * Would integrate with flight/hotel APIs for price monitoring.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // Types
@@ -23,7 +18,7 @@ export interface TrackPriceInput {
   itemType: PriceItemType;
   originalPrice: number;
   currency?: string;
-  alertThreshold?: number; // Percentage (0-100)
+  alertThreshold?: number;
 }
 
 export interface TrackPriceResponse {
@@ -83,84 +78,77 @@ export interface StopTrackingResponse {
 }
 
 // ============================================================================
-// API Helpers
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  return { 'Content-Type': 'application/json' };
-}
-
-async function priceDriftApiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}/api/v1/price-drift${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
-
-// ============================================================================
-// Price Drift API
+// Stub API Functions - Future Feature
 // ============================================================================
 
 /**
  * Start tracking price changes for an item
+ * Note: This is a stub for a future feature
  */
 export async function trackPrice(input: TrackPriceInput): Promise<TrackPriceResponse> {
-  return priceDriftApiRequest<TrackPriceResponse>('/track', {
-    method: 'POST',
-    body: JSON.stringify({
-      ...input,
+  console.log('[PriceDriftAPI] Feature not yet implemented', input);
+  
+  // Return stub response
+  return {
+    success: true,
+    data: {
+      trackingId: `track_${Date.now()}`,
+      itemId: input.itemId,
+      itemType: input.itemType,
+      originalPrice: input.originalPrice,
       currency: input.currency || 'USD',
       alertThreshold: input.alertThreshold || 5.0,
-    }),
-  });
+      alertEnabled: true,
+      trackedSince: new Date().toISOString(),
+    },
+  };
 }
 
 /**
  * Get current price status and history
  */
 export async function getPriceStatus(trackingId: string): Promise<PriceStatusResponse> {
-  return priceDriftApiRequest<PriceStatusResponse>(`/${trackingId}/status`);
+  // Return stub with no drift
+  return {
+    success: true,
+    data: {
+      trackingId,
+      itemId: 'item_placeholder',
+      itemType: 'flight',
+      originalPrice: 500,
+      currentPrice: 500,
+      currency: 'USD',
+      alertThreshold: 5,
+      alertEnabled: true,
+      trackedSince: new Date().toISOString(),
+      lastChecked: new Date().toISOString(),
+      priceHistory: [],
+      driftAnalysis: {
+        hasDrift: false,
+        driftAmount: 0,
+        driftPercent: 0,
+        direction: 'stable',
+        recommendation: 'Price is stable. Good time to book.',
+        confidenceScore: 1.0,
+      },
+    },
+  };
 }
 
 /**
  * Stop tracking price changes
  */
 export async function stopTracking(trackingId: string): Promise<StopTrackingResponse> {
-  return priceDriftApiRequest<StopTrackingResponse>(`/${trackingId}/stop`, {
-    method: 'POST',
-  });
+  return {
+    success: true,
+    message: `Stopped tracking ${trackingId}`,
+  };
 }
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-/**
- * Get drift direction label
- */
 export function getDriftDirectionLabel(direction: DriftAnalysis['direction']): string {
   switch (direction) {
     case 'up': return 'Price Increased';
@@ -169,9 +157,6 @@ export function getDriftDirectionLabel(direction: DriftAnalysis['direction']): s
   }
 }
 
-/**
- * Get drift direction color
- */
 export function getDriftDirectionColor(direction: DriftAnalysis['direction']): string {
   switch (direction) {
     case 'up': return 'red';
@@ -180,9 +165,6 @@ export function getDriftDirectionColor(direction: DriftAnalysis['direction']): s
   }
 }
 
-/**
- * Format price change for display
- */
 export function formatPriceChange(amount: number, currency: string = 'USD'): string {
   const formatted = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -208,8 +190,8 @@ export function usePriceStatus(trackingId: string | null) {
     queryKey: priceDriftKeys.status(trackingId || ''),
     queryFn: () => trackingId ? getPriceStatus(trackingId) : Promise.reject('No tracking ID'),
     enabled: !!trackingId,
-    staleTime: 60_000, // 1 minute
-    refetchInterval: 5 * 60_000, // Refetch every 5 minutes for live tracking
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 }
 

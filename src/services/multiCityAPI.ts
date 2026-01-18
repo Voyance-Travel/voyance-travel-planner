@@ -1,20 +1,11 @@
 /**
  * Voyance Multi-City API
  * 
- * Multi-city trip planning endpoints:
- * - POST /api/v1/trips/:tripId/add-cities - Generate multi-city options
- * - GET /api/v1/trips/:tripId/multi-city-options - Get saved options
- * - POST /api/v1/trips/:tripId/multi-city-options/:optionId/adjust-nights - Adjust nights
- * - POST /api/v1/trips/:tripId/confirm-multi-city - Confirm booking
- * - GET /api/v1/multi-city/pricing - Get pricing structure
- * - GET /api/v1/multi-city/popular-routes - Get popular routes
+ * Multi-city trip planning - stub implementation for future feature.
+ * Currently returns placeholder data.
  */
 
-import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // Types
@@ -105,68 +96,30 @@ export interface PopularRoute {
 }
 
 // ============================================================================
-// API Helpers
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  return { 'Content-Type': 'application/json' };
-}
-
-async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData._error || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
-
-// ============================================================================
-// Multi-City API
+// Stub API Functions - Future Feature
 // ============================================================================
 
 /**
  * Generate multi-city options for a trip
+ * Note: This is a stub for a future feature
  */
 export async function generateMultiCityOptions(
   tripId: string,
   potentialCities: PotentialCity[],
   preferences?: AddCitiesPreferences
 ): Promise<MultiCityOptionsResponse> {
-  return apiRequest<MultiCityOptionsResponse>(`/api/v1/trips/${tripId}/add-cities`, {
-    method: 'POST',
-    body: JSON.stringify({ potentialCities, preferences }),
-  });
+  // Stub implementation - returns empty options
+  console.log('[MultiCityAPI] Feature not yet implemented', { tripId, potentialCities, preferences });
+  
+  return {
+    tripId,
+    options: [],
+    metadata: {
+      baseCreditsUsed: 0,
+      totalCities: potentialCities.length,
+      generatedAt: new Date().toISOString(),
+    },
+  };
 }
 
 /**
@@ -177,9 +130,11 @@ export async function getMultiCityOptions(tripId: string): Promise<{
   options: MultiCityOption[];
   expiresAt: string | null;
 }> {
-  return apiRequest(`/api/v1/trips/${tripId}/multi-city-options`, {
-    method: 'GET',
-  });
+  return {
+    tripId,
+    options: [],
+    expiresAt: null,
+  };
 }
 
 /**
@@ -195,10 +150,14 @@ export async function adjustCityNights(
   adjustedAllocations: CityAllocation[];
   totalNights: number;
 }> {
-  return apiRequest(`/api/v1/trips/${tripId}/multi-city-options/${optionId}/adjust-nights`, {
-    method: 'POST',
-    body: JSON.stringify({ cityAllocations }),
-  });
+  const totalNights = cityAllocations.reduce((sum, c) => sum + c.nights, 0);
+  
+  return {
+    success: true,
+    optionId,
+    adjustedAllocations: cityAllocations,
+    totalNights,
+  };
 }
 
 /**
@@ -218,19 +177,41 @@ export async function confirmMultiCity(
   creditsUsed: number;
   status: string;
 }> {
-  return apiRequest(`/api/v1/trips/${tripId}/confirm-multi-city`, {
-    method: 'POST',
-    body: JSON.stringify({ optionId, selectedCities, agreedPrice }),
-  });
+  throw new Error('Multi-city booking not yet implemented');
 }
 
 /**
  * Get multi-city pricing structure
  */
 export async function getMultiCityPricing(): Promise<MultiCityPricingStructure> {
-  return apiRequest<MultiCityPricingStructure>('/api/v1/multi-city/pricing', {
-    method: 'GET',
-  });
+  return {
+    creditModel: {
+      singleCity: 1,
+      twoCities: 2,
+      threeCities: 3,
+      fourPlusCities: '4+',
+    },
+    tiers: {
+      value: {
+        name: 'Value',
+        description: 'Budget-friendly options',
+        features: ['Economy flights', '3-star hotels', 'Basic transfers'],
+        priceRange: '$',
+      },
+      balanced: {
+        name: 'Balanced',
+        description: 'Best value for comfort',
+        features: ['Mix of airlines', '4-star hotels', 'Comfortable transfers'],
+        priceRange: '$$',
+      },
+      premium: {
+        name: 'Premium',
+        description: 'Luxury experience',
+        features: ['Premium airlines', '5-star hotels', 'Private transfers'],
+        priceRange: '$$$',
+      },
+    },
+  };
 }
 
 /**
@@ -240,9 +221,14 @@ export async function getPopularRoutes(): Promise<{
   routes: PopularRoute[];
   lastUpdated: string;
 }> {
-  return apiRequest('/api/v1/multi-city/popular-routes', {
-    method: 'GET',
-  });
+  return {
+    routes: [
+      { id: '1', name: 'Classic Europe', cities: ['Paris', 'Rome', 'Barcelona'], duration: '10 days', popularity: 95 },
+      { id: '2', name: 'Southeast Asia', cities: ['Bangkok', 'Hanoi', 'Singapore'], duration: '12 days', popularity: 88 },
+      { id: '3', name: 'Japan Highlights', cities: ['Tokyo', 'Kyoto', 'Osaka'], duration: '8 days', popularity: 92 },
+    ],
+    lastUpdated: new Date().toISOString(),
+  };
 }
 
 // ============================================================================
@@ -310,7 +296,7 @@ export function useMultiCityPricing() {
   return useQuery({
     queryKey: ['multi-city-pricing'],
     queryFn: getMultiCityPricing,
-    staleTime: 24 * 60 * 60_000, // 24 hours
+    staleTime: 24 * 60 * 60_000,
   });
 }
 
@@ -318,7 +304,7 @@ export function usePopularRoutes() {
   return useQuery({
     queryKey: ['popular-routes'],
     queryFn: getPopularRoutes,
-    staleTime: 60 * 60_000, // 1 hour
+    staleTime: 60 * 60_000,
   });
 }
 
