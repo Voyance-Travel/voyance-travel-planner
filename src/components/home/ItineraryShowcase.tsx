@@ -79,7 +79,7 @@ export default function ItineraryShowcase() {
             viewport={{ once: true }}
             className="hidden md:block text-right"
           >
-            <span className="text-7xl font-serif text-muted/20">0{activeIndex + 1}</span>
+            <span className="text-7xl font-serif text-muted/20">{activeIndex + 1}</span>
           </motion.div>
         </div>
 
@@ -151,15 +151,15 @@ export default function ItineraryShowcase() {
             <div className="mb-10 space-y-3">
               {activeItinerary.highlights.map((highlight, i) => (
                 <div key={highlight} className="flex items-center gap-4 text-sm text-foreground/80 font-sans">
-                  <span className="text-xs text-muted-foreground w-4">0{i + 1}</span>
+                  <span className="text-xs text-muted-foreground w-4">{i + 1}</span>
                   <span>{highlight}</span>
                 </div>
               ))}
             </div>
 
             {/* Price & CTA */}
-            <div className="flex items-end justify-between pt-8 border-t border-border">
-              <div>
+            <div className="pt-8 border-t border-border">
+              <div className="mb-6">
                 <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans block mb-1">
                   From
                 </span>
@@ -170,16 +170,16 @@ export default function ItineraryShowcase() {
               </div>
               
               <div className="flex gap-3">
-                <Button variant="outline" size="lg" className="font-sans" asChild>
+                <Button variant="outline" size="sm" className="font-sans text-sm" asChild>
                   <Link to={ROUTES.ITINERARY.SAMPLE}>
                     View Details
-                    <ArrowUpRight className="ml-2 h-4 w-4" />
+                    <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
                   </Link>
                 </Button>
-                <Button size="lg" className="font-sans" asChild>
+                <Button size="sm" className="font-sans text-sm" asChild>
                   <Link to={ROUTES.START}>
                     Book Now
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Link>
                 </Button>
               </div>
