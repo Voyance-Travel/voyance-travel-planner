@@ -1,18 +1,14 @@
 /**
  * Account Management API Service
  * 
- * User account operations:
- * - Account deletion (request + confirm)
+ * User account operations using Supabase Auth directly:
+ * - Account deletion
  * - Password change
  * - Profile updates
- * 
- * Matches backend: user-validated.ts
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // TYPES
@@ -70,142 +66,181 @@ export interface UpdateProfileResponse {
 }
 
 // ============================================================================
-// API HELPERS
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` };
-  }
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
-// ============================================================================
 // API FUNCTIONS
 // ============================================================================
 
 /**
  * Request account deletion - generates a deletion token
+ * Note: For now, this creates a local token. In production, use edge function.
  */
 export async function requestAccountDeletion(): Promise<RequestDeletionResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/request-deletion`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  // Generate a simple token (in production, store in DB and send via email)
+  const deletionToken = crypto.randomUUID();
+  const expiresIn = '24h';
+  
+  // Store token in user metadata for verification
+  await supabase.auth.updateUser({
+    data: { 
+      deletion_token: deletionToken,
+      deletion_requested_at: new Date().toISOString()
+    }
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to request deletion' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to request deletion');
-  }
-
-  return response.json();
+  
+  return {
+    success: true,
+    status: 'deletion_requested',
+    message: 'Deletion request initiated. Please confirm within 24 hours.',
+    deletionToken,
+    expiresIn,
+  };
 }
 
 /**
  * Confirm account deletion with token
+ * Uses Supabase edge function for secure deletion
  */
 export async function confirmAccountDeletion(
   input: ConfirmDeletionInput
 ): Promise<ConfirmDeletionResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/confirm-deletion`, {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to confirm deletion' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to confirm deletion');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  // Verify email matches
+  if (user.email !== input.confirmEmail) {
+    throw new Error('Email does not match');
   }
-
-  return response.json();
+  
+  // Verify token (stored in user metadata)
+  const storedToken = user.user_metadata?.deletion_token;
+  if (storedToken !== input.token) {
+    throw new Error('Invalid deletion token');
+  }
+  
+  // Call edge function to delete user
+  const { error } = await supabase.functions.invoke('delete-users', {
+    body: { userIds: [user.id] }
+  });
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to delete account');
+  }
+  
+  // Sign out
+  await supabase.auth.signOut();
+  
+  return {
+    success: true,
+    status: 'deleted',
+    message: 'Account successfully deleted',
+    anonymized: true,
+  };
 }
 
 /**
- * Change user password
+ * Change user password using Supabase Auth
  */
 export async function changePassword(
   input: ChangePasswordInput
 ): Promise<ChangePasswordResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/change-password`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to change password' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to change password');
+  if (input.newPassword !== input.confirmPassword) {
+    throw new Error('Passwords do not match');
   }
-
-  return response.json();
+  
+  // Supabase requires re-authentication for password change
+  // First verify current password by signing in
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) throw new Error('Not authenticated');
+  
+  // Attempt to sign in with current password to verify
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: input.currentPassword,
+  });
+  
+  if (verifyError) {
+    throw new Error('Current password is incorrect');
+  }
+  
+  // Update to new password
+  const { error } = await supabase.auth.updateUser({
+    password: input.newPassword,
+  });
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to change password');
+  }
+  
+  return {
+    success: true,
+    message: 'Password changed successfully',
+  };
 }
 
 /**
- * Update user profile
+ * Update user profile using Supabase directly
  */
 export async function updateProfile(
   input: UpdateProfileInput
 ): Promise<UpdateProfileResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/profile`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to update profile' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to update profile');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const updates: Record<string, unknown> = {};
+  if (input.name !== undefined) updates.display_name = input.name;
+  if (input.handle !== undefined) updates.handle = input.handle;
+  if (input.bio !== undefined) updates.bio = input.bio;
+  if (input.avatarUrl !== undefined) updates.avatar_url = input.avatarUrl;
+  
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', user.id)
+    .select('id, display_name, handle, avatar_url')
+    .single();
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to update profile');
   }
-
-  return response.json();
+  
+  return {
+    success: true,
+    profile: {
+      id: profile.id,
+      name: profile.display_name,
+      handle: profile.handle,
+      email: user.email || '',
+      avatarUrl: profile.avatar_url,
+    },
+  };
 }
 
 /**
- * Legacy account deletion (without token confirmation)
+ * Delete account directly (simpler flow)
  */
 export async function deleteAccount(): Promise<ConfirmDeletionResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/delete`, {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  // Call edge function to delete user
+  const { error } = await supabase.functions.invoke('delete-users', {
+    body: { userIds: [user.id] }
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to delete account' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to delete account');
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to delete account');
   }
-
-  return response.json();
+  
+  await supabase.auth.signOut();
+  
+  return {
+    success: true,
+    status: 'deleted',
+    message: 'Account successfully deleted',
+    anonymized: true,
+  };
 }
 
 // ============================================================================
@@ -224,7 +259,6 @@ export function useConfirmAccountDeletion() {
   return useMutation({
     mutationFn: confirmAccountDeletion,
     onSuccess: () => {
-      // Clear all cached data after account deletion
       queryClient.clear();
     },
   });
@@ -244,7 +278,6 @@ export function useUpdateProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
-      queryClient.invalidateQueries({ queryKey: ['my-diagnostics'] });
     },
   });
 }

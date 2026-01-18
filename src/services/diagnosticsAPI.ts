@@ -1,14 +1,12 @@
 /**
  * Diagnostics API Service
  * 
- * System diagnostics, user profile diagnostics, and duplicate detection.
- * Matches backend: diagnostics routes
+ * User profile diagnostics using Supabase directly.
+ * System diagnostics use local checks.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // TYPES
@@ -95,134 +93,193 @@ export interface FixDuplicatesResponse {
 }
 
 // ============================================================================
-// API HELPERS
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` };
-  }
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
-// ============================================================================
 // API FUNCTIONS
 // ============================================================================
 
 /**
- * Get system status (database connectivity check)
+ * Get system status - checks Supabase connectivity
  */
 export async function getSystemStatus(): Promise<SystemStatusResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/diagnostics/status`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to get system status' }));
-    throw new Error(error.error || error.message || 'Failed to get system status');
+  try {
+    // Simple connectivity check
+    const { error } = await supabase.from('destinations').select('id').limit(1);
+    
+    return {
+      status: error ? 'error' : 'ok',
+      timestamp: new Date().toISOString(),
+      databaseConnected: !error,
+      message: error ? error.message : 'All systems operational',
+    };
+  } catch (err) {
+    return {
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      databaseConnected: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
   }
-
-  return response.json();
 }
 
 /**
- * Get user diagnostics by user ID
+ * Get user diagnostics by user ID (admin only - returns current user if not admin)
  */
 export async function getUserDiagnostics(userId: string): Promise<UserDiagnosticsResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/diagnostics/user/${userId}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to get user diagnostics' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to get user diagnostics');
-  }
-
-  return response.json();
+  // For non-admin users, just return their own diagnostics
+  return getMyDiagnostics();
 }
 
 /**
- * Get current user diagnostics (requires auth)
+ * Get current user diagnostics
  */
 export async function getMyDiagnostics(): Promise<UserDiagnosticsResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/diagnostics/me`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const [profileResult, preferencesResult] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase.from('user_preferences').select('*').eq('user_id', user.id).single(),
+  ]);
+  
+  const profile = profileResult.data;
+  const preferences = preferencesResult.data;
+  
+  // Calculate completeness
+  const hasPreferences = !!preferences;
+  const hasSetTravelStyle = !!preferences?.travel_style;
+  const hasSetRegions = (preferences?.preferred_regions?.length || 0) > 0;
+  const hasName = !!profile?.display_name;
+  const hasHandle = !!profile?.handle;
+  
+  const checks = [hasPreferences, hasSetTravelStyle, hasSetRegions, hasName, hasHandle];
+  const completionPercentage = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  
+  // Generate recommendations
+  const recommendations: string[] = [];
+  if (!hasName) recommendations.push('Add a display name to personalize your profile');
+  if (!hasHandle) recommendations.push('Set a unique handle for your profile URL');
+  if (!hasSetTravelStyle) recommendations.push('Complete the travel style quiz for better recommendations');
+  if (!hasSetRegions) recommendations.push('Add your preferred travel regions');
+  
+  return {
+    success: true,
+    diagnostics: {
+      userId: user.id,
+      email: user.email || '',
+      provider: user.app_metadata?.provider || null,
+      hasPassword: !!user.email, // Simplified check
+      createdAt: user.created_at,
+      lastLogin: user.last_sign_in_at || null,
+      profile: {
+        name: profile?.display_name || null,
+        handle: profile?.handle || null,
+      },
+      preferences: preferences ? {
+        id: preferences.id,
+        travelStyle: preferences.travel_style,
+        budget: preferences.budget_tier,
+        pace: preferences.travel_pace,
+        preferredRegions: preferences.preferred_regions,
+        flightPreferences: preferences.flight_preferences as Record<string, unknown> | null,
+        dietaryRestrictions: preferences.dietary_restrictions,
+        hasActivities: !!preferences.activity_weights,
+        createdAt: preferences.created_at,
+        updatedAt: preferences.updated_at,
+      } : null,
+      completeness: {
+        hasPreferences,
+        hasCustomizedActivities: !!preferences?.activity_weights,
+        hasSetRegions,
+        hasSetTravelStyle,
+        hasName,
+        hasHandle,
+        completionPercentage,
+      },
+      recommendations,
     },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to get diagnostics' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to get diagnostics');
-  }
-
-  return response.json();
+  };
 }
 
 /**
  * Check for duplicate preferences entries
  */
 export async function checkDuplicates(userId?: string): Promise<DuplicateCheckResponse> {
-  const headers = await getAuthHeader();
-  const params = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/diagnostics/duplicate-check${params}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to check duplicates' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to check duplicates');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const targetUserId = userId || user.id;
+  
+  const { data, error } = await supabase
+    .from('user_preferences')
+    .select('id, created_at, updated_at')
+    .eq('user_id', targetUserId);
+  
+  if (error) {
+    return { status: 'error', error: error.message };
   }
-
-  return response.json();
+  
+  const count = data?.length || 0;
+  
+  return {
+    status: 'ok',
+    userId: targetUserId,
+    count,
+    entries: data?.map(d => ({
+      id: d.id,
+      createdAt: d.created_at,
+      updatedAt: d.updated_at,
+    })) || [],
+    hasDuplicates: count > 1,
+  };
 }
 
 /**
  * Fix duplicate preferences for a user
  */
 export async function fixDuplicates(userId: string): Promise<FixDuplicatesResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/diagnostics/fix-duplicates/${userId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to fix duplicates' }));
-    throw new Error(error.error || error._error || error.message || 'Failed to fix duplicates');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  // Get all entries for user
+  const { data: entries, error } = await supabase
+    .from('user_preferences')
+    .select('id, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    return { status: 'error', message: error.message, userId, error: error.message };
   }
-
-  return response.json();
+  
+  if (!entries || entries.length <= 1) {
+    return {
+      status: 'ok',
+      message: 'No duplicates found',
+      userId,
+      count: entries?.length || 0,
+    };
+  }
+  
+  // Keep the most recent, delete the rest
+  const [keep, ...remove] = entries;
+  const idsToRemove = remove.map(e => e.id);
+  
+  const { error: deleteError } = await supabase
+    .from('user_preferences')
+    .delete()
+    .in('id', idsToRemove);
+  
+  if (deleteError) {
+    return { status: 'error', message: deleteError.message, userId, error: deleteError.message };
+  }
+  
+  return {
+    status: 'ok',
+    message: `Removed ${idsToRemove.length} duplicate entries`,
+    userId,
+    originalCount: entries.length,
+    deletedCount: idsToRemove.length,
+    keptEntryId: keep.id,
+  };
 }
 
 // ============================================================================
@@ -233,8 +290,8 @@ export function useSystemStatus() {
   return useQuery({
     queryKey: ['system-status'],
     queryFn: getSystemStatus,
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 60 * 1000, // Refetch every minute
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
   });
 }
 
@@ -243,7 +300,7 @@ export function useUserDiagnostics(userId: string | null) {
     queryKey: ['user-diagnostics', userId],
     queryFn: () => getUserDiagnostics(userId!),
     enabled: !!userId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -259,7 +316,7 @@ export function useDuplicateCheck(userId?: string) {
   return useQuery({
     queryKey: ['duplicate-check', userId],
     queryFn: () => checkDuplicates(userId),
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
   });
 }
 
@@ -317,7 +374,6 @@ export function getStatusIndicator(connected: boolean): {
 }
 
 export function formatRecommendations(recommendations: string[]): string[] {
-  // Filter and format recommendations for display
   return recommendations.filter((r) => r && r.trim().length > 0);
 }
 

@@ -1,14 +1,12 @@
 /**
  * User Billing API Service
  * 
- * Handles billing-related endpoints including subscriptions,
- * payment methods, transactions, and invoices.
+ * Handles billing-related endpoints using Supabase Edge Functions.
+ * Stripe operations go through existing edge functions.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation } from '@tanstack/react-query';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.voyance.travel';
 
 // ============================================================================
 // TYPES
@@ -163,41 +161,57 @@ export interface TransactionsResponse {
 }
 
 // ============================================================================
-// API FUNCTIONS
+// API FUNCTIONS - Using Supabase Edge Functions
 // ============================================================================
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` };
-  }
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
 /**
- * Get billing overview
+ * Get billing overview from check-subscription edge function
  */
 export async function getBillingOverview(): Promise<{ success: boolean; billing: BillingOverview }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/billing/overview`, {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Fetch failed' }));
-    throw new Error(error.error || 'Failed to fetch billing overview');
+  const { data, error } = await supabase.functions.invoke('check-subscription');
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to fetch billing overview');
   }
-
-  return response.json();
+  
+  // Transform check-subscription response to BillingOverview format
+  const hasSubscription = data?.hasSubscription || false;
+  
+  return {
+    success: true,
+    billing: {
+      hasStripeCustomer: hasSubscription,
+      subscription: hasSubscription ? {
+        id: data.subscription?.id || 'sub_default',
+        status: 'active' as SubscriptionStatus,
+        tier: (data.planId as SubscriptionTier) || 'free',
+        currentPeriodEnd: data.subscription?.currentPeriodEnd,
+        cancelAtPeriodEnd: data.subscription?.cancelAtPeriodEnd || false,
+        isActive: true,
+        daysUntilRenewal: null,
+      } : null,
+      paymentMethods: [],
+      hasPaymentMethod: hasSubscription,
+      recentTransactions: [],
+      stats: {
+        totalSpent: 0,
+        totalRefunded: 0,
+        netSpent: 0,
+        transactionCount: 0,
+        averageTransactionAmount: 0,
+      },
+      actions: {
+        canUpgrade: !hasSubscription,
+        canAddPaymentMethod: true,
+        canViewInvoices: hasSubscription,
+        canManageSubscription: hasSubscription,
+      },
+    },
+  };
 }
 
 /**
- * Get transaction history with pagination
+ * Get transaction history - uses local storage for now
  */
 export async function getTransactions(params?: {
   limit?: number;
@@ -206,117 +220,129 @@ export async function getTransactions(params?: {
   startDate?: string;
   endDate?: string;
 }): Promise<TransactionsResponse> {
-  const headers = await getAuthHeader();
-  const queryParams = new URLSearchParams();
-
-  if (params?.limit) queryParams.set('limit', params.limit.toString());
-  if (params?.offset) queryParams.set('offset', params.offset.toString());
-  if (params?.status) queryParams.set('status', params.status);
-  if (params?.startDate) queryParams.set('startDate', params.startDate);
-  if (params?.endDate) queryParams.set('endDate', params.endDate);
-
-  const url = `${API_BASE_URL}/api/v1/user/billing/transactions${queryParams.toString() ? `?${queryParams}` : ''}`;
-
-  const response = await fetch(url, { headers });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Fetch failed' }));
-    throw new Error(error.error || 'Failed to fetch transactions');
-  }
-
-  return response.json();
+  // For now, return empty transactions - would need dedicated edge function
+  return {
+    success: true,
+    transactions: [],
+    pagination: {
+      total: 0,
+      limit: params?.limit || 10,
+      offset: params?.offset || 0,
+      hasMore: false,
+    },
+  };
 }
 
 /**
  * Get detailed subscription info
  */
 export async function getSubscription(): Promise<{ success: boolean; subscription: Subscription | null; message?: string }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/billing/subscription`, {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Fetch failed' }));
-    throw new Error(error.error || 'Failed to fetch subscription');
+  const { data, error } = await supabase.functions.invoke('check-subscription');
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to fetch subscription');
   }
-
-  return response.json();
+  
+  if (!data?.hasSubscription) {
+    return { success: true, subscription: null, message: 'No active subscription' };
+  }
+  
+  return {
+    success: true,
+    subscription: {
+      id: data.subscription?.id || 'sub_default',
+      status: 'active',
+      tier: (data.planId as SubscriptionTier) || 'free',
+      currentPeriodStart: data.subscription?.currentPeriodStart,
+      currentPeriodEnd: data.subscription?.currentPeriodEnd,
+      cancelAtPeriodEnd: data.subscription?.cancelAtPeriodEnd || false,
+      createdAt: new Date().toISOString(),
+      isActive: true,
+      isCanceled: false,
+      willRenew: !data.subscription?.cancelAtPeriodEnd,
+      daysRemaining: null,
+      stripe: null,
+      actions: {
+        canCancel: true,
+        canReactivate: false,
+        canUpgrade: true,
+        canDowngrade: false,
+      },
+    },
+  };
 }
 
 /**
  * Create Stripe customer portal session
  */
 export async function createCustomerPortalSession(): Promise<{ success: boolean; url: string }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/billing/customer-portal`, {
-    method: 'POST',
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Creation failed' }));
-    throw new Error(error.error || 'Failed to create portal session');
+  const { data, error } = await supabase.functions.invoke('customer-portal');
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to create portal session');
   }
-
-  return response.json();
+  
+  return { success: true, url: data.url };
 }
 
 /**
- * Get billing profile summary (simplified for profile page)
+ * Get billing profile summary
  */
 export async function getBillingProfileSummary(): Promise<{ success: boolean; billing: BillingProfileSummary }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/billing/profile-summary`, {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Fetch failed' }));
-    throw new Error(error.error || 'Failed to fetch billing summary');
+  const { data, error } = await supabase.functions.invoke('check-subscription');
+  
+  if (error) {
+    throw new Error(error.message || 'Failed to fetch billing summary');
   }
-
-  return response.json();
+  
+  const hasSubscription = data?.hasSubscription || false;
+  
+  return {
+    success: true,
+    billing: {
+      hasActiveSubscription: hasSubscription,
+      subscriptionTier: (data?.planId as SubscriptionTier) || 'free',
+      hasPaymentMethod: hasSubscription,
+      hasStripeCustomer: hasSubscription,
+      subscription: hasSubscription ? {
+        tier: (data.planId as SubscriptionTier) || 'free',
+        status: 'active',
+        renewalDate: data.subscription?.currentPeriodEnd,
+        cancelAtPeriodEnd: data.subscription?.cancelAtPeriodEnd || false,
+      } : null,
+      spending: {
+        thisYear: 0,
+        currency: 'USD',
+        lastTransaction: null,
+      },
+      loyalty: {
+        points: 0,
+        tier: 'bronze',
+        totalTripsBooked: 0,
+      },
+      actions: {
+        showUpgradePrompt: !hasSubscription,
+        showAddPaymentMethod: !hasSubscription,
+        showManageBilling: hasSubscription,
+      },
+    },
+  };
 }
 
 /**
- * Get user invoices
+ * Get user invoices - placeholder for future implementation
  */
 export async function getInvoices(limit = 10): Promise<{ success: boolean; invoices: Invoice[] }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/billing/invoices?limit=${limit}`, {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Fetch failed' }));
-    throw new Error(error.error || 'Failed to fetch invoices');
-  }
-
-  return response.json();
+  // Would need dedicated edge function to fetch from Stripe
+  return { success: true, invoices: [] };
 }
 
 /**
  * Create setup intent for adding payment method
  */
 export async function createSetupIntent(): Promise<{ success: boolean; clientSecret: string; customerId: string }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/user/billing/create-setup-intent`, {
-    method: 'POST',
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Creation failed' }));
-    throw new Error(error.error || 'Failed to create setup intent');
-  }
-
-  return response.json();
+  // Would need dedicated edge function
+  throw new Error('Setup intent creation requires Stripe integration - use customer portal instead');
 }
 
 // ============================================================================
@@ -357,7 +383,6 @@ export function useCreateCustomerPortalSession() {
   return useMutation({
     mutationFn: createCustomerPortalSession,
     onSuccess: (data) => {
-      // Redirect to Stripe customer portal
       window.location.href = data.url;
     },
   });

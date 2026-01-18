@@ -1,18 +1,11 @@
 /**
  * Voyance Trips Debug API Service
  * 
- * Integrates with Railway backend debug endpoints:
- * - GET /api/v1/debug/trip-status-raw - Raw trip status values
- * - GET /api/v1/debug/trip-status-analysis - Trip status analysis
- * - GET /api/v1/debug/trips-response - Debug trips API response
- * - GET /api/v1/debug/trips-table-check - Check trips table structure
+ * Uses Supabase directly for trip debugging.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // Types
@@ -92,128 +85,199 @@ export interface TripsTableCheckResponse {
 }
 
 // ============================================================================
-// API Helpers
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  return { 'Content-Type': 'application/json' };
-}
-
-async function debugApiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}/api/v1/debug${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
-
-// ============================================================================
-// Debug API
+// Debug API using Supabase directly
 // ============================================================================
 
 /**
- * Get raw trip status values from database (no auth required)
+ * Get raw trip status values from database
  */
 export async function getTripStatusRaw(): Promise<TripStatusRawResponse> {
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/v1/debug/trip-status-raw`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    return response.json();
-  } catch (error) {
-    console.error('[DebugAPI] Get raw status error:', error);
-    throw error;
+  const { data: trips, error } = await supabase
+    .from('trips')
+    .select('status');
+  
+  if (error) {
+    throw new Error(error.message);
   }
+  
+  // Count status distribution
+  const statusMap = new Map<string, number>();
+  (trips || []).forEach(trip => {
+    const status = trip.status || 'unknown';
+    statusMap.set(status, (statusMap.get(status) || 0) + 1);
+  });
+  
+  const statusDistribution = Array.from(statusMap.entries()).map(([status, count]) => ({
+    status,
+    count,
+  }));
+  
+  return {
+    success: true,
+    message: 'Status distribution retrieved',
+    statusDistribution,
+    totalTrips: trips?.length || 0,
+    timestamp: new Date().toISOString(),
+  };
 }
 
 /**
- * Get trip status analysis (requires auth)
+ * Get trip status analysis for current user
  */
 export async function getTripStatusAnalysis(): Promise<TripStatusAnalysisResponse> {
-  try {
-    const response = await debugApiRequest<TripStatusAnalysisResponse>('/trip-status-analysis', {
-      method: 'GET',
-    });
-    return response;
-  } catch (error) {
-    console.error('[DebugAPI] Get status analysis error:', error);
-    throw error;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const { data: trips, error } = await supabase
+    .from('trips')
+    .select('id, status, name, destination, start_date, end_date, created_at, updated_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    throw new Error(error.message);
   }
+  
+  const now = new Date();
+  const categorization = {
+    draft: [] as string[],
+    upcoming: [] as string[],
+    completed: [] as string[],
+    other: [] as string[],
+  };
+  
+  const statusMap = new Map<string, number>();
+  
+  (trips || []).forEach(trip => {
+    const status = trip.status || 'unknown';
+    statusMap.set(status, (statusMap.get(status) || 0) + 1);
+    
+    if (status === 'draft') {
+      categorization.draft.push(trip.id);
+    } else if (status === 'completed') {
+      categorization.completed.push(trip.id);
+    } else if (trip.start_date && new Date(trip.start_date) > now) {
+      categorization.upcoming.push(trip.id);
+    } else {
+      categorization.other.push(trip.id);
+    }
+  });
+  
+  const statusDistribution = Array.from(statusMap.entries()).map(([status, count]) => ({
+    status,
+    count,
+  }));
+  
+  return {
+    success: true,
+    statusDistribution,
+    sampleTrips: (trips || []).slice(0, 10).map(t => ({
+      id: t.id,
+      status: t.status,
+      name: t.name,
+      destination: t.destination,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+    })),
+    draftCount: categorization.draft.length,
+    upcomingCount: categorization.upcoming.length,
+    completedCount: categorization.completed.length,
+    categorization,
+  };
 }
 
 /**
- * Get debug trips response (requires auth)
+ * Get debug trips response for current user
  */
 export async function getDebugTripsResponse(): Promise<DebugTripsResponseResult> {
-  try {
-    const response = await debugApiRequest<DebugTripsResponseResult>('/trips-response', {
-      method: 'GET',
-    });
-    return response;
-  } catch (error) {
-    console.error('[DebugAPI] Get debug trips error:', error);
-    throw error;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const { data: trips, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    throw new Error(error.message);
   }
+  
+  const statusMapping: Record<string, string> = {
+    draft: 'Draft',
+    planning: 'Planning',
+    booked: 'Booked',
+    active: 'Active',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+  };
+  
+  const mappedTrips = (trips || []).map(trip => ({
+    id: trip.id,
+    userId: trip.user_id,
+    destination: trip.destination,
+    name: trip.name,
+    startDate: trip.start_date,
+    endDate: trip.end_date,
+    status: trip.status,
+    displayStatus: statusMapping[trip.status] || trip.status,
+    createdAt: trip.created_at,
+    updatedAt: trip.updated_at,
+  }));
+  
+  return {
+    success: true,
+    userId: user.id,
+    totalTrips: trips?.length || 0,
+    rawTrips: mappedTrips,
+    mappedTrips,
+    statusMapping,
+  };
 }
 
 /**
- * Check trips table structure (no auth required)
+ * Check trips table structure - returns column info
  */
 export async function getTripsTableCheck(): Promise<TripsTableCheckResponse> {
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/v1/debug/trips-table-check`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    return response.json();
-  } catch (error) {
-    console.error('[DebugAPI] Get table check error:', error);
-    throw error;
-  }
+  // Get sample trips and status counts
+  const [tripsResult, statusResult] = await Promise.all([
+    supabase.from('trips').select('id, status, name, destination, created_at, updated_at').limit(5),
+    supabase.from('trips').select('status'),
+  ]);
+  
+  const statusMap = new Map<string, number>();
+  (statusResult.data || []).forEach(trip => {
+    const status = trip.status || 'unknown';
+    statusMap.set(status, (statusMap.get(status) || 0) + 1);
+  });
+  
+  // Note: We can't query information_schema directly, so we list known columns
+  const knownColumns: TableColumn[] = [
+    { column_name: 'id', data_type: 'uuid', is_nullable: 'NO' },
+    { column_name: 'user_id', data_type: 'uuid', is_nullable: 'NO' },
+    { column_name: 'name', data_type: 'text', is_nullable: 'NO' },
+    { column_name: 'destination', data_type: 'text', is_nullable: 'NO' },
+    { column_name: 'start_date', data_type: 'date', is_nullable: 'NO' },
+    { column_name: 'end_date', data_type: 'date', is_nullable: 'NO' },
+    { column_name: 'status', data_type: 'trip_status', is_nullable: 'NO' },
+    { column_name: 'created_at', data_type: 'timestamptz', is_nullable: 'NO' },
+    { column_name: 'updated_at', data_type: 'timestamptz', is_nullable: 'NO' },
+  ];
+  
+  return {
+    success: true,
+    columns: knownColumns,
+    statusCounts: Array.from(statusMap.entries()).map(([status, count]) => ({ status, count })),
+    recentTrips: (tripsResult.data || []).map(t => ({
+      id: t.id,
+      status: t.status,
+      name: t.name,
+      destination: t.destination,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+    })),
+    totalColumns: knownColumns.length,
+  };
 }
 
 // ============================================================================
@@ -224,7 +288,7 @@ export function useTripStatusRaw() {
   return useQuery({
     queryKey: ['debug-trip-status-raw'],
     queryFn: getTripStatusRaw,
-    staleTime: 0, // Always fresh for debugging
+    staleTime: 0,
   });
 }
 
