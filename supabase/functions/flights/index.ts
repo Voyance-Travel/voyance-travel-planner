@@ -32,9 +32,10 @@ async function getAmadeusToken(): Promise<string> {
     throw new Error('Amadeus credentials not configured');
   }
 
-  console.log('[Flights] Fetching new Amadeus access token');
+  console.log('[Flights] Fetching new Amadeus access token (TEST MODE)');
   
-  const response = await fetch('https://api.amadeus.com/v1/security/oauth2/token', {
+  // Using TEST environment for development
+  const response = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `grant_type=client_credentials&client_id=${apiKey}&client_secret=${apiSecret}`,
@@ -133,8 +134,9 @@ async function searchFlights(params: FlightSearchParams): Promise<any[]> {
 
   console.log('[Flights] Searching:', Object.fromEntries(searchParams));
 
+  // Using TEST environment for development
   const response = await fetch(
-    `https://api.amadeus.com/v2/shopping/flight-offers?${searchParams}`,
+    `https://test.api.amadeus.com/v2/shopping/flight-offers?${searchParams}`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }
