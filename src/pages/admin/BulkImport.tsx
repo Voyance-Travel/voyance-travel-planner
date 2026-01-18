@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Upload, FileText, CheckCircle, XCircle, Loader2, Users } from "lucide-react";
 import { readCSVFile, bulkImportCSV } from "@/utils/csvBulkImport";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ImportStatus {
   total: number;
@@ -21,6 +22,7 @@ export default function BulkImport() {
   const [isImporting, setIsImporting] = useState(false);
   const [status, setStatus] = useState<ImportStatus | null>(null);
   const [result, setResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
+  const [userImportResult, setUserImportResult] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,6 +31,7 @@ export default function BulkImport() {
       setFile(selectedFile);
       setResult(null);
       setStatus(null);
+      setUserImportResult(null);
     }
   };
 
@@ -41,6 +44,7 @@ export default function BulkImport() {
     setIsImporting(true);
     setResult(null);
     setStatus(null);
+    setUserImportResult(null);
 
     try {
       toast.info(`Reading ${file.name}...`);
@@ -48,6 +52,29 @@ export default function BulkImport() {
       
       if (csvData.length === 0) {
         toast.error("No data found in CSV file");
+        setIsImporting(false);
+        return;
+      }
+
+      // Special handling for users import
+      if (table === "users") {
+        toast.info(`Found ${csvData.length} users. Starting import via edge function...`);
+        
+        const { data, error } = await supabase.functions.invoke('import-users', {
+          body: { users: csvData }
+        });
+
+        if (error) {
+          toast.error(`Import failed: ${error.message}`);
+          setUserImportResult({ error: error.message });
+        } else {
+          setUserImportResult(data);
+          if (data.failed === 0) {
+            toast.success(`Successfully imported ${data.imported} users!`);
+          } else {
+            toast.warning(`Imported ${data.imported} users, ${data.failed} failed, ${data.skipped} skipped`);
+          }
+        }
         setIsImporting(false);
         return;
       }
@@ -101,6 +128,8 @@ export default function BulkImport() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="users">👤 Users (Auth + Profile)</SelectItem>
+                  <SelectItem value="trips">✈️ Trips</SelectItem>
                   <SelectItem value="activities">Activities</SelectItem>
                   <SelectItem value="attractions">Attractions</SelectItem>
                   <SelectItem value="guides">Guides</SelectItem>
@@ -210,6 +239,59 @@ export default function BulkImport() {
                         )}
                       </ul>
                     </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {userImportResult && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                User Import Complete
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {userImportResult.error ? (
+                  <p className="text-red-600">✗ Error: {userImportResult.error}</p>
+                ) : (
+                  <>
+                    <p className="text-green-600">✓ {userImportResult.imported} users imported successfully</p>
+                    {userImportResult.skipped > 0 && (
+                      <p className="text-yellow-600">⏭ {userImportResult.skipped} users skipped (already exist)</p>
+                    )}
+                    {userImportResult.failed > 0 && (
+                      <p className="text-red-600">✗ {userImportResult.failed} users failed</p>
+                    )}
+                    
+                    {userImportResult.details?.failed?.length > 0 && (
+                      <div className="mt-4">
+                        <p className="font-medium mb-2">Failed:</p>
+                        <ul className="text-sm text-muted-foreground space-y-1 max-h-40 overflow-y-auto">
+                          {userImportResult.details.failed.slice(0, 10).map((f: any, i: number) => (
+                            <li key={i}>• {f.email}: {f.error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {userImportResult.details?.skipped?.length > 0 && (
+                      <div className="mt-4">
+                        <p className="font-medium mb-2">Skipped:</p>
+                        <ul className="text-sm text-muted-foreground space-y-1 max-h-40 overflow-y-auto">
+                          {userImportResult.details.skipped.slice(0, 5).map((s: any, i: number) => (
+                            <li key={i}>• {s.email}: {s.reason}</li>
+                          ))}
+                          {userImportResult.details.skipped.length > 5 && (
+                            <li>... and {userImportResult.details.skipped.length - 5} more</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
