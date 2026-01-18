@@ -22,6 +22,7 @@ import { useTripPlanner } from '@/contexts/TripPlannerContext';
 // Enhanced components
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
 import EditorialProgressTracker from '@/components/planner/shared/EditorialProgressTracker';
+import LoadingInterlude from '@/components/planner/shared/LoadingInterlude';
 import HotelFilters, { type HotelFiltersState } from '@/components/planner/hotel/HotelFilters';
 import EnhancedHotelCard, { type EnhancedHotelOption } from '@/components/planner/hotel/EnhancedHotelCard';
 
@@ -124,11 +125,20 @@ export default function PlannerHotelEnhanced() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [holdingHotelId, setHoldingHotelId] = useState<string | null>(null);
 
+  // “Cute buffer” overlay — only on initial load for a given destination/dates
+  const [showInterlude, setShowInterlude] = useState(true);
+
   const createHold = useCreateHotelHold();
 
   const destination = searchParams.get('destination') || plannerState.basics.destination || 'Paris';
-  const startDate = searchParams.get('startDate') || plannerState.basics.startDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const endDate = searchParams.get('endDate') || plannerState.basics.endDate || new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const startDate =
+    searchParams.get('startDate') ||
+    plannerState.basics.startDate ||
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const endDate =
+    searchParams.get('endDate') ||
+    plannerState.basics.endDate ||
+    new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 2);
   const origin = searchParams.get('origin') || plannerState.basics.originCity || 'JFK';
 
@@ -138,6 +148,10 @@ export default function PlannerHotelEnhanced() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destination, startDate, endDate, travelers, origin]);
+
+  useEffect(() => {
+    setShowInterlude(true);
+  }, [destination, startDate, endDate, travelers]);
 
   const nights = calculateNights(startDate, endDate);
 
@@ -165,6 +179,10 @@ export default function PlannerHotelEnhanced() {
   );
 
   const { data: hotels, isLoading, error } = useHotelSearch(hotelParams);
+
+  useEffect(() => {
+    if (!isLoading) setShowInterlude(false);
+  }, [isLoading]);
 
   const filteredHotels = useMemo(() => {
     if (!hotels) return [];
@@ -270,6 +288,12 @@ export default function PlannerHotelEnhanced() {
   return (
     <MainLayout>
       <Head title="Select Hotel | Voyance" description="Choose the perfect accommodation" />
+
+      <LoadingInterlude
+        visible={isLoading && showInterlude}
+        title="Finding the right stay…"
+        subtitle={`Curating hotels in ${destination}.`}
+      />
 
       <section className="py-8 min-h-screen bg-background">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">

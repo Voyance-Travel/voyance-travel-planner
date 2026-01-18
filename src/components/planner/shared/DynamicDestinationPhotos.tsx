@@ -20,7 +20,7 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: string;
-  source: 'database' | 'google_places' | 'lovable_ai' | 'fallback';
+  source: 'database' | 'google_places' | 'lovable_ai' | 'pexels' | 'fallback';
 }
 
 export default function DynamicDestinationPhotos({
@@ -437,6 +437,7 @@ export default function DynamicDestinationPhotos({
               <div className="text-white/50 text-xs">
                 {currentImage.source === 'lovable_ai' && '✨ AI Generated'}
                 {currentImage.source === 'google_places' && '📍 Google Places'}
+                {currentImage.source === 'pexels' && '📷 Pexels'}
               </div>
             )}
           </div>
