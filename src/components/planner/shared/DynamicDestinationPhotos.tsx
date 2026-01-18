@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, MapPin, Calendar, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Calendar, Users, ImageOff } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface DynamicDestinationPhotosProps {
@@ -11,6 +11,14 @@ interface DynamicDestinationPhotosProps {
   variant?: 'hero' | 'compact' | 'banner';
   className?: string;
 }
+
+// Fallback images for when destination images fail to load
+const fallbackImages = [
+  'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1200&q=80', // Travel
+  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80', // Beach
+  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&q=80', // Lake
+  'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1200&q=80', // Travel bags
+];
 
 // Unsplash search-based dynamic photos
 // Uses the destination name as search query for relevant images
@@ -184,32 +192,51 @@ export default function DynamicDestinationPhotos({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set([0]));
+  const [failedImages, setFailedImages] = useState<Set<number>>(new Set());
+  const [useFallback, setUseFallback] = useState(false);
+
+  // Get the actual images to display (fallback if all fail)
+  const displayImages = useFallback ? fallbackImages : images;
+
+  // Handle image load error
+  const handleImageError = useCallback((index: number) => {
+    setFailedImages(prev => {
+      const newSet = new Set(prev).add(index);
+      // If all images failed, switch to fallback
+      if (newSet.size >= images.length) {
+        setUseFallback(true);
+        setCurrentIndex(0);
+      }
+      return newSet;
+    });
+  }, [images.length]);
 
   // Preload next image
   useEffect(() => {
-    const nextIndex = (currentIndex + 1) % images.length;
+    const nextIndex = (currentIndex + 1) % displayImages.length;
     if (!loadedImages.has(nextIndex)) {
       const img = new Image();
-      img.src = images[nextIndex];
+      img.src = displayImages[nextIndex];
       img.onload = () => {
         setLoadedImages(prev => new Set(prev).add(nextIndex));
       };
+      img.onerror = () => handleImageError(nextIndex);
     }
-  }, [currentIndex, images, loadedImages]);
+  }, [currentIndex, displayImages, loadedImages, handleImageError]);
 
   // Auto-rotate images
   useEffect(() => {
     if (isHovered || variant === 'compact') return;
     
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % images.length);
+      setCurrentIndex((prev) => (prev + 1) % displayImages.length);
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [images.length, isHovered, variant]);
+  }, [displayImages.length, isHovered, variant]);
 
-  const goNext = useCallback(() => setCurrentIndex((prev) => (prev + 1) % images.length), [images.length]);
-  const goPrev = useCallback(() => setCurrentIndex((prev) => (prev - 1 + images.length) % images.length), [images.length]);
+  const goNext = useCallback(() => setCurrentIndex((prev) => (prev + 1) % displayImages.length), [displayImages.length]);
+  const goPrev = useCallback(() => setCurrentIndex((prev) => (prev - 1 + displayImages.length) % displayImages.length), [displayImages.length]);
 
   const formatDateRange = () => {
     if (!startDate || !endDate) return null;
@@ -226,9 +253,10 @@ export default function DynamicDestinationPhotos({
     return (
       <div className={`relative rounded-xl overflow-hidden h-20 bg-gradient-to-r from-primary/20 to-accent/20 ${className}`}>
         <img
-          src={images[0]}
+          src={displayImages[0]}
           alt={destination}
           className="absolute inset-0 w-full h-full object-cover"
+          onError={() => handleImageError(0)}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-transparent" />
         <div className="absolute inset-0 p-3 flex items-center">
@@ -255,9 +283,10 @@ export default function DynamicDestinationPhotos({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.5 }}
-            src={images[currentIndex]}
+            src={displayImages[currentIndex]}
             alt={destination}
             className="absolute inset-0 w-full h-full object-cover"
+            onError={() => handleImageError(currentIndex)}
           />
         </AnimatePresence>
         
@@ -285,9 +314,9 @@ export default function DynamicDestinationPhotos({
             </div>
           </div>
           
-          {images.length > 1 && (
+          {displayImages.length > 1 && (
             <div className="flex gap-1">
-              {images.map((_, idx) => (
+              {displayImages.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setCurrentIndex(idx)}
@@ -318,9 +347,10 @@ export default function DynamicDestinationPhotos({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.7 }}
-          src={images[currentIndex]}
+          src={displayImages[currentIndex]}
           alt={destination}
           className="absolute inset-0 w-full h-full object-cover"
+          onError={() => handleImageError(currentIndex)}
         />
       </AnimatePresence>
       
@@ -328,7 +358,7 @@ export default function DynamicDestinationPhotos({
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10" />
       
       {/* Navigation Arrows */}
-      {isHovered && images.length > 1 && (
+      {isHovered && displayImages.length > 1 && (
         <>
           <motion.button
             initial={{ opacity: 0, x: -10 }}
@@ -351,7 +381,7 @@ export default function DynamicDestinationPhotos({
       
       {/* Dots Indicator */}
       <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex gap-2">
-        {images.map((_, idx) => (
+        {displayImages.map((_, idx) => (
           <button
             key={idx}
             onClick={() => setCurrentIndex(idx)}
@@ -389,7 +419,7 @@ export default function DynamicDestinationPhotos({
           </div>
           
           <div className="text-white/60 text-sm bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
-            {currentIndex + 1} / {images.length}
+            {currentIndex + 1} / {displayImages.length}
           </div>
         </div>
       </div>

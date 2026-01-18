@@ -13,7 +13,8 @@ import {
   CheckCircle,
   AlertCircle,
   Shield,
-  Lock
+  Lock,
+  Eye
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -52,20 +53,34 @@ export default function PlannerBooking() {
     }
   }, [wasCanceled]);
 
-  // Calculate costs
+  // Calculate costs with detailed breakdown
   const travelers = state.basics.travelers || 1;
-  const perPersonFlightTotal = (state.flights?.departure?.price || 0) + (state.flights?.return?.price || 0);
-  const flightTotal = perPersonFlightTotal * travelers;
+  const outboundFlightBase = (state.flights?.departure?.price || 0) * travelers;
+  const returnFlightBase = (state.flights?.return?.price || 0) * travelers;
+  const flightSubtotal = outboundFlightBase + returnFlightBase;
+  
+  // Estimated taxes (typically 10-15% for flights)
+  const flightTaxRate = 0.12;
+  const flightTaxes = flightSubtotal * flightTaxRate;
+  const flightTotal = flightSubtotal + flightTaxes;
+  
   const nights = state.basics.startDate && state.basics.endDate 
     ? Math.ceil((new Date(state.basics.endDate).getTime() - new Date(state.basics.startDate).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
-  const hotelTotal = (state.hotel?.pricePerNight || 0) * nights;
+  const hotelSubtotal = (state.hotel?.pricePerNight || 0) * nights;
+  
+  // Hotel taxes (typically 12-18% including resort fees)
+  const hotelTaxRate = 0.15;
+  const hotelTaxes = hotelSubtotal * hotelTaxRate;
+  const hotelTotal = hotelSubtotal + hotelTaxes;
+  
   const activitiesTotal = state.itinerary.reduce(
     (sum, day) => sum + day.activities.reduce((daySum, act) => daySum + (act.price || 0), 0),
     0
   );
   const serviceFee = 29.99;
-  const grandTotal = flightTotal + hotelTotal + activitiesTotal + serviceFee;
+  const totalTaxes = flightTaxes + hotelTaxes;
+  const grandTotal = flightSubtotal + hotelSubtotal + activitiesTotal + totalTaxes + serviceFee;
 
   // Handle checkout
   const handleCheckout = async () => {
@@ -307,49 +322,76 @@ export default function PlannerBooking() {
                   </div>
                   
                   <div className="p-6 space-y-4">
-                    {/* Detailed breakdown */}
-                    <div className="space-y-3">
-                      {flightTotal > 0 && (
-                        <>
+                    {/* Flight breakdown */}
+                    {flightSubtotal > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Flights</p>
+                        <div className="space-y-1.5 pl-3 border-l-2 border-primary/20">
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Outbound flight × {travelers}</span>
-                            <span>${((state.flights?.departure?.price || 0) * travelers).toFixed(2)}</span>
+                            <span className="text-muted-foreground">Outbound × {travelers}</span>
+                            <span>${outboundFlightBase.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Return flight × {travelers}</span>
-                            <span>${((state.flights?.return?.price || 0) * travelers).toFixed(2)}</span>
+                            <span className="text-muted-foreground">Return × {travelers}</span>
+                            <span>${returnFlightBase.toFixed(2)}</span>
                           </div>
-                        </>
-                      )}
-                      {hotelTotal > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            Hotel ({nights} nights × ${state.hotel?.pricePerNight}/night)
-                          </span>
-                          <span>${hotelTotal.toFixed(2)}</span>
+                          <div className="flex justify-between text-sm text-muted-foreground/80">
+                            <span>Taxes & carrier fees (est.)</span>
+                            <span>${flightTaxes.toFixed(2)}</span>
+                          </div>
                         </div>
-                      )}
-                      {activitiesTotal > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Activities & experiences</span>
-                          <span>${activitiesTotal.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                     
-                    <div className="border-t border-dashed border-border pt-3">
+                    {/* Hotel breakdown */}
+                    {hotelSubtotal > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Accommodation</p>
+                        <div className="space-y-1.5 pl-3 border-l-2 border-accent/20">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">{nights} nights × ${state.hotel?.pricePerNight}/night</span>
+                            <span>${hotelSubtotal.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-muted-foreground/80">
+                            <span>Taxes & resort fees (est.)</span>
+                            <span>${hotelTaxes.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Activities */}
+                    {activitiesTotal > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Experiences</p>
+                        <div className="pl-3 border-l-2 border-secondary/20">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Activities & tours</span>
+                            <span>${activitiesTotal.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Taxes summary */}
+                    <div className="border-t border-dashed border-border pt-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Total estimated taxes & fees</span>
+                        <span>${totalTaxes.toFixed(2)}</span>
+                      </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Voyance concierge fee</span>
                         <span>${serviceFee.toFixed(2)}</span>
                       </div>
                     </div>
                     
+                    {/* Grand total */}
                     <div className="border-t border-border pt-4 mt-4">
                       <div className="flex justify-between items-baseline">
                         <span className="text-lg font-semibold">Total</span>
                         <div className="text-right">
                           <span className="text-3xl font-bold text-primary">${grandTotal.toFixed(2)}</span>
-                          <p className="text-xs text-muted-foreground">USD</p>
+                          <p className="text-xs text-muted-foreground">USD • Final price at checkout</p>
                         </div>
                       </div>
                     </div>
@@ -408,10 +450,18 @@ export default function PlannerBooking() {
               </div>
             </div>
 
-            {/* Back button */}
-            <div className="mt-10">
+            {/* Action buttons */}
+            <div className="mt-10 flex flex-wrap gap-4">
               <Button variant="outline" onClick={() => navigate(-1)}>
                 ← Back to Trip Summary
+              </Button>
+              <Button 
+                variant="secondary" 
+                onClick={() => navigate(`/planner/itinerary?tripId=${tripId}`)}
+                disabled={!tripId}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Preview Itinerary
               </Button>
             </div>
           </motion.div>
