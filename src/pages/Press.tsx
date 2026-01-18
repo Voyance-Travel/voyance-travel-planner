@@ -1,7 +1,7 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Mail, Download, Building2, Globe, FileText, Palette, Loader2 } from 'lucide-react';
+import { Mail, Download, Building2, Globe, FileText, Palette, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -9,7 +9,8 @@ import { CONTACT_CONFIG } from '@/config/contact';
 import { 
   generatePressKitPDF, 
   companyInfo, 
-  keyStats
+  keyStats,
+  platformCapabilities
 } from '@/utils/pressKitGenerator';
 
 export default function Press() {
@@ -106,6 +107,37 @@ export default function Press() {
           </div>
         </div>
       </section>
+
+      {/* Platform Capabilities */}
+      <section className="py-16 bg-muted/30">
+        <div className="max-w-4xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center mb-8"
+          >
+            <Sparkles className="h-10 w-10 text-primary mx-auto mb-4" />
+            <h2 className="text-2xl font-semibold mb-2">What Makes Each Itinerary Unique</h2>
+            <p className="text-muted-foreground">
+              Our platform combines multiple AI systems to create truly personalized travel experiences
+            </p>
+          </motion.div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {platformCapabilities.map((capability, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="p-4 bg-card border border-border rounded-xl"
+              >
+                <p className="text-sm text-foreground">{capability}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Download & Contact */}
       <section className="py-16 bg-gradient-to-br from-primary/10 to-accent/10">
         <div className="max-w-4xl mx-auto px-4">
