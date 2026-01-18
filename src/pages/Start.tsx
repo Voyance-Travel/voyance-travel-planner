@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, Loader2, DollarSign, ChevronDown } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, Heart, Briefcase, Mountain, Sparkles, UserPlus } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -10,16 +10,15 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { 
   searchAirports, 
-  searchDestinations, 
   formatAirportDisplay,
-  formatDestinationDisplay,
   type Airport,
-  type Destination
 } from '@/services/locationSearchAPI';
+import { toast } from 'sonner';
 
 // Debounce hook for search
 function useDebounce<T>(value: T, delay: number): T {
@@ -36,10 +35,12 @@ function AirportAutocomplete({
   value,
   onChange,
   placeholder,
+  icon: Icon = Plane,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  icon?: typeof Plane;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value);
@@ -78,7 +79,7 @@ function AirportAutocomplete({
   return (
     <div className="relative">
       <div className="absolute left-0 top-1/2 -translate-y-1/2">
-        <Plane className="h-4 w-4 text-muted-foreground" />
+        <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <Input
         placeholder={placeholder}
@@ -103,7 +104,7 @@ function AirportAutocomplete({
           {loading ? (
             <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm font-sans">Searching...</span>
+              <span className="text-sm font-sans">Searching airports...</span>
             </div>
           ) : airports.length > 0 ? (
             airports.map((airport) => (
@@ -131,110 +132,13 @@ function AirportAutocomplete({
   );
 }
 
-// Destination Autocomplete - Editorial Style
-function DestinationAutocomplete({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(value);
-  const [destinations, setDestinations] = useState<Destination[]>([]);
-  const [loading, setLoading] = useState(false);
-  
-  const debouncedQuery = useDebounce(inputValue, 300);
-
-  useEffect(() => {
-    if (value !== inputValue) {
-      setInputValue(value);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  useEffect(() => {
-    if (debouncedQuery.length >= 1) {
-      setLoading(true);
-      searchDestinations(debouncedQuery, 12)
-        .then(setDestinations)
-        .finally(() => setLoading(false));
-    } else {
-      setDestinations([]);
-    }
-  }, [debouncedQuery]);
-
-  const handleSelect = (dest: Destination) => {
-    const display = formatDestinationDisplay(dest);
-    setInputValue(display);
-    onChange(display);
-    setIsOpen(false);
-  };
-
-  const showDropdown = isOpen && inputValue.length >= 1;
-
-  return (
-    <div className="relative">
-      <div className="absolute left-0 top-1/2 -translate-y-1/2">
-        <MapPin className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <Input
-        placeholder={placeholder}
-        value={inputValue}
-        onChange={(e) => {
-          setInputValue(e.target.value);
-          onChange(e.target.value);
-          setIsOpen(true);
-        }}
-        onFocus={() => {
-          if (inputValue.length >= 1) setIsOpen(true);
-        }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className="h-12 pl-8 text-base bg-transparent border-0 border-b border-border rounded-none focus:border-primary focus:ring-0 font-sans"
-      />
-      {showDropdown && (
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 overflow-hidden max-h-72 overflow-y-auto"
-        >
-          {loading ? (
-            <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm font-sans">Searching...</span>
-            </div>
-          ) : destinations.length > 0 ? (
-            destinations.map((dest) => (
-              <button
-                key={dest.id}
-                type="button"
-                className="w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
-                onMouseDown={() => handleSelect(dest)}
-              >
-                <MapPin className="h-4 w-4 text-primary shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-sans text-sm text-foreground truncate">{dest.city}</p>
-                    {dest.featured && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary font-sans tracking-wide uppercase">Popular</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{dest.country}{dest.region ? ` • ${dest.region}` : ''}</p>
-                </div>
-              </button>
-            ))
-          ) : inputValue.length >= 1 ? (
-            <div className="px-4 py-6 text-center text-muted-foreground text-sm font-sans">
-              No destinations found
-            </div>
-          ) : null}
-        </motion.div>
-      )}
-    </div>
-  );
-}
+// Trip type options
+const tripTypes = [
+  { id: 'romantic', label: 'Romantic', icon: Heart, description: 'Couples getaway' },
+  { id: 'business', label: 'Business', icon: Briefcase, description: 'Work travel' },
+  { id: 'adventure', label: 'Adventure', icon: Mountain, description: 'Explore & discover' },
+  { id: 'leisure', label: 'Leisure', icon: Sparkles, description: 'Relax & unwind' },
+];
 
 // Featured destinations with editorial imagery
 const featuredDestinations = [
@@ -248,6 +152,7 @@ const featuredDestinations = [
 
 export default function Start() {
   const { state: plannerState, setBasics } = useTripPlanner();
+  const { user } = useAuth();
   const navigate = useNavigate();
   
   const [origin, setOrigin] = useState(plannerState.basics.originCity || '');
@@ -259,7 +164,7 @@ export default function Start() {
     plannerState.basics.endDate ? new Date(plannerState.basics.endDate) : undefined
   );
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
-  const [budget, setBudget] = useState<string>(plannerState.basics.budgetTier || '');
+  const [tripType, setTripType] = useState<string>('leisure');
   const today = startOfToday();
 
   useEffect(() => {
@@ -284,9 +189,6 @@ export default function Start() {
     if (plannerState.basics.travelers && plannerState.basics.travelers !== travelers) {
       setTravelers(plannerState.basics.travelers);
     }
-    if (plannerState.basics.budgetTier && plannerState.basics.budgetTier !== budget) {
-      setBudget(plannerState.basics.budgetTier);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plannerState.basics]);
 
@@ -302,7 +204,7 @@ export default function Start() {
       endDate: end,
       travelers,
       originCity: origin,
-      budgetTier: budget || 'moderate',
+      budgetTier: 'moderate',
     });
 
     const params = new URLSearchParams();
@@ -311,13 +213,17 @@ export default function Start() {
     params.set('startDate', start);
     params.set('endDate', end);
     params.set('travelers', String(travelers));
-    if (budget) params.set('budget', budget);
+    params.set('tripType', tripType);
 
     navigate(`${ROUTES.PLANNER.FLIGHT}?${params.toString()}`);
   };
 
-  const selectDestination = (dest: typeof featuredDestinations[0]) => {
-    setDestination(`${dest.name}, ${dest.country}`);
+  const handleAddGuest = () => {
+    if (!user) {
+      toast.info('Sign in to link travel companions and use their preferences.');
+      return;
+    }
+    toast.info('Guest linking coming soon! We\'ll match travel preferences for your group.');
   };
 
   const isFormValid = destination && startDate && endDate;
@@ -329,8 +235,8 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* Hero Section - Editorial Magazine Style */}
-      <section className="relative min-h-[60vh] flex items-center justify-center overflow-hidden">
+      {/* Hero Section - Full width background image */}
+      <section className="relative min-h-[50vh] flex items-center justify-center overflow-hidden">
         {/* Background Image */}
         <div className="absolute inset-0">
           <img 
@@ -338,11 +244,11 @@ export default function Start() {
             alt=""
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate/40 via-slate/60 to-slate/90" />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate/40 via-slate/60 to-background" />
         </div>
 
         {/* Hero Content */}
-        <div className="relative z-10 w-full max-w-4xl mx-auto px-8 md:px-16 py-24 text-center">
+        <div className="relative z-10 w-full max-w-4xl mx-auto px-8 md:px-16 py-16 text-center">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -358,55 +264,57 @@ export default function Start() {
               <div className="w-8 h-px bg-white/40" />
             </div>
             
-            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-normal mb-6 leading-[0.95]">
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-normal mb-4 leading-[0.95]">
               Where to <em className="font-normal italic">next?</em>
             </h1>
             
-            <p className="text-lg text-white/70 font-sans font-light leading-relaxed max-w-lg mx-auto">
-              Tell us your destination and dates. We'll craft an itinerary that's thoughtfully planned down to every detail.
+            <p className="text-base text-white/70 font-sans font-light leading-relaxed max-w-lg mx-auto">
+              Tell us your destination and dates. We'll craft an itinerary thoughtfully planned to every detail.
             </p>
           </motion.div>
         </div>
       </section>
 
       {/* Planning Form - Centered Below Hero */}
-      <section className="relative -mt-16 pb-24">
-        <div className="max-w-2xl mx-auto px-8">
+      <section className="relative pb-16 -mt-8">
+        <div className="max-w-2xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className="bg-card p-8 md:p-10 shadow-elevated rounded-xl border border-border"
+            className="bg-card p-6 md:p-8 shadow-elevated rounded-2xl border border-border"
           >
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Origin */}
               <div>
-                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
                   Departing from
                 </label>
                 <AirportAutocomplete
                   value={origin}
                   onChange={setOrigin}
                   placeholder="Your city or airport"
+                  icon={Plane}
                 />
               </div>
               
               {/* Destination */}
               <div>
-                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
                   Destination
                 </label>
                 <AirportAutocomplete
                   value={destination}
                   onChange={setDestination}
                   placeholder="Where do you want to go?"
+                  icon={MapPin}
                 />
               </div>
 
               {/* Dates Row */}
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
                     Departure
                   </label>
                   <Popover>
@@ -441,7 +349,7 @@ export default function Start() {
                 </div>
                 
                 <div>
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
                     Return
                   </label>
                   <Popover>
@@ -462,10 +370,7 @@ export default function Start() {
                         mode="single"
                         selected={endDate}
                         onSelect={setEndDate}
-                        disabled={(date) => 
-                          isBefore(date, today) || 
-                          (startDate ? isBefore(date, startDate) : false)
-                        }
+                        disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, today)}
                         initialFocus
                         className={cn("p-3 pointer-events-auto")}
                       />
@@ -474,139 +379,105 @@ export default function Start() {
                 </div>
               </div>
 
-              {/* Travelers & Budget Row */}
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                    Travelers
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          {travelers} {travelers === 1 ? 'guest' : 'guests'}
-                        </span>
-                        <ChevronDown className="h-4 w-4 opacity-60" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-56 p-4" align="start">
-                      <div className="flex items-center justify-between">
-                        <span className="font-sans text-sm">Travelers</span>
-                        <div className="flex items-center gap-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => setTravelers(Math.max(1, travelers - 1))}
-                            disabled={travelers <= 1}
+              {/* Travelers Row */}
+              <div>
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
+                  Travelers
+                </label>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 flex-1">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center gap-2 border-b border-border pb-2 flex-1">
+                      {[1, 2, 3, 4].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setTravelers(num)}
+                          className={cn(
+                            "w-10 h-10 rounded-full border transition-all font-sans text-sm",
+                            travelers === num
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border text-muted-foreground hover:border-primary/50"
+                          )}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                      <span className="text-sm text-muted-foreground ml-2">
+                        {travelers > 1 && travelers <= 4 && (
+                          <button 
+                            onClick={handleAddGuest}
+                            className="flex items-center gap-1 text-primary hover:underline"
                           >
-                            -
-                          </Button>
-                          <span className="w-6 text-center font-sans">{travelers}</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => setTravelers(Math.min(10, travelers + 1))}
-                            disabled={travelers >= 10}
-                          >
-                            +
-                          </Button>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Link guest
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  </div>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                    Budget
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="ghost"
+              {/* Trip Type Selection */}
+              <div>
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                  Trip Type
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {tripTypes.map((type) => {
+                    const Icon = type.icon;
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setTripType(type.id)}
                         className={cn(
-                          "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
-                          !budget && "text-muted-foreground"
+                          "flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all",
+                          tripType === type.id
+                            ? "bg-primary/10 border-primary text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
                         )}
                       >
-                        <span className="flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-muted-foreground" />
-                          {budget ? budget.charAt(0).toUpperCase() + budget.slice(1) : 'Any'}
-                        </span>
-                        <ChevronDown className="h-4 w-4 opacity-60" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-56 p-2" align="start">
-                      <div className="space-y-1">
-                        {[
-                          { value: '', label: 'Any budget' },
-                          { value: 'budget', label: 'Budget' },
-                          { value: 'moderate', label: 'Moderate' },
-                          { value: 'premium', label: 'Premium' },
-                          { value: 'luxury', label: 'Luxury' },
-                        ].map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={() => setBudget(option.value)}
-                            className={cn(
-                              'w-full px-3 py-2 text-left text-sm font-sans rounded transition-colors',
-                              budget === option.value ? 'bg-primary/10 text-primary' : 'hover:bg-secondary'
-                            )}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                        <Icon className="h-5 w-5" />
+                        <span className="text-xs font-medium">{type.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* CTA Button */}
               <Button
-                size="lg"
                 onClick={handleStart}
                 disabled={!isFormValid}
-                className="w-full h-14 text-base font-sans font-medium tracking-wide mt-4"
+                className="w-full h-14 text-base font-medium mt-2"
+                size="lg"
               >
                 Plan My Trip
-                <ArrowRight className="ml-3 h-4 w-4" />
               </Button>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Featured Destinations - Editorial Grid */}
-      <section className="py-24 bg-background">
-        <div className="max-w-7xl mx-auto px-8 md:px-16">
-          {/* Section Header */}
+      {/* Popular Destinations Section */}
+      <section className="py-16 bg-secondary/30">
+        <div className="max-w-6xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="flex items-start justify-between mb-12"
+            className="text-center mb-10"
           >
-            <div>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-8 h-px bg-primary" />
-                <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
-                  Inspiration
-                </span>
-              </div>
-              <h2 className="text-3xl md:text-4xl font-serif font-normal text-foreground">
-                Popular <em className="font-normal">destinations</em>
-              </h2>
-            </div>
+            <h2 className="font-serif text-2xl md:text-3xl text-foreground mb-2">
+              Popular Destinations
+            </h2>
+            <p className="text-muted-foreground">
+              Get inspired by trending travel destinations
+            </p>
           </motion.div>
 
-          {/* Destinations Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {featuredDestinations.map((dest, index) => (
               <motion.button
@@ -614,79 +485,21 @@ export default function Start() {
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                onClick={() => selectDestination(dest)}
-                className="group relative aspect-[3/4] overflow-hidden"
+                transition={{ delay: index * 0.1 }}
+                onClick={() => setDestination(`${dest.name}, ${dest.country}`)}
+                className="group relative aspect-[4/5] rounded-xl overflow-hidden"
               >
-                <img 
-                  src={dest.image} 
+                <img
+                  src={dest.image}
                   alt={dest.name}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-                <div className="absolute bottom-4 left-4 right-4 text-left text-white">
-                  <p className="font-serif text-lg">{dest.name}</p>
-                  <p className="text-xs text-white/70 font-sans tracking-wide">{dest.country}</p>
+                <div className="absolute inset-0 bg-gradient-to-t from-slate/80 via-slate/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-3 text-white text-left">
+                  <p className="font-medium text-sm">{dest.name}</p>
+                  <p className="text-xs text-white/70">{dest.country}</p>
                 </div>
               </motion.button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Why Voyance - Editorial Style */}
-      <section className="py-24 bg-secondary/30 border-t border-border">
-        <div className="max-w-6xl mx-auto px-8 md:px-16">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <div className="w-8 h-px bg-primary" />
-              <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
-                Why Voyance
-              </span>
-              <div className="w-8 h-px bg-primary" />
-            </div>
-            <h2 className="text-3xl md:text-4xl font-serif font-normal text-foreground">
-              Travel planning, <em className="font-normal">refined</em>
-            </h2>
-          </motion.div>
-          
-          <div className="grid md:grid-cols-3 gap-px bg-border">
-            {[
-              {
-                number: '01',
-                title: 'Intelligent Personalization',
-                description: 'Our AI learns your preferences to craft itineraries tailored specifically to how you travel.',
-              },
-              {
-                number: '02',
-                title: 'Curated Experiences',
-                description: 'Hand-picked activities, restaurants, and hidden gems recommended by local experts.',
-              },
-              {
-                number: '03',
-                title: 'Seamless Booking',
-                description: 'Book flights, hotels, and activities all in one place with best-price guarantees.',
-              },
-            ].map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-background p-10 relative group"
-              >
-                <span className="text-6xl font-serif text-muted/15 absolute top-6 right-6 group-hover:text-primary/15 transition-colors">
-                  {feature.number}
-                </span>
-                <h3 className="text-xl font-serif text-foreground mb-4">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground font-sans leading-relaxed">{feature.description}</p>
-              </motion.div>
             ))}
           </div>
         </div>

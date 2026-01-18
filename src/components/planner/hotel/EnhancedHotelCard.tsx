@@ -18,11 +18,13 @@ import {
   Sparkles,
   Users,
   Bed,
-  ExternalLink
+  Image as ImageIcon,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface RoomOption {
   id: string;
@@ -35,6 +37,7 @@ interface RoomOption {
   freeCancellation?: boolean;
   breakfastIncluded?: boolean;
   refundable?: boolean;
+  imageUrl?: string;
 }
 
 interface Review {
@@ -87,6 +90,14 @@ const amenityIcons: Record<string, typeof Wifi> = {
   'Parking': Car,
 };
 
+// Room type icons
+const roomIcons: Record<string, string> = {
+  'Standard': '🛏️',
+  'Deluxe': '✨',
+  'Suite': '👑',
+  'Junior Suite': '💎',
+};
+
 export default function EnhancedHotelCard({
   hotel,
   isSelected,
@@ -98,6 +109,8 @@ export default function EnhancedHotelCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [showReviews, setShowReviews] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
 
   const lowestPrice = Math.min(...hotel.roomOptions.map(r => r.pricePerNight));
   
@@ -115,15 +128,34 @@ export default function EnhancedHotelCard({
     onSelect(roomId);
   };
 
+  const handleViewReviews = () => {
+    setShowReviews(!showReviews);
+    if (!isExpanded) setIsExpanded(true);
+  };
+
+  const handleViewGallery = () => {
+    setShowGallery(!showGallery);
+    if (!isExpanded) setIsExpanded(true);
+  };
+
+  const getRoomIcon = (roomName: string): string => {
+    for (const [key, icon] of Object.entries(roomIcons)) {
+      if (roomName.toLowerCase().includes(key.toLowerCase())) {
+        return icon;
+      }
+    }
+    return '🛏️';
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'relative bg-card rounded-xl border transition-all duration-200 overflow-hidden',
+        'relative bg-card rounded-2xl border transition-all duration-200 overflow-hidden',
         isSelected 
           ? 'border-primary shadow-lg ring-2 ring-primary/20' 
-          : 'border-border hover:border-primary/50 hover:shadow-md'
+          : 'border-border hover:border-primary/40 hover:shadow-md'
       )}
     >
       {/* Recommended Badge */}
@@ -181,6 +213,15 @@ export default function EnhancedHotelCard({
               </div>
             </>
           )}
+
+          {/* Gallery Button */}
+          <button
+            onClick={handleViewGallery}
+            className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-lg flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <ImageIcon className="h-3 w-3" />
+            View all
+          </button>
         </div>
         
         {/* Content */}
@@ -208,14 +249,20 @@ export default function EnhancedHotelCard({
               </div>
             </div>
             
-            {/* Rating */}
+            {/* Rating with review link */}
             <div className="text-right shrink-0">
-              <div className="bg-primary text-primary-foreground text-sm font-bold px-2.5 py-1.5 rounded-lg">
-                {hotel.rating.toFixed(1)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {hotel.reviewCount} reviews
-              </p>
+              <button 
+                onClick={handleViewReviews}
+                className="group"
+              >
+                <div className="bg-primary text-primary-foreground text-sm font-bold px-2.5 py-1.5 rounded-lg group-hover:bg-primary/90 transition-colors">
+                  {hotel.rating.toFixed(1)}
+                </div>
+                <p className="text-xs text-primary mt-1 group-hover:underline flex items-center gap-0.5">
+                  <MessageSquare className="h-3 w-3" />
+                  {hotel.reviewCount} reviews
+                </p>
+              </button>
             </div>
           </div>
           
@@ -268,7 +315,7 @@ export default function EnhancedHotelCard({
               ) : (
                 <>
                   <ChevronDown className="h-4 w-4 mr-1" />
-                  View Rooms & Details
+                  View Rooms
                 </>
               )}
             </Button>
@@ -287,6 +334,30 @@ export default function EnhancedHotelCard({
             className="overflow-hidden border-t border-border"
           >
             <div className="p-5 space-y-6">
+              {/* Gallery Section */}
+              {showGallery && hotel.images.length > 1 && (
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4 text-primary" />
+                    Photo Gallery
+                  </h4>
+                  <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+                    {hotel.images.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentImageIndex(idx)}
+                        className={cn(
+                          "aspect-square rounded-lg overflow-hidden border-2 transition-all",
+                          currentImageIndex === idx ? "border-primary" : "border-transparent"
+                        )}
+                      >
+                        <img src={img} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Room Options */}
               <div>
                 <h4 className="font-medium mb-3">Available Rooms</h4>
@@ -296,15 +367,16 @@ export default function EnhancedHotelCard({
                       key={room.id}
                       onClick={() => handleRoomSelect(room.id)}
                       className={cn(
-                        'p-4 rounded-lg border cursor-pointer transition-all',
+                        'p-4 rounded-xl border cursor-pointer transition-all',
                         selectedRoomId === room.id
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:border-primary/50'
                       )}
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{getRoomIcon(room.name)}</span>
                             <h5 className="font-medium">{room.name}</h5>
                             {selectedRoomId === room.id && (
                               <Check className="h-4 w-4 text-primary" />
@@ -338,10 +410,10 @@ export default function EnhancedHotelCard({
                             ))}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold">${room.pricePerNight}</p>
+                        <div className="text-right shrink-0">
+                          <p className="text-xl font-bold">${room.pricePerNight}</p>
                           <p className="text-xs text-muted-foreground">per night</p>
-                          <p className="text-sm font-medium mt-1">${room.price} total</p>
+                          <p className="text-sm font-medium mt-1 text-primary">${room.price} total</p>
                         </div>
                       </div>
                     </div>
@@ -349,13 +421,16 @@ export default function EnhancedHotelCard({
                 </div>
               </div>
 
-              {/* Reviews */}
-              {hotel.reviews && hotel.reviews.length > 0 && (
+              {/* Reviews Section */}
+              {showReviews && hotel.reviews && hotel.reviews.length > 0 && (
                 <div>
-                  <h4 className="font-medium mb-3">Guest Reviews</h4>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-primary" />
+                    Guest Reviews
+                  </h4>
                   <div className="space-y-3">
-                    {hotel.reviews.slice(0, 3).map((review, i) => (
-                      <div key={i} className="bg-muted/50 rounded-lg p-3">
+                    {hotel.reviews.map((review, i) => (
+                      <div key={i} className="bg-muted/50 rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-sm font-medium">
@@ -369,18 +444,26 @@ export default function EnhancedHotelCard({
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground">{review.text}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{review.date}</p>
+                        <p className="text-xs text-muted-foreground mt-2">{review.date}</p>
                       </div>
                     ))}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="w-full"
+                      onClick={() => toast.info('More reviews coming soon!')}
+                    >
+                      View all {hotel.reviewCount} reviews
+                    </Button>
                   </div>
                 </div>
               )}
 
               {/* Why Recommended */}
               {hotel.rationale && hotel.rationale.length > 0 && (
-                <div className="bg-muted/50 rounded-lg p-4">
-                  <p className="text-sm font-medium mb-2">Why we recommend this hotel:</p>
-                  <ul className="space-y-1">
+                <div className="bg-muted/50 rounded-xl p-4">
+                  <p className="text-xs font-medium mb-2 uppercase tracking-wide text-muted-foreground">Why we recommend this hotel</p>
+                  <ul className="space-y-1.5">
                     {hotel.rationale.map((reason, i) => (
                       <li key={i} className="flex items-center gap-2 text-sm">
                         <Check className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -395,16 +478,16 @@ export default function EnhancedHotelCard({
               {hotel.policies && (
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground">Check-in</p>
+                    <p className="text-muted-foreground text-xs uppercase tracking-wide">Check-in</p>
                     <p className="font-medium">{hotel.policies.checkIn}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Check-out</p>
+                    <p className="text-muted-foreground text-xs uppercase tracking-wide">Check-out</p>
                     <p className="font-medium">{hotel.policies.checkOut}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Cancellation</p>
-                    <p className="font-medium">{hotel.policies.cancellation}</p>
+                    <p className="text-muted-foreground text-xs uppercase tracking-wide">Cancellation</p>
+                    <p className="font-medium text-xs">{hotel.policies.cancellation}</p>
                   </div>
                 </div>
               )}
@@ -416,6 +499,7 @@ export default function EnhancedHotelCard({
                   disabled={isLoading || !selectedRoomId}
                   variant={isSelected ? "default" : "outline"}
                   size="lg"
+                  className="min-w-[180px]"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
