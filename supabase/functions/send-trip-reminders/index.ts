@@ -8,30 +8,192 @@ const corsHeaders = {
 
 interface TripReminder {
   tripId: string;
-  userId: string;
-  userEmail: string;
-  userName: string;
-  destination: string;
   tripName: string;
+  destination: string;
   startDate: string;
   daysUntil: number;
+  reminderType: "daily" | "weekly" | "monthly";
+  userEmail: string;
+  userName: string;
+}
+
+// Track sent reminders to avoid duplicates
+interface ReminderRecord {
+  tripId: string;
+  reminderType: string;
+  weekNumber?: number; // For weekly reminders
 }
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   console.log(`[TRIP-REMINDERS] ${step}`, details ? JSON.stringify(details) : "");
 };
 
-async function sendReminderEmail(
-  reminder: TripReminder,
-  sendgridApiKey: string
-): Promise<boolean> {
-  const daysText = reminder.daysUntil === 1 
-    ? "tomorrow" 
-    : reminder.daysUntil === 0 
-    ? "today" 
-    : `in ${reminder.daysUntil} days`;
+// Determine reminder type based on days until trip
+function getReminderType(daysUntil: number): "daily" | "weekly" | "monthly" | null {
+  if (daysUntil <= 0) return null; // Trip already started
+  if (daysUntil <= 7) return "daily"; // Week of
+  if (daysUntil <= 30) return "weekly"; // Month before
+  return "monthly"; // More than a month out
+}
 
-  const emailHtml = `
+// Check if we should send a reminder today based on schedule
+function shouldSendReminder(daysUntil: number, reminderType: "daily" | "weekly" | "monthly"): boolean {
+  if (reminderType === "daily") {
+    // Send daily during the week of the trip
+    return daysUntil > 0 && daysUntil <= 7;
+  }
+  if (reminderType === "weekly") {
+    // Send weekly on Mondays (or specific days before: 28, 21, 14, 8)
+    return [28, 21, 14, 8].includes(daysUntil);
+  }
+  if (reminderType === "monthly") {
+    // Send monthly on 60, 45, 30 days out
+    return [60, 45, 30].includes(daysUntil);
+  }
+  return false;
+}
+
+// Daily messages (week of trip) - 7 unique messages
+const dailyMessages = [
+  {
+    subject: "🎉 Only {{days}} days until {{destination}}!",
+    headline: "The countdown is ON!",
+    body: "Your adventure to {{destination}} is just around the corner. Have you started packing? Here's a quick mental checklist to get you excited.",
+    tip: "Pro tip: Roll your clothes instead of folding – you'll fit more and avoid wrinkles!",
+    cta: "Double-check your itinerary and make sure everything is set for the trip of a lifetime.",
+  },
+  {
+    subject: "✈️ {{days}} days to go – {{destination}} awaits!",
+    headline: "Adventure is calling!",
+    body: "Can you feel the excitement building? {{destination}} is ready to welcome you. Take a moment to review your travel documents and confirmations.",
+    tip: "Don't forget to download offline maps of {{destination}} – they're a lifesaver!",
+    cta: "Need last-minute inspiration? Check out our destination guides for hidden gems.",
+  },
+  {
+    subject: "🌟 T-minus {{days}} days to {{destination}}!",
+    headline: "Your journey begins soon!",
+    body: "The anticipation is the best part, right? Well, almost. {{destination}} has so much waiting for you. Make sure your camera is charged!",
+    tip: "Consider arriving at the airport 3 hours early for international flights – peace of mind is worth it.",
+    cta: "Share your upcoming trip with friends and family right from Voyance!",
+  },
+  {
+    subject: "🗺️ {{destination}} in {{days}} days – Ready?",
+    headline: "Almost time to explore!",
+    body: "Weather forecasts, local customs, emergency numbers – have you done your pre-trip research? Don't worry, we've got your back with everything you need.",
+    tip: "Notify your bank about your travel dates to avoid card blocks abroad!",
+    cta: "Review your personalized itinerary one more time – we've crafted it just for you.",
+  },
+  {
+    subject: "⏰ {{days}} days until takeoff to {{destination}}!",
+    headline: "Final countdown mode: ON",
+    body: "This is really happening! {{destination}} is about to become your reality. Time to finalize those last-minute details.",
+    tip: "Pack a small bag with essentials in your carry-on – just in case your luggage takes a detour!",
+    cta: "Create a packing list with our travel checklist feature – never forget anything again.",
+  },
+  {
+    subject: "🎒 Packing for {{destination}}? {{days}} days left!",
+    headline: "Time to pack smart!",
+    body: "The bags won't pack themselves! But we can help make sure you don't forget anything important for your {{destination}} adventure.",
+    tip: "Leave room in your suitcase for souvenirs – you know you'll find something amazing!",
+    cta: "Invite travel companions to collaborate on your trip plans with Voyance.",
+  },
+  {
+    subject: "✨ {{destination}} is calling – {{days}} days away!",
+    headline: "Your dream trip is almost here!",
+    body: "From planning to reality – you've made it this far! {{destination}} is going to be incredible. Trust your preparation and get ready for memories that last a lifetime.",
+    tip: "Take photos of your passport, ID, and confirmations – store them in the cloud for backup!",
+    cta: "After your trip, share your experience and help other travelers discover {{destination}}!",
+  },
+];
+
+// Weekly messages (month before) - 4 unique messages
+const weeklyMessages = [
+  {
+    subject: "📅 {{destination}} in {{weeks}} weeks – Time to plan!",
+    headline: "Your trip is taking shape!",
+    body: "With {{weeks}} weeks to go, now's the perfect time to fine-tune your plans. Have you thought about what experiences you absolutely can't miss in {{destination}}?",
+    tip: "Book popular restaurants and attractions now – the best spots fill up fast!",
+    cta: "Discover curated experiences for {{destination}} that match your travel style on Voyance.",
+  },
+  {
+    subject: "🌍 {{weeks}} weeks until {{destination}} – Getting excited?",
+    headline: "The best trips start with great planning!",
+    body: "Your {{destination}} adventure is {{weeks}} weeks away. This is the sweet spot for finalizing accommodations, activities, and building anticipation!",
+    tip: "Check if you need any vaccinations or visas – some take weeks to process!",
+    cta: "Share your trip plans with friends and see who wants to join your adventure!",
+  },
+  {
+    subject: "✈️ Countdown: {{weeks}} weeks to {{destination}}!",
+    headline: "Making travel dreams come true!",
+    body: "Every great adventure starts with a first step – and you've already taken yours by planning your trip to {{destination}}. Let's make sure you're fully prepared!",
+    tip: "Start a travel fund for spending money – even small daily savings add up!",
+    cta: "Explore similar destinations you might love for your next trip on Voyance.",
+  },
+  {
+    subject: "🎯 {{destination}} countdown: {{weeks}} weeks out!",
+    headline: "Stay organized, travel better!",
+    body: "With {{weeks}} weeks until your {{destination}} trip, you're in the perfect window to handle logistics without stress. Flights confirmed? Hotel ready? Itinerary set?",
+    tip: "Download your airline's app – digital boarding passes make everything smoother!",
+    cta: "Plan your next adventure while you're at it – dream trips don't plan themselves!",
+  },
+];
+
+// Monthly messages (more than a month out) - 3 unique messages
+const monthlyMessages = [
+  {
+    subject: "🗓️ {{destination}} is {{months}} month(s) away!",
+    headline: "Good things come to those who plan!",
+    body: "Your trip to {{destination}} is {{months}} month(s) out – perfect timing to start getting organized. The best travelers plan ahead and enjoy the journey stress-free.",
+    tip: "Set up price alerts for flights and hotels – early planning often means better deals!",
+    cta: "Take our Travel DNA quiz to get even more personalized recommendations for your trip!",
+  },
+  {
+    subject: "✨ {{destination}} dreams – {{months}} month(s) to go!",
+    headline: "Let the anticipation build!",
+    body: "Sometimes the excitement of planning is almost as good as the trip itself! With {{months}} month(s) until {{destination}}, you have time to craft the perfect experience.",
+    tip: "Research local festivals and events happening during your visit – they're often the best memories!",
+    cta: "Invite friends to Voyance and plan group trips together – adventures are better shared!",
+  },
+  {
+    subject: "🌟 Your {{destination}} adventure – {{months}} month(s) away!",
+    headline: "Every epic journey starts here!",
+    body: "We're keeping your {{destination}} trip on our radar! Use this time to learn about local culture, cuisine, and hidden gems. The more you know, the richer your experience.",
+    tip: "Start learning a few local phrases – locals love it when travelers make the effort!",
+    cta: "Explore our destination guides and travel tips to become a {{destination}} expert!",
+  },
+];
+
+function getRandomMessage(messages: typeof dailyMessages, daysUntil: number, destination: string): typeof dailyMessages[0] {
+  // Use days as a seed for consistency (same message for same day)
+  const index = daysUntil % messages.length;
+  const message = messages[index];
+  
+  const weeks = Math.ceil(daysUntil / 7);
+  const months = Math.ceil(daysUntil / 30);
+  
+  return {
+    subject: message.subject
+      .replace(/{{days}}/g, String(daysUntil))
+      .replace(/{{weeks}}/g, String(weeks))
+      .replace(/{{months}}/g, String(months))
+      .replace(/{{destination}}/g, destination),
+    headline: message.headline,
+    body: message.body
+      .replace(/{{days}}/g, String(daysUntil))
+      .replace(/{{weeks}}/g, String(weeks))
+      .replace(/{{months}}/g, String(months))
+      .replace(/{{destination}}/g, destination),
+    tip: message.tip.replace(/{{destination}}/g, destination),
+    cta: message.cta.replace(/{{destination}}/g, destination),
+  };
+}
+
+function generateEmailHtml(reminder: TripReminder, message: ReturnType<typeof getRandomMessage>): string {
+  const tripDate = new Date(reminder.startDate).toLocaleDateString('en-US', { 
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
+  });
+  
+  return `
     <!DOCTYPE html>
     <html>
     <head>
@@ -45,9 +207,9 @@ async function sendReminderEmail(
             <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
               <!-- Header -->
               <tr>
-                <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px 40px 30px; text-align: center;">
-                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">✈️ Trip Reminder</h1>
-                  <p style="margin: 10px 0 0; color: #a0aec0; font-size: 16px;">Your adventure awaits!</p>
+                <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px; text-align: center;">
+                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">${message.headline}</h1>
+                  <p style="margin: 15px 0 0; color: #a0aec0; font-size: 16px;">Your ${reminder.destination} adventure awaits</p>
                 </td>
               </tr>
               
@@ -57,44 +219,78 @@ async function sendReminderEmail(
                   <p style="margin: 0 0 20px; color: #374151; font-size: 16px; line-height: 1.6;">
                     Hi ${reminder.userName || 'Traveler'},
                   </p>
-                  <p style="margin: 0 0 30px; color: #374151; font-size: 16px; line-height: 1.6;">
-                    Your trip to <strong style="color: #1a1a2e;">${reminder.destination}</strong> starts <strong style="color: #6366f1;">${daysText}</strong>! 
-                    Make sure you have everything ready for your adventure.
+                  <p style="margin: 0 0 25px; color: #374151; font-size: 16px; line-height: 1.7;">
+                    ${message.body}
                   </p>
                   
                   <!-- Trip Card -->
-                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border-radius: 12px; padding: 24px; margin-bottom: 30px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); border-radius: 12px; margin-bottom: 25px;">
                     <tr>
-                      <td>
+                      <td style="padding: 24px;">
                         <h2 style="margin: 0 0 16px; color: #1a1a2e; font-size: 20px; font-weight: 600;">
-                          ${reminder.tripName || reminder.destination}
+                          ${reminder.tripName || `Trip to ${reminder.destination}`}
                         </h2>
                         <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;">
                           📍 <strong>Destination:</strong> ${reminder.destination}
                         </p>
                         <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;">
-                          📅 <strong>Departure:</strong> ${new Date(reminder.startDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                          📅 <strong>Departure:</strong> ${tripDate}
                         </p>
-                        <p style="margin: 0; color: #6b7280; font-size: 14px;">
-                          ⏰ <strong>Days until departure:</strong> ${reminder.daysUntil}
+                        <p style="margin: 0; color: #6366f1; font-size: 16px; font-weight: 600;">
+                          ⏰ ${reminder.daysUntil} day${reminder.daysUntil !== 1 ? 's' : ''} to go!
                         </p>
                       </td>
                     </tr>
                   </table>
 
-                  <!-- Checklist -->
-                  <h3 style="margin: 0 0 16px; color: #1a1a2e; font-size: 16px; font-weight: 600;">Quick Checklist:</h3>
-                  <ul style="margin: 0 0 30px; padding-left: 20px; color: #374151; font-size: 14px; line-height: 2;">
-                    <li>✅ Passport and travel documents ready</li>
-                    <li>✅ Flights and hotel confirmations printed/saved</li>
-                    <li>✅ Travel insurance arranged</li>
-                    <li>✅ Phone charger and adapters packed</li>
-                    <li>✅ Check weather forecast for ${reminder.destination}</li>
-                  </ul>
+                  <!-- Tip Box -->
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0; margin-bottom: 25px;">
+                    <tr>
+                      <td style="padding: 16px 20px;">
+                        <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.5;">
+                          💡 <strong>Travel Tip:</strong> ${message.tip}
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
 
-                  <p style="margin: 0; color: #374151; font-size: 16px; line-height: 1.6;">
-                    Have an amazing trip! 🌟
+                  <!-- CTA Section -->
+                  <p style="margin: 0 0 20px; color: #374151; font-size: 15px; line-height: 1.6;">
+                    ${message.cta}
                   </p>
+                  
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td align="center" style="padding-top: 10px;">
+                        <a href="https://voyance-travel-planner.lovable.app/trip/dashboard" 
+                           style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                          View My Trip
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              
+              <!-- Promo Section -->
+              <tr>
+                <td style="background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); padding: 24px 40px;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td>
+                        <h3 style="margin: 0 0 8px; color: #4338ca; font-size: 16px; font-weight: 600;">✨ Love planning with Voyance?</h3>
+                        <p style="margin: 0; color: #6366f1; font-size: 14px; line-height: 1.5;">
+                          Share Voyance with friends and plan your next adventure together! Personalized itineraries, smart recommendations, and stress-free travel planning await.
+                        </p>
+                      </td>
+                      <td width="120" style="text-align: right;">
+                        <a href="https://voyance-travel-planner.lovable.app" 
+                           style="display: inline-block; background: #4f46e5; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px;">
+                          Invite Friends
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
               
@@ -102,10 +298,11 @@ async function sendReminderEmail(
               <tr>
                 <td style="background-color: #f9fafb; padding: 24px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
                   <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;">
-                    Sent with ❤️ by Voyance
+                    Sent with ❤️ by <a href="https://voyance-travel-planner.lovable.app" style="color: #6366f1; text-decoration: none;">Voyance</a>
                   </p>
                   <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                    You can manage your notification preferences in your <a href="https://voyance-travel-planner.lovable.app/settings" style="color: #6366f1;">account settings</a>.
+                    <a href="https://voyance-travel-planner.lovable.app/settings" style="color: #9ca3af;">Manage notifications</a> · 
+                    <a href="https://voyance-travel-planner.lovable.app/trip/dashboard" style="color: #9ca3af;">View all trips</a>
                   </p>
                 </td>
               </tr>
@@ -116,30 +313,43 @@ async function sendReminderEmail(
     </body>
     </html>
   `;
+}
 
-  const emailText = `
-Trip Reminder - Your adventure awaits!
+async function sendReminderEmail(
+  reminder: TripReminder,
+  sendgridApiKey: string
+): Promise<boolean> {
+  const messages = reminder.reminderType === "daily" 
+    ? dailyMessages 
+    : reminder.reminderType === "weekly" 
+    ? weeklyMessages 
+    : monthlyMessages;
+    
+  const message = getRandomMessage(messages, reminder.daysUntil, reminder.destination);
+  const html = generateEmailHtml(reminder, message);
+  
+  const textContent = `
+${message.headline}
 
 Hi ${reminder.userName || 'Traveler'},
 
-Your trip to ${reminder.destination} starts ${daysText}!
+${message.body}
 
 Trip Details:
 - Destination: ${reminder.destination}
 - Departure: ${new Date(reminder.startDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
 - Days until departure: ${reminder.daysUntil}
 
-Quick Checklist:
-✅ Passport and travel documents ready
-✅ Flights and hotel confirmations printed/saved
-✅ Travel insurance arranged
-✅ Phone charger and adapters packed
-✅ Check weather forecast for ${reminder.destination}
+💡 Travel Tip: ${message.tip}
 
-Have an amazing trip!
+${message.cta}
+
+View your trip: https://voyance-travel-planner.lovable.app/trip/dashboard
 
 ---
-Sent by Voyance
+Love Voyance? Share it with friends and plan adventures together!
+https://voyance-travel-planner.lovable.app
+
 Manage notifications: https://voyance-travel-planner.lovable.app/settings
   `;
 
@@ -153,10 +363,10 @@ Manage notifications: https://voyance-travel-planner.lovable.app/settings
       body: JSON.stringify({
         personalizations: [{ to: [{ email: reminder.userEmail }] }],
         from: { email: "no-reply@voyancetravel.com", name: "Voyance Travel" },
-        subject: `✈️ Trip Reminder: Your ${reminder.destination} adventure starts ${daysText}!`,
+        subject: message.subject,
         content: [
-          { type: "text/plain", value: emailText },
-          { type: "text/html", value: emailHtml },
+          { type: "text/plain", value: textContent },
+          { type: "text/html", value: html },
         ],
       }),
     });
@@ -180,7 +390,7 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    logStep("Starting trip reminder check");
+    logStep("Starting smart trip reminder check");
 
     const sendgridApiKey = Deno.env.get("SENDGRID_API_KEY");
     if (!sendgridApiKey) {
@@ -191,29 +401,18 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get trips starting in 1, 3, or 7 days
     const today = new Date();
-    const reminderDays = [1, 3, 7];
-    const targetDates = reminderDays.map(days => {
-      const date = new Date(today);
-      date.setDate(date.getDate() + days);
-      return date.toISOString().split('T')[0];
-    });
+    today.setHours(0, 0, 0, 0);
 
-    logStep("Checking for trips", { targetDates });
-
-    // Fetch trips with matching start dates
+    // Fetch all upcoming trips (next 90 days)
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + 90);
+    
     const { data: trips, error: tripsError } = await supabase
       .from("trips")
-      .select(`
-        id,
-        user_id,
-        name,
-        destination,
-        start_date,
-        status
-      `)
-      .in("start_date", targetDates)
+      .select(`id, user_id, name, destination, start_date, status`)
+      .gte("start_date", today.toISOString().split('T')[0])
+      .lte("start_date", futureDate.toISOString().split('T')[0])
       .in("status", ["draft", "planning", "booked"]);
 
     if (tripsError) {
@@ -221,48 +420,67 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     if (!trips || trips.length === 0) {
-      logStep("No trips found for reminder dates");
+      logStep("No upcoming trips found");
       return new Response(
-        JSON.stringify({ success: true, message: "No trips to remind", sent: 0 }),
+        JSON.stringify({ success: true, message: "No upcoming trips", sent: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    logStep("Found trips for reminders", { count: trips.length });
+    logStep("Found upcoming trips", { count: trips.length });
 
-    // Get user IDs to check preferences
-    const userIds = [...new Set(trips.map(t => t.user_id))];
+    // Filter trips that should receive a reminder today
+    const tripsToRemind: Array<typeof trips[0] & { daysUntil: number; reminderType: "daily" | "weekly" | "monthly" }> = [];
+    
+    for (const trip of trips) {
+      const startDate = new Date(trip.start_date);
+      startDate.setHours(0, 0, 0, 0);
+      const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      const reminderType = getReminderType(daysUntil);
+      if (reminderType && shouldSendReminder(daysUntil, reminderType)) {
+        tripsToRemind.push({ ...trip, daysUntil, reminderType });
+      }
+    }
 
-    // Fetch user preferences (trip_reminders must be true)
-    const { data: preferences, error: prefsError } = await supabase
+    logStep("Trips qualifying for reminders today", { count: tripsToRemind.length });
+
+    if (tripsToRemind.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, message: "No reminders scheduled for today", sent: 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Get user IDs and check preferences
+    const userIds = [...new Set(tripsToRemind.map(t => t.user_id))];
+
+    const { data: preferences } = await supabase
       .from("user_preferences")
       .select("user_id, trip_reminders")
       .in("user_id", userIds)
       .eq("trip_reminders", true);
 
-    if (prefsError) {
-      logStep("Error fetching preferences", { error: prefsError.message });
-    }
-
     const usersWithReminders = new Set(preferences?.map(p => p.user_id) || []);
-    logStep("Users with reminders enabled", { count: usersWithReminders.size });
-
-    // Filter trips to only those users who want reminders
-    const tripsToRemind = trips.filter(t => usersWithReminders.has(t.user_id));
-
-    if (tripsToRemind.length === 0) {
-      logStep("No users have reminders enabled for upcoming trips");
+    
+    // Filter to only users who want reminders
+    const filteredTrips = tripsToRemind.filter(t => usersWithReminders.has(t.user_id));
+    
+    if (filteredTrips.length === 0) {
+      logStep("No users have reminders enabled");
       return new Response(
-        JSON.stringify({ success: true, message: "No users have reminders enabled", sent: 0 }),
+        JSON.stringify({ success: true, message: "No users with reminders enabled", sent: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Fetch user emails from auth.users (via profiles)
-    const { data: profiles, error: profilesError } = await supabase
+    // Get user profiles and emails
+    const { data: profiles } = await supabase
       .from("profiles")
       .select("id, display_name")
       .in("id", [...usersWithReminders]);
+
+    const profileMap = new Map(profiles?.map(p => [p.id, p.display_name]) || []);
 
     // Get emails from auth
     const userEmails: Record<string, string> = {};
@@ -273,50 +491,55 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    const profileMap = new Map(profiles?.map(p => [p.id, p.display_name]) || []);
-
     // Send reminders
     let sentCount = 0;
-    const results: { tripId: string; success: boolean; error?: string }[] = [];
+    const results: { tripId: string; reminderType: string; success: boolean; error?: string }[] = [];
 
-    for (const trip of tripsToRemind) {
+    for (const trip of filteredTrips) {
       const userEmail = userEmails[trip.user_id];
       if (!userEmail) {
-        results.push({ tripId: trip.id, success: false, error: "No email found" });
+        results.push({ tripId: trip.id, reminderType: trip.reminderType, success: false, error: "No email" });
         continue;
       }
 
-      const startDate = new Date(trip.start_date);
-      const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
       const reminder: TripReminder = {
         tripId: trip.id,
-        userId: trip.user_id,
+        tripName: trip.name,
+        destination: trip.destination,
+        startDate: trip.start_date,
+        daysUntil: trip.daysUntil,
+        reminderType: trip.reminderType,
         userEmail,
         userName: profileMap.get(trip.user_id) || "",
-        destination: trip.destination,
-        tripName: trip.name,
-        startDate: trip.start_date,
-        daysUntil,
       };
 
       const success = await sendReminderEmail(reminder, sendgridApiKey);
-      results.push({ tripId: trip.id, success });
+      results.push({ tripId: trip.id, reminderType: trip.reminderType, success });
       
       if (success) {
         sentCount++;
-        logStep("Reminder sent", { tripId: trip.id, destination: trip.destination, daysUntil });
+        logStep("Reminder sent", { 
+          tripId: trip.id, 
+          destination: trip.destination, 
+          daysUntil: trip.daysUntil,
+          reminderType: trip.reminderType 
+        });
       }
     }
 
-    logStep("Reminder job complete", { total: tripsToRemind.length, sent: sentCount });
+    logStep("Reminder job complete", { total: filteredTrips.length, sent: sentCount });
 
     return new Response(
       JSON.stringify({
         success: true,
         message: `Sent ${sentCount} reminder emails`,
         sent: sentCount,
-        total: tripsToRemind.length,
+        total: filteredTrips.length,
+        breakdown: {
+          daily: results.filter(r => r.reminderType === "daily").length,
+          weekly: results.filter(r => r.reminderType === "weekly").length,
+          monthly: results.filter(r => r.reminderType === "monthly").length,
+        },
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
