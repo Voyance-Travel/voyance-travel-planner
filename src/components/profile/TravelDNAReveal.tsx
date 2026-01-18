@@ -22,6 +22,7 @@ import {
 } from '@/data/archetypeNarratives';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { isDemoModeEnabled } from '@/contexts/AuthContext';
 
 interface TravelDNARevealProps {
   userId: string;
@@ -39,13 +40,41 @@ interface TravelDNAData {
   summary: string | null;
 }
 
+// Demo DNA data for preview mode
+const DEMO_DNA_DATA: TravelDNAData = {
+  primary_archetype_name: 'cultural_anthropologist',
+  secondary_archetype_name: 'slow_traveler',
+  dna_confidence_score: 92,
+  dna_rarity: 'Uncommon',
+  trait_scores: {
+    adventure: 65,
+    culture: 95,
+    relaxation: 45,
+    luxury: 55,
+    social: 70,
+    culinary: 85,
+    wellness: 40,
+  },
+  tone_tags: ['culture', 'culinary', 'adventure', 'social'],
+  emotional_drivers: ['understanding', 'connection', 'authenticity', 'growth'],
+  summary: 'As a Cultural Anthropologist, you prefer immersive travel experiences with a focus on authentic local connections. Your travel personality reflects someone who values deep cultural understanding over surface-level tourism.',
+};
+
 export default function TravelDNAReveal({ userId, className }: TravelDNARevealProps) {
   const [dnaData, setDnaData] = useState<TravelDNAData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('identity');
+  const isDemo = isDemoModeEnabled();
 
   useEffect(() => {
     async function loadDNA() {
+      // Use demo data in demo mode
+      if (isDemo || userId === 'demo-user-001') {
+        setDnaData(DEMO_DNA_DATA);
+        setIsLoading(false);
+        return;
+      }
+
       if (!userId) return;
       
       try {
@@ -65,7 +94,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
     }
     
     loadDNA();
-  }, [userId]);
+  }, [userId, isDemo]);
 
   if (isLoading) {
     return (
