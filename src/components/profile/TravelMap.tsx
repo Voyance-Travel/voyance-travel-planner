@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { isDemoModeEnabled } from '@/contexts/AuthContext';
+import worldSvgUrl from '@/assets/world.svg';
 
 interface TravelMapProps {
   userId: string;
@@ -253,23 +254,6 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
       animate={{ opacity: 1, y: 0 }}
       className={cn("space-y-6", className)}
     >
-      {/* Header with stats */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-2xl font-light text-foreground mb-2">Your Travel Journey</h3>
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-emerald-500" />
-              <span>{visitedCount} visited</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500" />
-              <span>{upcomingCount} upcoming</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Filter buttons */}
       <div className="flex gap-3">
         {[
@@ -302,74 +286,26 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
         </div>
         
         <div className="relative w-full aspect-[2/1]">
-          {/* High-quality SVG World Map with accurate paths */}
-          <svg 
-            viewBox="0 0 2000 1001" 
-            className="absolute inset-0 w-full h-full opacity-50"
-            preserveAspectRatio="xMidYMid slice"
-          >
-            <defs>
-              <linearGradient id="mapGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#64748b" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#475569" stopOpacity="0.4" />
-              </linearGradient>
-            </defs>
-            
-            {/* North America */}
-            <path 
-              d="M100,200 L200,150 L400,140 L500,180 L550,250 L500,350 L450,400 L380,450 L280,480 L200,500 L150,450 L100,350 Z" 
-              fill="url(#mapGradient)" 
-              stroke="#94a3b8"
-              strokeWidth="1"
-            />
-            
-            {/* South America */}
-            <path 
-              d="M300,520 L400,500 L500,550 L550,650 L530,750 L480,850 L400,900 L350,880 L320,800 L290,700 L280,600 Z" 
-              fill="url(#mapGradient)" 
-              stroke="#94a3b8"
-              strokeWidth="1"
-            />
-            
-            {/* Europe */}
-            <path 
-              d="M900,180 L1100,150 L1200,180 L1180,260 L1100,300 L950,280 L900,220 Z" 
-              fill="url(#mapGradient)" 
-              stroke="#94a3b8"
-              strokeWidth="1"
-            />
-            
-            {/* Africa */}
-            <path 
-              d="M900,350 L1100,320 L1200,380 L1250,500 L1200,650 L1100,750 L980,720 L920,600 L880,480 Z" 
-              fill="url(#mapGradient)" 
-              stroke="#94a3b8"
-              strokeWidth="1"
-            />
-            
-            {/* Asia */}
-            <path 
-              d="M1200,150 L1500,120 L1750,180 L1850,280 L1800,400 L1650,450 L1450,420 L1300,350 L1200,250 Z" 
-              fill="url(#mapGradient)" 
-              stroke="#94a3b8"
-              strokeWidth="1"
-            />
-            
-            {/* Australia */}
-            <path 
-              d="M1550,600 L1750,580 L1850,650 L1850,750 L1750,800 L1600,780 L1520,700 Z" 
-              fill="url(#mapGradient)" 
-              stroke="#94a3b8"
-              strokeWidth="1"
-            />
-          </svg>
+          {/* SVG World Map */}
+          <img 
+            src={worldSvgUrl} 
+            alt="World Map" 
+            className="absolute inset-0 w-full h-full object-cover opacity-60"
+            style={{ 
+              filter: 'contrast(1.2) brightness(0.8) hue-rotate(200deg) saturate(0.7)',
+              mixBlendMode: 'screen'
+            }}
+          />
+          
+          {/* Ocean gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-800/40 via-blue-900/30 to-indigo-900/40 mix-blend-multiply" />
           
           {/* Subtle grid pattern */}
           <div 
-            className="absolute inset-0 opacity-10"
+            className="absolute inset-0 opacity-20"
             style={{
-              backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
-              backgroundSize: '50px 50px'
+              backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
+              backgroundSize: '40px 40px'
             }}
           />
           
@@ -380,6 +316,11 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                 <stop offset="0%" stopColor="#0ABAB5" stopOpacity="0.8" />
                 <stop offset="100%" stopColor="#10B981" stopOpacity="0.8" />
               </linearGradient>
+              <linearGradient id="glowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#0ABAB5" stopOpacity="1" />
+                <stop offset="50%" stopColor="#10B981" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.6" />
+              </linearGradient>
             </defs>
             <g className="journey-lines">
               {filteredDestinations
@@ -389,21 +330,40 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                   const nextDest = visitedDests[index + 1];
                   const start = equirectangularProjection(destination.lat, destination.lng);
                   const end = equirectangularProjection(nextDest.lat, nextDest.lng);
+                  const startX = parseFloat(start.left);
+                  const startY = parseFloat(start.top);
+                  const endX = parseFloat(end.left);
+                  const endY = parseFloat(end.top);
                   
                   return (
-                    <motion.line
-                      key={`line-${destination.id}-${nextDest.id}`}
-                      x1={start.left}
-                      y1={start.top}
-                      x2={end.left}
-                      y2={end.top}
-                      stroke="url(#journeyGradient)"
-                      strokeWidth="2"
-                      strokeDasharray="5,5"
-                      initial={{ pathLength: 0, opacity: 0 }}
-                      animate={{ pathLength: 1, opacity: 0.6 }}
-                      transition={{ duration: 1.5, delay: index * 0.3 }}
-                    />
+                    <g key={`journey-${destination.id}-${nextDest.id}`}>
+                      {/* Dashed journey line */}
+                      <motion.line
+                        x1={`${startX}%`}
+                        y1={`${startY}%`}
+                        x2={`${endX}%`}
+                        y2={`${endY}%`}
+                        stroke="url(#journeyGradient)"
+                        strokeWidth="2"
+                        strokeDasharray="5,5"
+                        initial={{ pathLength: 0, opacity: 0 }}
+                        animate={{ pathLength: 1, opacity: 0.6 }}
+                        transition={{ duration: 1.5, delay: index * 0.3 }}
+                      />
+                      {/* Glowing trail */}
+                      <motion.line
+                        x1={`${startX}%`}
+                        y1={`${startY}%`}
+                        x2={`${endX}%`}
+                        y2={`${endY}%`}
+                        stroke="url(#glowGradient)"
+                        strokeWidth="1"
+                        strokeDasharray="3,10"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: [0, 0.4, 0] }}
+                        transition={{ duration: 3, repeat: Infinity, delay: index * 0.3 + 1 }}
+                      />
+                    </g>
                   );
                 })}
             </g>
@@ -451,10 +411,13 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                 {/* Pin with glow effect */}
                 <div 
                   className={cn(
-                    "relative w-8 h-8 rounded-full border-2 border-white shadow-xl flex items-center justify-center group-hover:shadow-2xl transition-all duration-300",
+                    "relative w-8 h-8 rounded-full border-2 border-white shadow-xl flex items-center justify-center",
+                    "group-hover:shadow-2xl transition-all duration-300 group-hover:scale-110",
                     getPinStyling(destination)
                   )}
-                  style={{ boxShadow: `0 0 20px ${destination.visited ? '#10b981' : destination.upcoming ? '#3b82f6' : '#ec4899'}40` }}
+                  style={{ 
+                    boxShadow: `0 0 20px ${destination.visited ? '#10b981' : destination.upcoming ? '#3b82f6' : '#ec4899'}40` 
+                  }}
                 >
                   <Icon className="w-4 h-4 text-white drop-shadow-lg" />
                   
@@ -481,19 +444,21 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                   )}
                 </div>
                 
-                {/* Tooltip */}
-                <motion.div 
-                  className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20"
-                >
+                {/* Dark tooltip on hover */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20">
                   <div className="bg-gray-900/95 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-xl border border-white/10 min-w-max">
                     <div className="text-sm font-medium">{destination.name}</div>
                     <div className="text-xs text-white/70 mb-1">{destination.country}</div>
                     
                     {destination.visited && destination.visitDate && (
-                      <div className="text-xs text-emerald-400">Visited {destination.visitDate}</div>
+                      <div className="text-xs text-emerald-400">
+                        Visited {destination.visitDate}
+                      </div>
                     )}
                     {destination.upcoming && destination.upcomingDate && (
-                      <div className="text-xs text-blue-400">Upcoming {destination.upcomingDate}</div>
+                      <div className="text-xs text-blue-400">
+                        Upcoming {destination.upcomingDate}
+                      </div>
                     )}
                     
                     {destination.rating && (
@@ -511,25 +476,14 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                     )}
                   </div>
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 border-r border-b border-white/10" />
-                </motion.div>
+                </div>
               </motion.div>
             );
           })}
-          
-          {/* Empty state */}
-          {filteredDestinations.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-white/60">
-                <Plane className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p className="text-lg font-light">Start your journey</p>
-                <p className="text-sm">Book a trip to see pins on your map</p>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Legend showing actual destinations */}
+      {/* Legend with actual destinations */}
       <motion.div 
         className="bg-card/95 backdrop-blur-md rounded-2xl p-6 shadow-lg border border-border"
         initial={{ opacity: 0, y: 20 }}
@@ -540,11 +494,15 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
           {/* Visited Destinations */}
           {destinations.filter(d => d.visited).length > 0 && (
             <div className="flex items-start gap-3">
-              <div className="mt-1 flex-shrink-0">
+              <motion.div 
+                animate={{ y: [0, -2, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="mt-1 flex-shrink-0"
+              >
                 <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center">
-                  <MapPin className="w-5 h-5 text-emerald-500" />
+                  <MapPin className="w-4 h-4 text-emerald-500" />
                 </div>
-              </div>
+              </motion.div>
               <div className="flex-1">
                 <h4 className="font-medium text-foreground mb-2">Conquered</h4>
                 <div className="flex flex-wrap gap-2">
@@ -554,7 +512,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="px-3 py-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 rounded-full text-sm font-medium border border-emerald-500/20"
+                      className="px-3 py-1 bg-muted text-foreground rounded-full text-sm font-medium border border-border"
                     >
                       {dest.name}
                     </motion.span>
@@ -573,7 +531,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                 className="mt-1 flex-shrink-0"
               >
                 <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/30 rounded-full flex items-center justify-center">
-                  <Plane className="w-5 h-5 text-blue-500" />
+                  <Plane className="w-4 h-4 text-blue-500" />
                 </div>
               </motion.div>
               <div className="flex-1">
@@ -585,11 +543,11 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="px-3 py-1 bg-blue-500/10 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium border border-blue-500/20"
+                      className="px-3 py-1 bg-muted text-foreground rounded-full text-sm font-medium border border-border"
                     >
                       {dest.name}
                       {dest.upcomingDate && (
-                        <span className="text-primary ml-1 text-xs">• {dest.upcomingDate}</span>
+                        <span className="text-blue-500 ml-1 text-xs">• {dest.upcomingDate}</span>
                       )}
                     </motion.span>
                   ))}
@@ -606,7 +564,73 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8 }}
         >
-          <div className="flex items-center justify-center gap-8 text-sm">
+          {/* Animated Legend */}
+          <div className="flex justify-center gap-6 mb-6 text-sm">
+            {[
+              { label: 'Visited', color: '#10B981', count: visitedCount },
+              { label: 'Upcoming', color: '#3B82F6', count: upcomingCount },
+            ].map((item, index) => (
+              <motion.div
+                key={item.label}
+                className="flex items-center gap-2"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 1 + index * 0.1 }}
+              >
+                <motion.div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: index * 0.5 }}
+                />
+                <span className="text-muted-foreground">
+                  {item.label} ({item.count})
+                </span>
+              </motion.div>
+            ))}
+          </div>
+          
+          {/* Stats */}
+          <div className="flex items-center justify-center gap-6 text-sm">
+            <motion.div 
+              className="text-center"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2 }}
+            >
+              <motion.div 
+                className="text-2xl font-light text-foreground"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 1.3, type: "spring" }}
+              >
+                {destinations.length}
+              </motion.div>
+              <div className="text-xs text-muted-foreground">Total Destinations</div>
+            </motion.div>
+            <div className="w-px h-8 bg-border" />
+            <motion.div 
+              className="text-center"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.3 }}
+            >
+              <motion.div 
+                className="text-2xl font-light text-foreground"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 1.4, type: "spring" }}
+              >
+                {(() => {
+                  const visitedWithRating = destinations.filter(d => d.visited && d.rating);
+                  if (visitedWithRating.length === 0) return '—';
+                  const avg = visitedWithRating.reduce((acc, d) => acc + (d.rating || 0), 0) / visitedWithRating.length;
+                  return avg.toFixed(1);
+                })()}
+              </motion.div>
+              <div className="text-xs text-muted-foreground">Avg Rating</div>
+            </motion.div>
+            <div className="w-px h-8 bg-border" />
             <motion.div 
               className="text-center"
               initial={{ opacity: 0, y: 10 }}
@@ -619,43 +643,9 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                 animate={{ scale: 1 }}
                 transition={{ delay: 1.5, type: "spring" }}
               >
-                {destinations.length}
-              </motion.div>
-              <div className="text-xs text-muted-foreground">Destinations</div>
-            </motion.div>
-            <div className="w-px h-8 bg-border" />
-            <motion.div 
-              className="text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.5 }}
-            >
-              <motion.div 
-                className="text-2xl font-light text-foreground"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 1.6, type: "spring" }}
-              >
-                {visitedCount}
-              </motion.div>
-              <div className="text-xs text-muted-foreground">Conquered</div>
-            </motion.div>
-            <div className="w-px h-8 bg-border" />
-            <motion.div 
-              className="text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.6 }}
-            >
-              <motion.div 
-                className="text-2xl font-light text-foreground"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 1.7, type: "spring" }}
-              >
                 {upcomingCount}
               </motion.div>
-              <div className="text-xs text-muted-foreground">Upcoming</div>
+              <div className="text-xs text-muted-foreground">Upcoming Trips</div>
             </motion.div>
           </div>
         </motion.div>
@@ -693,17 +683,17 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
               </div>
 
               {selectedDestination.visited && (
-                <div className="mb-4 p-4 bg-emerald-500/10 rounded-xl">
+                <div className="mb-4 p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="w-4 h-4 text-emerald-600" />
-                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                    <Calendar className="w-4 h-4 text-emerald-500" />
+                    <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
                       Visited {selectedDestination.visitDate}
                     </span>
                   </div>
                   {selectedDestination.rating && (
                     <div className="flex items-center gap-2 mt-2">
-                      <Star className="w-4 h-4 text-emerald-600" />
-                      <span className="text-sm text-emerald-700 dark:text-emerald-300">
+                      <Star className="w-4 h-4 text-emerald-500" />
+                      <span className="text-sm text-emerald-600 dark:text-emerald-400">
                         Rated {selectedDestination.rating} stars
                       </span>
                     </div>
@@ -712,10 +702,10 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
               )}
 
               {selectedDestination.upcoming && (
-                <div className="mb-4 p-4 bg-blue-500/10 rounded-xl">
+                <div className="mb-4 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
                   <div className="flex items-center gap-2">
-                    <Plane className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                    <Plane className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
                       Coming up {selectedDestination.upcomingDate}
                     </span>
                   </div>
@@ -726,11 +716,8 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                 <button className="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-lg hover:bg-primary/90 transition-colors">
                   View Trip
                 </button>
-                <button 
-                  onClick={() => setSelectedDestination(null)}
-                  className="flex-1 bg-muted text-muted-foreground py-2 px-4 rounded-lg hover:bg-muted/80 transition-colors"
-                >
-                  Close
+                <button className="flex-1 bg-muted text-foreground py-2 px-4 rounded-lg hover:bg-muted/80 transition-colors">
+                  Learn More
                 </button>
               </div>
             </motion.div>
