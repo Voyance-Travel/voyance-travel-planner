@@ -3,16 +3,10 @@ import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   getProfile, 
-  getProfileLite,
   updateProfile as updateProfileAPI,
-  type UserProfile,
-  type ProfileLite,
-} from '@/services/profileAPI';
-import {
-  getFullPreferences,
   updatePreferences as updatePreferencesAPI,
-  type FullPreferences,
-} from '@/services/preferencesV1API';
+  type UserProfile,
+} from '@/services/profileAPI';
 
 export interface User {
   id: string;

@@ -1,17 +1,11 @@
 /**
  * Voyance Planner API
  * 
- * Trip planner endpoints for creating and managing trips:
- * - POST /api/v1/planner/trips - Create draft trip
- * - PATCH /api/v1/planner/trips/:id - Update trip
- * - GET /api/v1/planner/trips/:id - Get trip details
+ * Trip planner operations via Supabase.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // Types
@@ -62,98 +56,126 @@ export interface CreateTripResponse {
 }
 
 // ============================================================================
-// API Helpers
+// API Functions
 // ============================================================================
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  return { 'Content-Type': 'application/json' };
-}
-
-async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData._error || errorData.message || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
-
-// ============================================================================
-// Planner API
-// ============================================================================
-
-/**
- * Create a new draft trip
- */
 export async function createPlannerTrip(input: TripCreateInput): Promise<CreateTripResponse> {
-  return apiRequest<CreateTripResponse>('/api/v1/planner/trips', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const primaryDestination = input.destinations[0];
+  const sessionId = crypto.randomUUID();
+  
+  const { data, error } = await supabase
+    .from('trips')
+    .insert({
+      user_id: user.id,
+      name: `Trip to ${primaryDestination.city}`,
+      origin_city: input.originCity,
+      destination: primaryDestination.city,
+      destination_country: primaryDestination.country,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      trip_type: input.tripType,
+      travelers: input.travelers,
+      budget_tier: input.budgetTier,
+      status: 'draft',
+      metadata: {
+        sessionId,
+        destinations: input.destinations,
+      },
+    })
+    .select('id')
+    .single();
+  
+  if (error) throw new Error(error.message);
+  
+  return { tripId: data.id, sessionId };
 }
 
-/**
- * Update an existing trip
- */
-export async function updatePlannerTrip(
-  tripId: string,
-  updates: TripUpdateInput
-): Promise<{ success: boolean }> {
-  return apiRequest<{ success: boolean }>(`/api/v1/planner/trips/${tripId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(updates),
-  });
-}
-
-/**
- * Get trip details by ID
- */
 export async function getPlannerTrip(tripId: string): Promise<PlannerTrip> {
-  return apiRequest<PlannerTrip>(`/api/v1/planner/trips/${tripId}`, {
-    method: 'GET',
-  });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .eq('user_id', user.id)
+    .single();
+  
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Trip not found');
+  
+  const metadata = data.metadata as Record<string, unknown> | null;
+  
+  return {
+    id: data.id,
+    sessionId: (metadata?.sessionId as string) || data.id,
+    name: data.name,
+    originCity: data.origin_city || '',
+    destination: data.destination,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    tripType: data.trip_type || 'vacation',
+    travelers: data.travelers || 1,
+    status: data.status as PlannerTrip['status'],
+    metadata: metadata || undefined,
+  };
+}
+
+export async function updatePlannerTrip(tripId: string, input: TripUpdateInput): Promise<PlannerTrip> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  
+  const updates: Record<string, unknown> = {};
+  if (input.originCity) updates.origin_city = input.originCity;
+  if (input.startDate) updates.start_date = input.startDate;
+  if (input.endDate) updates.end_date = input.endDate;
+  if (input.tripType) updates.trip_type = input.tripType;
+  if (input.travelers) updates.travelers = input.travelers;
+  if (input.destinations?.length) {
+    updates.destination = input.destinations[0].city;
+    updates.destination_country = input.destinations[0].country;
+  }
+  
+  const { data, error } = await supabase
+    .from('trips')
+    .update(updates)
+    .eq('id', tripId)
+    .eq('user_id', user.id)
+    .select()
+    .single();
+  
+  if (error) throw new Error(error.message);
+  
+  const metadata = data.metadata as Record<string, unknown> | null;
+  
+  return {
+    id: data.id,
+    sessionId: (metadata?.sessionId as string) || data.id,
+    name: data.name,
+    originCity: data.origin_city || '',
+    destination: data.destination,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    tripType: data.trip_type || 'vacation',
+    travelers: data.travelers || 1,
+    status: data.status as PlannerTrip['status'],
+    metadata: metadata || undefined,
+  };
 }
 
 // ============================================================================
 // React Query Hooks
 // ============================================================================
 
-export function usePlannerTrip(tripId: string | undefined) {
+export function usePlannerTrip(tripId: string | null) {
   return useQuery({
-    queryKey: ['planner-trip', tripId],
-    queryFn: () => getPlannerTrip(tripId!),
+    queryKey: ['plannerTrip', tripId],
+    queryFn: () => tripId ? getPlannerTrip(tripId) : null,
     enabled: !!tripId,
-    staleTime: 30_000,
+    staleTime: 2 * 60 * 1000,
   });
 }
 
@@ -162,9 +184,9 @@ export function useCreatePlannerTrip() {
   
   return useMutation({
     mutationFn: createPlannerTrip,
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trips'] });
-      queryClient.invalidateQueries({ queryKey: ['planner-trip', data.tripId] });
+      queryClient.invalidateQueries({ queryKey: ['plannerTrip'] });
     },
   });
 }
@@ -173,23 +195,23 @@ export function useUpdatePlannerTrip() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: ({ tripId, updates }: { tripId: string; updates: TripUpdateInput }) =>
-      updatePlannerTrip(tripId, updates),
-    onSuccess: (_, { tripId }) => {
-      queryClient.invalidateQueries({ queryKey: ['planner-trip', tripId] });
+    mutationFn: ({ tripId, input }: { tripId: string; input: TripUpdateInput }) => 
+      updatePlannerTrip(tripId, input),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['plannerTrip', data.id] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
   });
 }
 
 // ============================================================================
-// Export
+// Default Export
 // ============================================================================
 
 const plannerAPI = {
-  createTrip: createPlannerTrip,
-  updateTrip: updatePlannerTrip,
-  getTrip: getPlannerTrip,
+  createPlannerTrip,
+  getPlannerTrip,
+  updatePlannerTrip,
 };
 
 export default plannerAPI;

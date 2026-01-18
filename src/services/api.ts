@@ -1,189 +1,162 @@
 /**
- * API Configuration and Base Service
- * Centralized API configuration for Voyance
+ * Unified API Client - All backend calls go through Supabase
  */
+
+import { supabase } from '@/integrations/supabase/client';
 
 // Environment configuration
 export const API_CONFIG = {
-  baseUrl: import.meta.env.VITE_API_URL || '',
   timeout: 30000,
   useMockData: import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_DATA === 'true',
 } as const;
 
 // API Response types
-export interface ApiResponse<T> {
-  data: T;
+export interface ApiResponse<T = unknown> {
   success: boolean;
+  data?: T;
+  error?: string;
   message?: string;
-  status: number;
 }
 
-export interface ApiError {
-  message: string;
-  code?: string;
-  status?: number;
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
-// Request options
-export interface ApiRequestOptions {
-  headers?: Record<string, string>;
-  params?: Record<string, string | number | boolean | undefined>;
-  timeout?: number;
-}
+// ============================================================================
+// Error Handling
+// ============================================================================
 
-/**
- * Build URL with query parameters
- */
-function buildUrl(endpoint: string, params?: Record<string, string | number | boolean | undefined>): string {
-  const url = new URL(endpoint, API_CONFIG.baseUrl || window.location.origin);
-  
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.append(key, String(value));
-      }
-    });
-  }
-  
-  return url.toString();
-}
-
-/**
- * Get auth token from storage
- */
-function getAuthToken(): string | null {
-  try {
-    return localStorage.getItem('authToken');
-  } catch {
-    return null;
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode?: number,
+    public code?: string
+  ) {
+    super(message);
+    this.name = 'ApiError';
   }
 }
 
-/**
- * Base API service for making HTTP requests
- */
-export const apiService = {
-  /**
-   * GET request
-   */
-  async get<T>(endpoint: string, options?: ApiRequestOptions): Promise<ApiResponse<T>> {
-    const url = buildUrl(endpoint, options?.params);
-    const token = getAuthToken();
+// ============================================================================
+// Edge Function Invoker
+// ============================================================================
 
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-          ...options?.headers,
-        },
-        signal: AbortSignal.timeout(options?.timeout || API_CONFIG.timeout),
-      });
+export async function invokeEdgeFunction<T = unknown>(
+  functionName: string,
+  body?: Record<string, unknown>
+): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(functionName, {
+    body: body || {},
+  });
+  
+  if (error) {
+    console.error(`[${functionName}] Edge function error:`, error);
+    throw new ApiError(error.message || 'Edge function failed', 500);
+  }
+  
+  return data as T;
+}
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+// ============================================================================
+// Auth Header Helper
+// ============================================================================
 
-      const data = await response.json();
-      return { data, success: true, status: response.status };
-    } catch (error) {
-      console.error(`API GET ${endpoint} failed:`, error);
-      throw error;
+export async function getAuthHeader(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    return {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    };
+  }
+  return { 'Content-Type': 'application/json' };
+}
+
+// ============================================================================
+// Supabase Direct Queries
+// ============================================================================
+
+export async function queryTable<T>(
+  table: string,
+  options?: {
+    select?: string;
+    filter?: Record<string, unknown>;
+    order?: { column: string; ascending?: boolean };
+    limit?: number;
+    single?: boolean;
+  }
+): Promise<T | T[] | null> {
+  let query = supabase.from(table).select(options?.select || '*');
+  
+  if (options?.filter) {
+    for (const [key, value] of Object.entries(options.filter)) {
+      query = query.eq(key, value);
     }
-  },
+  }
+  
+  if (options?.order) {
+    query = query.order(options.order.column, { ascending: options.order.ascending ?? true });
+  }
+  
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+  
+  if (options?.single) {
+    const { data, error } = await query.single();
+    if (error && error.code !== 'PGRST116') throw new ApiError(error.message, 400, error.code);
+    return data as T | null;
+  }
+  
+  const { data, error } = await query;
+  if (error) throw new ApiError(error.message, 400, error.code);
+  return data as T[];
+}
 
-  /**
-   * POST request
-   */
-  async post<T>(endpoint: string, body?: unknown, options?: ApiRequestOptions): Promise<ApiResponse<T>> {
-    const url = buildUrl(endpoint, options?.params);
-    const token = getAuthToken();
+export async function insertRow<T>(
+  table: string,
+  row: Record<string, unknown>
+): Promise<T> {
+  const { data, error } = await supabase.from(table).insert(row).select().single();
+  if (error) throw new ApiError(error.message, 400, error.code);
+  return data as T;
+}
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-          ...options?.headers,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(options?.timeout || API_CONFIG.timeout),
-      });
+export async function updateRow<T>(
+  table: string,
+  id: string,
+  updates: Record<string, unknown>
+): Promise<T> {
+  const { data, error } = await supabase.from(table).update(updates).eq('id', id).select().single();
+  if (error) throw new ApiError(error.message, 400, error.code);
+  return data as T;
+}
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+export async function deleteRow(table: string, id: string): Promise<void> {
+  const { error } = await supabase.from(table).delete().eq('id', id);
+  if (error) throw new ApiError(error.message, 400, error.code);
+}
 
-      const data = await response.json();
-      return { data, success: true, status: response.status };
-    } catch (error) {
-      console.error(`API POST ${endpoint} failed:`, error);
-      throw error;
-    }
-  },
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
-  /**
-   * PUT request
-   */
-  async put<T>(endpoint: string, body?: unknown, options?: ApiRequestOptions): Promise<ApiResponse<T>> {
-    const url = buildUrl(endpoint, options?.params);
-    const token = getAuthToken();
+export function handleApiError(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'An unexpected error occurred';
+}
 
-    try {
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-          ...options?.headers,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(options?.timeout || API_CONFIG.timeout),
-      });
+// ============================================================================
+// Export common patterns
+// ============================================================================
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return { data, success: true, status: response.status };
-    } catch (error) {
-      console.error(`API PUT ${endpoint} failed:`, error);
-      throw error;
-    }
-  },
-
-  /**
-   * DELETE request
-   */
-  async delete<T>(endpoint: string, options?: ApiRequestOptions): Promise<ApiResponse<T>> {
-    const url = buildUrl(endpoint, options?.params);
-    const token = getAuthToken();
-
-    try {
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-          ...options?.headers,
-        },
-        signal: AbortSignal.timeout(options?.timeout || API_CONFIG.timeout),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return { data, success: true, status: response.status };
-    } catch (error) {
-      console.error(`API DELETE ${endpoint} failed:`, error);
-      throw error;
-    }
-  },
-};
-
-export default apiService;
+export { supabase } from '@/integrations/supabase/client';
