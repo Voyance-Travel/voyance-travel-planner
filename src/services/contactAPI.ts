@@ -1,16 +1,14 @@
 /**
  * Voyance Contact API
  * 
- * Contact form endpoints:
- * - POST /api/contact-us - Simple contact form
- * - POST /api/contact - Detailed contact form with types
+ * Uses Cloud edge function for contact form:
+ * - send-contact-email: Sends contact form via SendGrid
  */
 
+import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
-import { CONTACT_CONFIG } from '@/config/contact';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 // ============================================================================
 // Types & Validation Schemas
@@ -45,7 +43,7 @@ export interface ContactResponse {
 }
 
 // ============================================================================
-// Contact API
+// Contact API - Now using Cloud Edge Function
 // ============================================================================
 
 /**
@@ -56,13 +54,25 @@ export async function submitSimpleContact(data: SimpleContactInput): Promise<Con
     // Validate input
     const validated = SimpleContactSchema.parse(data);
     
-    const response = await fetch(`${BACKEND_URL}/api/contact-us`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(validated),
+    const { data: response, error } = await supabase.functions.invoke('send-contact-email', {
+      body: {
+        name: validated.name,
+        email: validated.email,
+        message: validated.message,
+        subject: `Contact from ${validated.name}`,
+        type: 'general',
+      },
     });
     
-    return response.json();
+    if (error) {
+      console.error('[ContactAPI] Edge function error:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to send message',
+      };
+    }
+    
+    return response as ContactResponse;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return {
@@ -88,13 +98,25 @@ export async function submitContactForm(data: ContactFormInput): Promise<Contact
     // Validate input
     const validated = ContactFormSchema.parse(data);
     
-    const response = await fetch(`${BACKEND_URL}/api/contact`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(validated),
+    const { data: response, error } = await supabase.functions.invoke('send-contact-email', {
+      body: {
+        name: validated.name,
+        email: validated.email,
+        subject: validated.subject,
+        message: validated.message,
+        type: validated.type,
+      },
     });
     
-    return response.json();
+    if (error) {
+      console.error('[ContactAPI] Edge function error:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to send message',
+      };
+    }
+    
+    return response as ContactResponse;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return {
@@ -115,9 +137,6 @@ export async function submitContactForm(data: ContactFormInput): Promise<Contact
 // ============================================================================
 // React Query Hooks
 // ============================================================================
-
-import { useMutation } from '@tanstack/react-query';
-import { toast } from 'sonner';
 
 export function useSubmitSimpleContact() {
   return useMutation({
