@@ -5,15 +5,24 @@ import Head from '@/components/common/Head';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import PlannerHeader from '@/components/planner/PlannerHeader';
-import TripSetup from '@/components/planner/steps/TripSetup';
+import TripContext from '@/components/planner/steps/TripContext';
 import FlightSelection from '@/components/planner/steps/FlightSelection';
 import HotelSelection from '@/components/planner/steps/HotelSelection';
+import BookingOptions from '@/components/planner/steps/BookingOptions';
 import ItineraryPreview from '@/components/planner/steps/ItineraryPreview';
 import { scrollToTop } from '@/utils/scrollUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import { format } from 'date-fns';
 
-type PlannerStep = 'setup' | 'flights' | 'hotels' | 'itinerary';
+type PlannerStep = 'context' | 'flights' | 'hotels' | 'booking' | 'itinerary';
+
+interface Companion {
+  id: string;
+  name: string;
+  type: 'adult' | 'child';
+}
 
 interface PlannerFormData {
   destination: string;
@@ -22,102 +31,105 @@ interface PlannerFormData {
   endDate: string;
   travelers: number;
   departureCity: string;
+  budget: string;
+  tripType: string;
+  companions: Companion[];
   selectedDepartureFlight: string | null;
   selectedReturnFlight: string | null;
   selectedHotel: string | null;
   tripId: string | null;
 }
 
-const initialFormData: PlannerFormData = {
-  destination: '',
-  name: '',
-  startDate: '',
-  endDate: '',
-  travelers: 2,
-  departureCity: '',
-  selectedDepartureFlight: null,
-  selectedReturnFlight: null,
-  selectedHotel: null,
-  tripId: null,
-};
-
 const STEPS = [
-  { title: 'Trip Details', description: 'Set up your trip basics' },
+  { title: 'Trip Context', description: 'Travelers & budget' },
   { title: 'Flights', description: 'Choose your flights' },
   { title: 'Hotels', description: 'Select accommodation' },
-  { title: 'Itinerary', description: 'Review your trip' },
+  { title: 'Book', description: 'Confirm your trip' },
 ];
 
 export default function Planner() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
-  const [currentStep, setCurrentStep] = useState<PlannerStep>('setup');
-  const [formData, setFormData] = useState<PlannerFormData>(initialFormData);
+  const { state: tripPlannerState } = useTripPlanner();
+  
+  const [currentStep, setCurrentStep] = useState<PlannerStep>('context');
   const [isLoading, setIsLoading] = useState(false);
-
-  // Initialize from URL params or localStorage
-  useEffect(() => {
-    const destination = searchParams.get('destination');
-    const tripId = searchParams.get('tripId');
-    const savedTrip = localStorage.getItem('voyance-current-trip');
-
-    let initialData = { ...initialFormData };
-
-    if (savedTrip) {
-      try {
-        const parsed = JSON.parse(savedTrip);
-        initialData = { ...initialData, ...parsed };
-      } catch (e) {
-        console.error('Failed to parse saved trip:', e);
-      }
-    }
-
-    if (destination) {
-      initialData.destination = destination;
-    }
+  
+  // Initialize form data from TripPlannerContext (set by Start page)
+  const [formData, setFormData] = useState<PlannerFormData>(() => {
+    // Read from context first
+    const contextData = tripPlannerState.basics;
     
-    if (tripId) {
-      initialData.tripId = tripId;
-      // Load trip from Supabase
-      loadTripFromDB(tripId, initialData);
-    } else {
-      setFormData(initialData);
-    }
-  }, [searchParams]);
+    // Generate companion slots based on traveler count
+    const travelers = contextData.travelers || 2;
+    const companions: Companion[] = Array.from({ length: travelers }, (_, i) => ({
+      id: `companion-${i}`,
+      name: '',
+      type: 'adult' as const,
+    }));
+    
+    return {
+      destination: contextData.destination || '',
+      name: '',
+      startDate: contextData.startDate || '',
+      endDate: contextData.endDate || '',
+      travelers: travelers,
+      departureCity: contextData.originCity || '',
+      budget: contextData.budgetTier || '',
+      tripType: contextData.tripType || '',
+      companions,
+      selectedDepartureFlight: null,
+      selectedReturnFlight: null,
+      selectedHotel: null,
+      tripId: tripPlannerState.tripId,
+    };
+  });
 
-  // Load existing trip from database
-  const loadTripFromDB = async (tripId: string, fallbackData: PlannerFormData) => {
-    try {
-      const { data, error } = await supabase
-        .from('trips')
-        .select('*')
-        .eq('id', tripId)
-        .single();
-
-      if (data && !error) {
-        setFormData({
-          ...fallbackData,
-          tripId: data.id,
-          destination: data.destination,
-          name: data.name,
-          startDate: data.start_date,
-          endDate: data.end_date,
-          travelers: data.travelers || 2,
-          departureCity: data.origin_city || '',
-        });
-      } else {
-        setFormData(fallbackData);
-      }
-    } catch (err) {
-      console.error('Failed to load trip:', err);
-      setFormData(fallbackData);
-    }
-  };
-
-  // Save form data to localStorage
+  // Check if we have basic trip info, if not redirect to Start
   useEffect(() => {
-    if (formData.destination || formData.name) {
+    if (!formData.destination || !formData.startDate || !formData.endDate) {
+      // Check localStorage for saved trip
+      const savedTrip = localStorage.getItem('voyance-current-trip');
+      if (savedTrip) {
+        try {
+          const parsed = JSON.parse(savedTrip);
+          if (parsed.destination && parsed.startDate && parsed.endDate) {
+            const travelers = parsed.travelers || 2;
+            const companions: Companion[] = Array.from({ length: travelers }, (_, i) => ({
+              id: `companion-${i}`,
+              name: parsed.companions?.[i]?.name || '',
+              type: parsed.companions?.[i]?.type || 'adult',
+            }));
+            setFormData(prev => ({ ...prev, ...parsed, companions }));
+            return;
+          }
+        } catch (e) {
+          console.error('Failed to parse saved trip:', e);
+        }
+      }
+      
+      // No valid data, redirect to start
+      toast.error('Please start by selecting your destination and dates');
+      navigate('/start');
+    }
+  }, []);
+
+  // Update companions when traveler count changes
+  useEffect(() => {
+    if (formData.travelers !== formData.companions.length) {
+      const newCompanions: Companion[] = Array.from({ length: formData.travelers }, (_, i) => ({
+        id: `companion-${i}`,
+        name: formData.companions[i]?.name || '',
+        type: formData.companions[i]?.type || 'adult',
+      }));
+      setFormData(prev => ({ ...prev, companions: newCompanions }));
+    }
+  }, [formData.travelers]);
+
+  // Save form data to localStorage on changes
+  useEffect(() => {
+    if (formData.destination) {
       localStorage.setItem('voyance-current-trip', JSON.stringify(formData));
     }
   }, [formData]);
@@ -127,17 +139,15 @@ export default function Planner() {
   };
 
   const getStepIndex = (step: PlannerStep): number => {
-    const steps: PlannerStep[] = ['setup', 'flights', 'hotels', 'itinerary'];
+    const steps: PlannerStep[] = ['context', 'flights', 'hotels', 'booking'];
     return steps.indexOf(step);
   };
 
-  // Save trip - works for both authenticated and anonymous users
+  // Save trip to database
   const saveTrip = async (): Promise<string | null> => {
-    // For anonymous users, save to Neon via edge function
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     
-    // Get or create anonymous session
     let sessionId = localStorage.getItem('voyance_anonymous_session');
     if (!sessionId) {
       sessionId = crypto.randomUUID();
@@ -145,8 +155,14 @@ export default function Planner() {
     }
 
     try {
-      // For authenticated users, save to Supabase
       if (isAuthenticated && user) {
+        // Serialize companions to JSON-compatible format
+        const companionsJson = formData.companions.map(c => ({
+          id: c.id,
+          name: c.name,
+          type: c.type,
+        }));
+
         const tripData = {
           user_id: user.id,
           name: formData.name || `Trip to ${formData.destination}`,
@@ -155,7 +171,10 @@ export default function Planner() {
           end_date: formData.endDate,
           travelers: formData.travelers,
           origin_city: formData.departureCity,
+          budget_tier: formData.budget,
+          trip_type: formData.tripType,
           status: 'planning' as const,
+          metadata: JSON.parse(JSON.stringify({ companions: companionsJson })),
         };
 
         if (formData.tripId) {
@@ -178,7 +197,7 @@ export default function Planner() {
           return data.id;
         }
       } else {
-        // For anonymous users, save to Neon
+        // Anonymous save to Neon
         const response = await fetch(`${supabaseUrl}/functions/v1/neon-db/trips/anonymous`, {
           method: 'POST',
           headers: {
@@ -192,13 +211,16 @@ export default function Planner() {
             startDate: formData.startDate,
             endDate: formData.endDate,
             travelers: formData.travelers,
+            budget: formData.budget,
+            tripType: formData.tripType,
+            companions: formData.companions,
           }),
         });
 
         const result = await response.json();
         if (result.error) throw new Error(result.error);
         
-        console.log('[Planner] Saved anonymous trip to Neon:', result.sessionId);
+        console.log('[Planner] Saved to Neon:', result.sessionId);
         return result.sessionId;
       }
     } catch (err) {
@@ -212,18 +234,18 @@ export default function Planner() {
     scrollToTop();
 
     switch (step) {
-      case 'setup':
-        // Save trip when leaving setup
-        const tripId = await saveTrip();
-        if (tripId) {
-          setCurrentStep('flights');
-        }
+      case 'context':
+        await saveTrip();
+        setCurrentStep('flights');
         break;
       case 'flights':
         setCurrentStep('hotels');
         break;
       case 'hotels':
-        setCurrentStep('itinerary');
+        setCurrentStep('booking');
+        break;
+      case 'booking':
+        // This is handled by the booking options
         break;
       case 'itinerary':
         handleTripSubmission();
@@ -236,45 +258,80 @@ export default function Planner() {
 
     switch (currentStep) {
       case 'flights':
-        setCurrentStep('setup');
+        setCurrentStep('context');
         break;
       case 'hotels':
         setCurrentStep('flights');
         break;
-      case 'itinerary':
+      case 'booking':
         setCurrentStep('hotels');
+        break;
+      case 'itinerary':
+        setCurrentStep('booking');
         break;
     }
   };
 
-  const handleTripSubmission = async () => {
+  const handleBook = async () => {
     if (!formData.tripId) {
-      toast.error('Trip not saved yet');
-      return;
+      const tripId = await saveTrip();
+      if (!tripId) return;
     }
 
     setIsLoading(true);
-
     try {
       // Update trip status to booked
-      const { error } = await supabase
-        .from('trips')
-        .update({ status: 'booked', updated_at: new Date().toISOString() })
-        .eq('id', formData.tripId);
+      if (isAuthenticated && formData.tripId) {
+        await supabase
+          .from('trips')
+          .update({ status: 'booked', updated_at: new Date().toISOString() })
+          .eq('id', formData.tripId);
+      }
 
-      if (error) throw error;
-
-      // Clear saved trip data
       localStorage.removeItem('voyance-current-trip');
-
       toast.success('Trip booked successfully!');
       navigate(`/trip/${formData.tripId}`);
     } catch (error) {
       console.error('Failed to book trip:', error);
-      toast.error('Failed to book trip. Please try again.');
+      toast.error('Failed to book trip');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSave = async () => {
+    const tripId = await saveTrip();
+    if (tripId) {
+      toast.success('Trip saved! You can access it from your dashboard.');
+      navigate('/trips');
+    }
+  };
+
+  const handleBuildItinerary = () => {
+    setCurrentStep('itinerary');
+  };
+
+  const handleTripSubmission = async () => {
+    // From itinerary preview, go back to booking options
+    setCurrentStep('booking');
+  };
+
+  // Calculate trip summary for booking options
+  const calculateTripSummary = () => {
+    const flightPrice = 650; // Mock price per person
+    const hotelPrice = 189; // Mock price per night
+    const startDate = new Date(formData.startDate);
+    const endDate = new Date(formData.endDate);
+    const nights = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    return {
+      destination: formData.destination,
+      dates: `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`,
+      travelers: formData.travelers,
+      flightTotal: flightPrice * formData.travelers * 2, // Round trip
+      hotelTotal: hotelPrice * nights,
+      grandTotal: (flightPrice * formData.travelers * 2) + (hotelPrice * nights),
+    };
   };
 
   return (
@@ -286,14 +343,23 @@ export default function Planner() {
 
       <TopNav />
 
-      <PlannerHeader activeStep={getStepIndex(currentStep)} steps={STEPS} />
+      <PlannerHeader 
+        activeStep={getStepIndex(currentStep)} 
+        steps={STEPS} 
+      />
 
       <main className="container mx-auto px-4 py-12 max-w-6xl">
-        {currentStep === 'setup' && (
-          <TripSetup
+        {currentStep === 'context' && (
+          <TripContext
             formData={formData}
-            updateFormData={updateFormData}
-            onContinue={() => handleStepComplete('setup')}
+            companions={formData.companions}
+            budget={formData.budget}
+            tripType={formData.tripType}
+            updateCompanions={(companions) => updateFormData({ companions })}
+            updateBudget={(budget) => updateFormData({ budget })}
+            updateTripType={(tripType) => updateFormData({ tripType })}
+            onContinue={() => handleStepComplete('context')}
+            onBack={() => navigate('/start')}
           />
         )}
 
@@ -302,12 +368,8 @@ export default function Planner() {
             formData={formData}
             selectedDeparture={formData.selectedDepartureFlight}
             selectedReturn={formData.selectedReturnFlight}
-            onSelectDeparture={(id) =>
-              updateFormData({ selectedDepartureFlight: id })
-            }
-            onSelectReturn={(id) =>
-              updateFormData({ selectedReturnFlight: id })
-            }
+            onSelectDeparture={(id) => updateFormData({ selectedDepartureFlight: id })}
+            onSelectReturn={(id) => updateFormData({ selectedReturnFlight: id })}
             onContinue={() => handleStepComplete('flights')}
             onBack={handleBack}
           />
@@ -320,6 +382,18 @@ export default function Planner() {
             onSelectHotel={(id) => updateFormData({ selectedHotel: id })}
             onContinue={() => handleStepComplete('hotels')}
             onBack={handleBack}
+          />
+        )}
+
+        {currentStep === 'booking' && (
+          <BookingOptions
+            tripSummary={calculateTripSummary()}
+            priceLockExpiry={new Date(Date.now() + 30 * 60 * 1000)} // 30 min from now
+            onBook={handleBook}
+            onSave={handleSave}
+            onBuildItinerary={handleBuildItinerary}
+            onBack={handleBack}
+            isLoading={isLoading}
           />
         )}
 
