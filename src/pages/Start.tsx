@@ -132,7 +132,7 @@ function AirportAutocomplete({
   );
 }
 
-// Trip type options
+// Trip type options - using Lucide icons instead of emojis
 const tripTypes = [
   { id: 'romantic', label: 'Romantic', icon: Heart, description: 'Couples getaway' },
   { id: 'business', label: 'Business', icon: Briefcase, description: 'Work travel' },
@@ -219,10 +219,7 @@ export default function Start() {
   };
 
   const handleAddGuest = () => {
-    if (!user) {
-      toast.info('Sign in to link travel companions and use their preferences.');
-      return;
-    }
+    // For testing, always show the guest linking modal placeholder
     toast.info('Guest linking coming soon! We\'ll match travel preferences for your group.');
   };
 

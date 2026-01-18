@@ -93,7 +93,7 @@ export default function PlannerBooking() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       toast.error('Please sign in to complete your booking');
-      navigate(`/sign-in?redirect=/planner/booking?tripId=${tripId}`);
+      navigate(`/signin?redirect=/planner/booking?tripId=${tripId}`);
       return;
     }
 
