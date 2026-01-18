@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
         }
         
         return {
-          id: row.id,
+          id: row.id || crypto.randomUUID(),
           city: row.city,
           country: row.country,
           region: row.region || null,
