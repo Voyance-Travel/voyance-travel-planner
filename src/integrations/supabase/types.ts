@@ -116,6 +116,66 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_feedback: {
+        Row: {
+          activity_category: string | null
+          activity_id: string
+          activity_type: string | null
+          created_at: string
+          destination: string | null
+          feedback_tags: string[] | null
+          feedback_text: string | null
+          id: string
+          rating: string
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_category?: string | null
+          activity_id: string
+          activity_type?: string | null
+          created_at?: string
+          destination?: string | null
+          feedback_tags?: string[] | null
+          feedback_text?: string | null
+          id?: string
+          rating: string
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_category?: string | null
+          activity_id?: string
+          activity_type?: string | null
+          created_at?: string
+          destination?: string | null
+          feedback_tags?: string[] | null
+          feedback_text?: string | null
+          id?: string
+          rating?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_feedback_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_feedback_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       airports: {
         Row: {
           city: string | null
@@ -1197,6 +1257,54 @@ export type Database = {
           created_at?: string
           email?: string | null
           legacy_user_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_preference_insights: {
+        Row: {
+          created_at: string
+          disliked_activity_types: Json | null
+          disliked_categories: Json | null
+          feedback_count: number | null
+          id: string
+          insights_summary: string | null
+          last_analysis_at: string | null
+          loved_activity_types: Json | null
+          loved_categories: Json | null
+          preferred_pace: string | null
+          preferred_times: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          disliked_activity_types?: Json | null
+          disliked_categories?: Json | null
+          feedback_count?: number | null
+          id?: string
+          insights_summary?: string | null
+          last_analysis_at?: string | null
+          loved_activity_types?: Json | null
+          loved_categories?: Json | null
+          preferred_pace?: string | null
+          preferred_times?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          disliked_activity_types?: Json | null
+          disliked_categories?: Json | null
+          feedback_count?: number | null
+          id?: string
+          insights_summary?: string | null
+          last_analysis_at?: string | null
+          loved_activity_types?: Json | null
+          loved_categories?: Json | null
+          preferred_pace?: string | null
+          preferred_times?: Json | null
           updated_at?: string
           user_id?: string
         }
