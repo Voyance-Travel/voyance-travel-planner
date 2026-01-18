@@ -1,14 +1,11 @@
 /**
  * Voyance Weather API Service
  * 
- * Integrates with Railway backend weather endpoints:
- * - GET /api/weather/:destinationId - Get weather data for a destination
+ * Uses Cloud edge function for weather data
  */
 
 import { useQuery } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
+import { supabase } from '@/integrations/supabase/client';
 
 // ============================================================================
 // Types
@@ -42,38 +39,49 @@ export interface WeatherResponse {
 }
 
 // ============================================================================
-// API Helpers
-// ============================================================================
-
-async function weatherApiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const response = await fetch(`${BACKEND_URL}/api/weather${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData._error || errorData.error || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
-
-// ============================================================================
 // Weather API
 // ============================================================================
 
 /**
- * Get weather data for a destination
+ * Get weather data for a destination using Cloud edge function
  */
 export async function getWeather(destinationId: string): Promise<WeatherResponse> {
-  return weatherApiRequest<WeatherResponse>(`/${destinationId}`);
+  const { data, error } = await supabase.functions.invoke('weather', {
+    body: {
+      destination: destinationId,
+      startDate: new Date().toISOString().split('T')[0],
+      days: 7,
+    },
+  });
+
+  if (error) {
+    console.warn('[WeatherAPI] Cloud function error:', error);
+    throw new Error('Failed to fetch weather data');
+  }
+
+  // Transform the response to match existing interface
+  const weatherData = data?.weather;
+  return {
+    destinationId,
+    weather: {
+      temperatureRange: weatherData?.current 
+        ? `${weatherData.current.temp - 5}°F - ${weatherData.current.temp + 5}°F`
+        : null,
+      seasonality: null,
+      bestTimeToVisit: null,
+      lastUpdated: new Date().toISOString(),
+      isDynamic: true,
+      humidity: weatherData?.current?.humidity ? `${weatherData.current.humidity}%` : undefined,
+      windSpeed: weatherData?.current?.windSpeed ? `${weatherData.current.windSpeed} mph` : undefined,
+      currentConditions: weatherData?.current?.condition,
+      forecast: weatherData?.forecast?.map((f: any) => ({
+        date: f.date,
+        condition: f.condition,
+        high: f.high,
+        low: f.low,
+      })),
+    },
+  };
 }
 
 // ============================================================================
