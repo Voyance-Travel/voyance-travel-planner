@@ -44,6 +44,7 @@ const SUBSCRIPTION_TIERS = {
     name: 'Voyage',
     description: 'For travelers who plan regularly',
     price: 15.99,
+    interval: 'month',
     priceId: 'price_1RpYVWFYxIg9jcJU4t3JVCy0',
     productId: 'prod_Sl4euoo6l8HCIE',
     features: [
@@ -57,6 +58,7 @@ const SUBSCRIPTION_TIERS = {
     name: 'Wanderlust',
     description: 'For digital nomads & frequent travelers',
     price: 119.99,
+    interval: 'year',
     priceId: 'price_1RpYWpFYxIg9jcJUPrSLmFsu',
     productId: 'prod_Sl4gxTsm0MDnN6',
     features: [
@@ -181,13 +183,29 @@ export default function Profile() {
 
   // Check subscription status
   const checkSubscription = async () => {
+    if (!isAuthenticated || !user) {
+      setSubscription(null);
+      return;
+    }
+    
     setIsLoadingSubscription(true);
     try {
       const { data, error } = await supabase.functions.invoke('check-subscription');
-      if (error) throw error;
+      if (error) {
+        console.error('Subscription check error:', error);
+        // Don't show error toast for auth issues - just set as not subscribed
+        setSubscription({ subscribed: false, product_id: null, price_id: null, subscription_end: null });
+        return;
+      }
+      if (data?.error) {
+        console.error('Subscription check error:', data.error);
+        setSubscription({ subscribed: false, product_id: null, price_id: null, subscription_end: null });
+        return;
+      }
       setSubscription(data);
     } catch (error) {
       console.error('Failed to check subscription:', error);
+      setSubscription({ subscribed: false, product_id: null, price_id: null, subscription_end: null });
     } finally {
       setIsLoadingSubscription(false);
     }
@@ -201,18 +219,27 @@ export default function Profile() {
 
   // Handle checkout
   const handleCheckout = async (priceId: string) => {
+    if (!isAuthenticated || !user) {
+      toast.error('Please sign in to subscribe');
+      navigate(ROUTES.SIGNIN);
+      return;
+    }
+    
     setIsCheckingOut(priceId);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { priceId, mode: 'subscription' },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       if (data?.url) {
         window.open(data.url, '_blank');
+      } else {
+        throw new Error('No checkout URL received');
       }
     } catch (error: any) {
       console.error('Checkout error:', error);
-      toast.error(error.message || 'Failed to start checkout');
+      toast.error(error.message || 'Failed to start checkout. Please try again.');
     } finally {
       setIsCheckingOut(null);
     }
@@ -555,98 +582,180 @@ export default function Profile() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-8"
+            className="space-y-10"
           >
-            {/* Current Status */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">Your Subscription</h2>
-                <p className="text-sm text-muted-foreground">
-                  {subscription?.subscribed 
-                    ? `Active until ${subscription.subscription_end ? format(new Date(subscription.subscription_end), 'MMMM d, yyyy') : 'N/A'}`
-                    : 'No active subscription'}
-                </p>
-              </div>
-              {isLoadingSubscription && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-            </div>
-
-            {/* Subscription Cards */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {Object.entries(SUBSCRIPTION_TIERS).map(([key, tier]) => {
-                const isCurrentPlan = subscription?.product_id === tier.productId;
-                return (
-                  <div
-                    key={key}
-                    className={cn(
-                      "relative p-6 rounded-xl border-2 transition-all",
-                      isCurrentPlan 
-                        ? "border-primary bg-primary/5" 
-                        : "border-border hover:border-muted-foreground/50"
-                    )}
-                  >
-                    {isCurrentPlan && (
-                      <div className="absolute -top-3 left-4 px-3 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-full flex items-center gap-1">
-                        <Crown className="h-3 w-3" />
-                        Current Plan
-                      </div>
-                    )}
-                    <div className="mb-4">
-                      <h3 className="text-xl font-semibold text-foreground">{tier.name}</h3>
-                      <p className="text-sm text-muted-foreground">{tier.description}</p>
-                    </div>
-                    <div className="mb-6">
-                      <span className="text-3xl font-bold text-foreground">${tier.price}</span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
-                    <ul className="space-y-3 mb-6">
-                      {tier.features.map((feature) => (
-                        <li key={feature} className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="text-muted-foreground">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    {isCurrentPlan ? (
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={handleManageSubscription}
-                      >
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Manage Subscription
-                      </Button>
-                    ) : (
-                      <Button 
-                        className="w-full"
-                        onClick={() => handleCheckout(tier.priceId)}
-                        disabled={isCheckingOut === tier.priceId}
-                      >
-                        {isCheckingOut === tier.priceId ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Loading...
-                          </>
-                        ) : (
-                          <>Subscribe</>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Already subscribed - show manage button */}
-            {subscription?.subscribed && (
-              <div className="text-center pt-4">
-                <Button variant="ghost" onClick={handleManageSubscription}>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Manage Billing & Cancel
+            {/* Header - Editorial style */}
+            <div className="border-b border-border pb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-serif font-medium text-foreground tracking-tight">
+                    Membership
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {subscription?.subscribed 
+                      ? `Active until ${subscription.subscription_end ? format(new Date(subscription.subscription_end), 'MMMM d, yyyy') : 'N/A'}`
+                      : 'Unlock premium travel planning features'}
+                  </p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={checkSubscription}
+                  disabled={isLoadingSubscription}
+                  className="text-xs text-muted-foreground"
+                >
+                  {isLoadingSubscription ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                      Refresh
+                    </>
+                  )}
                 </Button>
               </div>
+            </div>
+
+            {/* Free tier info - show if not subscribed */}
+            {!subscription?.subscribed && (
+              <div className="p-6 rounded-lg border border-border bg-muted/20">
+                <div className="flex items-start gap-4">
+                  <div className="p-2.5 rounded-full bg-muted">
+                    <Compass className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-foreground">Free Plan</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      You're currently on the free plan with limited features.
+                    </p>
+                    <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+                      <li className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                        3 trip plans per month
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                        Basic itinerary generation
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                        Travel DNA quiz
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             )}
+
+            {/* Subscription Plans */}
+            <div>
+              <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-6">
+                Choose your plan
+              </h3>
+              <div className="grid md:grid-cols-2 gap-6">
+                {Object.entries(SUBSCRIPTION_TIERS).map(([key, tier]) => {
+                  const isCurrentPlan = subscription?.product_id === tier.productId;
+                  const isAnnual = key === 'wanderlust';
+                  
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        "relative p-6 rounded-lg border transition-all",
+                        isCurrentPlan 
+                          ? "border-foreground" 
+                          : "border-border hover:border-muted-foreground/50"
+                      )}
+                    >
+                      {isCurrentPlan && (
+                        <div className="absolute -top-3 left-4 px-2.5 py-0.5 bg-foreground text-background text-[10px] uppercase tracking-wider font-medium">
+                          Current
+                        </div>
+                      )}
+                      
+                      {isAnnual && !isCurrentPlan && (
+                        <div className="absolute -top-3 right-4 px-2.5 py-0.5 bg-primary text-primary-foreground text-[10px] uppercase tracking-wider font-medium">
+                          Best Value
+                        </div>
+                      )}
+                      
+                      <div className="mb-6">
+                        <h3 className="text-lg font-medium text-foreground">{tier.name}</h3>
+                        <p className="text-sm text-muted-foreground mt-0.5">{tier.description}</p>
+                      </div>
+                      
+                      <div className="mb-6">
+                        <span className="text-3xl font-serif font-medium text-foreground">${tier.price}</span>
+                        <span className="text-sm text-muted-foreground">
+                          /{isAnnual ? 'year' : 'month'}
+                        </span>
+                        {isAnnual && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Save ~37% vs monthly
+                          </p>
+                        )}
+                      </div>
+                      
+                      <ul className="space-y-3 mb-8">
+                        {tier.features.map((feature) => (
+                          <li key={feature} className="flex items-start gap-2.5 text-sm">
+                            <Check className="h-4 w-4 text-foreground flex-shrink-0 mt-0.5" />
+                            <span className="text-muted-foreground">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      
+                      {isCurrentPlan ? (
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={handleManageSubscription}
+                        >
+                          Manage
+                        </Button>
+                      ) : (
+                        <Button 
+                          className="w-full"
+                          onClick={() => handleCheckout(tier.priceId)}
+                          disabled={isCheckingOut === tier.priceId}
+                        >
+                          {isCheckingOut === tier.priceId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Subscribe'
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Manage subscription link for subscribers */}
+            {subscription?.subscribed && (
+              <div className="pt-6 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Billing & Payment</p>
+                    <p className="text-sm text-muted-foreground">
+                      Update payment method, view invoices, or cancel
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleManageSubscription}>
+                    <CreditCard className="h-4 w-4 mr-1.5" />
+                    Manage
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* FAQ / Help */}
+            <div className="pt-6 border-t border-border">
+              <p className="text-xs text-muted-foreground text-center">
+                Questions about billing? Contact us at support@voyance.travel
+              </p>
+            </div>
           </motion.div>
         )}
 
