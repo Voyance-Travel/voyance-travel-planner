@@ -10,45 +10,22 @@ export const companyInfo = {
   name: 'Voyance',
   tagline: 'AI-Powered Travel Planning',
   founded: '2024',
-  headquarters: 'San Francisco, CA',
+  headquarters: 'Atlanta, GA',
   website: 'https://voyance.travel',
   mission: 'To revolutionize travel planning by combining artificial intelligence with deep personalization, helping every traveler discover experiences that resonate with who they are.',
   vision: 'A world where every journey is perfectly tailored to the individual, making travel more accessible, meaningful, and memorable for everyone.',
 };
 
 export const keyStats = [
-  { label: 'Destinations', value: '10,000+' },
-  { label: 'Travel DNA Profiles Created', value: '50,000+' },
-  { label: 'Itineraries Generated', value: '100,000+' },
-  { label: 'Countries Covered', value: '190+' },
-  { label: 'Average User Rating', value: '4.8/5' },
-  { label: 'Time Saved Per Trip', value: '15+ hours' },
+  { label: 'Unique Destinations', value: '500+' },
+  { label: 'AI Itinerary Engines', value: '3' },
+  { label: 'Personalization Algorithms', value: '12+' },
+  { label: 'Travel Style Profiles', value: '16' },
 ];
 
-export const leadership = [
-  {
-    name: 'Alex Chen',
-    title: 'Co-Founder & CEO',
-    bio: 'Former product lead at Airbnb, Alex has spent over a decade building travel technology products that delight millions of users.',
-  },
-  {
-    name: 'Sarah Martinez',
-    title: 'Co-Founder & CTO',
-    bio: 'Previously a senior engineer at Google, Sarah leads our AI and engineering teams in building the future of personalized travel.',
-  },
-  {
-    name: 'David Kim',
-    title: 'VP of Product',
-    bio: 'With experience at Expedia and Booking.com, David brings deep expertise in travel product development.',
-  },
-];
+export const leadership: { name: string; title: string; bio: string }[] = [];
 
-export const pressHighlights = [
-  'Named "Best Travel Startup of 2024" by TechCrunch',
-  'Featured in Forbes "30 Under 30" Travel & Hospitality',
-  'Winner of the Phocuswright Innovation Award',
-  'Backed by leading investors including Sequoia and a]16z',
-];
+export const pressHighlights: string[] = [];
 
 export const brandGuidelines = {
   primaryColor: '#6366F1', // Indigo
@@ -137,25 +114,19 @@ export async function generatePressKitPDF(): Promise<void> {
 
   addDivider();
 
-  // Leadership
-  addSection('Leadership Team');
-  leadership.forEach(person => {
-    addText(`${person.name} - ${person.title}`, 11, 'bold');
-    addText(person.bio, 10);
-    y += 2;
-  });
+  // Leadership (only if available)
+  if (leadership.length > 0) {
+    addSection('Leadership Team');
+    leadership.forEach(person => {
+      addText(`${person.name} - ${person.title}`, 11, 'bold');
+      addText(person.bio, 10);
+      y += 2;
+    });
+  }
 
-  // New page for highlights and brand
+  // New page for brand guidelines
   pdf.addPage();
   y = margin;
-
-  // Press Highlights
-  addSection('Press Highlights');
-  pressHighlights.forEach(highlight => {
-    addText(`• ${highlight}`, 11);
-  });
-
-  addDivider();
 
   // Brand Guidelines Summary
   addSection('Brand Guidelines');
