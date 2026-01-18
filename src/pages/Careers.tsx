@@ -5,8 +5,7 @@ import { MapPin, Clock, Briefcase, ChevronRight, ChevronDown, Users, Code, Palet
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-
-const CONTACT_EMAIL = 'careers@voyance.travel';
+import { CONTACT_CONFIG } from '@/config/contact';
 
 // Full job listings with details
 const jobs = [
@@ -172,7 +171,7 @@ export default function Careers() {
   const handleApply = (job: Job) => {
     const subject = encodeURIComponent(`Application for ${job.title}`);
     const body = encodeURIComponent(`Hi Voyance Team,\n\nI'm interested in applying for the ${job.title} position.\n\n[Please attach your resume and include a brief introduction about yourself]\n\nBest regards`);
-    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:${CONTACT_CONFIG.CAREERS_EMAIL}?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -183,7 +182,7 @@ export default function Careers() {
       />
       
       {/* Hero */}
-      <section className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+      <section className="pt-32 pb-16 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <motion.span
             initial={{ opacity: 0 }}
@@ -310,7 +309,7 @@ export default function Careers() {
             ))}
           </div>
           <Button variant="outline" size="lg" asChild>
-            <a href={`mailto:${CONTACT_EMAIL}`}>
+            <a href={`mailto:${CONTACT_CONFIG.CAREERS_EMAIL}`}>
               <Mail className="h-4 w-4 mr-2" />
               Contact Careers Team
             </a>

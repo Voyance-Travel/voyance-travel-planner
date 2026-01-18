@@ -5,6 +5,7 @@ export const ROUTES = {
   EXPLORE: '/explore',
   DESTINATIONS: '/destinations',
   DESTINATION_DETAIL: '/destination/:slug',
+  GUIDES: '/guides',
   ABOUT: '/about',
   HOW_IT_WORKS: '/how-it-works',
   CAREERS: '/careers',

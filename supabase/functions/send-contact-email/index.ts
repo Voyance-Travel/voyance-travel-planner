@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
 const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
-const CONTACT_EMAIL = "hello@voyance.travel"; // Change to your support email
+// Use environment variable if set, otherwise default to hello@voyance.travel
+const CONTACT_EMAIL = Deno.env.get("CONTACT_EMAIL") || "hello@voyance.travel";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
