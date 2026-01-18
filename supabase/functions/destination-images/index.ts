@@ -286,22 +286,22 @@ serve(async (req) => {
 
     let images: DestinationImage[] = [];
 
-    // Priority 1: Google Places (most reliable for real destination photos)
-    if (googleApiKey) {
-      const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
-      if (googleImage) {
-        images = [googleImage];
-        console.log("[Images] ✅ Using Google Places image for:", resolvedDestination);
-      }
-    }
-
-    // Priority 2: Lovable AI Generated (fallback if Google fails)
-    if (images.length === 0 && lovableApiKey) {
-      console.log("[Images] Trying Lovable AI image for:", resolvedDestination);
+    // Priority 1: Lovable AI Generated (best quality)
+    if (lovableApiKey) {
+      console.log("[Images] Generating Lovable AI image for:", resolvedDestination);
       const aiImage = await generateAIImage(resolvedDestination, lovableApiKey);
       if (aiImage) {
         images = [aiImage];
         console.log("[Images] ✅ Using AI-generated image for:", resolvedDestination);
+      }
+    }
+
+    // Priority 2: Google Places (fallback)
+    if (images.length === 0 && googleApiKey) {
+      const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
+      if (googleImage) {
+        images = [googleImage];
+        console.log("[Images] ✅ Using Google Places image for:", resolvedDestination);
       }
     }
 
