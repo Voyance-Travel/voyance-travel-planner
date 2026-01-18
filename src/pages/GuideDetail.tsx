@@ -1,14 +1,178 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, Calendar, User, Tag, Share2 } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, User, Tag, Share2, Check, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { guides, getGuideBySlug, getRelatedGuides } from '@/data/guides';
+import { toast } from 'sonner';
+
+// Parse markdown-style content into structured JSX
+function parseContent(content: string) {
+  // Remove the main title (# Title) as it's displayed in the hero
+  const withoutMainTitle = content.replace(/^#\s+[^\n]+\n\n?/, '');
+  
+  // Split into sections by ## headers
+  const sections = withoutMainTitle.split(/\n(?=## )/);
+  
+  return sections.map((section, sectionIndex) => {
+    const lines = section.trim().split('\n');
+    const elements: JSX.Element[] = [];
+    let currentList: string[] = [];
+    let isInList = false;
+    
+    lines.forEach((line, lineIndex) => {
+      // Section header (##)
+      if (line.startsWith('## ')) {
+        if (isInList && currentList.length > 0) {
+          elements.push(
+            <ul key={`list-${sectionIndex}-${lineIndex}`} className="space-y-3 my-6">
+              {currentList.map((item, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2.5 flex-shrink-0" />
+                  <span className="text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: formatInlineStyles(item) }} />
+                </li>
+              ))}
+            </ul>
+          );
+          currentList = [];
+          isInList = false;
+        }
+        elements.push(
+          <h2 key={`h2-${sectionIndex}-${lineIndex}`} className="text-2xl font-display font-bold text-foreground mt-12 mb-6 pb-2 border-b border-border">
+            {line.replace('## ', '')}
+          </h2>
+        );
+      }
+      // Subsection header (###)
+      else if (line.startsWith('### ')) {
+        if (isInList && currentList.length > 0) {
+          elements.push(
+            <ul key={`list-${sectionIndex}-${lineIndex}`} className="space-y-3 my-6">
+              {currentList.map((item, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2.5 flex-shrink-0" />
+                  <span className="text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: formatInlineStyles(item) }} />
+                </li>
+              ))}
+            </ul>
+          );
+          currentList = [];
+          isInList = false;
+        }
+        elements.push(
+          <h3 key={`h3-${sectionIndex}-${lineIndex}`} className="text-lg font-semibold text-foreground mt-8 mb-4">
+            {line.replace('### ', '')}
+          </h3>
+        );
+      }
+      // List item
+      else if (line.startsWith('- ')) {
+        isInList = true;
+        currentList.push(line.replace('- ', ''));
+      }
+      // Numbered list item
+      else if (/^\d+\.\s/.test(line)) {
+        if (isInList && currentList.length > 0 && !currentList[0].match(/^\d+\./)) {
+          elements.push(
+            <ul key={`list-${sectionIndex}-${lineIndex}`} className="space-y-3 my-6">
+              {currentList.map((item, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2.5 flex-shrink-0" />
+                  <span className="text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: formatInlineStyles(item) }} />
+                </li>
+              ))}
+            </ul>
+          );
+          currentList = [];
+        }
+        isInList = true;
+        currentList.push(line);
+      }
+      // Regular paragraph
+      else if (line.trim()) {
+        if (isInList && currentList.length > 0) {
+          const isNumbered = currentList[0].match(/^\d+\./);
+          if (isNumbered) {
+            elements.push(
+              <ol key={`list-${sectionIndex}-${lineIndex}`} className="space-y-3 my-6">
+                {currentList.map((item, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-sm font-medium flex items-center justify-center flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <span className="text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: formatInlineStyles(item.replace(/^\d+\.\s*/, '')) }} />
+                  </li>
+                ))}
+              </ol>
+            );
+          } else {
+            elements.push(
+              <ul key={`list-${sectionIndex}-${lineIndex}`} className="space-y-3 my-6">
+                {currentList.map((item, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2.5 flex-shrink-0" />
+                    <span className="text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: formatInlineStyles(item) }} />
+                  </li>
+                ))}
+              </ul>
+            );
+          }
+          currentList = [];
+          isInList = false;
+        }
+        elements.push(
+          <p key={`p-${sectionIndex}-${lineIndex}`} className="text-muted-foreground leading-relaxed my-4" dangerouslySetInnerHTML={{ __html: formatInlineStyles(line) }} />
+        );
+      }
+    });
+    
+    // Handle remaining list items
+    if (isInList && currentList.length > 0) {
+      const isNumbered = currentList[0].match(/^\d+\./);
+      if (isNumbered) {
+        elements.push(
+          <ol key={`list-end-${sectionIndex}`} className="space-y-3 my-6">
+            {currentList.map((item, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-sm font-medium flex items-center justify-center flex-shrink-0">
+                  {i + 1}
+                </span>
+                <span className="text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: formatInlineStyles(item.replace(/^\d+\.\s*/, '')) }} />
+              </li>
+            ))}
+          </ol>
+        );
+      } else {
+        elements.push(
+          <ul key={`list-end-${sectionIndex}`} className="space-y-3 my-6">
+            {currentList.map((item, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2.5 flex-shrink-0" />
+                <span className="text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: formatInlineStyles(item) }} />
+              </li>
+            ))}
+          </ul>
+        );
+      }
+    }
+    
+    return <div key={sectionIndex}>{elements}</div>;
+  });
+}
+
+// Format inline styles like **bold** and *italic*
+function formatInlineStyles(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-foreground font-semibold">$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+}
 
 export default function GuideDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const [copied, setCopied] = useState(false);
   
   // Find guide by slug or id (for backwards compatibility)
   const guide = slug ? (getGuideBySlug(slug) || guides.find(g => g.slug === slug || String(guides.indexOf(g) + 1) === slug)) : undefined;
@@ -19,7 +183,7 @@ export default function GuideDetail() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <h1 className="font-display text-2xl mb-4">Guide not found</h1>
-            <Link to="/explore#guides">
+            <Link to="/guides">
               <Button>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Guides
@@ -33,20 +197,34 @@ export default function GuideDetail() {
 
   const relatedGuides = getRelatedGuides(guide).slice(0, 3);
 
-  // Parse markdown content into sections
-  const sections = guide.content.split('\n## ').map((section, index) => {
-    if (index === 0) {
-      // First section starts with # title
-      const lines = section.split('\n');
-      const title = lines[0].replace('# ', '');
-      const content = lines.slice(1).join('\n').trim();
-      return { title, content, isMain: true };
+  const handleShare = async () => {
+    const shareUrl = window.location.href;
+    const shareData = {
+      title: guide.title,
+      text: guide.summary,
+      url: shareUrl,
+    };
+
+    // Try native share first (mobile)
+    if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fall through to clipboard
+      }
     }
-    const lines = section.split('\n');
-    const title = lines[0];
-    const content = lines.slice(1).join('\n').trim();
-    return { title, content, isMain: false };
-  });
+
+    // Fall back to clipboard copy
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      toast.success('Link copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error('Failed to copy link');
+    }
+  };
 
   return (
     <MainLayout>
@@ -76,7 +254,7 @@ export default function GuideDetail() {
               animate={{ opacity: 1, y: 0 }}
             >
               <Link 
-                to="/explore#guides"
+                to="/guides"
                 className="inline-flex items-center gap-2 text-white/80 hover:text-white mb-4 transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -117,55 +295,32 @@ export default function GuideDetail() {
       </section>
       
       {/* Content */}
-      <article className="max-w-4xl mx-auto px-4 py-12">
-        {/* Summary */}
+      <article className="max-w-3xl mx-auto px-4 py-12">
+        {/* Summary - Editorial Style */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-muted/50 rounded-xl p-6 mb-10"
+          className="relative mb-12"
         >
-          <p className="text-lg text-muted-foreground leading-relaxed">
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-full" />
+          <p className="text-xl text-foreground leading-relaxed pl-6 italic">
             {guide.summary}
           </p>
         </motion.div>
         
-        {/* Main content */}
+        {/* Main content - Editorial Styling */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="prose prose-lg max-w-none dark:prose-invert guide-content"
+          className="prose-editorial"
         >
-          {sections.map((section, index) => (
-            <div key={index} className={section.isMain ? '' : 'mt-10'}>
-              {!section.isMain && (
-                <h2 className="text-2xl font-display font-bold text-foreground mb-4">
-                  {section.title}
-                </h2>
-              )}
-              <div className="text-muted-foreground leading-relaxed whitespace-pre-line">
-                {section.content.split('\n### ').map((subsection, subIndex) => {
-                  if (subIndex === 0) {
-                    return <p key={subIndex}>{subsection}</p>;
-                  }
-                  const lines = subsection.split('\n');
-                  const subTitle = lines[0];
-                  const subContent = lines.slice(1).join('\n').trim();
-                  return (
-                    <div key={subIndex} className="mt-6">
-                      <h3 className="text-xl font-semibold text-foreground mb-3">{subTitle}</h3>
-                      <p>{subContent}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+          {parseContent(guide.content)}
         </motion.div>
         
         {/* Tags */}
-        <div className="flex flex-wrap gap-2 mt-10 pt-8 border-t">
+        <div className="flex flex-wrap gap-2 mt-12 pt-8 border-t border-border">
           {guide.tags.map(tag => (
             <Badge key={tag} variant="secondary" className="flex items-center gap-1">
               <Tag className="h-3 w-3" />
@@ -176,9 +331,23 @@ export default function GuideDetail() {
         
         {/* Share */}
         <div className="flex items-center gap-4 mt-6">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Share2 className="h-4 w-4" />
-            Share Guide
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2"
+            onClick={handleShare}
+          >
+            {copied ? (
+              <>
+                <Check className="h-4 w-4 text-green-500" />
+                Copied!
+              </>
+            ) : (
+              <>
+                <Share2 className="h-4 w-4" />
+                Share Guide
+              </>
+            )}
           </Button>
         </div>
       </article>
