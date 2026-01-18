@@ -17,10 +17,19 @@ export const companyInfo = {
 };
 
 export const keyStats = [
-  { label: 'Unique Destinations', value: '500+' },
+  { label: 'Curated Destinations', value: '500+' },
+  { label: 'Travel DNA Archetypes', value: '16' },
+  { label: 'Personalization Signals', value: '50+' },
   { label: 'AI Itinerary Engines', value: '3' },
-  { label: 'Personalization Algorithms', value: '12+' },
-  { label: 'Travel Style Profiles', value: '16' },
+];
+
+export const platformCapabilities = [
+  'Unique itineraries generated from 16 distinct Travel DNA profiles',
+  'Multi-factor personalization using 50+ preference signals',
+  'Day-by-day activity scheduling with time-optimized routing',
+  'Real-time flight and hotel integration via Amadeus APIs',
+  'Adaptive recommendations based on budget, pace, and interests',
+  'Destination matching using proprietary scoring algorithms',
 ];
 
 export const leadership: { name: string; title: string; bio: string }[] = [];
@@ -114,15 +123,13 @@ export async function generatePressKitPDF(): Promise<void> {
 
   addDivider();
 
-  // Leadership (only if available)
-  if (leadership.length > 0) {
-    addSection('Leadership Team');
-    leadership.forEach(person => {
-      addText(`${person.name} - ${person.title}`, 11, 'bold');
-      addText(person.bio, 10);
-      y += 2;
-    });
-  }
+  // Platform Capabilities
+  addSection('Platform Capabilities');
+  addText('What makes each Voyance itinerary unique:', 11, 'bold');
+  y += 2;
+  platformCapabilities.forEach(capability => {
+    addText(`• ${capability}`, 10);
+  });
 
   // New page for brand guidelines
   pdf.addPage();
