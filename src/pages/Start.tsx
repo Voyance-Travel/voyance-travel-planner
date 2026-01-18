@@ -18,7 +18,7 @@ import {
   formatAirportDisplay,
   type Airport,
 } from '@/services/locationSearchAPI';
-import { toast } from 'sonner';
+import GuestLinkModal from '@/components/planner/GuestLinkModal';
 
 // Debounce hook for search
 function useDebounce<T>(value: T, delay: number): T {
@@ -256,9 +256,11 @@ export default function Start() {
     navigate(`${ROUTES.PLANNER.FLIGHT}?${params.toString()}`);
   };
 
+  // Guest link modal state
+  const [guestModalOpen, setGuestModalOpen] = useState(false);
+
   const handleAddGuest = () => {
-    // For testing, always show the guest linking modal placeholder
-    toast.info('Guest linking coming soon! We\'ll match travel preferences for your group.');
+    setGuestModalOpen(true);
   };
 
   const isFormValid = destination && startDate && endDate;
@@ -539,6 +541,14 @@ export default function Start() {
           </div>
         </div>
       </section>
+
+      {/* Guest Link Modal */}
+      <GuestLinkModal
+        open={guestModalOpen}
+        onOpenChange={setGuestModalOpen}
+        maxGuests={4}
+        currentTravelers={travelers}
+      />
     </MainLayout>
   );
 }

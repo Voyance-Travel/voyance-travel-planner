@@ -69,7 +69,8 @@ export interface FlightSearchParams {
 
 export interface FlightOption {
   id: string;
-  airline: string;
+  airline: string; // IATA carrier code (e.g., "UA", "DL")
+  airlineName?: string; // Full airline name (e.g., "United Airlines")
   airlineLogo?: string;
   flightNumber: string;
   origin: {
@@ -198,7 +199,8 @@ function generateMockFlights(params: FlightSearchParams): FlightOption[] {
 
     flights.push({
       id: `flight-${i + 1}`,
-      airline: airline.name,
+      airline: airline.code, // Use IATA code for logo lookup
+      airlineName: airline.name, // Keep full name for display
       airlineLogo: airline.logo,
       flightNumber: `${airline.code}${1000 + Math.floor(Math.random() * 9000)}`,
       origin: {
