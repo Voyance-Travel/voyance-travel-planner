@@ -10,7 +10,6 @@ interface SocialLoginButtonsProps {
 
 export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps) {
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
-  const [isLoadingApple, setIsLoadingApple] = useState(false);
 
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
@@ -34,28 +33,6 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
     }
   };
 
-  const handleAppleLogin = async () => {
-    setIsLoadingApple(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: `${window.location.origin}/`,
-        },
-      });
-      
-      if (error) {
-        toast.error('Failed to sign in with Apple');
-        console.error('Apple login error:', error);
-      }
-    } catch (error) {
-      toast.error('An unexpected error occurred');
-      console.error('Apple login error:', error);
-    } finally {
-      setIsLoadingApple(false);
-    }
-  };
-
   const actionText = mode === 'signup' ? 'Sign up' : 'Continue';
 
   return (
@@ -63,14 +40,13 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.1 }}
-      className="space-y-3"
     >
       {/* Google Button */}
       <Button
         type="button"
         variant="outline"
         onClick={handleGoogleLogin}
-        disabled={isLoadingGoogle || isLoadingApple}
+        disabled={isLoadingGoogle}
         className="w-full h-12 bg-white hover:bg-gray-50 border-slate-200 text-slate-700 font-medium"
       >
         {isLoadingGoogle ? (
@@ -99,29 +75,6 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
               />
             </svg>
             {actionText} with Google
-          </span>
-        )}
-      </Button>
-
-      {/* Apple Button */}
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleAppleLogin}
-        disabled={isLoadingGoogle || isLoadingApple}
-        className="w-full h-12 bg-black hover:bg-gray-900 border-black text-white font-medium"
-      >
-        {isLoadingApple ? (
-          <span className="flex items-center gap-2">
-            <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-            Connecting...
-          </span>
-        ) : (
-          <span className="flex items-center gap-3">
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-            </svg>
-            {actionText} with Apple
           </span>
         )}
       </Button>
