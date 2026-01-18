@@ -21,161 +21,6 @@ import {
   type TravelDNAPayload 
 } from '@/utils/quizMapping';
 
-// Themed motifs per category - these float/animate during transitions
-const categoryMotifs: Record<string, { icons: React.ReactNode[]; color: string }> = {
-  'Identity': {
-    icons: [
-      <Compass key="1" className="w-6 h-6" />,
-      <Star key="2" className="w-5 h-5" />,
-      <Globe key="3" className="w-7 h-7" />,
-    ],
-    color: 'from-violet-500/30 to-purple-500/30',
-  },
-  'Vibes': {
-    icons: [
-      <Glasses key="1" className="w-6 h-6" />,
-      <Sun key="2" className="w-7 h-7" />,
-      <Heart key="3" className="w-5 h-5" />,
-    ],
-    color: 'from-pink-500/30 to-rose-500/30',
-  },
-  'Habits': {
-    icons: [
-      <Plane key="1" className="w-7 h-7" />,
-      <Luggage key="2" className="w-6 h-6" />,
-      <Clock key="3" className="w-5 h-5" />,
-    ],
-    color: 'from-sky-500/30 to-blue-500/30',
-  },
-  'Preferences': {
-    icons: [
-      <DollarSign key="1" className="w-7 h-7" />,
-      <DollarSign key="2" className="w-5 h-5" />,
-      <Sparkles key="3" className="w-6 h-6" />,
-    ],
-    color: 'from-emerald-500/30 to-green-500/30',
-  },
-  'Style': {
-    icons: [
-      <Palette key="1" className="w-6 h-6" />,
-      <Briefcase key="2" className="w-5 h-5" />,
-      <MapPin key="3" className="w-7 h-7" />,
-    ],
-    color: 'from-amber-500/30 to-orange-500/30',
-  },
-  'Context': {
-    icons: [
-      <Users key="1" className="w-7 h-7" />,
-      <UserCircle2 key="2" className="w-6 h-6" />,
-      <Heart key="3" className="w-5 h-5" />,
-    ],
-    color: 'from-red-500/30 to-pink-500/30',
-  },
-  'Interests': {
-    icons: [
-      <Heart key="1" className="w-6 h-6" />,
-      <Mountain key="2" className="w-7 h-7" />,
-      <Star key="3" className="w-5 h-5" />,
-    ],
-    color: 'from-indigo-500/30 to-violet-500/30',
-  },
-  'Accommodations': {
-    icons: [
-      <Hotel key="1" className="w-7 h-7" />,
-      <Star key="2" className="w-5 h-5" />,
-      <Sparkles key="3" className="w-6 h-6" />,
-    ],
-    color: 'from-teal-500/30 to-cyan-500/30',
-  },
-  'Food': {
-    icons: [
-      <Utensils key="1" className="w-7 h-7" />,
-      <Coffee key="2" className="w-6 h-6" />,
-      <Heart key="3" className="w-5 h-5" />,
-    ],
-    color: 'from-orange-500/30 to-red-500/30',
-  },
-  'Environment': {
-    icons: [
-      <Sun key="1" className="w-7 h-7" />,
-      <Plane key="2" className="w-6 h-6" />,
-      <Globe key="3" className="w-5 h-5" />,
-    ],
-    color: 'from-cyan-500/30 to-blue-500/30',
-  },
-};
-
-// Floating motif component for transitions
-function FloatingMotifs({ category, isActive }: { category: string; isActive: boolean }) {
-  const motif = categoryMotifs[category] || categoryMotifs['Identity'];
-  
-  if (!isActive) return null;
-  
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {motif.icons.map((icon, i) => (
-        <motion.div
-          key={i}
-          className={`absolute text-primary/60`}
-          style={{
-            left: `${15 + i * 30}%`,
-            top: '20%',
-          }}
-          initial={{ 
-            opacity: 0, 
-            scale: 0,
-            y: 100,
-            rotate: -30,
-          }}
-          animate={{ 
-            opacity: [0, 1, 1, 0],
-            scale: [0.5, 1.2, 1, 0.8],
-            y: [100, -20, -40, -100],
-            rotate: [-30, 10, -5, 15],
-          }}
-          transition={{
-            duration: 1.5,
-            delay: i * 0.15,
-            ease: "easeOut",
-          }}
-        >
-          {icon}
-        </motion.div>
-      ))}
-      
-      {/* Central burst */}
-      <motion.div
-        className={`absolute top-1/3 left-1/2 -translate-x-1/2 w-40 h-40 rounded-full bg-gradient-to-br ${motif.color} blur-3xl`}
-        initial={{ opacity: 0, scale: 0 }}
-        animate={{ opacity: [0, 0.6, 0], scale: [0, 1.5, 2] }}
-        transition={{ duration: 1.2, ease: "easeOut" }}
-      />
-    </div>
-  );
-}
-
-// Page flip variants for storybook effect
-const pageFlipVariants = {
-  enter: (direction: number) => ({
-    rotateY: direction > 0 ? 90 : -90,
-    opacity: 0,
-    scale: 0.9,
-    transformOrigin: direction > 0 ? 'left center' : 'right center',
-  }),
-  center: {
-    rotateY: 0,
-    opacity: 1,
-    scale: 1,
-    transformOrigin: 'center center',
-  },
-  exit: (direction: number) => ({
-    rotateY: direction > 0 ? -90 : 90,
-    opacity: 0,
-    scale: 0.9,
-    transformOrigin: direction > 0 ? 'right center' : 'left center',
-  }),
-};
-
 // Comprehensive 10-step quiz based on the detailed quiz documentation
 const questions = [
   {
@@ -195,7 +40,7 @@ const questions = [
   {
     id: 'travel_vibes',
     step: 2,
-    category: 'Identity',
+    category: 'Vibes',
     title: 'What vibes draw you in?',
     subtitle: 'Select all the atmospheres that excite you',
     icon: <Heart className="w-5 h-5" />,
@@ -240,7 +85,7 @@ const questions = [
   {
     id: 'budget',
     step: 4,
-    category: 'Preferences',
+    category: 'Budget',
     title: 'What\'s your travel budget style?',
     subtitle: 'Per person, per trip — we\'ll match recommendations accordingly',
     icon: <Sparkles className="w-5 h-5" />,
@@ -280,7 +125,7 @@ const questions = [
   {
     id: 'travel_companions',
     step: 6,
-    category: 'Context',
+    category: 'Companions',
     title: 'Who do you usually travel with?',
     subtitle: 'Select all that apply to you',
     icon: <Users className="w-5 h-5" />,
@@ -314,7 +159,7 @@ const questions = [
   {
     id: 'accommodation',
     step: 8,
-    category: 'Accommodations',
+    category: 'Hotels',
     title: 'Where do you love to stay?',
     subtitle: 'Your preferred accommodation style',
     icon: <Hotel className="w-5 h-5" />,
@@ -329,7 +174,7 @@ const questions = [
   {
     id: 'hotel_priorities',
     step: 8,
-    category: 'Accommodations',
+    category: 'Hotels',
     title: 'What matters most in a hotel?',
     subtitle: 'Select your top priorities',
     icon: <Hotel className="w-5 h-5" />,
@@ -345,7 +190,7 @@ const questions = [
   {
     id: 'dining_style',
     step: 9,
-    category: 'Food',
+    category: 'Dining',
     title: 'How do you like to dine when traveling?',
     subtitle: 'Your food and dining preferences',
     icon: <Utensils className="w-5 h-5" />,
@@ -359,7 +204,7 @@ const questions = [
   {
     id: 'dietary_restrictions',
     step: 9,
-    category: 'Food',
+    category: 'Dining',
     title: 'Any dietary considerations?',
     subtitle: 'Select all that apply — we\'ll factor these in',
     icon: <Utensils className="w-5 h-5" />,
@@ -377,7 +222,7 @@ const questions = [
   {
     id: 'weather_preference',
     step: 10,
-    category: 'Environment',
+    category: 'Logistics',
     title: 'What climate do you prefer?',
     subtitle: 'We\'ll recommend destinations that match',
     icon: <Sun className="w-5 h-5" />,
@@ -392,7 +237,7 @@ const questions = [
   {
     id: 'flight_preferences',
     step: 10,
-    category: 'Travel',
+    category: 'Logistics',
     title: 'Flight preferences?',
     subtitle: 'Select what matters to you',
     icon: <Plane className="w-5 h-5" />,
@@ -413,15 +258,15 @@ const getQuestionsForStep = (step: number) => questions.filter(q => q.step === s
 const totalSteps = 10;
 const stepCategories = [
   { step: 1, category: 'Identity', label: 'Who You Are' },
-  { step: 2, category: 'Identity', label: 'Your Vibes' },
+  { step: 2, category: 'Vibes', label: 'Your Vibes' },
   { step: 3, category: 'Habits', label: 'Travel Habits' },
-  { step: 4, category: 'Preferences', label: 'Budget' },
+  { step: 4, category: 'Budget', label: 'Budget' },
   { step: 5, category: 'Style', label: 'Your Style' },
-  { step: 6, category: 'Context', label: 'Companions' },
+  { step: 6, category: 'Companions', label: 'Companions' },
   { step: 7, category: 'Interests', label: 'Interests' },
-  { step: 8, category: 'Accommodations', label: 'Hotels' },
-  { step: 9, category: 'Food', label: 'Dining' },
-  { step: 10, category: 'Environment', label: 'Logistics' },
+  { step: 8, category: 'Hotels', label: 'Hotels' },
+  { step: 9, category: 'Dining', label: 'Dining' },
+  { step: 10, category: 'Logistics', label: 'Logistics' },
 ];
 
 // Welcome/Intro Screen Component
@@ -441,112 +286,56 @@ function QuizIntro({ onStart }: { onStart: () => void }) {
           transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.2 }}
           className="relative mx-auto mb-8"
         >
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mx-auto">
-            <motion.div
-              animate={{ rotate: [0, 10, -10, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <Wand2 className="w-10 h-10 text-primary" />
-            </motion.div>
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+            <Compass className="w-12 h-12 text-primary" />
           </div>
-          {/* Floating particles */}
-          {[...Array(6)].map((_, i) => (
-            <motion.div
-              key={i}
-              className="absolute w-2 h-2 rounded-full bg-primary/40"
-              style={{
-                top: '50%',
-                left: '50%',
-              }}
-              animate={{
-                x: [0, Math.cos(i * 60 * Math.PI / 180) * 60],
-                y: [0, Math.sin(i * 60 * Math.PI / 180) * 60],
-                opacity: [0, 1, 0],
-                scale: [0.5, 1, 0.5],
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                delay: i * 0.2,
-                ease: "easeInOut"
-              }}
-            />
-          ))}
         </motion.div>
-
+        
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
-            <Sparkles className="w-4 h-4" />
-            5 minutes to personalized travel
-          </span>
+          <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
+            Discover Your Travel DNA
+          </h1>
+          <p className="text-lg text-muted-foreground mb-8 max-w-lg mx-auto">
+            Answer a few questions and we'll create personalized recommendations that match your unique travel style.
+          </p>
         </motion.div>
-
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight"
-        >
-          Discover Your{' '}
-          <span className="text-primary italic">Travel DNA</span>
-        </motion.h1>
-
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="text-lg md:text-xl text-muted-foreground mb-10 max-w-lg mx-auto"
-        >
-          Answer a few questions about how you love to travel, and we'll craft 
-          a unique profile that powers personalized recommendations just for you.
-        </motion.p>
-
+        
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
+          transition={{ delay: 0.6 }}
           className="space-y-4"
         >
+          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mb-8">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              <span>5 minutes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Star className="w-4 h-4 text-primary" />
+              <span>10 questions</span>
+            </div>
+          </div>
+          
           <Button
             size="lg"
             onClick={onStart}
-            className="gap-3 h-14 px-10 text-lg shadow-xl shadow-primary/25 hover:shadow-primary/35 transition-all"
+            className="h-14 px-10 text-lg shadow-lg shadow-primary/20"
           >
-            Begin Your Journey
-            <ArrowRight className="w-5 h-5" />
+            <Wand2 className="w-5 h-5 mr-2" />
+            Begin Discovery
           </Button>
-
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mt-8">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                <Clock className="w-4 h-4" />
-              </div>
-              <span>~5 minutes</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <span>10 questions</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                <Heart className="w-4 h-4" />
-              </div>
-              <span>Your unique profile</span>
-            </div>
-          </div>
         </motion.div>
       </div>
     </motion.div>
   );
 }
 
-// Enhanced Quiz Option Component
+// Quiz Option Card
 function QuizOptionCard({ 
   value, 
   label, 
@@ -568,68 +357,39 @@ function QuizOptionCard({
     <motion.button
       type="button"
       onClick={() => onSelect(value)}
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ 
-        delay: index * 0.05,
-        type: 'spring',
-        stiffness: 400,
-        damping: 30
-      }}
-      whileHover={{ scale: 1.01, y: -2 }}
+      transition={{ delay: index * 0.05 }}
+      whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
       className={cn(
-        'relative p-6 rounded-2xl border-2 text-left transition-all w-full group overflow-hidden',
+        'relative p-5 rounded-xl border-2 text-left transition-all w-full group',
         isSelected
-          ? 'border-primary bg-gradient-to-br from-primary/10 to-primary/5 shadow-lg shadow-primary/10'
-          : 'border-border/60 bg-card/50 hover:border-primary/40 hover:bg-card hover:shadow-md'
+          ? 'border-primary bg-primary/5 shadow-md'
+          : 'border-border bg-card hover:border-primary/40 hover:shadow-sm'
       )}
     >
-      {/* Background gradient on hover */}
-      <div className={cn(
-        'absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 transition-opacity',
-        !isSelected && 'group-hover:opacity-100'
-      )} />
-      
       {/* Selection indicator */}
-      <motion.div
-        initial={false}
-        animate={{
-          scale: isSelected ? 1 : 0.8,
-          opacity: isSelected ? 1 : 0,
-        }}
-        className="absolute top-4 right-4 z-10"
-      >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/30">
-          <Check className="w-4 h-4 text-primary-foreground" />
+      <div className="absolute top-4 right-4">
+        <div className={cn(
+          'w-6 h-6 flex items-center justify-center transition-all',
+          isMultiSelect ? 'rounded-md' : 'rounded-full',
+          isSelected 
+            ? 'bg-primary' 
+            : 'border-2 border-border group-hover:border-primary/40'
+        )}>
+          {isSelected && <Check className="w-4 h-4 text-primary-foreground" />}
         </div>
-      </motion.div>
+      </div>
       
-      {/* Unselected indicator */}
-      <motion.div
-        initial={false}
-        animate={{
-          scale: isSelected ? 0.8 : 1,
-          opacity: isSelected ? 0 : 1,
-        }}
-        className="absolute top-4 right-4 z-10"
-      >
+      <div className="pr-10">
         <div className={cn(
-          'w-8 h-8 border-2 transition-colors bg-background/50',
-          isMultiSelect ? 'rounded-lg' : 'rounded-full',
-          'border-border/60 group-hover:border-primary/40'
-        )} />
-      </motion.div>
-      
-      {/* Content */}
-      <div className="pr-14 relative z-10">
-        <div className={cn(
-          'font-semibold text-lg mb-1.5 transition-colors',
-          isSelected ? 'text-primary' : 'text-foreground group-hover:text-foreground'
+          'font-semibold mb-1 transition-colors',
+          isSelected ? 'text-primary' : 'text-foreground'
         )}>
           {label}
         </div>
-        <div className="text-sm text-muted-foreground leading-relaxed">
+        <div className="text-sm text-muted-foreground">
           {description}
         </div>
       </div>
@@ -637,74 +397,51 @@ function QuizOptionCard({
   );
 }
 
-// Progress bar component with enhanced visuals
+// Progress bar component
 function QuizProgressBar({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
   const progress = ((currentStep + 1) / totalSteps) * 100;
   
   return (
-    <div className="w-full max-w-3xl mx-auto">
-      {/* Step indicators for desktop */}
-      <div className="hidden lg:flex justify-between mb-4 px-2">
+    <div className="w-full max-w-2xl mx-auto">
+      {/* Step indicators */}
+      <div className="hidden md:flex justify-between mb-3 px-1">
         {stepCategories.map((s, idx) => (
-          <motion.div 
-            key={idx}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05 }}
-            className="flex flex-col items-center"
-          >
+          <div key={idx} className="flex flex-col items-center">
             <div className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium mb-1.5 transition-all',
+              'w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium mb-1 transition-all',
               idx === currentStep 
-                ? 'bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30' 
+                ? 'bg-primary text-primary-foreground' 
                 : idx < currentStep 
                   ? 'bg-primary/20 text-primary' 
                   : 'bg-muted text-muted-foreground'
             )}>
-              {idx < currentStep ? <Check className="w-4 h-4" /> : idx + 1}
+              {idx < currentStep ? <Check className="w-3.5 h-3.5" /> : idx + 1}
             </div>
             <span className={cn(
               'text-[10px] font-medium transition-colors text-center',
-              idx === currentStep ? 'text-primary' : 
-              idx < currentStep ? 'text-muted-foreground' : 'text-muted-foreground/50'
+              idx === currentStep ? 'text-primary' : 'text-muted-foreground/60'
             )}>
               {s.label}
             </span>
-          </motion.div>
+          </div>
         ))}
       </div>
       
-      {/* Progress bar with glow effect */}
-      <div className="relative h-2 bg-muted rounded-full overflow-hidden shadow-inner">
+      {/* Progress bar */}
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
         <motion.div 
-          className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary via-primary to-accent rounded-full"
+          className="h-full bg-primary rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-        />
-        {/* Glow effect */}
-        <motion.div 
-          className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary via-primary to-accent rounded-full blur-sm opacity-50"
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
         />
       </div>
       
       {/* Mobile step indicator */}
-      <div className="lg:hidden text-center mt-4">
-        <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-muted/50">
-          <span className="text-sm font-medium text-primary">
-            Step {currentStep + 1}
-          </span>
-          <span className="text-muted-foreground">/</span>
-          <span className="text-sm text-muted-foreground">
-            {totalSteps}
-          </span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-sm font-medium text-foreground">
-            {stepCategories[currentStep]?.label}
-          </span>
-        </div>
+      <div className="md:hidden text-center mt-3">
+        <span className="text-sm text-muted-foreground">
+          Step {currentStep + 1} of {totalSteps} · {stepCategories[currentStep]?.label}
+        </span>
       </div>
     </div>
   );
@@ -713,8 +450,6 @@ function QuizProgressBar({ currentStep, totalSteps }: { currentStep: number; tot
 export default function Quiz() {
   const [hasStarted, setHasStarted] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
-  const [showMotifs, setShowMotifs] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [isComplete, setIsComplete] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -724,7 +459,6 @@ export default function Quiz() {
   const navigate = useNavigate();
 
   const stepQuestions = getQuestionsForStep(currentStep + 1);
-  const currentCategory = stepCategories[currentStep]?.category || 'Identity';
 
   // Initialize quiz session when user is available and quiz starts
   useEffect(() => {
@@ -792,7 +526,6 @@ export default function Quiz() {
   };
 
   const canProceed = () => {
-    // Check if all required questions for this step have answers
     const requiredQuestions = stepQuestions.filter(q => !q.optional);
     return requiredQuestions.every(q => {
       const answer = answers[q.id];
@@ -806,9 +539,6 @@ export default function Quiz() {
   const handleNext = async () => {
     if (currentStep < totalSteps - 1) {
       const nextStep = currentStep + 1;
-      setDirection(1);
-      setShowMotifs(true);
-      setTimeout(() => setShowMotifs(false), 1500);
       setCurrentStep(nextStep);
       
       // Update session progress
@@ -851,9 +581,6 @@ export default function Quiz() {
 
   const handleBack = () => {
     if (currentStep > 0) {
-      setDirection(-1);
-      setShowMotifs(true);
-      setTimeout(() => setShowMotifs(false), 1500);
       setCurrentStep(currentStep - 1);
     }
   };
@@ -869,64 +596,9 @@ export default function Quiz() {
         description="Take our comprehensive quiz to get personalized travel recommendations tailored to your unique preferences."
       />
       
-      <div className="min-h-screen flex flex-col relative overflow-hidden">
-        {/* Enhanced background with animated elements */}
-        <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5 -z-10" />
-        
-        {/* Floating orbs */}
-        <motion.div 
-          className="fixed top-20 left-[10%] w-72 h-72 bg-primary/15 rounded-full blur-3xl -z-10"
-          animate={{
-            x: [0, 30, 0],
-            y: [0, -20, 0],
-            scale: [1, 1.1, 1],
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div 
-          className="fixed top-1/3 right-[5%] w-96 h-96 bg-accent/10 rounded-full blur-3xl -z-10"
-          animate={{
-            x: [0, -20, 0],
-            y: [0, 30, 0],
-            scale: [1, 0.9, 1],
-          }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div 
-          className="fixed bottom-20 left-1/3 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-10"
-          animate={{
-            x: [0, 40, 0],
-            y: [0, -30, 0],
-          }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        />
-        
-        {/* Sparkle particles */}
-        {hasStarted && !isComplete && (
-          <div className="fixed inset-0 pointer-events-none -z-5 overflow-hidden">
-            {[...Array(12)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute w-1 h-1 bg-primary/40 rounded-full"
-                style={{
-                  left: `${10 + (i * 7) % 80}%`,
-                  top: `${5 + (i * 11) % 90}%`,
-                }}
-                animate={{
-                  opacity: [0, 1, 0],
-                  scale: [0, 1.5, 0],
-                  y: [0, -30, -60],
-                }}
-                transition={{
-                  duration: 3,
-                  repeat: Infinity,
-                  delay: i * 0.4,
-                  ease: "easeOut"
-                }}
-              />
-            ))}
-          </div>
-        )}
+      <div className="min-h-screen flex flex-col">
+        {/* Subtle background gradient */}
+        <div className="fixed inset-0 bg-gradient-to-br from-primary/3 via-background to-accent/3 -z-10" />
         
         <AnimatePresence mode="wait">
           {!hasStarted ? (
@@ -934,10 +606,9 @@ export default function Quiz() {
           ) : isComplete ? (
             <motion.div
               key="completion"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              transition={{ duration: 0.5 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               className="flex-1 pt-28"
             >
               <QuizCompletion onContinue={handleComplete} />
@@ -948,150 +619,61 @@ export default function Quiz() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex-1 flex flex-col pt-32 pb-8"
+              className="flex-1 flex flex-col pt-28 pb-8"
             >
               {/* Progress */}
-              <div className="px-4 mb-10">
+              <div className="px-4 mb-8">
                 <QuizProgressBar currentStep={currentStep} totalSteps={totalSteps} />
               </div>
               
-              {/* Questions for this step with page-flip transitions */}
-              <div className="flex-1 flex items-start justify-center px-4 overflow-y-auto perspective-1000">
-                {/* Floating themed motifs */}
-                <FloatingMotifs category={currentCategory} isActive={showMotifs} />
-                
-                <AnimatePresence mode="wait" custom={direction}>
+              {/* Questions */}
+              <div className="flex-1 flex items-start justify-center px-4 overflow-y-auto">
+                <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
-                    custom={direction}
-                    variants={pageFlipVariants}
-                    initial="enter"
-                    animate="center"
-                    exit="exit"
-                    transition={{ 
-                      type: 'spring',
-                      stiffness: 300,
-                      damping: 30,
-                      mass: 0.8,
-                    }}
-                    style={{ transformStyle: 'preserve-3d' }}
-                    className="max-w-2xl w-full space-y-12 relative"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="max-w-2xl w-full space-y-10"
                   >
-                    {/* Storybook page effect - paper texture feel */}
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="absolute -inset-8 bg-gradient-to-br from-background via-background to-muted/30 rounded-3xl -z-10 shadow-2xl"
-                    />
-                    
-                    {/* Step transition sparkle burst */}
-                    <motion.div
-                      initial={{ opacity: 1, scale: 0 }}
-                      animate={{ opacity: 0, scale: 3 }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                    >
-                      <div className={`w-24 h-24 bg-gradient-to-br ${categoryMotifs[currentCategory]?.color || 'from-primary/20 to-accent/20'} rounded-full blur-2xl`} />
-                    </motion.div>
-                    
                     {stepQuestions.map((question, qIdx) => (
-                      <div key={question.id} className={qIdx > 0 ? 'pt-10 border-t border-border/30' : ''}>
-                        {/* Question header with staggered reveal */}
-                        <motion.div 
-                          className="text-center mb-10"
-                          initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ 
-                            delay: 0.15 + qIdx * 0.1,
-                            type: 'spring',
-                            stiffness: 300,
-                            damping: 25
-                          }}
-                        >
-                          {/* Animated category badge */}
-                          <motion.div 
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 text-primary text-xs font-semibold uppercase tracking-wider mb-5 border border-primary/20"
-                            initial={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: 0.2 + qIdx * 0.1, type: 'spring', stiffness: 400 }}
-                          >
-                            <motion.span
-                              animate={{ rotate: [0, 10, -10, 0] }}
-                              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: qIdx * 0.5 }}
-                            >
-                              {question.icon}
-                            </motion.span>
+                      <div key={question.id} className={qIdx > 0 ? 'pt-8 border-t border-border' : ''}>
+                        {/* Question header */}
+                        <div className="text-center mb-8">
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider mb-4">
+                            {question.icon}
                             {question.category}
-                          </motion.div>
+                          </div>
                           
-                          {/* Title with letter animation feel */}
-                          <motion.h1 
-                            className="text-2xl md:text-4xl font-serif font-bold text-foreground mb-3 leading-tight"
-                            initial={{ opacity: 0, y: 15 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.25 + qIdx * 0.1 }}
-                          >
+                          <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2">
                             {question.title}
-                          </motion.h1>
+                          </h1>
                           
-                          <motion.p 
-                            className="text-muted-foreground text-lg"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.35 + qIdx * 0.1 }}
-                          >
+                          <p className="text-muted-foreground">
                             {question.subtitle}
-                            {question.optional && <span className="text-xs ml-2 text-muted-foreground/60">(optional)</span>}
-                          </motion.p>
-                        </motion.div>
+                            {question.optional && <span className="text-xs ml-2 opacity-60">(optional)</span>}
+                          </p>
+                        </div>
                         
-                        {/* Options with cascade reveal */}
-                        <motion.div 
-                          className={cn(
-                            'grid gap-4',
-                            question.options.length > 4 ? 'md:grid-cols-2' : ''
-                          )}
-                          initial="hidden"
-                          animate="visible"
-                          variants={{
-                            hidden: {},
-                            visible: {
-                              transition: {
-                                staggerChildren: 0.06,
-                                delayChildren: 0.3 + qIdx * 0.15,
-                              }
-                            }
-                          }}
-                        >
+                        {/* Options */}
+                        <div className={cn(
+                          'grid gap-3',
+                          question.options.length > 4 ? 'md:grid-cols-2' : ''
+                        )}>
                           {question.options.map((option, index) => (
-                            <motion.div
+                            <QuizOptionCard
                               key={option.value}
-                              variants={{
-                                hidden: { opacity: 0, y: 20, scale: 0.95 },
-                                visible: { 
-                                  opacity: 1, 
-                                  y: 0, 
-                                  scale: 1,
-                                  transition: {
-                                    type: 'spring',
-                                    stiffness: 400,
-                                    damping: 30,
-                                  }
-                                }
-                              }}
-                            >
-                              <QuizOptionCard
-                                value={option.value}
-                                label={option.label}
-                                description={option.description}
-                                isSelected={isSelected(question.id, option.value)}
-                                onSelect={(val) => handleSelect(question.id, val, !!question.multiSelect)}
-                                index={index}
-                                isMultiSelect={question.multiSelect}
-                              />
-                            </motion.div>
+                              value={option.value}
+                              label={option.label}
+                              description={option.description}
+                              isSelected={isSelected(question.id, option.value)}
+                              onSelect={(val) => handleSelect(question.id, val, !!question.multiSelect)}
+                              index={index}
+                              isMultiSelect={question.multiSelect}
+                            />
                           ))}
-                        </motion.div>
+                        </div>
                       </div>
                     ))}
                   </motion.div>
@@ -1099,31 +681,26 @@ export default function Quiz() {
               </div>
               
               {/* Navigation */}
-              <motion.div 
-                className="max-w-2xl mx-auto w-full px-4 mt-10 pt-6 border-t border-border/30"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
+              <div className="max-w-2xl mx-auto w-full px-4 mt-8 pt-6 border-t border-border">
                 <div className="flex justify-between items-center">
                   <Button
                     variant="ghost"
                     onClick={handleBack}
                     disabled={currentStep === 0}
-                    className="gap-2 h-12 px-6 text-muted-foreground hover:text-foreground"
+                    className="gap-2 h-11"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     Back
                   </Button>
                   
-                  <div className="hidden sm:flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-1.5">
                     {[...Array(totalSteps)].map((_, idx) => (
                       <div 
                         key={idx}
                         className={cn(
-                          'w-2 h-2 rounded-full transition-all',
+                          'w-1.5 h-1.5 rounded-full transition-all',
                           idx === currentStep 
-                            ? 'bg-primary w-6' 
+                            ? 'bg-primary w-4' 
                             : idx < currentStep 
                               ? 'bg-primary/40' 
                               : 'bg-muted'
@@ -1135,12 +712,12 @@ export default function Quiz() {
                   <Button
                     onClick={handleNext}
                     disabled={!canProceed() || isSubmitting}
-                    className="gap-2 h-12 px-8 shadow-lg shadow-primary/20"
+                    className="gap-2 h-11 px-6"
                   >
                     {isSubmitting ? (
                       <>
                         <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
-                        Analyzing...
+                        Saving...
                       </>
                     ) : (
                       <>
@@ -1150,7 +727,7 @@ export default function Quiz() {
                     )}
                   </Button>
                 </div>
-              </motion.div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

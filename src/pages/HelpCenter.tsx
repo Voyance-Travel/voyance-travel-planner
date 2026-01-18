@@ -14,8 +14,33 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CONTACT_CONFIG } from '@/config/contact';
+import { ROUTES } from '@/config/routes';
+
+// Define routes for each article
+const articleRoutes: Record<string, string> = {
+  // Getting Started
+  'create-account': ROUTES.SIGNUP,
+  'travel-dna-quiz': ROUTES.QUIZ,
+  'profile-guide': ROUTES.PROFILE.VIEW,
+  'browse-destinations': ROUTES.DESTINATIONS,
+  // Trip Planning
+  'first-itinerary': ROUTES.START,
+  'customize-activities': ROUTES.PLANNER.ITINERARY,
+  'add-companions': ROUTES.START,
+  'share-trips': ROUTES.TRIP.DASHBOARD,
+  // Booking & Payments
+  'booking-guide': ROUTES.HOW_IT_WORKS,
+  'payment-methods': ROUTES.FAQ,
+  'cancellations': ROUTES.FAQ,
+  'refunds': ROUTES.CONTACT,
+  // Account Settings
+  'edit-profile': ROUTES.PROFILE.EDIT,
+  'retake-quiz': ROUTES.QUIZ,
+  'notifications': ROUTES.PROFILE.SETTINGS,
+  'delete-account': ROUTES.CONTACT,
+};
 
 const helpCategories = [
   {
@@ -67,21 +92,57 @@ const helpCategories = [
 const quickAnswers = [
   { 
     question: 'How do I change my itinerary after booking?', 
-    answer: 'You can modify most activities up to 48 hours before your trip starts.'
+    answer: 'You can modify most activities up to 48 hours before your trip starts. Go to your Trip Dashboard, select the trip, and click on any activity to make changes.'
   },
   { 
     question: 'Is my payment information secure?', 
-    answer: 'Yes, we use industry-standard encryption and never store full card details.'
+    answer: 'Yes, we use industry-standard encryption and never store full card details. All payments are processed through secure, PCI-compliant payment processors.'
   },
   { 
     question: 'Can I plan a trip for a group?', 
-    answer: 'Absolutely! Add companions during planning and share the itinerary with them.'
+    answer: 'Absolutely! Add companions during planning and share the itinerary with them. Each person can view the trip details and make suggestions.'
+  },
+  { 
+    question: 'How does the Travel DNA quiz work?', 
+    answer: 'Our quiz takes about 5 minutes and asks about your travel preferences, budget, interests, and style. We use this to personalize all your recommendations.'
+  },
+  { 
+    question: 'Can I retake the quiz?', 
+    answer: 'Yes! You can retake the Travel DNA quiz anytime from your profile settings. Your preferences will be updated based on your new answers.'
   },
 ];
 
 export default function HelpCenter() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const navigate = useNavigate();
+
+  const handleArticleClick = (slug: string) => {
+    const route = articleRoutes[slug];
+    if (route) {
+      navigate(route);
+    }
+  };
+
+  const handleCategoryViewAll = (categoryTitle: string) => {
+    // Navigate to relevant section based on category
+    switch (categoryTitle) {
+      case 'Getting Started':
+        navigate(ROUTES.HOW_IT_WORKS);
+        break;
+      case 'Trip Planning':
+        navigate(ROUTES.START);
+        break;
+      case 'Booking & Payments':
+        navigate(ROUTES.FAQ);
+        break;
+      case 'Account Settings':
+        navigate(ROUTES.PROFILE.VIEW);
+        break;
+      default:
+        navigate(ROUTES.FAQ);
+    }
+  };
 
   return (
     <MainLayout>
@@ -144,7 +205,7 @@ export default function HelpCenter() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="bg-card border border-border rounded-2xl p-6 hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer group"
+                  className="bg-card border border-border rounded-2xl p-6 hover:border-primary/50 hover:shadow-lg transition-all group"
                 >
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                     <Icon className="h-6 w-6 text-primary" />
@@ -154,14 +215,20 @@ export default function HelpCenter() {
                   <ul className="space-y-2">
                     {category.articles.slice(0, 3).map((article) => (
                       <li key={article.slug}>
-                        <button className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 group/item w-full text-left">
+                        <button 
+                          onClick={() => handleArticleClick(article.slug)}
+                          className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 group/item w-full text-left transition-colors"
+                        >
                           <ChevronRight className="h-3 w-3 group-hover/item:translate-x-0.5 transition-transform" />
                           {article.title}
                         </button>
                       </li>
                     ))}
                   </ul>
-                  <button className="mt-4 text-sm text-primary font-medium flex items-center gap-1 hover:gap-2 transition-all">
+                  <button 
+                    onClick={() => handleCategoryViewAll(category.title)}
+                    className="mt-4 text-sm text-primary font-medium flex items-center gap-1 hover:gap-2 transition-all"
+                  >
                     View all
                     <ArrowRight className="h-4 w-4" />
                   </button>

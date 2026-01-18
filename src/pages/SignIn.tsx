@@ -5,7 +5,7 @@ import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { Compass, Sparkles } from 'lucide-react';
+import { Compass, Sparkles, MapPin, Star, Plane } from 'lucide-react';
 
 export default function SignIn() {
   const [searchParams] = useSearchParams();
@@ -29,55 +29,35 @@ export default function SignIn() {
         description="Sign in to your Voyance account to continue planning your personalized travel experiences."
       />
       <div className="min-h-screen flex">
-        {/* Left: Editorial image - full height */}
+        {/* Left: Editorial image */}
         <motion.div
           className="relative hidden lg:flex lg:w-1/2 xl:w-3/5"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 1 }}
+          transition={{ duration: 0.8 }}
         >
           <HeroImageWithFallback
             src={heroImage.src}
             alt={heroImage.alt}
             fallbackSources={heroImage.fallbacks}
-            overlayGradient="from-black/30 via-black/20 to-black/60"
+            overlayGradient="from-black/40 via-black/20 to-black/60"
             className="h-full object-cover"
           />
           
-          {/* Floating elements */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(5)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute w-1 h-1 bg-white/40 rounded-full"
-                style={{
-                  left: `${20 + i * 15}%`,
-                  top: `${30 + i * 10}%`,
-                }}
-                animate={{
-                  y: [0, -20, 0],
-                  opacity: [0.3, 0.6, 0.3],
-                }}
-                transition={{
-                  duration: 3 + i * 0.5,
-                  repeat: Infinity,
-                  delay: i * 0.3,
-                }}
-              />
-            ))}
-          </div>
-          
           {/* Editorial overlay content */}
-          <div className="absolute inset-0 flex flex-col justify-between p-12">
+          <div className="absolute inset-0 flex flex-col justify-between p-10 lg:p-12">
             {/* Top: Logo */}
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.6 }}
             >
-              <Link to="/" className="inline-flex items-center gap-2">
+              <Link to="/" className="inline-flex items-center gap-2 group">
+                <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/20 transition-colors">
+                  <Compass className="w-5 h-5 text-white" />
+                </div>
                 <span className="text-2xl font-display font-bold text-white">
-                  <span className="text-primary">V</span>oyance
+                  Voyance
                 </span>
               </Link>
             </motion.div>
@@ -90,10 +70,10 @@ export default function SignIn() {
                 transition={{ delay: 0.5, duration: 0.8 }}
                 className="mb-8"
               >
-                <p className="text-2xl md:text-3xl font-display font-light text-white leading-relaxed mb-4">
-                  "The world is a book, and those who do not travel read only one page."
+                <p className="text-3xl lg:text-4xl font-display font-light text-white leading-snug mb-4">
+                  "Travel isn't always pretty. It isn't always comfortable. But that's okay. The journey changes you."
                 </p>
-                <footer className="text-white/70 text-sm">— Saint Augustine</footer>
+                <footer className="text-white/70 text-sm font-medium">— Anthony Bourdain</footer>
               </motion.blockquote>
               
               <motion.div
@@ -102,13 +82,17 @@ export default function SignIn() {
                 transition={{ delay: 0.7, duration: 0.6 }}
                 className="flex flex-wrap gap-3"
               >
-                {['AI-Powered Itineraries', 'Personalized Experiences', 'Seamless Booking'].map((feature, i) => (
+                {[
+                  { icon: Sparkles, text: 'AI-Powered Itineraries' },
+                  { icon: MapPin, text: 'Personalized Experiences' },
+                  { icon: Plane, text: 'Seamless Booking' },
+                ].map((feature) => (
                   <span
-                    key={feature}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-white/90 text-sm"
+                    key={feature.text}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white/90 text-sm font-medium"
                   >
-                    <Sparkles className="w-3 h-3" />
-                    {feature}
+                    <feature.icon className="w-4 h-4" />
+                    {feature.text}
                   </span>
                 ))}
               </motion.div>
@@ -117,12 +101,15 @@ export default function SignIn() {
         </motion.div>
 
         {/* Right: Form */}
-        <div className="w-full lg:w-1/2 xl:w-2/5 flex flex-col">
+        <div className="w-full lg:w-1/2 xl:w-2/5 flex flex-col bg-background">
           {/* Mobile logo */}
-          <div className="lg:hidden p-6">
+          <div className="lg:hidden p-6 border-b border-border">
             <Link to="/" className="inline-flex items-center gap-2">
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Compass className="w-5 h-5 text-primary" />
+              </div>
               <span className="text-xl font-display font-bold text-foreground">
-                <span className="text-primary">V</span>oyance
+                Voyance
               </span>
             </Link>
           </div>
@@ -131,7 +118,7 @@ export default function SignIn() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex-1 flex flex-col justify-center px-8 md:px-12 lg:px-16 py-12"
+            className="flex-1 flex flex-col justify-center px-8 md:px-12 lg:px-14 xl:px-16 py-12"
           >
             {authLoading ? (
               <div className="flex flex-col items-center justify-center py-20">
@@ -144,55 +131,55 @@ export default function SignIn() {
               </div>
             ) : (
               <>
-                {/* Icon */}
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-8"
-                >
-                  <Compass className="w-7 h-7 text-primary" />
-                </motion.div>
-                
-                {isRedirectedFromProtected ? (
+                {/* Welcome header */}
+                <div className="mb-8">
                   <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="mb-8"
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-6"
                   >
-                    <h1 className="text-2xl md:text-3xl font-display font-semibold text-foreground mb-3">
-                      Sign in to continue
-                    </h1>
-                    <p className="text-muted-foreground">
-                      You need to sign in to access{' '}
-                      {nextPath === '/profile' ? 'your profile' : 'this page'}.
-                    </p>
+                    <Star className="w-6 h-6 text-primary" />
                   </motion.div>
-                ) : (
-                  <motion.div
-                    className="mb-8"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <h1 className="text-2xl md:text-3xl font-display font-semibold text-foreground mb-3">
-                      Welcome back
-                    </h1>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Sign in to continue your personalized travel planning journey
-                    </p>
-                  </motion.div>
-                )}
+                  
+                  {isRedirectedFromProtected ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+                        Sign in to continue
+                      </h1>
+                      <p className="text-muted-foreground text-lg">
+                        You need to sign in to access{' '}
+                        {nextPath === '/profile' ? 'your profile' : 'this page'}.
+                      </p>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+                        Welcome back
+                      </h1>
+                      <p className="text-muted-foreground text-lg">
+                        Sign in to continue your travel planning journey
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
                 
                 <SignInForm />
                 
-                {/* Bottom decorative */}
+                {/* Bottom legal */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.8 }}
-                  className="mt-12 pt-8 border-t border-border"
+                  className="mt-10 pt-8 border-t border-border"
                 >
                   <p className="text-xs text-muted-foreground text-center">
                     By signing in, you agree to our{' '}

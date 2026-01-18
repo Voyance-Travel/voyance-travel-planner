@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, ChevronDown, Loader2 } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, Loader2, Sparkles, Globe, Star } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -15,8 +15,6 @@ import { cn } from '@/lib/utils';
 import { 
   searchAirports, 
   searchDestinations, 
-  getMajorAirports,
-  getFeaturedDestinations,
   formatAirportDisplay,
   formatDestinationDisplay,
   type Airport,
@@ -33,7 +31,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// Airport Autocomplete - connects to Neon DB
+// Airport Autocomplete
 function AirportAutocomplete({
   value,
   onChange,
@@ -50,7 +48,6 @@ function AirportAutocomplete({
   
   const debouncedQuery = useDebounce(inputValue, 300);
 
-  // Only search when user has typed something
   useEffect(() => {
     if (debouncedQuery.length >= 1) {
       setLoading(true);
@@ -69,11 +66,13 @@ function AirportAutocomplete({
     setIsOpen(false);
   };
 
-  // Only show dropdown when user is typing and has results
   const showDropdown = isOpen && inputValue.length >= 1;
 
   return (
     <div className="relative">
+      <div className="absolute left-4 top-1/2 -translate-y-1/2">
+        <Plane className="h-5 w-5 text-primary/60" />
+      </div>
       <Input
         placeholder={placeholder}
         value={inputValue}
@@ -86,7 +85,7 @@ function AirportAutocomplete({
           if (inputValue.length >= 1) setIsOpen(true);
         }}
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className="h-14 text-lg bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40"
+        className="h-14 pl-12 text-lg bg-background border-border focus:border-primary"
       />
       {showDropdown && (
         <motion.div 
@@ -127,7 +126,7 @@ function AirportAutocomplete({
   );
 }
 
-// Destination Autocomplete - connects to Neon DB
+// Destination Autocomplete
 function DestinationAutocomplete({
   value,
   onChange,
@@ -144,7 +143,6 @@ function DestinationAutocomplete({
   
   const debouncedQuery = useDebounce(inputValue, 300);
 
-  // Only search when user has typed something
   useEffect(() => {
     if (debouncedQuery.length >= 1) {
       setLoading(true);
@@ -163,11 +161,13 @@ function DestinationAutocomplete({
     setIsOpen(false);
   };
 
-  // Only show dropdown when user is typing and has results
   const showDropdown = isOpen && inputValue.length >= 1;
 
   return (
     <div className="relative">
+      <div className="absolute left-4 top-1/2 -translate-y-1/2">
+        <MapPin className="h-5 w-5 text-primary/60" />
+      </div>
       <Input
         placeholder={placeholder}
         value={inputValue}
@@ -180,7 +180,7 @@ function DestinationAutocomplete({
           if (inputValue.length >= 1) setIsOpen(true);
         }}
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className="h-14 text-lg bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40"
+        className="h-14 pl-12 text-lg bg-background border-border focus:border-primary"
       />
       {showDropdown && (
         <motion.div 
@@ -228,10 +228,10 @@ function DestinationAutocomplete({
 
 // Inspiration destinations
 const inspirationDestinations = [
-  { name: 'Santorini', country: 'Greece', image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400' },
-  { name: 'Kyoto', country: 'Japan', image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400' },
-  { name: 'Marrakech', country: 'Morocco', image: 'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=400' },
-  { name: 'Bali', country: 'Indonesia', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400' },
+  { name: 'Santorini', country: 'Greece', image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400', tagline: 'Iconic sunsets' },
+  { name: 'Kyoto', country: 'Japan', image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400', tagline: 'Ancient temples' },
+  { name: 'Marrakech', country: 'Morocco', image: 'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=400', tagline: 'Vibrant souks' },
+  { name: 'Bali', country: 'Indonesia', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400', tagline: 'Tropical paradise' },
 ];
 
 export default function Start() {
@@ -273,8 +273,8 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* Hero with background - adjusted padding for header */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-24">
+      {/* Hero Section */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
         {/* Background Image */}
         <div className="absolute inset-0">
           <img 
@@ -282,88 +282,61 @@ export default function Start() {
             alt=""
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
-          
-          {/* Animated particles */}
-          <div className="absolute inset-0 overflow-hidden">
-            {[...Array(8)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute w-1 h-1 bg-white/30 rounded-full"
-                style={{
-                  left: `${10 + i * 12}%`,
-                  top: `${20 + (i % 3) * 25}%`,
-                }}
-                animate={{
-                  y: [0, -30, 0],
-                  opacity: [0.2, 0.5, 0.2],
-                }}
-                transition={{
-                  duration: 4 + i * 0.5,
-                  repeat: Infinity,
-                  delay: i * 0.4,
-                }}
-              />
-            ))}
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70" />
         </div>
 
         {/* Content */}
-        <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-16 md:py-24">
+        <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-24">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="text-center mb-10"
+            className="text-center mb-12"
           >
-            {/* Tagline chip */}
+            {/* Badge */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2 }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white/90 text-sm mb-6"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white/90 text-sm mb-8"
             >
-              <Plane className="w-4 h-4" />
+              <Sparkles className="w-4 h-4 text-primary" />
               AI-Powered Trip Planning
             </motion.div>
             
-            <h1 className="font-display text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
+            <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
               Your Next Adventure
               <br />
-              <span className="bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
-                Starts Here
-              </span>
+              <span className="text-primary">Starts Here</span>
             </h1>
-            <p className="text-lg md:text-xl text-white/80 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-xl text-white/80 max-w-2xl mx-auto">
               Tell us where you dream of going. We'll craft an itinerary as unique as you are.
             </p>
           </motion.div>
 
-          {/* Planning Form */}
+          {/* Planning Form Card */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className="bg-white/10 backdrop-blur-xl rounded-3xl p-6 md:p-8 border border-white/20"
+            className="bg-card/95 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 border border-border"
           >
-            <div className="grid md:grid-cols-2 gap-4 mb-4">
+            <div className="grid md:grid-cols-2 gap-5 mb-5">
               {/* Origin */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  <Plane className="inline h-4 w-4 mr-1" />
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Flying from
                 </label>
                 <AirportAutocomplete
                   value={origin}
                   onChange={setOrigin}
-                  placeholder="Your departure city or airport"
+                  placeholder="Your departure city"
                 />
               </div>
               
               {/* Destination */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  <MapPin className="inline h-4 w-4 mr-1" />
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Flying to
                 </label>
                 <DestinationAutocomplete
@@ -377,7 +350,7 @@ export default function Start() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {/* Start Date */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Departure
                 </label>
                 <Popover>
@@ -385,11 +358,11 @@ export default function Start() {
                     <Button
                       variant="outline"
                       className={cn(
-                        "w-full h-14 justify-between text-left font-normal bg-white/10 border-white/20 text-white hover:bg-white/20",
-                        !startDate && "text-white/60"
+                        "w-full h-14 justify-between text-left font-normal",
+                        !startDate && "text-muted-foreground"
                       )}
                     >
-                      {startDate ? format(startDate, "MMM d") : "When?"}
+                      {startDate ? format(startDate, "MMM d, yyyy") : "Select date"}
                       <CalendarIcon className="h-4 w-4 opacity-60" />
                     </Button>
                   </PopoverTrigger>
@@ -413,7 +386,7 @@ export default function Start() {
               
               {/* End Date */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Return
                 </label>
                 <Popover>
@@ -421,11 +394,11 @@ export default function Start() {
                     <Button
                       variant="outline"
                       className={cn(
-                        "w-full h-14 justify-between text-left font-normal bg-white/10 border-white/20 text-white hover:bg-white/20",
-                        !endDate && "text-white/60"
+                        "w-full h-14 justify-between text-left font-normal",
+                        !endDate && "text-muted-foreground"
                       )}
                     >
-                      {endDate ? format(endDate, "MMM d") : "When?"}
+                      {endDate ? format(endDate, "MMM d, yyyy") : "Select date"}
                       <CalendarIcon className="h-4 w-4 opacity-60" />
                     </Button>
                   </PopoverTrigger>
@@ -447,40 +420,41 @@ export default function Start() {
 
               {/* Travelers */}
               <div className="col-span-2 md:col-span-1">
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Travelers
                 </label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
-                      className="w-full h-14 justify-between text-left font-normal bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      className="w-full h-14 justify-between text-left font-normal"
                     >
                       <span className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
+                        <Users className="h-4 w-4 text-primary/60" />
                         {travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}
                       </span>
-                      <ChevronDown className="h-4 w-4 opacity-60" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-48" align="start">
+                  <PopoverContent className="w-56 p-4" align="start">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Travelers</span>
+                      <span className="font-medium">Travelers</span>
                       <div className="flex items-center gap-3">
                         <Button
-                          size="icon"
                           variant="outline"
-                          className="h-8 w-8"
+                          size="sm"
+                          className="h-8 w-8 p-0"
                           onClick={() => setTravelers(Math.max(1, travelers - 1))}
+                          disabled={travelers <= 1}
                         >
                           -
                         </Button>
-                        <span className="w-6 text-center font-semibold">{travelers}</span>
+                        <span className="w-6 text-center font-medium">{travelers}</span>
                         <Button
-                          size="icon"
                           variant="outline"
-                          className="h-8 w-8"
-                          onClick={() => setTravelers(Math.min(12, travelers + 1))}
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => setTravelers(Math.min(10, travelers + 1))}
+                          disabled={travelers >= 10}
                         >
                           +
                         </Button>
@@ -489,93 +463,97 @@ export default function Start() {
                   </PopoverContent>
                 </Popover>
               </div>
-
-              {/* Submit */}
+              
+              {/* Start Button */}
               <div className="col-span-2 md:col-span-1">
-                <label className="block text-sm font-medium text-white/80 mb-2 opacity-0">
-                  Action
-                </label>
+                <label className="block text-sm font-medium text-transparent mb-2">Action</label>
                 <Button
-                  onClick={handleStart}
                   size="lg"
-                  className="w-full h-14 text-base font-semibold gap-2"
+                  onClick={handleStart}
                   disabled={!isFormValid}
+                  className="w-full h-14 text-lg gap-2"
                 >
-                  Let's Go
+                  Start Planning
                   <ArrowRight className="h-5 w-5" />
                 </Button>
               </div>
             </div>
-
-            <p className="text-center text-white/50 text-sm">
-              No account needed. Save your trip anytime.
-            </p>
-          </motion.div>
-
-          {/* Inspiration */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="mt-12"
-          >
-            <p className="text-center text-white/60 text-sm mb-4">Need inspiration?</p>
-            <div className="flex flex-wrap justify-center gap-3">
-              {inspirationDestinations.map((dest) => (
-                <button
-                  key={dest.name}
-                  onClick={() => selectInspiration(dest)}
-                  className="group relative overflow-hidden rounded-full bg-white/10 hover:bg-white/20 transition-all border border-white/20 hover:border-white/40"
-                >
-                  <div className="flex items-center gap-2 px-4 py-2">
-                    <div className="w-6 h-6 rounded-full overflow-hidden">
-                      <img src={dest.image} alt="" className="w-full h-full object-cover" />
+            
+            {/* Inspiration */}
+            <div className="pt-6 border-t border-border">
+              <p className="text-sm text-muted-foreground mb-4">Need inspiration? Try one of these:</p>
+              <div className="flex flex-wrap gap-3">
+                {inspirationDestinations.map((dest) => (
+                  <button
+                    key={dest.name}
+                    onClick={() => selectInspiration(dest)}
+                    className="group flex items-center gap-3 px-4 py-2.5 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left"
+                  >
+                    <img 
+                      src={dest.image} 
+                      alt={dest.name}
+                      className="w-10 h-10 rounded-lg object-cover"
+                    />
+                    <div>
+                      <p className="font-medium text-sm group-hover:text-primary transition-colors">{dest.name}</p>
+                      <p className="text-xs text-muted-foreground">{dest.tagline}</p>
                     </div>
-                    <span className="text-white text-sm font-medium">{dest.name}</span>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))}
+              </div>
             </div>
           </motion.div>
         </div>
-
-        {/* Scroll indicator */}
-        <motion.div 
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-          animate={{ y: [0, 8, 0] }}
-          transition={{ repeat: Infinity, duration: 2 }}
-        >
-          <ChevronDown className="h-6 w-6 text-white/40" />
-        </motion.div>
       </section>
 
-      {/* Why Voyance - Quick value props */}
-      <section className="py-20 bg-background">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8 text-center">
+      {/* Why Voyance Section */}
+      <section className="py-24 bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+              Why Voyance?
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              We combine AI intelligence with human expertise to create unforgettable travel experiences
+            </p>
+          </motion.div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
             {[
-              { 
-                title: 'Personalized', 
-                desc: 'AI that learns your style and builds trips around your preferences.' 
+              {
+                icon: Sparkles,
+                title: 'AI-Powered Personalization',
+                description: 'Our AI learns your preferences and crafts itineraries tailored specifically to you.',
               },
-              { 
-                title: 'Effortless', 
-                desc: 'From flights to activities, everything curated in one place.' 
+              {
+                icon: Globe,
+                title: 'Curated Experiences',
+                description: 'Hand-picked activities, restaurants, and hidden gems recommended by local experts.',
               },
-              { 
-                title: 'Flexible', 
-                desc: 'Adjust anything, anytime. Your trip, your way.' 
+              {
+                icon: Star,
+                title: 'Seamless Booking',
+                description: 'Book flights, hotels, and activities all in one place with best-price guarantees.',
               },
-            ].map((item, i) => (
+            ].map((feature, index) => (
               <motion.div
-                key={item.title}
+                key={feature.title}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
+                transition={{ delay: index * 0.1 }}
+                className="text-center p-8 rounded-2xl bg-card border border-border"
               >
-                <h3 className="text-xl font-display font-semibold mb-2">{item.title}</h3>
-                <p className="text-muted-foreground">{item.desc}</p>
+                <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                  <feature.icon className="w-7 h-7 text-primary" />
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-3">{feature.title}</h3>
+                <p className="text-muted-foreground">{feature.description}</p>
               </motion.div>
             ))}
           </div>
