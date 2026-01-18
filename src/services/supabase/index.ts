@@ -14,5 +14,20 @@ export * from './friends';
 // Trips
 export * from './trips';
 
+// Destinations
+export * from './destinations';
+
+// Airports
+export * from './airports';
+
+// Activities
+export * from './activities';
+
+// Attractions
+export * from './attractions';
+
+// Guides
+export * from './guides';
+
 // Re-export supabase client for convenience
 export { supabase } from '@/integrations/supabase/client';
