@@ -269,6 +269,28 @@ const stepCategories = [
   { step: 10, category: 'Logistics', label: 'Logistics' },
 ];
 
+// Floating decorative motifs for visual interest
+const FloatingMotif = ({ icon, delay, x, y }: { icon: React.ReactNode; delay: number; x: string; y: string }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0 }}
+    animate={{ 
+      opacity: [0, 0.15, 0.15, 0],
+      scale: [0.8, 1, 1, 0.8],
+      y: [0, -15, -15, 0]
+    }}
+    transition={{ 
+      duration: 8, 
+      delay, 
+      repeat: Infinity,
+      ease: "easeInOut"
+    }}
+    className="absolute text-primary/20 pointer-events-none"
+    style={{ left: x, top: y }}
+  >
+    {icon}
+  </motion.div>
+);
+
 // Welcome/Intro Screen Component
 function QuizIntro({ onStart }: { onStart: () => void }) {
   return (
@@ -276,19 +298,42 @@ function QuizIntro({ onStart }: { onStart: () => void }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-[80vh] flex items-center justify-center px-4"
+      className="min-h-[80vh] flex items-center justify-center px-4 relative overflow-hidden"
     >
-      <div className="max-w-2xl mx-auto text-center">
-        {/* Animated compass icon */}
+      {/* Floating decorative elements */}
+      <FloatingMotif icon={<Plane className="w-8 h-8" />} delay={0} x="15%" y="20%" />
+      <FloatingMotif icon={<Globe className="w-10 h-10" />} delay={1.5} x="80%" y="25%" />
+      <FloatingMotif icon={<Mountain className="w-9 h-9" />} delay={3} x="10%" y="70%" />
+      <FloatingMotif icon={<Coffee className="w-7 h-7" />} delay={4.5} x="85%" y="65%" />
+      <FloatingMotif icon={<Luggage className="w-8 h-8" />} delay={2} x="75%" y="80%" />
+      <FloatingMotif icon={<Star className="w-6 h-6" />} delay={3.5} x="20%" y="45%" />
+      
+      <div className="max-w-2xl mx-auto text-center relative z-10">
+        {/* Animated compass icon with subtle glow */}
         <motion.div
           initial={{ scale: 0, rotate: -180 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.2 }}
           className="relative mx-auto mb-8"
         >
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-            <Compass className="w-12 h-12 text-primary" />
-          </div>
+          <motion.div
+            animate={{ 
+              boxShadow: [
+                '0 0 0 0 hsl(var(--primary) / 0.2)',
+                '0 0 30px 10px hsl(var(--primary) / 0.1)',
+                '0 0 0 0 hsl(var(--primary) / 0.2)'
+              ]
+            }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            className="w-28 h-28 rounded-full bg-gradient-to-br from-primary/20 via-primary/10 to-accent/20 flex items-center justify-center"
+          >
+            <motion.div
+              animate={{ rotate: [0, 10, 0, -10, 0] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Compass className="w-14 h-14 text-primary" />
+            </motion.div>
+          </motion.div>
         </motion.div>
         
         <motion.div
@@ -299,7 +344,7 @@ function QuizIntro({ onStart }: { onStart: () => void }) {
           <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
             Discover Your Travel DNA
           </h1>
-          <p className="text-lg text-muted-foreground mb-8 max-w-lg mx-auto">
+          <p className="text-lg text-muted-foreground mb-8 max-w-lg mx-auto leading-relaxed">
             Answer a few questions and we'll create personalized recommendations that match your unique travel style.
           </p>
         </motion.div>
@@ -311,24 +356,35 @@ function QuizIntro({ onStart }: { onStart: () => void }) {
           className="space-y-4"
         >
           <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mb-8">
-            <div className="flex items-center gap-2">
+            <motion.div 
+              className="flex items-center gap-2"
+              whileHover={{ scale: 1.05 }}
+            >
               <Clock className="w-4 h-4 text-primary" />
               <span>5 minutes</span>
-            </div>
-            <div className="flex items-center gap-2">
+            </motion.div>
+            <motion.div 
+              className="flex items-center gap-2"
+              whileHover={{ scale: 1.05 }}
+            >
               <Star className="w-4 h-4 text-primary" />
               <span>10 questions</span>
-            </div>
+            </motion.div>
           </div>
           
-          <Button
-            size="lg"
-            onClick={onStart}
-            className="h-14 px-10 text-lg shadow-lg shadow-primary/20"
+          <motion.div
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
           >
-            <Wand2 className="w-5 h-5 mr-2" />
-            Begin Discovery
-          </Button>
+            <Button
+              size="lg"
+              onClick={onStart}
+              className="h-14 px-10 text-lg shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-shadow"
+            >
+              <Wand2 className="w-5 h-5 mr-2" />
+              Begin Discovery
+            </Button>
+          </motion.div>
         </motion.div>
       </div>
     </motion.div>
@@ -357,39 +413,60 @@ function QuizOptionCard({
     <motion.button
       type="button"
       onClick={() => onSelect(value)}
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
+      transition={{ delay: index * 0.08, duration: 0.4, ease: "easeOut" }}
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
       className={cn(
-        'relative p-5 rounded-xl border-2 text-left transition-all w-full group',
+        'relative p-5 rounded-xl border-2 text-left transition-all w-full group overflow-hidden',
         isSelected
-          ? 'border-primary bg-primary/5 shadow-md'
-          : 'border-border bg-card hover:border-primary/40 hover:shadow-sm'
+          ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
+          : 'border-border bg-card hover:border-primary/40 hover:shadow-md'
       )}
     >
-      {/* Selection indicator */}
+      {/* Subtle gradient overlay on selection */}
+      {isSelected && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none"
+        />
+      )}
+      
+      {/* Selection indicator with animation */}
       <div className="absolute top-4 right-4">
-        <div className={cn(
-          'w-6 h-6 flex items-center justify-center transition-all',
-          isMultiSelect ? 'rounded-md' : 'rounded-full',
-          isSelected 
-            ? 'bg-primary' 
-            : 'border-2 border-border group-hover:border-primary/40'
-        )}>
-          {isSelected && <Check className="w-4 h-4 text-primary-foreground" />}
-        </div>
+        <motion.div 
+          animate={isSelected ? { scale: [1, 1.2, 1] } : {}}
+          transition={{ duration: 0.3 }}
+          className={cn(
+            'w-6 h-6 flex items-center justify-center transition-all',
+            isMultiSelect ? 'rounded-md' : 'rounded-full',
+            isSelected 
+              ? 'bg-primary shadow-md shadow-primary/30' 
+              : 'border-2 border-border group-hover:border-primary/40'
+          )}
+        >
+          {isSelected && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 400, damping: 20 }}
+            >
+              <Check className="w-4 h-4 text-primary-foreground" />
+            </motion.div>
+          )}
+        </motion.div>
       </div>
       
-      <div className="pr-10">
+      <div className="pr-10 relative z-10">
         <div className={cn(
           'font-semibold mb-1 transition-colors',
-          isSelected ? 'text-primary' : 'text-foreground'
+          isSelected ? 'text-primary' : 'text-foreground group-hover:text-primary/80'
         )}>
           {label}
         </div>
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground leading-relaxed">
           {description}
         </div>
       </div>
@@ -597,8 +674,18 @@ export default function Quiz() {
       />
       
       <div className="min-h-screen flex flex-col">
-        {/* Subtle background gradient */}
-        <div className="fixed inset-0 bg-gradient-to-br from-primary/3 via-background to-accent/3 -z-10" />
+        {/* Animated background gradient */}
+        <motion.div 
+          className="fixed inset-0 -z-10"
+          animate={{
+            background: [
+              'linear-gradient(135deg, hsl(var(--primary) / 0.03) 0%, hsl(var(--background)) 50%, hsl(var(--accent) / 0.03) 100%)',
+              'linear-gradient(135deg, hsl(var(--accent) / 0.03) 0%, hsl(var(--background)) 50%, hsl(var(--primary) / 0.03) 100%)',
+              'linear-gradient(135deg, hsl(var(--primary) / 0.03) 0%, hsl(var(--background)) 50%, hsl(var(--accent) / 0.03) 100%)',
+            ]
+          }}
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+        />
         
         <AnimatePresence mode="wait">
           {!hasStarted ? (
@@ -631,30 +718,43 @@ export default function Quiz() {
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
-                    initial={{ opacity: 0, x: 20 }}
+                    initial={{ opacity: 0, x: 30 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
+                    exit={{ opacity: 0, x: -30 }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
                     className="max-w-2xl w-full space-y-10"
                   >
                     {stepQuestions.map((question, qIdx) => (
                       <div key={question.id} className={qIdx > 0 ? 'pt-8 border-t border-border' : ''}>
-                        {/* Question header */}
-                        <div className="text-center mb-8">
-                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider mb-4">
-                            {question.icon}
+                        {/* Question header with subtle animation */}
+                        <motion.div 
+                          className="text-center mb-8"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.1 }}
+                        >
+                          <motion.div 
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider mb-4"
+                            whileHover={{ scale: 1.05 }}
+                          >
+                            <motion.span
+                              animate={{ rotate: [0, 5, 0, -5, 0] }}
+                              transition={{ duration: 4, repeat: Infinity }}
+                            >
+                              {question.icon}
+                            </motion.span>
                             {question.category}
-                          </div>
+                          </motion.div>
                           
-                          <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2">
+                          <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-3">
                             {question.title}
                           </h1>
                           
-                          <p className="text-muted-foreground">
+                          <p className="text-muted-foreground leading-relaxed">
                             {question.subtitle}
                             {question.optional && <span className="text-xs ml-2 opacity-60">(optional)</span>}
                           </p>
-                        </div>
+                        </motion.div>
                         
                         {/* Options */}
                         <div className={cn(
