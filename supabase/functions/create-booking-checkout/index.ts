@@ -20,12 +20,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
-  );
-
   try {
     logStep("Function started");
 
@@ -34,24 +28,50 @@ serve(async (req) => {
 
     if (!tripId) throw new Error("tripId is required");
 
-    // Authenticate user
+    // Authenticate user using getClaims for proper JWT validation
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header provided");
+    if (!authHeader?.startsWith("Bearer ")) {
+      logStep("Missing or invalid authorization header");
+      return new Response(JSON.stringify({ error: "Unauthorized: No valid authorization header" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } }
+    );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
     
-    const user = userData.user;
-    if (!user?.email) throw new Error("User not authenticated");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    if (claimsError || !claimsData?.claims?.sub) {
+      logStep("JWT validation failed", { error: claimsError?.message });
+      return new Response(JSON.stringify({ error: "Unauthorized: Invalid session. Please sign in again." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
 
-    // Get trip details
-    const { data: trip, error: tripError } = await supabaseClient
+    const userId = claimsData.claims.sub;
+    const userEmail = claimsData.claims.email as string;
+    logStep("User authenticated", { userId, email: userEmail });
+
+    // Use service role client for database operations
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+
+    // Get trip details using service client
+    const { data: trip, error: tripError } = await serviceClient
       .from('trips')
       .select('*')
       .eq('id', tripId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (tripError || !trip) {
@@ -65,7 +85,7 @@ serve(async (req) => {
     });
 
     // Check for existing Stripe customer
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
     let customerId;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
@@ -135,13 +155,13 @@ serve(async (req) => {
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      customer_email: customerId ? undefined : user.email,
+      customer_email: customerId ? undefined : userEmail,
       line_items: lineItems,
       mode: "payment",
       success_url: `${origin}/trips/${tripId}/confirmation?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/planner/booking?tripId=${tripId}&canceled=true`,
       metadata: {
-        user_id: user.id,
+        user_id: userId,
         trip_id: tripId,
         trip_destination: trip.destination,
       },
@@ -150,7 +170,7 @@ serve(async (req) => {
     logStep("Checkout session created", { sessionId: session.id });
 
     // Update trip status to pending payment
-    await supabaseClient
+    await serviceClient
       .from('trips')
       .update({ 
         status: 'planning',
