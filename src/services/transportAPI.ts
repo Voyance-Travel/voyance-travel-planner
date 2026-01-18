@@ -1,14 +1,12 @@
 /**
  * Voyance Transport API Service
  * 
- * Integrates with Railway backend transport endpoints:
- * - GET /transport/:destinationId/options - Get transport options for a destination
+ * Transport options - now using Supabase destinations table.
+ * Falls back to sensible defaults if no data exists.
  */
 
 import { useQuery } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
+import { supabase } from '@/integrations/supabase/client';
 
 // ============================================================================
 // Types
@@ -37,53 +35,75 @@ export interface TransportOptionsResponse {
   isDefault: boolean;
 }
 
-// ============================================================================
-// API Helpers
-// ============================================================================
+// Default transport modes for most cities
+const DEFAULT_TRANSPORT_MODES: TransportModeType[] = [
+  'walking',
+  'public_transport',
+  'taxi',
+  'metro',
+  'bus',
+];
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  return { 'Content-Type': 'application/json' };
-}
-
-async function transportApiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}/api/transport${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData._error || errorData.error || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
+// City-specific transport modes
+const CITY_TRANSPORT_OVERRIDES: Record<string, TransportModeType[]> = {
+  'venice': ['walking', 'ferry', 'taxi'],
+  'amsterdam': ['walking', 'bike', 'tram', 'taxi', 'ferry'],
+  'copenhagen': ['walking', 'bike', 'metro', 'bus', 'taxi'],
+  'bangkok': ['walking', 'metro', 'taxi', 'bus', 'tram', 'ferry', 'rickshaw'],
+  'tokyo': ['walking', 'metro', 'bus', 'taxi'],
+  'new york': ['walking', 'metro', 'taxi', 'bus'],
+  'london': ['walking', 'metro', 'bus', 'taxi'],
+  'paris': ['walking', 'metro', 'bus', 'taxi', 'bike'],
+  'san francisco': ['walking', 'metro', 'bus', 'taxi', 'cable_car'],
+  'lisbon': ['walking', 'metro', 'tram', 'taxi', 'bus'],
+  'hong kong': ['walking', 'metro', 'bus', 'taxi', 'ferry', 'tram'],
+};
 
 // ============================================================================
-// Transport API
+// Transport API - Using Supabase with smart defaults
 // ============================================================================
 
 /**
  * Get transport options available for a destination
  */
 export async function getTransportOptions(destinationId: string): Promise<TransportOptionsResponse> {
-  return transportApiRequest<TransportOptionsResponse>(`/${destinationId}/options`);
+  // Try to get from Supabase destinations table
+  const { data: destination } = await supabase
+    .from('destinations')
+    .select('id, city, country, default_transport_modes')
+    .eq('id', destinationId)
+    .single();
+
+  if (destination) {
+    // Use stored transport modes or city-specific overrides or defaults
+    const cityLower = destination.city.toLowerCase();
+    let transportModes: TransportModeType[];
+
+    if (destination.default_transport_modes && Array.isArray(destination.default_transport_modes)) {
+      transportModes = destination.default_transport_modes as TransportModeType[];
+    } else if (CITY_TRANSPORT_OVERRIDES[cityLower]) {
+      transportModes = CITY_TRANSPORT_OVERRIDES[cityLower];
+    } else {
+      transportModes = DEFAULT_TRANSPORT_MODES;
+    }
+
+    return {
+      destinationId: destination.id,
+      city: destination.city,
+      country: destination.country,
+      transportModes,
+      isDefault: !destination.default_transport_modes,
+    };
+  }
+
+  // Fallback: search by ID pattern or return defaults
+  return {
+    destinationId,
+    city: 'Unknown',
+    country: 'Unknown',
+    transportModes: DEFAULT_TRANSPORT_MODES,
+    isDefault: true,
+  };
 }
 
 /**
