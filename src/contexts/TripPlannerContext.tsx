@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from './AuthContext';
+import { useAuth, isDemoModeEnabled } from './AuthContext';
 
 // Anonymous session management
 const ANON_SESSION_KEY = 'voyance_anonymous_session';
+const DEMO_TRIPS_KEY = 'voyance_demo_trips';
 
 function getOrCreateAnonymousSession(): string {
   let sessionId = localStorage.getItem(ANON_SESSION_KEY);
@@ -12,6 +13,21 @@ function getOrCreateAnonymousSession(): string {
     localStorage.setItem(ANON_SESSION_KEY, sessionId);
   }
   return sessionId;
+}
+
+// Demo mode localStorage trip storage
+function saveDemoTrip(tripData: Record<string, unknown>): string {
+  const tripId = tripData.id as string || crypto.randomUUID();
+  const trips = JSON.parse(localStorage.getItem(DEMO_TRIPS_KEY) || '{}');
+  trips[tripId] = { ...tripData, id: tripId };
+  localStorage.setItem(DEMO_TRIPS_KEY, JSON.stringify(trips));
+  console.log('[TripPlanner] Demo trip saved to localStorage:', tripId);
+  return tripId;
+}
+
+function loadDemoTrip(tripId: string): Record<string, unknown> | null {
+  const trips = JSON.parse(localStorage.getItem(DEMO_TRIPS_KEY) || '{}');
+  return trips[tripId] || null;
 }
 
 export interface TripBasics {
@@ -191,6 +207,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         : 'New Trip';
 
       const tripData = {
+        id: state.tripId || undefined,
         user_id: user.id,
         name: tripName,
         destination: state.basics.destination || 'Unknown',
@@ -213,6 +230,19 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
       let tripId = state.tripId;
 
+      // Demo mode: save to localStorage instead of Supabase
+      if (isDemoModeEnabled()) {
+        tripId = saveDemoTrip(tripData);
+        setState(prev => ({ 
+          ...prev, 
+          tripId,
+          isLoading: false 
+        }));
+        console.log('[TripPlanner] Demo trip saved:', tripId);
+        return tripId;
+      }
+
+      // Real mode: save to Supabase
       if (tripId) {
         // Update existing trip
         const { error } = await supabase
@@ -263,34 +293,44 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const { data: trip, error } = await supabase
-        .from('trips')
-        .select('*')
-        .eq('id', tripId)
-        .eq('user_id', user.id)
-        .single();
+      let trip: Record<string, unknown> | null = null;
 
-      if (error) throw error;
-      if (!trip) throw new Error('Trip not found');
+      // Demo mode: load from localStorage
+      if (isDemoModeEnabled()) {
+        trip = loadDemoTrip(tripId);
+        if (!trip) throw new Error('Demo trip not found');
+      } else {
+        // Real mode: load from Supabase
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('id', tripId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) throw error;
+        if (!data) throw new Error('Trip not found');
+        trip = data;
+      }
 
       const metadata = trip.metadata as Record<string, unknown> | null;
       const itineraryData = trip.itinerary_data as { days?: DayItinerary[] } | null;
 
       setState(prev => ({
         ...prev,
-        tripId: trip.id,
+        tripId: trip!.id as string,
         sessionId: (metadata?.sessionId as string) || prev.sessionId,
         basics: {
-          destination: trip.destination,
-          startDate: trip.start_date,
-          endDate: trip.end_date,
-          travelers: trip.travelers || 1,
-          tripType: trip.trip_type as TripBasics['tripType'],
-          originCity: trip.origin_city || undefined,
-          budgetTier: trip.budget_tier || undefined,
+          destination: trip!.destination as string,
+          startDate: trip!.start_date as string,
+          endDate: trip!.end_date as string,
+          travelers: (trip!.travelers as number) || 1,
+          tripType: trip!.trip_type as TripBasics['tripType'],
+          originCity: (trip!.origin_city as string) || undefined,
+          budgetTier: (trip!.budget_tier as string) || undefined,
         },
-        flights: trip.flight_selection as unknown as FlightSelection | null,
-        hotel: trip.hotel_selection as unknown as HotelSelection | null,
+        flights: trip!.flight_selection as unknown as FlightSelection | null,
+        hotel: trip!.hotel_selection as unknown as HotelSelection | null,
         itinerary: itineraryData?.days || [],
         isLoading: false,
       }));

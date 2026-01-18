@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, MapPin, Calendar, Users, ImageOff, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { getCachedImages, prefetchDestinationImages } from '@/utils/imagePrefetch';
 
 interface DynamicDestinationPhotosProps {
   destination: string;
@@ -42,16 +43,44 @@ export default function DynamicDestinationPhotos({
     .replace(/\s*\([A-Z]{3}\)\s*$/i, '') // Remove (XXX) airport codes
     .trim();
 
-  // Fetch images from backend
+  // Track if we've already fetched for this destination to prevent re-fetching
+  const fetchedRef = useRef<string | null>(null);
+
+  // Fetch images from cache first, then backend if needed
   useEffect(() => {
     if (!cleanDestination) return;
+    
+    // Skip if we already fetched for this exact destination
+    if (fetchedRef.current === cleanDestination && images.length > 0) {
+      console.log('[DynamicPhotos] Already loaded for:', cleanDestination);
+      return;
+    }
 
-    const fetchImages = async () => {
+    const loadImages = async () => {
+      // First, check if images are already cached
+      const cachedUrls = getCachedImages(destination);
+      if (cachedUrls.length > 0) {
+        console.log('[DynamicPhotos] Using cached images for:', cleanDestination, cachedUrls.length);
+        setImages(cachedUrls.map((url, i) => ({
+          id: `cached-${i}`,
+          url,
+          alt: `${cleanDestination} view ${i + 1}`,
+          type: 'hero',
+          source: 'database' as const,
+        })));
+        setIsLoading(false);
+        fetchedRef.current = cleanDestination;
+        return;
+      }
+
       setIsLoading(true);
       setError(false);
       
       try {
         console.log('[DynamicPhotos] Fetching images for:', cleanDestination);
+        
+        // Also trigger prefetch to populate cache for future use
+        prefetchDestinationImages(destination);
         
         const { data, error: fetchError } = await supabase.functions.invoke('destination-images', {
           body: {
@@ -70,6 +99,7 @@ export default function DynamicDestinationPhotos({
         if (data?.images && data.images.length > 0) {
           console.log('[DynamicPhotos] Got images:', data.images.length, 'source:', data.source);
           setImages(data.images);
+          fetchedRef.current = cleanDestination;
         } else {
           console.log('[DynamicPhotos] No images returned');
           setError(true);
@@ -82,8 +112,8 @@ export default function DynamicDestinationPhotos({
       }
     };
 
-    fetchImages();
-  }, [cleanDestination]);
+    loadImages();
+  }, [cleanDestination, destination]);
 
   // Auto-rotate images
   useEffect(() => {
