@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   MapPin, 
   Calendar, 
@@ -12,7 +12,11 @@ import {
   Compass,
   Star,
   Clock,
-  Loader2
+  Loader2,
+  CreditCard,
+  Check,
+  Crown,
+  RefreshCw
 } from 'lucide-react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
@@ -23,8 +27,48 @@ import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { tripsApi, Trip } from '@/services/neonDb';
 import { format } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
-type TabType = 'overview' | 'trips' | 'preferences';
+type TabType = 'overview' | 'trips' | 'preferences' | 'subscription';
+
+// Subscription tiers config
+const SUBSCRIPTION_TIERS = {
+  voyage: {
+    name: 'Voyage',
+    description: 'For travelers who plan regularly',
+    price: 15.99,
+    priceId: 'price_1RpYVWFYxIg9jcJU4t3JVCy0',
+    productId: 'prod_Sl4euoo6l8HCIE',
+    features: [
+      'Unlimited trip planning',
+      'AI-powered itineraries',
+      'Flight & hotel recommendations',
+      'Email support',
+    ],
+  },
+  wanderlust: {
+    name: 'Wanderlust',
+    description: 'For digital nomads & frequent travelers',
+    price: 119.99,
+    priceId: 'price_1RpYWpFYxIg9jcJUPrSLmFsu',
+    productId: 'prod_Sl4gxTsm0MDnN6',
+    features: [
+      'Everything in Voyage',
+      'Priority support',
+      'Advanced customization',
+      'Exclusive deals',
+      'Offline access',
+    ],
+  },
+};
+
+interface SubscriptionStatus {
+  subscribed: boolean;
+  product_id: string | null;
+  price_id: string | null;
+  subscription_end: string | null;
+}
 
 interface DisplayTrip {
   id: string;
@@ -123,6 +167,81 @@ export default function Profile() {
     loadTrips();
   }, [user?.id]);
 
+  const [searchParams] = useSearchParams();
+  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState<string | null>(null);
+
+  // Handle success/cancel query params
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Subscription activated successfully!');
+      setActiveTab('subscription');
+      checkSubscription();
+    } else if (searchParams.get('canceled') === 'true') {
+      toast.info('Checkout canceled');
+    }
+  }, [searchParams]);
+
+  // Check subscription status
+  const checkSubscription = async () => {
+    setIsLoadingSubscription(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('check-subscription');
+      if (error) throw error;
+      setSubscription(data);
+    } catch (error) {
+      console.error('Failed to check subscription:', error);
+    } finally {
+      setIsLoadingSubscription(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      checkSubscription();
+    }
+  }, [isAuthenticated]);
+
+  // Handle checkout
+  const handleCheckout = async (priceId: string) => {
+    setIsCheckingOut(priceId);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { priceId, mode: 'subscription' },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error: any) {
+      console.error('Checkout error:', error);
+      toast.error(error.message || 'Failed to start checkout');
+    } finally {
+      setIsCheckingOut(null);
+    }
+  };
+
+  // Handle manage subscription
+  const handleManageSubscription = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('customer-portal');
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error: any) {
+      console.error('Portal error:', error);
+      toast.error(error.message || 'Failed to open billing portal');
+    }
+  };
+
+  // Get current tier
+  const getCurrentTier = () => {
+    if (!subscription?.product_id) return null;
+    return Object.values(SUBSCRIPTION_TIERS).find(t => t.productId === subscription.product_id);
+  };
+
   if (!isAuthenticated) {
     return null;
   }
@@ -155,6 +274,7 @@ export default function Profile() {
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'trips' as const, label: 'My Trips' },
+    { id: 'subscription' as const, label: 'Subscription' },
     { id: 'preferences' as const, label: 'Preferences' },
   ];
 
@@ -465,6 +585,106 @@ export default function Profile() {
                   )}
                 </div>
               </>
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === 'subscription' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-8"
+          >
+            {/* Current Status */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Your Subscription</h2>
+                <p className="text-sm text-muted-foreground">
+                  {subscription?.subscribed 
+                    ? `Active until ${subscription.subscription_end ? format(new Date(subscription.subscription_end), 'MMMM d, yyyy') : 'N/A'}`
+                    : 'No active subscription'}
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={checkSubscription} disabled={isLoadingSubscription}>
+                <RefreshCw className={cn("h-4 w-4 mr-2", isLoadingSubscription && "animate-spin")} />
+                Refresh
+              </Button>
+            </div>
+
+            {/* Subscription Cards */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {Object.entries(SUBSCRIPTION_TIERS).map(([key, tier]) => {
+                const isCurrentPlan = subscription?.product_id === tier.productId;
+                return (
+                  <div
+                    key={key}
+                    className={cn(
+                      "relative p-6 rounded-xl border-2 transition-all",
+                      isCurrentPlan 
+                        ? "border-primary bg-primary/5" 
+                        : "border-border hover:border-muted-foreground/50"
+                    )}
+                  >
+                    {isCurrentPlan && (
+                      <div className="absolute -top-3 left-4 px-3 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-full flex items-center gap-1">
+                        <Crown className="h-3 w-3" />
+                        Current Plan
+                      </div>
+                    )}
+                    <div className="mb-4">
+                      <h3 className="text-xl font-semibold text-foreground">{tier.name}</h3>
+                      <p className="text-sm text-muted-foreground">{tier.description}</p>
+                    </div>
+                    <div className="mb-6">
+                      <span className="text-3xl font-bold text-foreground">${tier.price}</span>
+                      <span className="text-muted-foreground">/month</span>
+                    </div>
+                    <ul className="space-y-3 mb-6">
+                      {tier.features.map((feature) => (
+                        <li key={feature} className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                          <span className="text-muted-foreground">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {isCurrentPlan ? (
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={handleManageSubscription}
+                      >
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Manage Subscription
+                      </Button>
+                    ) : (
+                      <Button 
+                        className="w-full"
+                        onClick={() => handleCheckout(tier.priceId)}
+                        disabled={isCheckingOut === tier.priceId}
+                      >
+                        {isCheckingOut === tier.priceId ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          <>Subscribe</>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Already subscribed - show manage button */}
+            {subscription?.subscribed && (
+              <div className="text-center pt-4">
+                <Button variant="ghost" onClick={handleManageSubscription}>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Manage Billing & Cancel
+                </Button>
+              </div>
             )}
           </motion.div>
         )}
