@@ -140,207 +140,278 @@ export default function PlannerBooking() {
     <MainLayout>
       <Head title={`Book Trip to ${state.basics.destination} | Voyance`} />
       
-      <section className="pt-24 pb-16 min-h-screen bg-muted/30">
-        <div className="max-w-5xl mx-auto px-4">
+      <section className="pt-24 pb-16 min-h-screen bg-gradient-to-b from-background to-muted/30">
+        <div className="max-w-6xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            {/* Header */}
-            <div className="text-center mb-10">
-              <h1 className="text-3xl font-display font-medium text-foreground mb-2">
-                Complete Your Booking
+            {/* Editorial Header */}
+            <div className="text-center mb-12">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full text-primary text-sm font-medium mb-4"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Your trip is ready to book
+              </motion.div>
+              <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
+                {state.basics.destination}
               </h1>
-              <p className="text-muted-foreground">
-                Review your trip details and proceed to secure payment
+              <p className="text-lg text-muted-foreground flex items-center justify-center gap-2">
+                <Calendar className="h-5 w-5" />
+                {state.basics.startDate && state.basics.endDate ? (
+                  <>
+                    {format(new Date(state.basics.startDate), 'MMM d')} - {format(new Date(state.basics.endDate), 'MMM d, yyyy')}
+                  </>
+                ) : 'Dates not set'} 
+                <span className="text-muted-foreground/50">•</span>
+                <Users className="h-5 w-5" />
+                {travelers} traveler{travelers > 1 ? 's' : ''}
               </p>
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-8">
-              {/* Trip Summary */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Destination Card */}
-                <div className="bg-card rounded-xl border p-6">
-                  <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-primary" />
-                    Trip Details
-                  </h2>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Destination</p>
-                      <p className="font-medium">{state.basics.destination}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Departing From</p>
-                      <p className="font-medium">{state.basics.originCity || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Dates</p>
-                      <p className="font-medium">
-                        {state.basics.startDate && state.basics.endDate ? (
-                          <>
-                            {format(new Date(state.basics.startDate), 'MMM d')} -{' '}
-                            {format(new Date(state.basics.endDate), 'MMM d, yyyy')}
-                          </>
-                        ) : (
-                          'Not set'
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Travelers</p>
-                      <p className="font-medium">{state.basics.travelers || 1} guest(s)</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Flights */}
+            <div className="grid lg:grid-cols-5 gap-8">
+              {/* Trip Details - 3 columns */}
+              <div className="lg:col-span-3 space-y-6">
+                {/* Flights Card */}
                 {state.flights && (
-                  <div className="bg-card rounded-xl border p-6">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Plane className="h-5 w-5 text-primary" />
-                      Flights
-                    </h2>
-                    <div className="space-y-4">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 }}
+                    className="bg-card rounded-2xl border border-border overflow-hidden"
+                  >
+                    <div className="bg-gradient-to-r from-primary/5 to-transparent p-5 border-b border-border">
+                      <h2 className="text-lg font-semibold flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                          <Plane className="h-5 w-5 text-primary" />
+                        </div>
+                        Flights
+                      </h2>
+                    </div>
+                    <div className="p-5 space-y-4">
                       {state.flights.departure && (
-                        <div className="flex justify-between items-center py-3 border-b">
-                          <div>
-                            <p className="font-medium">Outbound Flight</p>
-                            <p className="text-sm text-muted-foreground">
-                              {state.flights.departure.airline} {state.flights.departure.flightNumber}
-                            </p>
+                        <div className="flex justify-between items-center py-3 px-4 bg-muted/30 rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground uppercase">Outbound</p>
+                              <p className="font-semibold">{state.flights.departure.airline}</p>
+                            </div>
+                            <div className="h-8 w-px bg-border" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                {state.flights.departure.cabin && `${state.flights.departure.cabin} class`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {state.flights.departure.departureTime} → {state.flights.departure.arrivalTime}
+                              </p>
+                            </div>
                           </div>
-                          <p className="font-medium">${state.flights.departure.price.toFixed(2)}</p>
+                          <div className="text-right">
+                            <p className="text-lg font-bold">${state.flights.departure.price.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">per person</p>
+                          </div>
                         </div>
                       )}
                       {state.flights.return && (
-                        <div className="flex justify-between items-center py-3">
-                          <div>
-                            <p className="font-medium">Return Flight</p>
-                            <p className="text-sm text-muted-foreground">
-                              {state.flights.return.airline} {state.flights.return.flightNumber}
-                            </p>
+                        <div className="flex justify-between items-center py-3 px-4 bg-muted/30 rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground uppercase">Return</p>
+                              <p className="font-semibold">{state.flights.return.airline}</p>
+                            </div>
+                            <div className="h-8 w-px bg-border" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                {state.flights.return.cabin && `${state.flights.return.cabin} class`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {state.flights.return.departureTime} → {state.flights.return.arrivalTime}
+                              </p>
+                            </div>
                           </div>
-                          <p className="font-medium">${state.flights.return.price.toFixed(2)}</p>
+                          <div className="text-right">
+                            <p className="text-lg font-bold">${state.flights.return.price.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">per person</p>
+                          </div>
                         </div>
                       )}
+                      <div className="flex justify-between items-center pt-2 border-t border-border">
+                        <span className="text-muted-foreground">Flights subtotal ({travelers} travelers)</span>
+                        <span className="font-semibold">${flightTotal.toFixed(2)}</span>
+                      </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
 
-                {/* Hotel */}
+                {/* Hotel Card */}
                 {state.hotel && (
-                  <div className="bg-card rounded-xl border p-6">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Hotel className="h-5 w-5 text-primary" />
-                      Accommodation
-                    </h2>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{state.hotel.name}</p>
-                        <p className="text-sm text-muted-foreground">{state.hotel.location}</p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {state.hotel.roomType} • {nights} night(s)
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">${hotelTotal.toFixed(2)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          ${state.hotel.pricePerNight}/night
-                        </p>
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="bg-card rounded-2xl border border-border overflow-hidden"
+                  >
+                    <div className="bg-gradient-to-r from-primary/5 to-transparent p-5 border-b border-border">
+                      <h2 className="text-lg font-semibold flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                          <Hotel className="h-5 w-5 text-primary" />
+                        </div>
+                        Accommodation
+                      </h2>
+                    </div>
+                    <div className="p-5">
+                      <div className="flex gap-4">
+                        {state.hotel.imageUrl && (
+                          <img 
+                            src={state.hotel.imageUrl} 
+                            alt={state.hotel.name}
+                            className="w-24 h-24 rounded-xl object-cover"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-lg">{state.hotel.name}</h3>
+                          <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                            <MapPin className="h-4 w-4" />
+                            {state.hotel.location}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {state.hotel.roomType} • {nights} night{nights > 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold">${hotelTotal.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            ${state.hotel.pricePerNight}/night
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
               </div>
 
-              {/* Payment Summary */}
-              <div className="lg:col-span-1">
-                <div className="bg-card rounded-xl border p-6 sticky top-24">
-                  <h2 className="text-lg font-semibold mb-4">Payment Summary</h2>
+              {/* Payment Summary - 2 columns */}
+              <div className="lg:col-span-2">
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.25 }}
+                  className="bg-card rounded-2xl border border-border overflow-hidden sticky top-24"
+                >
+                  <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-6 border-b border-border">
+                    <h2 className="text-xl font-semibold">Your Trip Total</h2>
+                  </div>
                   
-                  <div className="space-y-3 mb-6">
-                    {flightTotal > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Flights</span>
-                        <span>${flightTotal.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {hotelTotal > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Accommodation ({nights} nights)</span>
-                        <span>${hotelTotal.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {activitiesTotal > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Activities</span>
-                        <span>${activitiesTotal.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Voyance Service Fee</span>
-                      <span>${serviceFee.toFixed(2)}</span>
+                  <div className="p-6 space-y-4">
+                    {/* Detailed breakdown */}
+                    <div className="space-y-3">
+                      {flightTotal > 0 && (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Outbound flight × {travelers}</span>
+                            <span>${((state.flights?.departure?.price || 0) * travelers).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Return flight × {travelers}</span>
+                            <span>${((state.flights?.return?.price || 0) * travelers).toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
+                      {hotelTotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Hotel ({nights} nights × ${state.hotel?.pricePerNight}/night)
+                          </span>
+                          <span>${hotelTotal.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {activitiesTotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Activities & experiences</span>
+                          <span>${activitiesTotal.toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
                     
-                    <div className="border-t pt-3 mt-3">
-                      <div className="flex justify-between font-semibold text-lg">
-                        <span>Total</span>
-                        <span>${grandTotal.toFixed(2)}</span>
+                    <div className="border-t border-dashed border-border pt-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Voyance concierge fee</span>
+                        <span>${serviceFee.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-border pt-4 mt-4">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-lg font-semibold">Total</span>
+                        <div className="text-right">
+                          <span className="text-3xl font-bold text-primary">${grandTotal.toFixed(2)}</span>
+                          <p className="text-xs text-muted-foreground">USD</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {error && (
+                      <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl">
+                        <p className="text-sm text-destructive flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          {error}
+                        </p>
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={handleCheckout}
+                      disabled={isProcessing}
+                      size="lg"
+                      className="w-full h-14 text-lg shadow-lg shadow-primary/20"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="h-5 w-5 mr-2" />
+                          Complete Booking
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Trust badges */}
+                    <div className="pt-4 space-y-3 border-t border-border">
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <Lock className="h-4 w-4" />
+                        </div>
+                        <span>Secure payment via Stripe</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <Shield className="h-4 w-4" />
+                        </div>
+                        <span>Your data is encrypted and protected</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <CheckCircle className="h-4 w-4" />
+                        </div>
+                        <span>Free cancellation up to 24h before</span>
                       </div>
                     </div>
                   </div>
-
-                  {error && (
-                    <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                      <p className="text-sm text-destructive flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4" />
-                        {error}
-                      </p>
-                    </div>
-                  )}
-
-                  <Button
-                    onClick={handleCheckout}
-                    disabled={isProcessing}
-                    className="w-full h-12 text-base"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Pay ${grandTotal.toFixed(2)}
-                      </>
-                    )}
-                  </Button>
-
-                  {/* Trust badges */}
-                  <div className="mt-6 space-y-3">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Lock className="h-4 w-4" />
-                      <span>Secure payment via Stripe</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Shield className="h-4 w-4" />
-                      <span>Your data is encrypted and protected</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <CheckCircle className="h-4 w-4" />
-                      <span>Free cancellation up to 24h before</span>
-                    </div>
-                  </div>
-                </div>
+                </motion.div>
               </div>
             </div>
 
             {/* Back button */}
-            <div className="mt-8">
+            <div className="mt-10">
               <Button variant="outline" onClick={() => navigate(-1)}>
-                Back to Itinerary
+                ← Back to Trip Summary
               </Button>
             </div>
           </motion.div>

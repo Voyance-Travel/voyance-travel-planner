@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, Loader2, Sparkles, Globe, Star } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, Loader2, Sparkles, Globe, Star, DollarSign, ChevronDown } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -243,7 +243,7 @@ export default function Start() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [travelers, setTravelers] = useState(2);
-
+  const [budget, setBudget] = useState<string>('');
   const today = startOfToday();
 
   const handleStart = () => {
@@ -357,7 +357,7 @@ export default function Start() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
               {/* Start Date */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -372,7 +372,7 @@ export default function Start() {
                         !startDate && "text-muted-foreground"
                       )}
                     >
-                      {startDate ? format(startDate, "MMM d, yyyy") : "Select date"}
+                      {startDate ? format(startDate, "MMM d") : "Date"}
                       <CalendarIcon className="h-4 w-4 opacity-60" />
                     </Button>
                   </PopoverTrigger>
@@ -408,7 +408,7 @@ export default function Start() {
                         !endDate && "text-muted-foreground"
                       )}
                     >
-                      {endDate ? format(endDate, "MMM d, yyyy") : "Select date"}
+                      {endDate ? format(endDate, "MMM d") : "Date"}
                       <CalendarIcon className="h-4 w-4 opacity-60" />
                     </Button>
                   </PopoverTrigger>
@@ -429,7 +429,7 @@ export default function Start() {
               </div>
 
               {/* Travelers */}
-              <div className="col-span-2 md:col-span-1">
+              <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Travelers
                 </label>
@@ -441,8 +441,9 @@ export default function Start() {
                     >
                       <span className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-primary/60" />
-                        {travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}
+                        {travelers}
                       </span>
+                      <ChevronDown className="h-4 w-4 opacity-60" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-56 p-4" align="start">
@@ -473,9 +474,56 @@ export default function Start() {
                   </PopoverContent>
                 </Popover>
               </div>
+
+              {/* Budget (Optional) */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Budget <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full h-14 justify-between text-left font-normal",
+                        !budget && "text-muted-foreground"
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-primary/60" />
+                        {budget || 'Any'}
+                      </span>
+                      <ChevronDown className="h-4 w-4 opacity-60" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 p-2" align="start">
+                    <div className="space-y-1">
+                      {[
+                        { value: '', label: 'Any budget', desc: 'Show all options' },
+                        { value: 'budget', label: 'Budget', desc: 'Under $100/day' },
+                        { value: 'moderate', label: 'Moderate', desc: '$100-250/day' },
+                        { value: 'premium', label: 'Premium', desc: '$250-500/day' },
+                        { value: 'luxury', label: 'Luxury', desc: '$500+/day' },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => setBudget(option.value)}
+                          className={cn(
+                            'w-full px-3 py-2 rounded-lg text-left transition-colors',
+                            budget === option.value ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                          )}
+                        >
+                          <p className="font-medium text-sm">{option.label}</p>
+                          <p className="text-xs text-muted-foreground">{option.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
               
               {/* Start Button */}
-              <div className="col-span-2 md:col-span-1">
+              <div>
                 <label className="block text-sm font-medium text-transparent mb-2">Action</label>
                 <Button
                   size="lg"
@@ -483,7 +531,7 @@ export default function Start() {
                   disabled={!isFormValid}
                   className="w-full h-14 text-lg gap-2"
                 >
-                  Start Planning
+                  Start
                   <ArrowRight className="h-5 w-5" />
                 </Button>
               </div>

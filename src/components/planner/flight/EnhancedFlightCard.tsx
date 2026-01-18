@@ -135,63 +135,64 @@ export default function EnhancedFlightCard({
         </div>
       )}
       
-      <div className={cn('p-5', flight.isRecommended && 'pt-10')}>
+      <div className={cn('p-6', flight.isRecommended && 'pt-12')}>
         {/* Main Flight Info */}
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-5">
           {/* Airline Logo & Info */}
-          <div className="flex items-center gap-3 lg:w-40 shrink-0">
+          <div className="flex items-center gap-4 lg:w-44 shrink-0">
             <AirlineLogo code={primarySegment.airline} size="md" />
             <div>
-              <p className="font-medium text-foreground">{primarySegment.airline}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="font-semibold text-foreground">{primarySegment.airline}</p>
+              <p className="text-sm text-muted-foreground">
                 {flight.segments.map(s => s.flightNumber).join(' → ')}
               </p>
             </div>
           </div>
           
-          {/* Flight Times */}
-          <div className="flex-1 flex items-center gap-4">
-            <div className="text-center">
-              <p className="text-xl font-bold text-foreground">
+          {/* Flight Times - More spacious */}
+          <div className="flex-1 flex items-center gap-6">
+            <div className="text-center min-w-[70px]">
+              <p className="text-2xl font-bold text-foreground tracking-tight">
                 {formatTime(primarySegment.departure)}
               </p>
-              <p className="text-sm text-muted-foreground">{primarySegment.departureAirport}</p>
+              <p className="text-sm text-muted-foreground mt-1">{primarySegment.departureAirport}</p>
             </div>
             
-            <div className="flex-1 flex flex-col items-center px-4">
-              <p className="text-xs text-muted-foreground mb-1">
+            <div className="flex-1 flex flex-col items-center px-6">
+              <p className="text-sm text-muted-foreground mb-2">
                 {formatDuration(flight.totalDuration)}
               </p>
               <div className="relative w-full h-0.5 bg-border">
-                <div className="absolute inset-y-0 left-0 w-2 h-2 -mt-[3px] bg-primary rounded-full" />
-                <div className="absolute inset-y-0 right-0 w-2 h-2 -mt-[3px] bg-primary rounded-full" />
+                <div className="absolute inset-y-0 left-0 w-2.5 h-2.5 -mt-1 bg-primary rounded-full" />
+                <div className="absolute inset-y-0 right-0 w-2.5 h-2.5 -mt-1 bg-primary rounded-full" />
                 {flight.stops === 0 ? (
-                  <ArrowRight className="absolute left-1/2 -translate-x-1/2 -mt-2 h-4 w-4 text-primary" />
+                  <ArrowRight className="absolute left-1/2 -translate-x-1/2 -mt-2.5 h-5 w-5 text-primary" />
                 ) : (
-                  <div className="absolute left-1/2 -translate-x-1/2 -mt-1 flex gap-1">
+                  <div className="absolute left-1/2 -translate-x-1/2 -mt-1.5 flex gap-2">
                     {Array.from({ length: flight.stops }).map((_, i) => (
-                      <div key={i} className="w-2 h-2 bg-accent rounded-full" />
+                      <div key={i} className="w-2.5 h-2.5 bg-accent rounded-full border-2 border-background" />
                     ))}
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-2">
                 {flight.stops === 0 ? 'Non-stop' : `${flight.stops} stop${flight.stops > 1 ? 's' : ''}`}
               </p>
             </div>
             
-            <div className="text-center">
-              <p className="text-xl font-bold text-foreground">
+            <div className="text-center min-w-[70px]">
+              <p className="text-2xl font-bold text-foreground tracking-tight">
                 {formatTime(lastSegment.arrival)}
               </p>
-              <p className="text-sm text-muted-foreground">{lastSegment.arrivalAirport}</p>
+              <p className="text-sm text-muted-foreground mt-1">{lastSegment.arrivalAirport}</p>
             </div>
           </div>
           
-          {/* Price */}
-          <div className="text-right lg:w-32 shrink-0">
-            <p className="text-2xl font-bold text-foreground">${lowestPrice}</p>
-            <p className="text-xs text-muted-foreground">per person</p>
+          {/* Price - More prominent */}
+          <div className="text-right lg:w-36 shrink-0 lg:border-l lg:border-border lg:pl-5">
+            <p className="text-sm text-muted-foreground mb-1">From</p>
+            <p className="text-3xl font-bold text-foreground">${lowestPrice}</p>
+            <p className="text-xs text-muted-foreground mt-1">per person</p>
           </div>
         </div>
 
