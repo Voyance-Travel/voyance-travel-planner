@@ -102,7 +102,7 @@ export function useTrips(params: ListTripsParams = {}) {
         .order('created_at', { ascending: false });
       
       if (params.status) {
-        query = query.eq('status', params.status);
+        query = query.eq('status', params.status as 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled');
       }
       if (params.limit) {
         query = query.limit(params.limit);

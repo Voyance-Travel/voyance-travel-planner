@@ -225,10 +225,12 @@ export async function updatePreferences(preferences: Partial<UserPreferences>): 
     if (preferences.dietaryRestrictions !== undefined) dbUpdates.dietary_restrictions = preferences.dietaryRestrictions;
     if (preferences.tripDuration !== undefined) dbUpdates.trip_duration = preferences.tripDuration;
     if (preferences.ecoFriendly !== undefined) dbUpdates.eco_friendly = preferences.ecoFriendly;
+    // Cast to satisfy Supabase types
+    const upsertData = dbUpdates as { user_id: string } & Record<string, unknown>;
     
     const { error } = await supabase
       .from('user_preferences')
-      .upsert(dbUpdates, { onConflict: 'user_id' });
+      .upsert(upsertData, { onConflict: 'user_id' });
     
     if (error) return { success: false, error: error.message };
     return { success: true };

@@ -66,25 +66,27 @@ export async function createPlannerTrip(input: TripCreateInput): Promise<CreateT
   const primaryDestination = input.destinations[0];
   const sessionId = crypto.randomUUID();
   
+  const insertData = {
+    user_id: user.id,
+    name: `Trip to ${primaryDestination.city}`,
+    origin_city: input.originCity,
+    destination: primaryDestination.city,
+    destination_country: primaryDestination.country || null,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    trip_type: input.tripType,
+    travelers: input.travelers,
+    budget_tier: input.budgetTier || 'moderate',
+    status: 'draft' as const,
+    metadata: JSON.parse(JSON.stringify({
+      sessionId,
+      destinations: input.destinations,
+    })),
+  };
+  
   const { data, error } = await supabase
     .from('trips')
-    .insert({
-      user_id: user.id,
-      name: `Trip to ${primaryDestination.city}`,
-      origin_city: input.originCity,
-      destination: primaryDestination.city,
-      destination_country: primaryDestination.country || null,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      trip_type: input.tripType,
-      travelers: input.travelers,
-      budget_tier: input.budgetTier || 'moderate',
-      status: 'draft' as const,
-      metadata: {
-        sessionId,
-        destinations: input.destinations,
-      },
-    })
+    .insert(insertData)
     .select('id')
     .single();
   

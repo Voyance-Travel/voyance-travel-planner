@@ -79,7 +79,7 @@ export interface TripPlannerState {
   sessionId: string;
   step: number;
   basics: TripBasics;
-  flight: FlightSelection | null;
+  flights: FlightSelection | null;
   hotel: HotelSelection | null;
   itinerary: DayItinerary[];
   totalPrice: number;
@@ -92,6 +92,7 @@ interface TripPlannerContextType {
   setStep: (step: number) => void;
   setBasics: (basics: Partial<TripBasics>) => void;
   setFlight: (flight: FlightSelection | null) => void;
+  setFlights: (flights: FlightSelection | null) => void;
   setHotel: (hotel: HotelSelection | null) => void;
   setItinerary: (itinerary: DayItinerary[]) => void;
   saveTrip: () => Promise<string | null>;
@@ -105,7 +106,7 @@ const initialState: TripPlannerState = {
   sessionId: getOrCreateAnonymousSession(),
   step: 1,
   basics: {},
-  flight: null,
+  flights: null,
   hotel: null,
   itinerary: [],
   totalPrice: 0,
@@ -123,11 +124,11 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
   const calculateTotalPrice = useCallback(() => {
     let total = 0;
     
-    if (state.flight?.departure?.price) {
-      total += state.flight.departure.price;
+    if (state.flights?.departure?.price) {
+      total += state.flights.departure.price;
     }
-    if (state.flight?.return?.price) {
-      total += state.flight.return.price;
+    if (state.flights?.return?.price) {
+      total += state.flights.return.price;
     }
     
     if (state.hotel?.pricePerNight && state.basics.startDate && state.basics.endDate) {
@@ -139,7 +140,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
     }
     
     return total;
-  }, [state.flight, state.hotel, state.basics]);
+  }, [state.flights, state.hotel, state.basics]);
 
   // Update total price when selections change
   useEffect(() => {
@@ -161,7 +162,11 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
   };
 
   const setFlight = (flight: FlightSelection | null) => {
-    setState(prev => ({ ...prev, flight }));
+    setState(prev => ({ ...prev, flights: flight }));
+  };
+
+  const setFlights = (flights: FlightSelection | null) => {
+    setState(prev => ({ ...prev, flights }));
   };
 
   const setHotel = (hotel: HotelSelection | null) => {
@@ -189,7 +194,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         user_id: user.id,
         name: tripName,
         destination: state.basics.destination || 'Unknown',
-        destination_country: null,
+        destination_country: null as string | null,
         start_date: state.basics.startDate || new Date().toISOString().split('T')[0],
         end_date: state.basics.endDate || new Date().toISOString().split('T')[0],
         trip_type: state.basics.tripType || 'vacation',
@@ -197,13 +202,13 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         origin_city: state.basics.originCity,
         budget_tier: state.basics.budgetTier || 'moderate',
         status: 'draft' as const,
-        flight_selection: state.flight as unknown as Record<string, unknown> | null,
-        hotel_selection: state.hotel as unknown as Record<string, unknown> | null,
-        itinerary_data: state.itinerary.length > 0 ? { days: state.itinerary } : null,
-        metadata: {
+        flight_selection: state.flights ? JSON.parse(JSON.stringify(state.flights)) : null,
+        hotel_selection: state.hotel ? JSON.parse(JSON.stringify(state.hotel)) : null,
+        itinerary_data: state.itinerary.length > 0 ? JSON.parse(JSON.stringify({ days: state.itinerary })) : null,
+        metadata: JSON.parse(JSON.stringify({
           sessionId: state.sessionId,
           lastUpdated: new Date().toISOString(),
-        },
+        })),
       };
 
       let tripId = state.tripId;
@@ -284,7 +289,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
           originCity: trip.origin_city || undefined,
           budgetTier: trip.budget_tier || undefined,
         },
-        flight: trip.flight_selection as unknown as FlightSelection | null,
+        flights: trip.flight_selection as unknown as FlightSelection | null,
         hotel: trip.hotel_selection as unknown as HotelSelection | null,
         itinerary: itineraryData?.days || [],
         isLoading: false,
@@ -316,6 +321,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         setStep,
         setBasics,
         setFlight,
+        setFlights,
         setHotel,
         setItinerary,
         saveTrip,
