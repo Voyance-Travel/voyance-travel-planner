@@ -4,28 +4,28 @@ import { Sparkles, Map, Calendar, CreditCard, ArrowRight } from 'lucide-react';
 
 const steps = [
   {
-    number: '01',
+    number: '1',
     icon: Sparkles,
     title: 'Share Your Vision',
     description: 'Tell us about your dream destination and travel style. Our AI learns what matters most to you.',
     image: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800',
   },
   {
-    number: '02',
+    number: '2',
     icon: Map,
     title: 'Receive Your Itinerary',
     description: 'Get a thoughtfully crafted day-by-day plan, complete with curated experiences and local insights.',
     image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
   },
   {
-    number: '03',
+    number: '3',
     icon: Calendar,
     title: 'Refine & Customize',
     description: 'Adjust activities, swap hotels, add experiences. Your itinerary evolves with your preferences.',
     image: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800',
   },
   {
-    number: '04',
+    number: '4',
     icon: CreditCard,
     title: 'Book With Confidence',
     description: 'Secure your flights, hotels, and experiences in one seamless transaction.',
