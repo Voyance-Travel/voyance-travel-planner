@@ -21,7 +21,7 @@ import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, isDemoModeEnabled } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,6 +32,7 @@ import AvatarUpload from '@/components/profile/AvatarUpload';
 import TravelDNAReveal from '@/components/profile/TravelDNAReveal';
 import TravelMap from '@/components/profile/TravelMap';
 import SurpriseTripCard from '@/components/profile/SurpriseTripCard';
+import RotatingCoverPhoto from '@/components/profile/RotatingCoverPhoto';
 
 type TabType = 'overview' | 'trips' | 'preferences' | 'subscription';
 
@@ -124,6 +125,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [trips, setTrips] = useState<DisplayTrip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
+  const isDemo = isDemoModeEnabled();
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -280,15 +282,8 @@ export default function Profile() {
 
       {/* Hero Header */}
       <section className="relative pt-20">
-        {/* Cover Image */}
-        <div className="h-64 md:h-80 relative overflow-hidden">
-          <img
-            src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920"
-            alt="Cover"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
-        </div>
+        {/* Rotating Cover Photo */}
+        <RotatingCoverPhoto />
 
         {/* Profile Info */}
         <div className="max-w-5xl mx-auto px-4 -mt-20 relative z-10">
@@ -385,8 +380,8 @@ export default function Profile() {
             {/* Travel Map */}
             <TravelMap userId={user?.id || ''} />
 
-            {/* Surprise Trip Card */}
-            <SurpriseTripCard isPremium={!!subscription?.subscribed} />
+            {/* Surprise Trip Card - show as premium for demo users */}
+            <SurpriseTripCard isPremium={isDemo || !!subscription?.subscribed} />
 
             {/* Upcoming Trips */}
             {upcomingTrips.length > 0 && (
