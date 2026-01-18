@@ -1,10 +1,10 @@
-import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, User, DollarSign, Compass, Heart, Briefcase, Baby, UserCircle } from 'lucide-react';
+import { Users, User, DollarSign, Compass, Heart, Briefcase, Baby, UserCircle, SkipForward, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import DestinationTeaser from '../shared/DestinationTeaser';
 
 interface Companion {
   id: string;
@@ -31,17 +31,17 @@ interface TripContextProps {
 }
 
 const budgetOptions = [
-  { value: 'budget', label: 'Budget-Friendly', description: 'Under $150/day', icon: <DollarSign className="w-5 h-5" /> },
-  { value: 'moderate', label: 'Moderate', description: '$150-300/day', icon: <><DollarSign className="w-5 h-5" /><DollarSign className="w-5 h-5 -ml-3" /></> },
-  { value: 'premium', label: 'Premium', description: '$300-500/day', icon: <><DollarSign className="w-5 h-5" /><DollarSign className="w-5 h-5 -ml-3" /><DollarSign className="w-5 h-5 -ml-3" /></> },
-  { value: 'luxury', label: 'Luxury', description: '$500+/day', icon: <Heart className="w-5 h-5" /> },
+  { value: 'budget', label: 'Budget-Friendly', description: 'Smart savings', icon: '$', color: 'from-emerald-500 to-teal-500' },
+  { value: 'moderate', label: 'Moderate', description: 'Balanced comfort', icon: '$$', color: 'from-blue-500 to-indigo-500' },
+  { value: 'premium', label: 'Premium', description: 'Elevated experience', icon: '$$$', color: 'from-violet-500 to-purple-500' },
+  { value: 'luxury', label: 'Luxury', description: 'No compromises', icon: '✦', color: 'from-amber-500 to-orange-500' },
 ];
 
 const tripTypeOptions = [
-  { value: 'leisure', label: 'Leisure', description: 'Relaxation & exploration', icon: <Compass className="w-5 h-5" /> },
-  { value: 'romantic', label: 'Romantic', description: 'Couple getaway', icon: <Heart className="w-5 h-5" /> },
-  { value: 'family', label: 'Family', description: 'All ages adventure', icon: <Baby className="w-5 h-5" /> },
-  { value: 'business', label: 'Business', description: 'Work & meetings', icon: <Briefcase className="w-5 h-5" /> },
+  { value: 'leisure', label: 'Leisure', description: 'Relaxation & exploration', icon: Compass, color: 'from-sky-500 to-blue-500' },
+  { value: 'romantic', label: 'Romantic', description: 'Couple getaway', icon: Heart, color: 'from-rose-500 to-pink-500' },
+  { value: 'family', label: 'Family', description: 'All ages adventure', icon: Baby, color: 'from-green-500 to-emerald-500' },
+  { value: 'business', label: 'Business', description: 'Work & meetings', icon: Briefcase, color: 'from-slate-500 to-zinc-500' },
 ];
 
 function CompanionCard({ 
@@ -57,98 +57,178 @@ function CompanionCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
-      className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4"
+      transition={{ delay: index * 0.05 }}
+      className="group relative bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 p-4 hover:border-primary/30 hover:shadow-md transition-all"
     >
-      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-        {companion.name ? (
-          <span className="text-lg font-semibold text-primary">
-            {companion.name.charAt(0).toUpperCase()}
-          </span>
-        ) : (
-          <UserCircle className="w-6 h-6 text-primary" />
-        )}
-      </div>
-      <div className="flex-1">
-        <Label className="text-xs text-slate-500 mb-1 block">
-          Traveler {index + 1} {index === 0 ? '(You)' : ''}
-        </Label>
-        <Input
-          placeholder={index === 0 ? "Your name (optional)" : "Name (optional)"}
-          value={companion.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          className="h-10"
-        />
-      </div>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onChange({ type: 'adult' })}
-          className={cn(
-            'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-            companion.type === 'adult' 
-              ? 'bg-primary text-primary-foreground' 
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+      <div className="flex items-center gap-4">
+        {/* Avatar */}
+        <div className="relative">
+          <div className={cn(
+            'w-14 h-14 rounded-full flex items-center justify-center transition-colors',
+            companion.name 
+              ? 'bg-gradient-to-br from-primary to-primary/80' 
+              : 'bg-gradient-to-br from-slate-200 to-slate-300'
+          )}>
+            {companion.name ? (
+              <span className="text-xl font-bold text-white">
+                {companion.name.charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              <UserCircle className="w-7 h-7 text-slate-500" />
+            )}
+          </div>
+          {index === 0 && (
+            <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 bg-primary text-[10px] font-medium text-white rounded-full">
+              You
+            </span>
           )}
-        >
-          Adult
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange({ type: 'child' })}
-          className={cn(
-            'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-            companion.type === 'child' 
-              ? 'bg-primary text-primary-foreground' 
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          )}
-        >
-          Child
-        </button>
+        </div>
+        
+        {/* Name Input */}
+        <div className="flex-1">
+          <Label className="text-xs font-medium text-slate-500 mb-1.5 block">
+            Traveler {index + 1}
+          </Label>
+          <Input
+            placeholder={index === 0 ? "Your name (optional)" : "Name (optional)"}
+            value={companion.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            className="h-9 bg-white/50 border-slate-200 focus:border-primary"
+          />
+        </div>
+        
+        {/* Type Toggle */}
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => onChange({ type: 'adult' })}
+            className={cn(
+              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+              companion.type === 'adult' 
+                ? 'bg-primary text-white shadow-sm' 
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            )}
+          >
+            Adult
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ type: 'child' })}
+            className={cn(
+              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+              companion.type === 'child' 
+                ? 'bg-primary text-white shadow-sm' 
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            )}
+          >
+            Child
+          </button>
+        </div>
       </div>
     </motion.div>
   );
 }
 
-function OptionCard({
-  value,
-  label,
-  description,
-  icon,
+function BudgetCard({
+  option,
   isSelected,
   onSelect,
 }: {
-  value: string;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
+  option: typeof budgetOptions[0];
   isSelected: boolean;
   onSelect: () => void;
 }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onSelect}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
       className={cn(
-        'p-4 rounded-xl border-2 text-left transition-all w-full',
+        'relative p-4 rounded-xl text-left transition-all overflow-hidden group',
         isSelected
-          ? 'border-primary bg-primary/5'
-          : 'border-slate-200 hover:border-slate-300 bg-white'
+          ? 'ring-2 ring-primary shadow-lg'
+          : 'bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md'
       )}
     >
-      <div className="flex items-center gap-3">
+      {/* Background gradient when selected */}
+      {isSelected && (
         <div className={cn(
-          'w-10 h-10 rounded-lg flex items-center justify-center',
-          isSelected ? 'bg-primary/20 text-primary' : 'bg-slate-100 text-slate-600'
+          'absolute inset-0 bg-gradient-to-br opacity-10',
+          option.color
+        )} />
+      )}
+      
+      <div className="relative flex items-center gap-3">
+        <div className={cn(
+          'w-10 h-10 rounded-lg flex items-center justify-center font-bold transition-colors',
+          isSelected 
+            ? `bg-gradient-to-br ${option.color} text-white` 
+            : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'
         )}>
-          {icon}
+          {option.icon}
         </div>
         <div>
-          <p className="font-medium text-slate-900">{label}</p>
-          <p className="text-sm text-slate-500">{description}</p>
+          <p className={cn(
+            'font-semibold transition-colors',
+            isSelected ? 'text-primary' : 'text-slate-900'
+          )}>{option.label}</p>
+          <p className="text-xs text-slate-500">{option.description}</p>
         </div>
       </div>
-    </button>
+    </motion.button>
+  );
+}
+
+function TripTypeCard({
+  option,
+  isSelected,
+  onSelect,
+}: {
+  option: typeof tripTypeOptions[0];
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const Icon = option.icon;
+  
+  return (
+    <motion.button
+      type="button"
+      onClick={onSelect}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className={cn(
+        'relative p-4 rounded-xl text-left transition-all overflow-hidden group',
+        isSelected
+          ? 'ring-2 ring-primary shadow-lg'
+          : 'bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md'
+      )}
+    >
+      {isSelected && (
+        <div className={cn(
+          'absolute inset-0 bg-gradient-to-br opacity-10',
+          option.color
+        )} />
+      )}
+      
+      <div className="relative flex items-center gap-3">
+        <div className={cn(
+          'w-10 h-10 rounded-lg flex items-center justify-center transition-colors',
+          isSelected 
+            ? `bg-gradient-to-br ${option.color} text-white` 
+            : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'
+        )}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div>
+          <p className={cn(
+            'font-semibold transition-colors',
+            isSelected ? 'text-primary' : 'text-slate-900'
+          )}>{option.label}</p>
+          <p className="text-xs text-slate-500">{option.description}</p>
+        </div>
+      </div>
+    </motion.button>
   );
 }
 
@@ -172,101 +252,208 @@ export default function TripContext({
   const canContinue = budget && tripType;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-2xl mx-auto"
-    >
-      {/* Trip Summary Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Compass className="w-4 h-4" />
-          {formData.destination}
-        </div>
+    <div className="max-w-4xl mx-auto">
+      {/* Skip Button at Top */}
+      <motion.div 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex justify-end mb-4"
+      >
+        <Button
+          variant="ghost"
+          onClick={onContinue}
+          className="text-slate-500 hover:text-primary gap-2"
+        >
+          Skip this step
+          <SkipForward className="w-4 h-4" />
+        </Button>
+      </motion.div>
+
+      {/* Destination Teaser */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <DestinationTeaser
+          destination={formData.destination}
+          startDate={formData.startDate}
+          endDate={formData.endDate}
+          travelers={formData.travelers}
+        />
+      </motion.div>
+
+      {/* Section Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="text-center mb-8"
+      >
         <h1 className="text-3xl font-display font-medium text-slate-900 mb-2">
-          Who's coming along?
+          Tell us about your trip
         </h1>
         <p className="text-slate-600">
-          {formData.startDate} → {formData.endDate} • {formData.travelers} traveler{formData.travelers > 1 ? 's' : ''}
+          Help us personalize your experience — or skip ahead if you're in a hurry
         </p>
-      </div>
+      </motion.div>
 
-      {/* Companions Section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <Users className="w-5 h-5 text-slate-700" />
-          <h2 className="text-lg font-medium text-slate-900">Your Travel Party</h2>
-        </div>
-        <p className="text-sm text-slate-500 mb-4">
-          Add names to personalize the experience, or leave anonymous. We'll remember everyone's preferences.
-        </p>
-        <div className="space-y-3">
-          {companions.map((companion, index) => (
-            <CompanionCard
-              key={companion.id}
-              companion={companion}
-              index={index}
-              onChange={(updates) => handleCompanionChange(index, updates)}
-            />
-          ))}
-        </div>
-      </div>
+      <div className="grid lg:grid-cols-5 gap-8">
+        {/* Main Content */}
+        <div className="lg:col-span-3 space-y-8">
+          {/* Companions Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Who's Coming Along?</h2>
+                  <p className="text-sm text-slate-500">Optional — add names or leave anonymous</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              {companions.map((companion, index) => (
+                <CompanionCard
+                  key={companion.id}
+                  companion={companion}
+                  index={index}
+                  onChange={(updates) => handleCompanionChange(index, updates)}
+                />
+              ))}
+            </div>
+          </motion.div>
 
-      {/* Budget Section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <DollarSign className="w-5 h-5 text-slate-700" />
-          <h2 className="text-lg font-medium text-slate-900">Trip Budget</h2>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {budgetOptions.map((option) => (
-            <OptionCard
-              key={option.value}
-              value={option.value}
-              label={option.label}
-              description={option.description}
-              icon={option.icon}
-              isSelected={budget === option.value}
-              onSelect={() => updateBudget(option.value)}
-            />
-          ))}
-        </div>
-      </div>
+          {/* Budget Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Trip Budget</h2>
+                <p className="text-sm text-slate-500">Per person, per day estimate</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              {budgetOptions.map((option) => (
+                <BudgetCard
+                  key={option.value}
+                  option={option}
+                  isSelected={budget === option.value}
+                  onSelect={() => updateBudget(option.value)}
+                />
+              ))}
+            </div>
+          </motion.div>
 
-      {/* Trip Type Section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <Compass className="w-5 h-5 text-slate-700" />
-          <h2 className="text-lg font-medium text-slate-900">Type of Trip</h2>
+          {/* Trip Type Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-500/10 flex items-center justify-center">
+                <Compass className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Type of Trip</h2>
+                <p className="text-sm text-slate-500">We'll tailor suggestions accordingly</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              {tripTypeOptions.map((option) => (
+                <TripTypeCard
+                  key={option.value}
+                  option={option}
+                  isSelected={tripType === option.value}
+                  onSelect={() => updateTripType(option.value)}
+                />
+              ))}
+            </div>
+          </motion.div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {tripTypeOptions.map((option) => (
-            <OptionCard
-              key={option.value}
-              value={option.value}
-              label={option.label}
-              description={option.description}
-              icon={option.icon}
-              isSelected={tripType === option.value}
-              onSelect={() => updateTripType(option.value)}
-            />
-          ))}
-        </div>
+
+        {/* Sidebar Summary */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.5 }}
+          className="lg:col-span-2"
+        >
+          <div className="sticky top-24 space-y-4">
+            {/* Quick Summary */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-xl">
+              <h3 className="text-sm font-medium text-slate-400 mb-3">Your Trip</h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                    <Compass className="w-4 h-4" />
+                  </div>
+                  <span className="font-medium">{formData.destination}</span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-300">
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <span>{formData.travelers} traveler{formData.travelers > 1 ? 's' : ''}</span>
+                </div>
+                {budget && (
+                  <div className="flex items-center gap-3 text-slate-300">
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                    <span>{budgetOptions.find(b => b.value === budget)?.label}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Next Steps */}
+            <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
+              <p className="text-sm text-slate-600">
+                <span className="font-medium text-primary">Next up:</span> We'll find the perfect flights for your journey
+              </p>
+            </div>
+          </div>
+        </motion.div>
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between pt-4 border-t border-slate-200">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        className="flex justify-between mt-8 pt-6 border-t border-slate-200"
+      >
         <Button variant="outline" onClick={onBack} className="h-12 px-6">
           Back
         </Button>
         <Button
           onClick={onContinue}
-          disabled={!canContinue}
-          className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white"
+          className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white gap-2"
         >
           Continue to Flights
+          <ArrowRight className="w-4 h-4" />
         </Button>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }
