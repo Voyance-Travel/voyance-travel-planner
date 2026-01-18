@@ -28,7 +28,6 @@ import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { formatEnumDisplay } from '@/utils/textFormatting';
 import { toast } from 'sonner';
 import AvatarUpload from '@/components/profile/AvatarUpload';
 import TravelDNAReveal from '@/components/profile/TravelDNAReveal';
@@ -37,6 +36,7 @@ import SurpriseTripCard from '@/components/profile/SurpriseTripCard';
 import RotatingCoverPhoto from '@/components/profile/RotatingCoverPhoto';
 import FriendsSection from '@/components/profile/FriendsSection';
 import MemoryLane from '@/components/profile/MemoryLane';
+import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
 
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences';
 
@@ -915,38 +915,7 @@ export default function Profile() {
         )}
 
         {activeTab === 'preferences' && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-8"
-          >
-            <PreferenceSection
-              title="Travel Style"
-              items={[
-                { label: 'Primary Style', value: user?.preferences?.style || 'Not set' },
-                { label: 'Travel Pace', value: user?.preferences?.pace || 'Not set' },
-                { label: 'Budget Level', value: user?.preferences?.budget || 'Not set' },
-              ]}
-            />
-            <PreferenceSection
-              title="Accommodation"
-              items={[
-                { label: 'Preferred Type', value: user?.preferences?.accommodation || 'Not set' },
-              ]}
-            />
-            <PreferenceSection
-              title="Interests"
-              items={user?.preferences?.interests?.map(i => ({ label: i, value: '' })) || []}
-              isTags
-            />
-            <div className="pt-4">
-              <Button variant="outline" asChild>
-                <Link to={ROUTES.QUIZ}>
-                  Update Preferences
-                </Link>
-              </Button>
-            </div>
-          </motion.div>
+          <EditorialPreferencesView />
         )}
       </main>
 
@@ -1007,29 +976,3 @@ function EmptyState({ message, action }: { message: string; action?: string }) {
   );
 }
 
-function PreferenceSection({ title, items, isTags }: { title: string; items: { label: string; value: string }[]; isTags?: boolean }) {
-  return (
-    <div>
-      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">{title}</h3>
-      {isTags ? (
-        <div className="flex flex-wrap gap-2">
-          {items.map((item) => (
-            <span key={item.label} className="px-3 py-1.5 bg-muted rounded-full text-sm capitalize">
-              {item.label}
-            </span>
-          ))}
-          {items.length === 0 && <span className="text-muted-foreground text-sm">None set</span>}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <div key={item.label} className="flex justify-between items-center py-2 border-b border-border">
-              <span className="text-muted-foreground">{item.label}</span>
-              <span className="text-foreground">{formatEnumDisplay(item.value)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
