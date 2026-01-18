@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Mail, MessageSquare, Send, Loader2, CheckCircle } from "lucide-react";
+import { Mail, MessageSquare, Send, Loader2, CheckCircle, Clock, MapPin } from "lucide-react";
 import MainLayout from "@/components/layout/MainLayout";
 import Head from "@/components/common/Head";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CONTACT_CONFIG } from "@/config/contact";
+
 const contactSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   email: z.string().email("Please enter a valid email"),
@@ -85,37 +86,79 @@ const Contact = () => {
 
       <div className="min-h-screen bg-background">
         {/* Hero Section */}
-        <section className="relative pt-32 pb-16 px-4 bg-gradient-to-b from-muted/50 to-background">
+        <section className="relative pt-32 pb-16 px-4 bg-gradient-to-br from-primary/10 via-background to-accent/10">
           <div className="container max-w-4xl mx-auto text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              <MessageSquare className="w-16 h-16 mx-auto mb-6 text-primary" />
-              <h1 className="text-4xl md:text-5xl font-bold mb-4">Get in Touch</h1>
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                <MessageSquare className="w-8 h-8 text-primary" />
+              </div>
+              <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">Get in Touch</h1>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Have a question, feedback, or need help with your trip? We'd love to hear from you.
+                Have a question, feedback, or need help? We'd love to hear from you.
               </p>
             </motion.div>
           </div>
         </section>
 
+        {/* Contact Info Cards */}
+        <section className="py-8 px-4 -mt-8">
+          <div className="container max-w-4xl mx-auto">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-card border border-border rounded-xl p-5 flex items-start gap-4"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Mail className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Email Us</h3>
+                  <a href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`} className="text-sm text-primary hover:underline">
+                    {CONTACT_CONFIG.SUPPORT_EMAIL}
+                  </a>
+                </div>
+              </motion.div>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="bg-card border border-border rounded-xl p-5 flex items-start gap-4"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Clock className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Response Time</h3>
+                  <p className="text-sm text-muted-foreground">Usually within {CONTACT_CONFIG.RESPONSE_TIME}</p>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
         {/* Contact Form Section */}
-        <section className="py-16 px-4">
+        <section className="py-12 px-4">
           <div className="container max-w-2xl mx-auto">
             {isSuccess ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="text-center py-12"
+                className="text-center py-12 bg-card border border-border rounded-2xl"
               >
-                <CheckCircle className="w-20 h-20 mx-auto mb-6 text-green-500" />
-                <h2 className="text-2xl font-bold mb-4">Message Sent!</h2>
-                <p className="text-muted-foreground mb-8">
-                  Thank you for reaching out. We'll get back to you within 24-48 hours.
+                <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle className="w-10 h-10 text-green-600" />
+                </div>
+                <h2 className="text-2xl font-display font-bold mb-4">Message Sent!</h2>
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                  Thank you for reaching out. We'll get back to you within {CONTACT_CONFIG.RESPONSE_TIME}.
                 </p>
-                <Button onClick={() => setIsSuccess(false)}>
+                <Button onClick={() => setIsSuccess(false)} variant="outline">
                   Send Another Message
                 </Button>
               </motion.div>
@@ -125,8 +168,13 @@ const Contact = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.2 }}
                 onSubmit={handleSubmit(onSubmit)}
-                className="space-y-6 bg-card p-8 rounded-xl border shadow-sm"
+                className="space-y-6 bg-card p-8 rounded-2xl border border-border shadow-sm"
               >
+                <div className="text-center mb-2">
+                  <h2 className="text-xl font-semibold">Send Us a Message</h2>
+                  <p className="text-sm text-muted-foreground">Fill out the form below and we'll respond promptly.</p>
+                </div>
+                
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="name">Name *</Label>
@@ -220,25 +268,6 @@ const Contact = () => {
                 </Button>
               </motion.form>
             )}
-
-            {/* Additional Contact Info */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="mt-12 text-center"
-            >
-              <p className="text-muted-foreground mb-4">
-                Prefer email? Reach us directly at:
-              </p>
-              <a
-                href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`}
-                className="inline-flex items-center gap-2 text-primary hover:underline"
-              >
-                <Mail className="w-4 h-4" />
-                {CONTACT_CONFIG.SUPPORT_EMAIL}
-              </a>
-            </motion.div>
           </div>
         </section>
       </div>

@@ -10,7 +10,10 @@ import {
   HelpCircle, 
   Mail,
   MessageSquare,
-  ChevronRight
+  ChevronRight,
+  Compass,
+  Heart,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,9 +23,11 @@ import { CONTACT_CONFIG } from '@/config/contact';
 
 const helpCategories = [
   {
-    icon: BookOpen,
+    icon: Compass,
     title: 'Getting Started',
-    description: 'Learn the basics of using Voyance',
+    description: 'Begin your Voyance journey',
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-500/10',
     articles: [
       'Creating your account',
       'Taking the Travel DNA quiz',
@@ -33,7 +38,9 @@ const helpCategories = [
   {
     icon: Map,
     title: 'Trip Planning',
-    description: 'Plan and customize your trips',
+    description: 'Create your perfect itinerary',
+    color: 'text-emerald-500',
+    bgColor: 'bg-emerald-500/10',
     articles: [
       'Generating your first itinerary',
       'Customizing activities',
@@ -44,7 +51,9 @@ const helpCategories = [
   {
     icon: CreditCard,
     title: 'Booking & Payments',
-    description: 'Manage bookings and payments',
+    description: 'Manage reservations',
+    color: 'text-violet-500',
+    bgColor: 'bg-violet-500/10',
     articles: [
       'Making a booking',
       'Payment methods',
@@ -55,7 +64,9 @@ const helpCategories = [
   {
     icon: User,
     title: 'Account & Profile',
-    description: 'Manage your account settings',
+    description: 'Your settings & preferences',
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-500/10',
     articles: [
       'Updating your profile',
       'Retaking the quiz',
@@ -66,11 +77,11 @@ const helpCategories = [
 ];
 
 const popularArticles = [
-  { title: 'How to book a complete trip', category: 'Booking' },
-  { title: 'Understanding your Travel DNA results', category: 'Profile' },
-  { title: 'Customizing your generated itinerary', category: 'Trips' },
-  { title: 'Sharing trips with travel companions', category: 'Trips' },
-  { title: 'Cancellation and refund policies', category: 'Booking' },
+  { title: 'How to book a complete trip', category: 'Booking', icon: CreditCard },
+  { title: 'Understanding your Travel DNA results', category: 'Profile', icon: Heart },
+  { title: 'Customizing your generated itinerary', category: 'Trips', icon: Map },
+  { title: 'Sharing trips with travel companions', category: 'Trips', icon: User },
+  { title: 'Cancellation and refund policies', category: 'Booking', icon: BookOpen },
 ];
 
 export default function HelpCenter() {
@@ -84,23 +95,22 @@ export default function HelpCenter() {
       />
       
       {/* Hero */}
-      <section className="pt-32 pb-16 bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+      <section className="pt-32 pb-16 bg-gradient-to-br from-primary/10 via-background to-accent/10">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <motion.h1
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4"
           >
-            How Can We Help?
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8"
-          >
-            Find answers, tutorials, and support for all your Voyance questions
-          </motion.p>
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+              <HelpCircle className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
+              How Can We Help?
+            </h1>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
+              Find answers, tutorials, and support for all your Voyance questions
+            </p>
+          </motion.div>
           
           {/* Search */}
           <motion.div
@@ -114,7 +124,7 @@ export default function HelpCenter() {
               placeholder="Search for help articles..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 h-14 text-lg rounded-xl"
+              className="pl-12 h-14 text-lg rounded-xl border-2 focus:border-primary"
             />
           </motion.div>
         </div>
@@ -123,7 +133,7 @@ export default function HelpCenter() {
       {/* Categories */}
       <section className="py-16">
         <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-2xl font-semibold text-center mb-8">Browse by Category</h2>
+          <h2 className="text-2xl font-display font-bold text-center mb-10">Browse by Category</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {helpCategories.map((category, index) => (
               <motion.div
@@ -131,17 +141,17 @@ export default function HelpCenter() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group"
+                className="bg-card border border-border rounded-2xl p-6 hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer group"
               >
-                <div className="p-3 bg-primary/10 rounded-lg w-fit mb-4 group-hover:bg-primary/20 transition-colors">
-                  <category.icon className="h-6 w-6 text-primary" />
+                <div className={`w-12 h-12 rounded-xl ${category.bgColor} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                  <category.icon className={`h-6 w-6 ${category.color}`} />
                 </div>
-                <h3 className="font-semibold mb-2">{category.title}</h3>
+                <h3 className="font-semibold text-lg mb-1">{category.title}</h3>
                 <p className="text-sm text-muted-foreground mb-4">{category.description}</p>
                 <ul className="space-y-2">
                   {category.articles.slice(0, 3).map((article, i) => (
-                    <li key={i} className="text-sm text-muted-foreground hover:text-primary cursor-pointer flex items-center gap-1">
-                      <ChevronRight className="h-3 w-3" />
+                    <li key={i} className="text-sm text-muted-foreground hover:text-primary cursor-pointer flex items-center gap-1 group/item">
+                      <ChevronRight className="h-3 w-3 group-hover/item:translate-x-0.5 transition-transform" />
                       {article}
                     </li>
                   ))}
@@ -155,7 +165,10 @@ export default function HelpCenter() {
       {/* Popular Articles */}
       <section className="py-16 bg-muted/30">
         <div className="max-w-4xl mx-auto px-4">
-          <h2 className="text-2xl font-semibold text-center mb-8">Popular Articles</h2>
+          <div className="flex items-center justify-center gap-2 mb-10">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <h2 className="text-2xl font-display font-bold">Popular Articles</h2>
+          </div>
           <div className="space-y-3">
             {popularArticles.map((article, index) => (
               <motion.div
@@ -163,17 +176,19 @@ export default function HelpCenter() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-primary/50 cursor-pointer group"
+                className="bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-primary/50 hover:shadow-md cursor-pointer group transition-all"
               >
-                <div className="flex items-center gap-3">
-                  <HelpCircle className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">{article.title}</span>
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <article.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <span className="font-medium group-hover:text-primary transition-colors">{article.title}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full hidden sm:block">
                     {article.category}
                   </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                 </div>
               </motion.div>
             ))}
@@ -184,10 +199,18 @@ export default function HelpCenter() {
       {/* Contact Support */}
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-2xl p-8 md:p-12 text-center">
-            <h2 className="text-2xl font-semibold mb-4">Can't Find What You're Looking For?</h2>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-2xl p-8 md:p-12 text-center border border-primary/20"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+              <MessageSquare className="h-7 w-7 text-primary" />
+            </div>
+            <h2 className="text-2xl font-display font-bold mb-4">Still Need Help?</h2>
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-              Our support team is available to help you with any questions or issues.
+              Our support team is here to help you with any questions or issues you might have.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" asChild>
@@ -199,11 +222,11 @@ export default function HelpCenter() {
               <Button size="lg" variant="outline" asChild>
                 <a href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`} className="gap-2">
                   <Mail className="h-4 w-4" />
-                  {CONTACT_CONFIG.SUPPORT_EMAIL}
+                  Email Us
                 </a>
               </Button>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 

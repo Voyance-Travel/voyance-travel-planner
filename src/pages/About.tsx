@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import MainLayout from '@/components/layout/MainLayout';
-import { ArrowRight, MessageSquare, Users, Clock, Check, X, Compass } from 'lucide-react';
+import { ArrowRight, MessageSquare, Users, Clock, Check, X, Compass, Heart, Zap, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import Head from '@/components/common/Head';
@@ -14,91 +14,76 @@ export default function About() {
       />
       
       {/* Hero Section */}
-      <section className="relative pt-24 pb-16 overflow-hidden">
-        {/* Background Image */}
-        <div className="absolute inset-0 z-0">
-          <img 
-            src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1920&q=80" 
-            alt="Airplane wing view"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/60 to-background" />
-        </div>
+      <section className="relative pt-32 pb-20 overflow-hidden">
+        {/* Background gradient instead of image */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-accent/10" />
 
-        <div className="container mx-auto px-6 relative z-10 text-center py-16">
+        <div className="container mx-auto px-6 relative z-10 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
             <span className="inline-block px-4 py-1.5 rounded-full bg-accent text-accent-foreground text-sm font-medium mb-6">
-              Our Mission & Values
+              Our Mission
             </span>
-            <h1 className="font-serif text-4xl md:text-5xl font-semibold mb-4">
-              This Isn't Just Travel.<br />
-              <span className="text-accent">This Is Design.</span>
+            <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
+              Travel Planning,{' '}
+              <span className="text-primary">Reimagined</span>
             </h1>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-6">
-              Voyance isn't another booking site. It's an intelligent trip builder that listens, 
-              curates, and learns for you — from dream to departure.
+            <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto mb-8">
+              Voyance is an intelligent trip builder that listens, curates, and learns — 
+              transforming the chaos of travel planning into a seamless experience.
             </p>
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Compass className="h-4 w-4" />
-              <span>Voyance Philosophy</span>
+              <span>Building the future of travel</span>
             </div>
           </motion.div>
         </div>
       </section>
 
       {/* The Problem Section */}
-      <section className="py-20 bg-background">
+      <section className="py-20 bg-card">
         <div className="container mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-12"
+            className="text-center mb-16"
           >
-            <span className="text-accent text-sm font-medium">The Problem</span>
-            <h2 className="font-serif text-3xl md:text-4xl font-semibold mt-2">
-              Travel Is Meant to Feel Liberating — <span className="text-muted-foreground">Not Like Homework.</span>
+            <span className="text-primary text-sm font-medium uppercase tracking-wider">The Problem</span>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mt-4">
+              Travel Planning Shouldn't Feel Like Work
             </h2>
             <p className="text-muted-foreground mt-4 max-w-2xl mx-auto">
-              Most trips start with 25 browser tabs. A Google Doc full of 
-              copy-pasted links. A group chat that dissolves into chaos.
+              Most trips start with dozens of browser tabs, scattered notes, and endless group chat debates. 
+              The excitement gets lost in the logistics.
             </p>
           </motion.div>
-
-          {/* Warning icon */}
-          <div className="flex justify-center mb-8">
-            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
-              <span className="text-xl">⚠️</span>
-            </div>
-          </div>
-
-          <p className="text-center text-muted-foreground mb-12">
-            But you're <span className="text-foreground font-medium">still</span> the one stitching it all together.
-          </p>
 
           {/* Problem Cards */}
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-16">
             {[
               {
-                icon: <MessageSquare className="h-5 w-5 text-red-500" />,
+                icon: <MessageSquare className="h-6 w-6" />,
                 title: 'Too Many Tabs',
-                description: '25 open tabs, no clarity, no connection. Just noise.',
-                cta: 'Sound familiar?',
+                description: 'Flights here, hotels there, activities somewhere else. No single source of truth.',
+                color: 'text-red-500',
+                bgColor: 'bg-red-500/10',
               },
               {
-                icon: <Users className="h-5 w-5 text-orange-500" />,
-                title: 'Group Chat Chaos',
-                description: '15 options, 47 suggestions, no decisions. The energy drains.',
-                cta: 'Been there?',
+                icon: <Users className="h-6 w-6" />,
+                title: 'Group Coordination',
+                description: 'Endless messages, conflicting preferences, and decisions that never get made.',
+                color: 'text-orange-500',
+                bgColor: 'bg-orange-500/10',
               },
               {
-                icon: <Clock className="h-5 w-5 text-yellow-500" />,
-                title: 'Weeks of Work',
-                description: 'By hour 15 of planning, the joy is gone. It\'s just a task.',
-                cta: 'Let us help',
+                icon: <Clock className="h-6 w-6" />,
+                title: 'Hours of Research',
+                description: 'By the time you\'ve planned everything, the excitement has faded.',
+                color: 'text-amber-500',
+                bgColor: 'bg-amber-500/10',
               },
             ].map((problem, idx) => (
               <motion.div
@@ -107,186 +92,207 @@ export default function About() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.1 }}
-                className="bg-card rounded-xl border border-border p-6"
+                className="bg-background rounded-xl border border-border p-6"
               >
-                <div className="mb-4">{problem.icon}</div>
-                <h3 className="font-semibold mb-2">{problem.title}</h3>
-                <p className="text-sm text-muted-foreground mb-4">{problem.description}</p>
-                <button className="text-accent text-sm font-medium hover:underline">
-                  {problem.cta} →
-                </button>
+                <div className={`w-12 h-12 rounded-lg ${problem.bgColor} flex items-center justify-center mb-4`}>
+                  <div className={problem.color}>{problem.icon}</div>
+                </div>
+                <h3 className="font-semibold text-lg mb-2">{problem.title}</h3>
+                <p className="text-sm text-muted-foreground">{problem.description}</p>
               </motion.div>
             ))}
           </div>
 
-          {/* Comparison: Before/After */}
+          {/* Before/After Comparison */}
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {/* Before - Chaos */}
-            <div className="bg-red-50 dark:bg-red-950/20 rounded-xl border border-red-200 dark:border-red-900 p-6">
+            {/* Before */}
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="bg-red-50 dark:bg-red-950/20 rounded-xl border border-red-200 dark:border-red-900/50 p-6"
+            >
               <span className="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wider">Before</span>
-              <h3 className="font-semibold text-lg mt-2 mb-4">Chaos & Confusion</h3>
-              
-              <div className="bg-white dark:bg-background rounded-lg p-4 mb-4 border border-red-100 dark:border-red-900">
-                <div className="flex gap-2 mb-3">
-                  {[1,2,3,4,5].map(i => (
-                    <div key={i} className="h-2 w-8 bg-gray-200 dark:bg-gray-700 rounded" />
-                  ))}
-                </div>
-                <div className="space-y-2">
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className="h-2 bg-gray-100 dark:bg-gray-800 rounded w-full" />
-                  ))}
-                </div>
-                <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-                  <X className="h-3 w-3 text-red-500" /> Was this reviewed yet again?
-                </div>
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                  <X className="h-3 w-3 text-red-500" /> Where do we eat in Egypt?
-                </div>
-              </div>
-
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2"><X className="h-4 w-4 text-red-500 shrink-0 mt-0.5" /> Lists scattered across 6 devices</li>
-                <li className="flex items-start gap-2"><X className="h-4 w-4 text-red-500 shrink-0 mt-0.5" /> No central source of truth</li>
-                <li className="flex items-start gap-2"><X className="h-4 w-4 text-red-500 shrink-0 mt-0.5" /> Endless back and forth</li>
+              <h3 className="font-semibold text-lg mt-2 mb-4">The Old Way</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <X className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">Lists scattered across multiple apps</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <X className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">Hours comparing prices and reviews</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <X className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">Generic recommendations that don't fit</span>
+                </li>
               </ul>
-            </div>
+            </motion.div>
 
-            {/* After - Voyance */}
-            <div className="bg-accent/5 rounded-xl border border-accent/20 p-6">
-              <span className="text-xs font-medium text-accent uppercase tracking-wider">After</span>
-              <h3 className="font-semibold text-lg mt-2 mb-4">Voyance Clarity</h3>
-              
-              <div className="bg-white dark:bg-background rounded-lg p-4 mb-4 border border-accent/20">
-                <div className="flex gap-2 mb-3 text-xs">
-                  <span className="px-2 py-0.5 rounded bg-accent/10 text-accent">Bali</span>
-                  <span className="px-2 py-0.5 rounded bg-secondary">+Main</span>
-                  <span className="px-2 py-0.5 rounded bg-secondary">+Activities</span>
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2 bg-accent/20 rounded w-3/4" />
-                  <div className="h-2 bg-accent/10 rounded w-1/2" />
-                </div>
-                <Button variant="accent" size="sm" className="mt-4 w-full">
-                  View Itinerary
-                </Button>
-              </div>
-
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2"><Check className="h-4 w-4 text-accent shrink-0 mt-0.5" /> One intelligent interface for your group</li>
-                <li className="flex items-start gap-2"><Check className="h-4 w-4 text-accent shrink-0 mt-0.5" /> Real-time collaboration</li>
-                <li className="flex items-start gap-2"><Check className="h-4 w-4 text-accent shrink-0 mt-0.5" /> Book everything with confidence</li>
+            {/* After */}
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="bg-primary/5 rounded-xl border border-primary/20 p-6"
+            >
+              <span className="text-xs font-medium text-primary uppercase tracking-wider">After</span>
+              <h3 className="font-semibold text-lg mt-2 mb-4">With Voyance</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">One intelligent interface for everything</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">Personalized recommendations in minutes</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">Trips tailored to your unique preferences</span>
+                </li>
               </ul>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
 
-      {/* Solution Section */}
-      <section className="py-20 bg-secondary/30">
-        <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <span className="text-accent text-sm font-medium">The Solution</span>
-            <h2 className="font-serif text-3xl md:text-4xl font-semibold mt-2">
-              So We Rebuilt Travel Planning From First Principles.
-            </h2>
-            <p className="text-muted-foreground mt-4">
-              One interface. One conversation. Every detail handled.
-            </p>
-          </motion.div>
-
-          <div className="grid lg:grid-cols-2 gap-12 items-center max-w-5xl mx-auto">
-            <div>
-              <h3 className="font-semibold text-xl mb-6">Intelligence That Actually Understands</h3>
-              
-              <div className="space-y-6">
-                {[
-                  { label: 'Bulk Curation', desc: 'Not 3,000 options. The right 3 — precisely matched.' },
-                  { label: 'One to One Design', desc: 'Your itinerary is a conversation, not a template.' },
-                  { label: 'Actuary Model', desc: 'We plan for what might go wrong, so you don\'t have to.' },
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-3">
-                    <Check className="h-5 w-5 text-accent mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="relative">
-              <img 
-                src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80" 
-                alt="Beach destination"
-                className="rounded-xl shadow-medium"
-              />
-              <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3">
-                <p className="text-sm font-medium">✨ I have a unique trip...</p>
-                <p className="text-xs text-muted-foreground">Tell us more about what you're looking for.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Who We Serve Section */}
+      {/* Our Approach Section */}
       <section className="py-20 bg-background">
         <div className="container mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-12"
+            className="text-center mb-16"
           >
-            <span className="text-accent text-sm font-medium">Audience</span>
-            <h2 className="font-serif text-3xl font-semibold mt-2">Who Voyance Is Built For</h2>
-            <p className="text-muted-foreground mt-4">We serve those who value their time as much as their experiences.</p>
+            <span className="text-primary text-sm font-medium uppercase tracking-wider">Our Approach</span>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mt-4">
+              Built From First Principles
+            </h2>
+            <p className="text-muted-foreground mt-4 max-w-2xl mx-auto">
+              We didn't just build another booking site. We reimagined what travel planning could be.
+            </p>
           </motion.div>
 
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {[
               {
-                title: 'Luxury Seekers',
-                desc: 'Those who value exceptional service and personalized attention over basic offerings.',
-                image: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=400&q=80',
+                icon: <Heart className="h-6 w-6" />,
+                title: 'Personalized Curation',
+                description: 'Your Travel DNA powers recommendations that actually match your preferences, not generic suggestions.',
               },
               {
-                title: 'Time-Conscious Professionals',
-                desc: 'Who want to maximize experiences without spending weeks planning.',
-                image: 'https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=400&q=80',
+                icon: <Zap className="h-6 w-6" />,
+                title: 'Intelligent Planning',
+                description: 'AI that understands context, timing, and logistics — so every itinerary just works.',
+              },
+              {
+                icon: <Shield className="h-6 w-6" />,
+                title: 'Confidence in Booking',
+                description: 'Transparent pricing, verified options, and support when you need it.',
+              },
+            ].map((feature, idx) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1 }}
+                className="text-center"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <div className="text-primary">{feature.icon}</div>
+                </div>
+                <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
+                <p className="text-sm text-muted-foreground">{feature.description}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Who We Serve Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="container mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <span className="text-primary text-sm font-medium uppercase tracking-wider">Who We Serve</span>
+            <h2 className="font-display text-3xl font-bold mt-4">Built for Thoughtful Travelers</h2>
+            <p className="text-muted-foreground mt-4 max-w-xl mx-auto">
+              We serve those who value their time as much as their experiences.
+            </p>
+          </motion.div>
+
+          <div className="max-w-3xl mx-auto space-y-4">
+            {[
+              {
+                title: 'Experience Seekers',
+                desc: 'Those who want meaningful trips, not just destinations.',
+              },
+              {
+                title: 'Busy Professionals',
+                desc: 'Who want amazing trips without spending weeks planning.',
+              },
+              {
+                title: 'Group Travelers',
+                desc: 'Making coordination easy for friends and family trips.',
               },
             ].map((persona, idx) => (
-              <div key={idx} className="flex items-center gap-6 bg-card rounded-xl border border-border p-4">
-                <Check className="h-5 w-5 text-accent shrink-0" />
-                <div className="flex-1">
+              <motion.div 
+                key={idx}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1 }}
+                className="flex items-center gap-4 bg-card rounded-xl border border-border p-5"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Check className="h-5 w-5 text-primary" />
+                </div>
+                <div>
                   <h4 className="font-semibold">{persona.title}</h4>
                   <p className="text-sm text-muted-foreground">{persona.desc}</p>
                 </div>
-                <img src={persona.image} alt={persona.title} className="w-24 h-16 rounded-lg object-cover hidden md:block" />
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-accent/5">
+      <section className="py-20 bg-primary/5">
         <div className="container mx-auto px-6 text-center">
-          <h2 className="font-serif text-3xl font-semibold mb-4">Ready to Experience the Difference?</h2>
-          <p className="text-muted-foreground mb-8">Start planning your perfect trip with Voyance today.</p>
-          <Link to="/trip/new">
-            <Button variant="accent" size="xl">
-              Start Your Journey
-              <ArrowRight className="h-5 w-5 ml-2" />
-            </Button>
-          </Link>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
+              Ready to Plan Differently?
+            </h2>
+            <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
+              Discover your Travel DNA and let Voyance craft your perfect trip.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link to="/quiz">
+                <Button size="lg">
+                  Take the Quiz
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+              <Link to="/explore">
+                <Button size="lg" variant="outline">
+                  Explore Destinations
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
         </div>
       </section>
     </MainLayout>

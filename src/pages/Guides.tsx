@@ -5,13 +5,13 @@ import { BookOpen, Clock, MapPin, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
-// Comprehensive travel guides
+// Comprehensive travel guides with unique images
 const guides = [
   {
     slug: 'first-time-japan',
     title: 'First Time in Japan',
     description: 'Everything you need to know for your first visit to Japan, from transit tips to cultural etiquette.',
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800&q=80',
     readTime: '15 min read',
     category: 'Destination Guide',
     region: 'Asia',
@@ -20,7 +20,7 @@ const guides = [
     slug: 'europe-on-budget',
     title: 'Europe on a Budget',
     description: 'How to explore Europe without breaking the bank. Tips for affordable travel, dining, and experiences.',
-    image: 'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800&q=80',
     readTime: '12 min read',
     category: 'Budget Travel',
     region: 'Europe',
@@ -29,7 +29,7 @@ const guides = [
     slug: 'solo-female-travel',
     title: 'Solo Female Travel Guide',
     description: 'Empowering tips and destinations for women traveling solo. Safety, community, and adventure.',
-    image: 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=800&q=80',
     readTime: '18 min read',
     category: 'Solo Travel',
     region: 'Worldwide',
@@ -38,7 +38,7 @@ const guides = [
     slug: 'family-travel-essentials',
     title: 'Family Travel Essentials',
     description: 'Master the art of traveling with kids. Packing lists, entertainment ideas, and family-friendly destinations.',
-    image: 'https://images.unsplash.com/photo-1565038229449-1f22e26e03af?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?w=800&q=80',
     readTime: '14 min read',
     category: 'Family Travel',
     region: 'Worldwide',
@@ -47,7 +47,7 @@ const guides = [
     slug: 'southeast-asia-adventure',
     title: 'Southeast Asia Adventure',
     description: 'From temples to beaches, discover the best of Thailand, Vietnam, Cambodia, and beyond.',
-    image: 'https://images.unsplash.com/photo-1528181304800-259b08848526?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&q=80',
     readTime: '20 min read',
     category: 'Destination Guide',
     region: 'Asia',
@@ -56,7 +56,7 @@ const guides = [
     slug: 'sustainable-travel',
     title: 'Sustainable Travel 101',
     description: 'How to minimize your environmental impact while maximizing your travel experiences.',
-    image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=800&q=80',
     readTime: '10 min read',
     category: 'Eco Travel',
     region: 'Worldwide',
@@ -65,7 +65,7 @@ const guides = [
     slug: 'mediterranean-food-tour',
     title: 'Mediterranean Food Journey',
     description: 'A culinary adventure through Italy, Greece, Spain, and beyond. Must-try dishes and hidden gems.',
-    image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=800&q=80',
     readTime: '16 min read',
     category: 'Food & Culture',
     region: 'Europe',
@@ -74,7 +74,7 @@ const guides = [
     slug: 'road-trip-usa',
     title: 'Ultimate USA Road Trip',
     description: 'Plan the perfect American road trip. Routes, stops, and tips for an unforgettable journey.',
-    image: 'https://images.unsplash.com/photo-1449034446853-66c86144b0ad?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80',
     readTime: '22 min read',
     category: 'Road Trip',
     region: 'North America',
