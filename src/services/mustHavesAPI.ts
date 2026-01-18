@@ -3,6 +3,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface MustHave { id: string; tripId: string; label: string; notes?: string; aiGenerated: boolean; userModified: boolean; completed?: boolean; createdAt: string; updatedAt: string; }
 export interface CreateMustHaveInput { tripId: string; label: string; notes?: string; }
@@ -19,7 +20,8 @@ async function getTripMustHaves(tripId: string): Promise<MustHave[]> {
 async function saveTripMustHaves(tripId: string, mustHaves: MustHave[]): Promise<void> {
   const { data } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
   const existing = (data?.metadata as Record<string, unknown>) || {};
-  const { error } = await supabase.from('trips').update({ metadata: { ...existing, mustHaves } }).eq('id', tripId);
+  const updatedMetadata = { ...existing, mustHaves };
+  const { error } = await supabase.from('trips').update({ metadata: updatedMetadata as unknown as Json }).eq('id', tripId);
   if (error) throw new Error(error.message);
 }
 
