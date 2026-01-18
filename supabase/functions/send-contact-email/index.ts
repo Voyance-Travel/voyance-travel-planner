@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
 const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
-// Use environment variable if set, otherwise default to hello@voyance.travel
-const CONTACT_EMAIL = Deno.env.get("CONTACT_EMAIL") || "hello@voyance.travel";
+// Use environment variable if set, otherwise default to contact@travelwithvoyance.com
+const CONTACT_EMAIL = Deno.env.get("CONTACT_EMAIL") || "contact@travelwithvoyance.com";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,7 +50,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: CONTACT_EMAIL }] }],
-        from: { email: "noreply@voyance.travel", name: "Voyance Contact Form" },
+        from: { email: "noreply@travelwithvoyance.com", name: "Voyance Contact Form" },
         reply_to: { email, name },
         subject: emailSubject,
         content: [
@@ -91,7 +91,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email }] }],
-        from: { email: "noreply@voyance.travel", name: "Voyance" },
+        from: { email: "noreply@travelwithvoyance.com", name: "Voyance" },
         subject: "We received your message!",
         content: [
           {

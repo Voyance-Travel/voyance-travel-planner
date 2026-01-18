@@ -110,7 +110,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             personalizations: [{ to: [{ email: user.email }] }],
-            from: { email: "bookings@voyance.travel", name: "Voyance Travel" },
+            from: { email: "contact@travelwithvoyance.com", name: "Voyance Travel" },
             subject: `🎉 Your trip to ${trip.destination} is confirmed!`,
             content: [
               {
@@ -154,7 +154,7 @@ serve(async (req) => {
                     </div>
                     
                     <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;">
-                      <p>Questions? Reply to this email or contact us at support@voyance.travel</p>
+                      <p>Questions? Reply to this email or contact us at contact@travelwithvoyance.com</p>
                       <p>© ${new Date().getFullYear()} Voyance. All rights reserved.</p>
                     </div>
                   </div>
