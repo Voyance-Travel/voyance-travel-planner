@@ -3,12 +3,13 @@ import { MapPin, Star, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { buildRoute } from '@/config/routes';
 
+// Unique images for each destination to avoid duplicates across site
 const destinations = [
   {
     slug: 'kyoto',
     name: 'Kyoto',
     country: 'Japan',
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600',
+    image: 'https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=600',
     rating: 4.9,
     category: 'Culture',
   },
@@ -16,7 +17,7 @@ const destinations = [
     slug: 'santorini',
     name: 'Santorini',
     country: 'Greece',
-    image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=600',
+    image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600',
     rating: 4.8,
     category: 'Romance',
   },
@@ -24,7 +25,7 @@ const destinations = [
     slug: 'bali',
     name: 'Bali',
     country: 'Indonesia',
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600',
+    image: 'https://images.unsplash.com/photo-1573790387438-4da905039392?w=600',
     rating: 4.7,
     category: 'Wellness',
   },
@@ -32,7 +33,7 @@ const destinations = [
     slug: 'paris',
     name: 'Paris',
     country: 'France',
-    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=600',
+    image: 'https://images.unsplash.com/photo-1431274172761-fca41d930114?w=600',
     rating: 4.8,
     category: 'Culture',
   },
@@ -40,7 +41,7 @@ const destinations = [
     slug: 'marrakech',
     name: 'Marrakech',
     country: 'Morocco',
-    image: 'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=600',
+    image: 'https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600',
     rating: 4.6,
     category: 'Adventure',
   },
@@ -48,7 +49,7 @@ const destinations = [
     slug: 'new-york',
     name: 'New York',
     country: 'USA',
-    image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=600',
+    image: 'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=600',
     rating: 4.7,
     category: 'Urban',
   },

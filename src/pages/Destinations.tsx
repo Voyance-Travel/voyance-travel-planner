@@ -43,12 +43,12 @@ const featuredDestinations = [
   },
 ];
 
-// Trending destinations
-const trendingDestinations = [
-  { id: 'copenhagen', name: 'Copenhagen', country: 'Denmark', trend: '+42%' },
-  { id: 'mexico-city', name: 'Mexico City', country: 'Mexico', trend: '+38%' },
-  { id: 'cape-town', name: 'Cape Town', country: 'South Africa', trend: '+35%' },
-  { id: 'bangkok', name: 'Bangkok', country: 'Thailand', trend: '+31%' },
+// Popular destinations
+const popularDestinations = [
+  { id: 'copenhagen', name: 'Copenhagen', country: 'Denmark', badge: 'Hot' },
+  { id: 'mexico-city', name: 'Mexico City', country: 'Mexico', badge: 'Popular' },
+  { id: 'cape-town', name: 'Cape Town', country: 'South Africa', badge: 'Rising' },
+  { id: 'bangkok', name: 'Bangkok', country: 'Thailand', badge: 'Trending' },
 ];
 
 // Regions for browsing
@@ -204,18 +204,18 @@ export default function Destinations() {
         </div>
       </section>
       
-      {/* Trending Now */}
+      {/* Popular Now */}
       <section className="py-16 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-10">
             <TrendingUp className="h-6 w-6 text-primary" />
             <h2 className="text-2xl font-display font-bold text-foreground">
-              Trending Now
+              Popular Right Now
             </h2>
           </div>
           
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {trendingDestinations.map((destination, index) => {
+            {popularDestinations.map((destination, index) => {
               const fullDest = allDestinations.find(d => d.id === destination.id);
               return (
                 <motion.div
@@ -243,12 +243,9 @@ export default function Destinations() {
                         {destination.country}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-semibold text-green-600">
-                        {destination.trend}
-                      </span>
-                      <p className="text-xs text-muted-foreground">searches</p>
-                    </div>
+                    <Badge variant="secondary" className="shrink-0 text-xs">
+                      {destination.badge}
+                    </Badge>
                   </div>
                 </motion.div>
               );
