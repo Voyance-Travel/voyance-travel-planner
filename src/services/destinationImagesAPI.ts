@@ -1,11 +1,12 @@
 /**
  * Destination Images API Service
- * Endpoints for destination images management
+ * 
+ * Uses Cloud edge function with Google Places Photos fallback.
+ * Priority: Database → Google Places → Gradient fallback
  */
 
+import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // TYPES
@@ -18,28 +19,25 @@ export interface DestinationImage {
   url: string;
   alt: string;
   type: 'hero' | 'gallery' | 'activity';
-  tags: string[];
+  source: 'database' | 'google_places' | 'fallback';
+  tags?: string[];
   width?: number | null;
   height?: number | null;
   photographer?: string | null;
-  source?: string | null;
 }
 
 export interface GetImagesParams {
   destinationId?: string;
+  destination?: string;
   imageType?: ImageType;
   limit?: number;
   excludePeople?: boolean;
 }
 
 export interface ImagesResponse {
-  status: 'success';
+  success: boolean;
   images: DestinationImage[];
-}
-
-export interface HeroImageResponse {
-  status: 'success';
-  image: DestinationImage;
+  source: 'database' | 'google_places' | 'fallback' | 'none';
 }
 
 // ============================================================================
@@ -47,7 +45,8 @@ export interface HeroImageResponse {
 // ============================================================================
 
 /**
- * Get destination images with optional filtering
+ * Get destination images with fallback chain:
+ * Database → Google Places → Gradient
  */
 export async function getDestinationImages(
   params: GetImagesParams = {}
@@ -55,44 +54,33 @@ export async function getDestinationImages(
   const queryParams = new URLSearchParams();
   
   if (params.destinationId) queryParams.set('destinationId', params.destinationId);
+  if (params.destination) queryParams.set('destination', params.destination);
   if (params.imageType) queryParams.set('imageType', params.imageType);
   if (params.limit) queryParams.set('limit', String(params.limit));
-  if (params.excludePeople !== undefined) queryParams.set('excludePeople', String(params.excludePeople));
   
-  const url = `${BACKEND_URL}/api/v1/destination-images?${queryParams.toString()}`;
+  const { data, error } = await supabase.functions.invoke(`destination-images?${queryParams.toString()}`);
   
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Failed to fetch destination images: ${response.statusText}`);
+  if (error) {
+    console.error('[Images] Edge function error:', error);
+    // Return empty array on error - UI should handle gracefully
+    return [];
   }
   
-  const data: ImagesResponse = await response.json();
-  return data.images;
+  return (data as ImagesResponse)?.images || [];
 }
 
 /**
  * Get hero image for a specific destination
  */
-export async function getHeroImage(destinationId: string): Promise<DestinationImage> {
-  const response = await fetch(`${BACKEND_URL}/api/v1/destination-images/hero/${destinationId}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+export async function getHeroImage(destinationId: string, destinationName?: string): Promise<DestinationImage | null> {
+  const images = await getDestinationImages({
+    destinationId,
+    destination: destinationName,
+    imageType: 'hero',
+    limit: 1,
   });
   
-  if (!response.ok) {
-    throw new Error(`Failed to fetch hero image: ${response.statusText}`);
-  }
-  
-  const data: HeroImageResponse = await response.json();
-  return data.image;
+  return images[0] || null;
 }
 
 /**
@@ -128,24 +116,25 @@ export async function getActivityImages(
 // ============================================================================
 
 /**
- * Hook to fetch destination images
+ * Hook to fetch destination images with automatic fallback
  */
 export function useDestinationImages(params: GetImagesParams = {}) {
   return useQuery({
     queryKey: ['destination-images', params],
     queryFn: () => getDestinationImages(params),
-    staleTime: 1000 * 60 * 60, // 1 hour (cached on backend)
+    enabled: !!(params.destinationId || params.destination),
+    staleTime: 1000 * 60 * 60, // 1 hour
   });
 }
 
 /**
  * Hook to fetch hero image for a destination
  */
-export function useHeroImage(destinationId: string | undefined) {
+export function useHeroImage(destinationId: string | undefined, destinationName?: string) {
   return useQuery({
-    queryKey: ['hero-image', destinationId],
-    queryFn: () => getHeroImage(destinationId!),
-    enabled: !!destinationId,
+    queryKey: ['hero-image', destinationId, destinationName],
+    queryFn: () => getHeroImage(destinationId!, destinationName),
+    enabled: !!destinationId || !!destinationName,
     staleTime: 1000 * 60 * 60, // 1 hour
   });
 }

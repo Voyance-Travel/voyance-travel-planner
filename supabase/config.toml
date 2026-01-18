@@ -38,3 +38,18 @@ verify_jwt = false
 
 [functions.delete-users]
 verify_jwt = false
+
+[functions.flights]
+verify_jwt = false
+
+[functions.hotels]
+verify_jwt = false
+
+[functions.weather]
+verify_jwt = false
+
+[functions.activities]
+verify_jwt = false
+
+[functions.destination-images]
+verify_jwt = false

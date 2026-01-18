@@ -30,7 +30,9 @@ export interface WeatherData {
   uvIndex?: string;
   airQuality?: string;
   currentConditions?: string;
+  feelsLike?: number;
   forecast?: WeatherForecast[];
+  source?: 'weatherstack' | 'fallback';
 }
 
 export interface WeatherResponse {
@@ -61,25 +63,30 @@ export async function getWeather(destinationId: string): Promise<WeatherResponse
 
   // Transform the response to match existing interface
   const weatherData = data?.weather;
+  const isRealData = weatherData?.source === 'weatherstack';
+  
   return {
     destinationId,
     weather: {
       temperatureRange: weatherData?.current 
-        ? `${weatherData.current.temp - 5}°F - ${weatherData.current.temp + 5}°F`
+        ? `${weatherData.current.temp - 5}°C - ${weatherData.current.temp + 5}°C`
         : null,
       seasonality: null,
       bestTimeToVisit: null,
       lastUpdated: new Date().toISOString(),
-      isDynamic: true,
+      isDynamic: isRealData,
+      precipitation: weatherData?.current?.precipitation ? `${weatherData.current.precipitation}mm` : undefined,
       humidity: weatherData?.current?.humidity ? `${weatherData.current.humidity}%` : undefined,
-      windSpeed: weatherData?.current?.windSpeed ? `${weatherData.current.windSpeed} mph` : undefined,
+      windSpeed: weatherData?.current?.windSpeed ? `${weatherData.current.windSpeed} km/h` : undefined,
       currentConditions: weatherData?.current?.condition,
+      feelsLike: weatherData?.current?.feelsLike,
       forecast: weatherData?.forecast?.map((f: any) => ({
         date: f.date,
         condition: f.condition,
         high: f.high,
         low: f.low,
       })),
+      source: weatherData?.source || 'fallback',
     },
   };
 }

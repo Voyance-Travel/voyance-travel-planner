@@ -1,13 +1,11 @@
 /**
  * Activities API Service
  * 
- * Handles activity catalog search with TravelDNA scoring.
+ * Uses Cloud edge function with Viator API for bookable activities.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.voyance.travel';
 
 // ============================================================================
 // TYPES
@@ -28,18 +26,25 @@ export interface Activity {
   title: string;
   description: string;
   category: string;
-  location: ActivityLocation;
-  cost: number;
+  location?: ActivityLocation;
+  price: number;
+  currency: string;
   duration: number; // in minutes
-  tags: string[];
+  imageUrl: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  bookingUrl: string | null;
+  tags?: string[];
   travelDnaScore?: number;
-  verified: boolean;
-  seasonality: string[];
-  weatherDependency: WeatherDependency;
+  verified?: boolean;
+  seasonality?: string[];
+  weatherDependency?: WeatherDependency;
+  source: 'viator' | 'database';
 }
 
 export interface ActivitySearchParams {
-  destinationId: string;
+  destination?: string;
+  destinationId?: string;
   category?: string;
   priceRange?: {
     min: number;
@@ -49,10 +54,11 @@ export interface ActivitySearchParams {
 }
 
 export interface ActivitySearchResponse {
-  status: 'success';
+  success: boolean;
   activities: Activity[];
-  fromCache: boolean;
   totalCount: number;
+  source: 'viator' | 'database' | 'mixed';
+  fromCache: boolean;
 }
 
 export interface ActivityDetailsResponse {
@@ -64,60 +70,67 @@ export interface ActivityDetailsResponse {
 // API FUNCTIONS
 // ============================================================================
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` };
-  }
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
 /**
- * Search activities for a destination
+ * Search activities for a destination using Cloud edge function
  */
 export async function searchActivities(params: ActivitySearchParams): Promise<ActivitySearchResponse> {
-  const headers = await getAuthHeader();
   const queryParams = new URLSearchParams();
 
-  queryParams.set('destinationId', params.destinationId);
+  if (params.destination) queryParams.set('destination', params.destination);
+  if (params.destinationId) queryParams.set('destinationId', params.destinationId);
   if (params.category) queryParams.set('category', params.category);
   if (params.limit) queryParams.set('limit', params.limit.toString());
-  if (params.priceRange) {
-    queryParams.set('priceRange', JSON.stringify(params.priceRange));
+
+  const { data, error } = await supabase.functions.invoke('activities', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: null,
+  });
+
+  // Edge functions with GET need query params in URL - use POST instead
+  const { data: result, error: invokeError } = await supabase.functions.invoke(`activities?${queryParams.toString()}`);
+
+  if (invokeError) {
+    console.error('[Activities] Edge function error:', invokeError);
+    throw new Error(invokeError.message || 'Failed to search activities');
   }
 
-  const url = `${API_BASE_URL}/api/v1/activities/search?${queryParams}`;
-
-  const response = await fetch(url, { headers });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Search failed' }));
-    throw new Error(error.error || 'Failed to search activities');
-  }
-
-  return response.json();
+  return result as ActivitySearchResponse;
 }
 
 /**
- * Get activity details by ID
+ * Get activity details by ID (from database)
  */
 export async function getActivityDetails(activityId: string): Promise<ActivityDetailsResponse> {
-  const headers = await getAuthHeader();
+  const { data, error } = await supabase
+    .from('activity_catalog')
+    .select('*')
+    .eq('id', activityId)
+    .single();
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/activities/${activityId}`, {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Fetch failed' }));
-    throw new Error(error.error || 'Failed to fetch activity details');
+  if (error) {
+    throw new Error(error.message || 'Failed to fetch activity details');
   }
 
-  return response.json();
+  return {
+    status: 'success',
+    activity: {
+      id: data.id,
+      title: data.title,
+      description: data.description || '',
+      category: data.category || 'Activity',
+      price: data.cost_usd || 0,
+      currency: 'USD',
+      duration: (data.estimated_duration_hours || 2) * 60,
+      imageUrl: null,
+      rating: null,
+      reviewCount: null,
+      bookingUrl: null,
+      source: 'database',
+    },
+  };
 }
 
 // ============================================================================
@@ -128,8 +141,8 @@ export function useActivitySearch(params: ActivitySearchParams | null) {
   return useQuery({
     queryKey: ['activities-search', params],
     queryFn: () => searchActivities(params!),
-    enabled: !!params?.destinationId,
-    staleTime: 1800000, // 30 minutes (cached on backend)
+    enabled: !!(params?.destinationId || params?.destination),
+    staleTime: 1800000, // 30 minutes
   });
 }
 
@@ -138,7 +151,7 @@ export function useActivityDetails(activityId: string | null) {
     queryKey: ['activity-details', activityId],
     queryFn: () => getActivityDetails(activityId!),
     enabled: !!activityId,
-    staleTime: 3600000, // 1 hour (cached on backend)
+    staleTime: 3600000, // 1 hour
   });
 }
 
