@@ -582,178 +582,234 @@ export default function Profile() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-10"
+            className="space-y-12"
           >
-            {/* Header - Editorial style */}
-            <div className="border-b border-border pb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-serif font-medium text-foreground tracking-tight">
-                    Membership
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {subscription?.subscribed 
-                      ? `Active until ${subscription.subscription_end ? format(new Date(subscription.subscription_end), 'MMMM d, yyyy') : 'N/A'}`
-                      : 'Unlock premium travel planning features'}
-                  </p>
+            {/* Hero Header - Editorial Magazine Style */}
+            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-slate to-slate/90 p-8 md:p-12">
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-white/20 to-transparent rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2" />
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-primary/30 to-transparent rounded-full blur-2xl transform -translate-x-1/3 translate-y-1/3" />
+              </div>
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-4">
+                  <Crown className="h-4 w-4 text-gold" />
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-slate-foreground/70 font-medium">
+                    Premium Membership
+                  </span>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={checkSubscription}
-                  disabled={isLoadingSubscription}
-                  className="text-xs text-muted-foreground"
-                >
-                  {isLoadingSubscription ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                      Refresh
-                    </>
-                  )}
-                </Button>
+                <h2 className="text-3xl md:text-4xl font-serif font-medium text-slate-foreground tracking-tight leading-tight mb-3">
+                  Travel Without<br />Limits
+                </h2>
+                <p className="text-slate-foreground/70 max-w-md text-sm leading-relaxed">
+                  {subscription?.subscribed 
+                    ? `Your membership is active until ${subscription.subscription_end ? format(new Date(subscription.subscription_end), 'MMMM d, yyyy') : 'renewal'}`
+                    : 'Unlock AI-powered itineraries, unlimited trips, and exclusive travel intelligence.'}
+                </p>
+                <div className="mt-6 flex items-center gap-4">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={checkSubscription}
+                    disabled={isLoadingSubscription}
+                    className="text-xs text-slate-foreground/60 hover:text-slate-foreground hover:bg-white/10"
+                  >
+                    {isLoadingSubscription ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                        Refresh Status
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
 
-            {/* Free tier info - show if not subscribed */}
+            {/* Current Status - Editorial Card */}
             {!subscription?.subscribed && (
-              <div className="p-6 rounded-lg border border-border bg-muted/20">
-                <div className="flex items-start gap-4">
-                  <div className="p-2.5 rounded-full bg-muted">
-                    <Compass className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-medium text-foreground">Free Plan</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      You're currently on the free plan with limited features.
-                    </p>
-                    <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-muted-foreground" />
-                        3 trip plans per month
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-muted-foreground" />
-                        Basic itinerary generation
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-muted-foreground" />
-                        Travel DNA quiz
-                      </li>
-                    </ul>
+              <div className="relative">
+                <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-border via-muted-foreground/30 to-border" />
+                <div className="pl-8">
+                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                    Current Plan
+                  </span>
+                  <h3 className="text-xl font-serif text-foreground mt-2 mb-3">Explorer (Free)</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-lg mb-4">
+                    You're exploring Voyance with our complimentary tier. Upgrade to unlock the full suite of travel intelligence.
+                  </p>
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <span className="w-1 h-1 rounded-full bg-muted-foreground" />
+                      3 trips/month
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="w-1 h-1 rounded-full bg-muted-foreground" />
+                      Basic itineraries
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="w-1 h-1 rounded-full bg-muted-foreground" />
+                      Travel DNA quiz
+                    </span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Subscription Plans */}
+            {/* Subscription Plans - Editorial Grid */}
             <div>
-              <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-6">
-                Choose your plan
-              </h3>
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium block mb-1">
+                    Membership Options
+                  </span>
+                  <h3 className="text-xl font-serif text-foreground">Choose Your Journey</h3>
+                </div>
+              </div>
+              
               <div className="grid md:grid-cols-2 gap-6">
                 {Object.entries(SUBSCRIPTION_TIERS).map(([key, tier]) => {
                   const isCurrentPlan = subscription?.product_id === tier.productId;
                   const isAnnual = key === 'wanderlust';
                   
                   return (
-                    <div
+                    <motion.div
                       key={key}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: isAnnual ? 0.1 : 0 }}
                       className={cn(
-                        "relative p-6 rounded-lg border transition-all",
+                        "group relative bg-card rounded-lg overflow-hidden transition-all duration-300",
                         isCurrentPlan 
-                          ? "border-foreground" 
-                          : "border-border hover:border-muted-foreground/50"
+                          ? "ring-2 ring-foreground shadow-elevated" 
+                          : "border border-border hover:shadow-medium hover:border-muted-foreground/30"
                       )}
                     >
+                      {/* Plan Badge */}
                       {isCurrentPlan && (
-                        <div className="absolute -top-3 left-4 px-2.5 py-0.5 bg-foreground text-background text-[10px] uppercase tracking-wider font-medium">
-                          Current
-                        </div>
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-foreground via-foreground to-foreground/60" />
                       )}
                       
                       {isAnnual && !isCurrentPlan && (
-                        <div className="absolute -top-3 right-4 px-2.5 py-0.5 bg-primary text-primary-foreground text-[10px] uppercase tracking-wider font-medium">
-                          Best Value
-                        </div>
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-accent to-primary/60" />
                       )}
                       
-                      <div className="mb-6">
-                        <h3 className="text-lg font-medium text-foreground">{tier.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-0.5">{tier.description}</p>
-                      </div>
-                      
-                      <div className="mb-6">
-                        <span className="text-3xl font-serif font-medium text-foreground">${tier.price}</span>
-                        <span className="text-sm text-muted-foreground">
-                          /{isAnnual ? 'year' : 'month'}
-                        </span>
-                        {isAnnual && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Save ~37% vs monthly
-                          </p>
+                      <div className="p-6 md:p-8">
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-6">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              {isCurrentPlan && (
+                                <span className="text-[9px] uppercase tracking-wider text-foreground font-semibold px-2 py-0.5 bg-foreground/10 rounded">
+                                  Active
+                                </span>
+                              )}
+                              {isAnnual && !isCurrentPlan && (
+                                <span className="text-[9px] uppercase tracking-wider text-primary font-semibold px-2 py-0.5 bg-primary/10 rounded">
+                                  Best Value
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-2xl font-serif font-medium text-foreground mt-1">
+                              {tier.name}
+                            </h4>
+                            <p className="text-sm text-muted-foreground mt-1">{tier.description}</p>
+                          </div>
+                        </div>
+                        
+                        {/* Price - Editorial Display */}
+                        <div className="mb-8 pb-6 border-b border-border">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-4xl font-serif font-medium text-foreground tracking-tight">
+                              ${tier.price}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              /{isAnnual ? 'year' : 'mo'}
+                            </span>
+                          </div>
+                          {isAnnual && (
+                            <p className="text-xs text-primary mt-2 font-medium">
+                              Save 37% compared to monthly billing
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Features - Clean List */}
+                        <ul className="space-y-3 mb-8">
+                          {tier.features.map((feature) => (
+                            <li key={feature} className="flex items-start gap-3 text-sm">
+                              <div className="w-4 h-4 rounded-full border border-muted-foreground/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <Check className="h-2.5 w-2.5 text-foreground" />
+                              </div>
+                              <span className="text-foreground/80">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        
+                        {/* CTA */}
+                        {isCurrentPlan ? (
+                          <Button 
+                            variant="outline" 
+                            className="w-full h-11 text-sm font-medium"
+                            onClick={handleManageSubscription}
+                          >
+                            Manage Subscription
+                          </Button>
+                        ) : (
+                          <Button 
+                            className={cn(
+                              "w-full h-11 text-sm font-medium transition-all",
+                              isAnnual 
+                                ? "bg-gradient-to-r from-slate to-slate/90 hover:from-slate/90 hover:to-slate text-slate-foreground" 
+                                : ""
+                            )}
+                            onClick={() => handleCheckout(tier.priceId)}
+                            disabled={isCheckingOut === tier.priceId}
+                          >
+                            {isCheckingOut === tier.priceId ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>Get {tier.name}</>
+                            )}
+                          </Button>
                         )}
                       </div>
-                      
-                      <ul className="space-y-3 mb-8">
-                        {tier.features.map((feature) => (
-                          <li key={feature} className="flex items-start gap-2.5 text-sm">
-                            <Check className="h-4 w-4 text-foreground flex-shrink-0 mt-0.5" />
-                            <span className="text-muted-foreground">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      
-                      {isCurrentPlan ? (
-                        <Button 
-                          variant="outline" 
-                          className="w-full"
-                          onClick={handleManageSubscription}
-                        >
-                          Manage
-                        </Button>
-                      ) : (
-                        <Button 
-                          className="w-full"
-                          onClick={() => handleCheckout(tier.priceId)}
-                          disabled={isCheckingOut === tier.priceId}
-                        >
-                          {isCheckingOut === tier.priceId ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            'Subscribe'
-                          )}
-                        </Button>
-                      )}
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Manage subscription link for subscribers */}
+            {/* Active Subscriber Section */}
             {subscription?.subscribed && (
-              <div className="pt-6 border-t border-border">
-                <div className="flex items-center justify-between">
+              <div className="border-t border-border pt-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-lg bg-muted/30">
                   <div>
-                    <p className="text-sm font-medium text-foreground">Billing & Payment</p>
+                    <h4 className="text-sm font-medium text-foreground mb-1">Billing & Invoices</h4>
                     <p className="text-sm text-muted-foreground">
-                      Update payment method, view invoices, or cancel
+                      Update payment methods, download invoices, or manage your subscription
                     </p>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={handleManageSubscription}>
-                    <CreditCard className="h-4 w-4 mr-1.5" />
-                    Manage
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleManageSubscription}
+                    className="shrink-0"
+                  >
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Billing Portal
                   </Button>
                 </div>
               </div>
             )}
 
-            {/* FAQ / Help */}
-            <div className="pt-6 border-t border-border">
-              <p className="text-xs text-muted-foreground text-center">
-                Questions about billing? Contact us at support@voyance.travel
+            {/* FAQ Footer - Editorial */}
+            <div className="text-center pt-6">
+              <p className="text-xs text-muted-foreground">
+                Questions about membership?{' '}
+                <a href="mailto:support@voyance.travel" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                  Contact our team
+                </a>
               </p>
             </div>
           </motion.div>
