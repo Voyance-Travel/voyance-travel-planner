@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { Sparkles, Map, Calendar, CreditCard } from 'lucide-react';
+import { useState } from 'react';
+import { Sparkles, Map, Calendar, CreditCard, ArrowRight } from 'lucide-react';
 
 const steps = [
   {
@@ -7,39 +8,39 @@ const steps = [
     icon: Sparkles,
     title: 'Share Your Vision',
     description: 'Tell us about your dream destination and travel style. Our AI learns what matters most to you.',
+    image: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800',
   },
   {
     number: '02',
     icon: Map,
     title: 'Receive Your Itinerary',
     description: 'Get a thoughtfully crafted day-by-day plan, complete with curated experiences and local insights.',
+    image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
   },
   {
     number: '03',
     icon: Calendar,
     title: 'Refine & Customize',
     description: 'Adjust activities, swap hotels, add experiences. Your itinerary evolves with your preferences.',
+    image: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800',
   },
   {
     number: '04',
     icon: CreditCard,
     title: 'Book With Confidence',
     description: 'Secure your flights, hotels, and experiences in one seamless transaction.',
+    image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800',
   },
 ];
 
 export default function HowItWorksCarousel() {
-  return (
-    <section className="py-32 bg-secondary/30 relative overflow-hidden">
-      {/* Background Texture */}
-      <div className="absolute inset-0 opacity-30">
-        <div className="absolute top-0 left-0 right-0 h-px bg-border" />
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
-      </div>
+  const [activeStep, setActiveStep] = useState(0);
 
-      <div className="max-w-7xl mx-auto px-8 md:px-16 relative">
-        {/* Section Header - Editorial Style */}
-        <div className="flex items-start justify-between mb-20">
+  return (
+    <section className="py-32 bg-background relative overflow-hidden">
+      <div className="max-w-7xl mx-auto px-8 md:px-16">
+        {/* Section Header */}
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8 mb-16">
           <div>
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -61,38 +62,125 @@ export default function HowItWorksCarousel() {
               How it <em className="font-normal">works</em>
             </motion.h2>
           </div>
+          
+          {/* Step Navigation - Horizontal Pills */}
+          <div className="flex gap-2">
+            {steps.map((step, index) => (
+              <button
+                key={step.number}
+                onClick={() => setActiveStep(index)}
+                className={`px-4 py-2 text-sm font-sans transition-all duration-300 ${
+                  activeStep === index
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {step.number}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Steps Grid - Editorial Layout */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-px bg-border">
-          {steps.map((step, index) => (
-            <motion.div
-              key={step.number}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-background p-8 lg:p-10 group relative"
-            >
-              {/* Large Number */}
-              <span className="text-6xl font-serif text-muted/20 absolute top-6 right-6 group-hover:text-primary/20 transition-colors duration-500">
-                {step.number}
-              </span>
-              
-              {/* Icon */}
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-                <step.icon className="w-5 h-5 text-primary" />
+        {/* Main Content - Asymmetric Layout */}
+        <div className="grid lg:grid-cols-12 gap-8 lg:gap-0">
+          {/* Left: Image */}
+          <motion.div 
+            key={activeStep}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="lg:col-span-7 relative"
+          >
+            <div className="aspect-[4/3] lg:aspect-[16/12] overflow-hidden relative">
+              <img
+                src={steps[activeStep].image}
+                alt={steps[activeStep].title}
+                className="w-full h-full object-cover"
+              />
+              {/* Overlay with step number */}
+              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/70 to-transparent">
+                <span className="text-8xl md:text-9xl font-serif text-white/20">
+                  {steps[activeStep].number}
+                </span>
               </div>
-              
-              {/* Content */}
-              <h3 className="text-xl font-serif text-foreground mb-3">
-                {step.title}
+            </div>
+          </motion.div>
+
+          {/* Right: Content Panel */}
+          <div className="lg:col-span-5 lg:pl-12 flex flex-col justify-center">
+            <motion.div
+              key={`content-${activeStep}`}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              {/* Icon */}
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+                {(() => {
+                  const IconComponent = steps[activeStep].icon;
+                  return <IconComponent className="w-6 h-6 text-primary" />;
+                })()}
+              </div>
+
+              {/* Title */}
+              <h3 className="text-3xl md:text-4xl font-serif text-foreground mb-4">
+                {steps[activeStep].title}
               </h3>
-              <p className="text-sm text-muted-foreground font-sans leading-relaxed">
-                {step.description}
+
+              {/* Description */}
+              <p className="text-lg text-muted-foreground font-sans font-light leading-relaxed mb-8">
+                {steps[activeStep].description}
               </p>
+
+              {/* Progress Indicator */}
+              <div className="flex items-center gap-6">
+                <div className="flex gap-1">
+                  {steps.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`h-1 transition-all duration-300 ${
+                        index === activeStep ? 'w-8 bg-primary' : 'w-2 bg-border'
+                      }`}
+                    />
+                  ))}
+                </div>
+                
+                {activeStep < steps.length - 1 && (
+                  <button
+                    onClick={() => setActiveStep(activeStep + 1)}
+                    className="flex items-center gap-2 text-sm text-primary font-sans hover:gap-3 transition-all"
+                  >
+                    Next step
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </motion.div>
-          ))}
+
+            {/* All Steps List - Compact */}
+            <div className="mt-12 pt-8 border-t border-border">
+              <div className="grid grid-cols-2 gap-4">
+                {steps.map((step, index) => (
+                  <button
+                    key={step.number}
+                    onClick={() => setActiveStep(index)}
+                    className={`text-left p-3 transition-all ${
+                      activeStep === index 
+                        ? 'bg-secondary' 
+                        : 'hover:bg-secondary/50'
+                    }`}
+                  >
+                    <span className="text-xs text-muted-foreground font-sans">{step.number}</span>
+                    <p className={`text-sm font-sans mt-1 ${
+                      activeStep === index ? 'text-foreground' : 'text-muted-foreground'
+                    }`}>
+                      {step.title}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
