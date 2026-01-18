@@ -94,60 +94,129 @@ async function getLearnedPreferences(supabase: any, userId: string): Promise<Use
   }
 }
 
+// Helper to get collaborator preferences for a trip
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getCollaboratorPreferences(supabase: any, tripId: string): Promise<any[]> {
+  try {
+    // Get all collaborators for this trip
+    const { data: collaborators, error: collabError } = await supabase
+      .from('trip_collaborators')
+      .select('user_id')
+      .eq('trip_id', tripId);
+    
+    if (collabError || !collaborators || collaborators.length === 0) {
+      return [];
+    }
+
+    const userIds = collaborators.map((c: any) => c.user_id);
+    console.log(`[generate-itinerary] Found ${userIds.length} collaborators for trip ${tripId}`);
+
+    // Fetch their preferences
+    const { data: preferences, error: prefError } = await supabase
+      .from('user_preferences')
+      .select('user_id, interests, travel_pace, dining_style, activity_level, budget_tier')
+      .in('user_id', userIds);
+
+    if (prefError) {
+      console.error('[generate-itinerary] Error fetching collaborator preferences:', prefError);
+      return [];
+    }
+
+    // Fetch their profiles for names
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', userIds);
+
+    // Combine preferences with profile names
+    return (preferences || []).map((pref: any) => {
+      const profile = profiles?.find((p: any) => p.id === pref.user_id);
+      return {
+        ...pref,
+        display_name: profile?.display_name || 'Travel Companion',
+      };
+    });
+  } catch (e) {
+    console.error('[generate-itinerary] Failed to get collaborator preferences:', e);
+    return [];
+  }
+}
+
 // Build preference context for AI prompt
-function buildPreferenceContext(insights: UserPreferenceInsights | null): string {
-  if (!insights) return '';
-  
+function buildPreferenceContext(insights: UserPreferenceInsights | null, collaboratorPrefs: any[] = []): string {
   const parts: string[] = [];
   
-  // Get top loved activity types
-  const lovedTypes = Object.entries(insights.loved_activity_types || {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([type]) => type.replace(/_/g, ' '));
-  
-  if (lovedTypes.length > 0) {
-    parts.push(`This traveler LOVES: ${lovedTypes.join(', ')} activities. Prioritize these.`);
+  if (insights) {
+    // Get top loved activity types
+    const lovedTypes = Object.entries(insights.loved_activity_types || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([type]) => type.replace(/_/g, ' '));
+    
+    if (lovedTypes.length > 0) {
+      parts.push(`Primary traveler LOVES: ${lovedTypes.join(', ')} activities. Prioritize these.`);
+    }
+    
+    // Get disliked activity types
+    const dislikedTypes = Object.entries(insights.disliked_activity_types || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([type]) => type.replace(/_/g, ' '));
+    
+    if (dislikedTypes.length > 0) {
+      parts.push(`AVOID or minimize: ${dislikedTypes.join(', ')} activities.`);
+    }
+    
+    // Get loved categories
+    const lovedCategories = Object.entries(insights.loved_categories || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([cat]) => cat.replace(/_/g, ' '));
+    
+    if (lovedCategories.length > 0) {
+      parts.push(`Favorite categories: ${lovedCategories.join(', ')}.`);
+    }
+    
+    // Get disliked categories
+    const dislikedCategories = Object.entries(insights.disliked_categories || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([cat]) => cat.replace(/_/g, ' '));
+    
+    if (dislikedCategories.length > 0) {
+      parts.push(`Categories to avoid: ${dislikedCategories.join(', ')}.`);
+    }
+    
+    // Add pace preference
+    if (insights.preferred_pace) {
+      parts.push(`Preferred pace: ${insights.preferred_pace}.`);
+    }
   }
-  
-  // Get disliked activity types
-  const dislikedTypes = Object.entries(insights.disliked_activity_types || {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([type]) => type.replace(/_/g, ' '));
-  
-  if (dislikedTypes.length > 0) {
-    parts.push(`AVOID or minimize: ${dislikedTypes.join(', ')} activities.`);
-  }
-  
-  // Get loved categories
-  const lovedCategories = Object.entries(insights.loved_categories || {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([cat]) => cat.replace(/_/g, ' '));
-  
-  if (lovedCategories.length > 0) {
-    parts.push(`Favorite categories: ${lovedCategories.join(', ')}.`);
-  }
-  
-  // Get disliked categories
-  const dislikedCategories = Object.entries(insights.disliked_categories || {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([cat]) => cat.replace(/_/g, ' '));
-  
-  if (dislikedCategories.length > 0) {
-    parts.push(`Categories to avoid: ${dislikedCategories.join(', ')}.`);
-  }
-  
-  // Add pace preference
-  if (insights.preferred_pace) {
-    parts.push(`Preferred pace: ${insights.preferred_pace}.`);
+
+  // Add collaborator preferences
+  if (collaboratorPrefs.length > 0) {
+    parts.push(`\n👥 TRAVEL COMPANIONS (${collaboratorPrefs.length} linked friends):`);
+    
+    collaboratorPrefs.forEach((collab, index) => {
+      const prefs: string[] = [];
+      if (collab.interests?.length) {
+        prefs.push(`interests: ${(collab.interests as string[]).slice(0, 3).join(', ')}`);
+      }
+      if (collab.travel_pace) prefs.push(`pace: ${collab.travel_pace}`);
+      if (collab.dining_style) prefs.push(`dining: ${collab.dining_style}`);
+      if (collab.activity_level) prefs.push(`activity level: ${collab.activity_level}`);
+      
+      if (prefs.length > 0) {
+        parts.push(`  ${index + 1}. ${collab.display_name}: ${prefs.join(', ')}`);
+      }
+    });
+    
+    parts.push(`\n⚖️ BALANCE THE ITINERARY to include activities that appeal to the whole group!`);
   }
   
   if (parts.length === 0) return '';
   
-  return `\n\n🎯 PERSONALIZED PREFERENCES (based on past trip feedback):\n${parts.join('\n')}`;
+  return `\n\n🎯 PERSONALIZED PREFERENCES (based on past trip feedback and travel companions):\n${parts.join('\n')}`;
 }
 
 const SYSTEM_PROMPT = `You are an expert travel planner with deep knowledge of destinations worldwide. Generate detailed, personalized day itineraries that feel authentic and locally-informed.
@@ -282,14 +351,23 @@ serve(async (req) => {
       const request = params as GenerationRequest;
       
       // Fetch learned preferences if userId is provided
-      let preferenceContext = '';
+      let insights: UserPreferenceInsights | null = null;
+      let collaboratorPrefs: any[] = [];
+      
       if (request.userId) {
         console.log(`[generate-itinerary] Fetching learned preferences for user ${request.userId}`);
-        const insights = await getLearnedPreferences(supabase, request.userId);
-        if (insights && insights.loved_activity_types && Object.keys(insights.loved_activity_types).length > 0) {
-          preferenceContext = buildPreferenceContext(insights);
-          console.log(`[generate-itinerary] Applied preference context:`, preferenceContext);
-        }
+        insights = await getLearnedPreferences(supabase, request.userId);
+      }
+      
+      // Fetch collaborator preferences for this trip
+      if (request.tripId) {
+        console.log(`[generate-itinerary] Fetching collaborator preferences for trip ${request.tripId}`);
+        collaboratorPrefs = await getCollaboratorPreferences(supabase, request.tripId);
+      }
+      
+      const preferenceContext = buildPreferenceContext(insights, collaboratorPrefs);
+      if (preferenceContext) {
+        console.log(`[generate-itinerary] Applied preference context:`, preferenceContext);
       }
       
       const prompt = buildDayPrompt(request, preferenceContext);

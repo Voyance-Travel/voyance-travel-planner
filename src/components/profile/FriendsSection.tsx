@@ -36,6 +36,9 @@ import {
   useRemoveFriend
 } from '@/services/supabase/friends';
 import { useSearchProfiles } from '@/services/supabase/profiles';
+import LinkToTripModal from './LinkToTripModal';
+import FriendProfileCard from './FriendProfileCard';
+import FriendsActivityFeed from './FriendsActivityFeed';
 
 interface FriendsSectionProps {
   userId: string;
@@ -55,7 +58,14 @@ const friendGradients = [
 export default function FriendsSection({ userId, className }: FriendsSectionProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'friends' | 'pending' | 'sent'>('friends');
+  const [activeSubTab, setActiveSubTab] = useState<'friends' | 'pending' | 'sent' | 'activity'>('friends');
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<{
+    id: string;
+    display_name: string | null;
+    handle: string | null;
+    avatar_url: string | null;
+  } | null>(null);
 
   // Fetch data
   const { data: friends, isLoading: isLoadingFriends } = useSupabaseFriends();
@@ -101,6 +111,11 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
     } catch (error) {
       // Error handled in mutation
     }
+  };
+
+  const openLinkModal = (friend: typeof selectedFriend) => {
+    setSelectedFriend(friend);
+    setLinkModalOpen(true);
   };
 
   const isLoading = isLoadingFriends || isLoadingPending;
@@ -225,34 +240,38 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
         </AnimatePresence>
       </div>
 
-      {/* Sub-tabs for Friends / Pending / Sent */}
+      {/* Sub-tabs for Friends / Pending / Sent / Activity */}
       <Tabs value={activeSubTab} onValueChange={(v) => setActiveSubTab(v as any)} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto rounded-full p-1 h-auto bg-muted/50">
-          <TabsTrigger value="friends" className="rounded-full py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Users className="h-4 w-4 mr-2" />
-            Friends
+        <TabsList className="grid w-full grid-cols-4 max-w-lg mx-auto rounded-full p-1 h-auto bg-muted/50">
+          <TabsTrigger value="friends" className="rounded-full py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Users className="h-4 w-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Friends</span>
             {friendsCount > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-primary/10 text-primary">{friendsCount}</span>
+              <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-primary/10 text-primary">{friendsCount}</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="pending" className="rounded-full py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Clock className="h-4 w-4 mr-2" />
-            Requests
+          <TabsTrigger value="pending" className="rounded-full py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Clock className="h-4 w-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Requests</span>
             {pendingCount > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-rose-500 text-white animate-pulse">{pendingCount}</span>
+              <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-rose-500 text-white animate-pulse">{pendingCount}</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="sent" className="rounded-full py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Send className="h-4 w-4 mr-2" />
-            Sent
+          <TabsTrigger value="sent" className="rounded-full py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Send className="h-4 w-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Sent</span>
             {sentCount > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-muted-foreground/20">{sentCount}</span>
+              <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-muted-foreground/20">{sentCount}</span>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="rounded-full py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Sparkles className="h-4 w-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Activity</span>
           </TabsTrigger>
         </TabsList>
 
         {/* Loading State */}
-        {isLoading && (
+        {isLoading && activeSubTab !== 'activity' && (
           <div className="flex justify-center py-12">
             <div className="flex items-center gap-3 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -291,12 +310,16 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-14 w-14 ring-3 ring-white dark:ring-gray-800 shadow-md">
-                      <AvatarImage src={friendship.friend?.avatar_url || undefined} />
-                      <AvatarFallback className="bg-white dark:bg-gray-800 text-lg font-semibold">
-                        {(friendship.friend?.display_name || '?')[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <FriendProfileCard friendId={friendship.friend?.id || ''}>
+                      <button className="flex-shrink-0">
+                        <Avatar className="h-14 w-14 ring-3 ring-white dark:ring-gray-800 shadow-md cursor-pointer hover:ring-primary transition-all">
+                          <AvatarImage src={friendship.friend?.avatar_url || undefined} />
+                          <AvatarFallback className="bg-white dark:bg-gray-800 text-lg font-semibold">
+                            {(friendship.friend?.display_name || '?')[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </button>
+                    </FriendProfileCard>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-foreground truncate">
                         {friendship.friend?.display_name || 'Unknown'}
@@ -321,12 +344,13 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                     </Button>
                   </div>
 
-                  {/* Link to trip indicator */}
+                  {/* Link to trip button */}
                   <div className="mt-3 flex items-center gap-2">
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       className="h-7 text-xs rounded-full bg-white/60 dark:bg-gray-800/60 hover:bg-white dark:hover:bg-gray-800 gap-1"
+                      onClick={() => openLinkModal(friendship.friend)}
                     >
                       <Link2 className="h-3 w-3" />
                       Link to trip
@@ -364,12 +388,16 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      <Avatar className="h-12 w-12 ring-2 ring-white dark:ring-gray-800">
-                        <AvatarImage src={request.requester?.avatar_url || undefined} />
-                        <AvatarFallback className="bg-rose-100 text-rose-700">
-                          {(request.requester?.display_name || '?')[0].toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <FriendProfileCard friendId={request.requester?.id || ''}>
+                        <button>
+                          <Avatar className="h-12 w-12 ring-2 ring-white dark:ring-gray-800 cursor-pointer hover:ring-primary transition-all">
+                            <AvatarImage src={request.requester?.avatar_url || undefined} />
+                            <AvatarFallback className="bg-rose-100 text-rose-700">
+                              {(request.requester?.display_name || '?')[0].toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                        </button>
+                      </FriendProfileCard>
                       <span className="absolute -top-1 -right-1 h-4 w-4 bg-rose-500 rounded-full flex items-center justify-center">
                         <UserPlus className="h-2.5 w-2.5 text-white" />
                       </span>
@@ -436,12 +464,16 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                   className="flex items-center justify-between p-4 bg-muted/30 rounded-xl"
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={request.addressee?.avatar_url || undefined} />
-                      <AvatarFallback>
-                        {(request.addressee?.display_name || request.addressee?.handle || '?')[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <FriendProfileCard friendId={request.addressee?.id || ''}>
+                      <button>
+                        <Avatar className="h-12 w-12 cursor-pointer hover:ring-2 hover:ring-primary transition-all">
+                          <AvatarImage src={request.addressee?.avatar_url || undefined} />
+                          <AvatarFallback>
+                            {(request.addressee?.display_name || request.addressee?.handle || '?')[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </button>
+                    </FriendProfileCard>
                     <div>
                       <p className="font-semibold text-foreground">
                         {request.addressee?.display_name || request.addressee?.handle || 'Unknown'}
@@ -461,6 +493,11 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Activity Feed */}
+        <TabsContent value="activity" className="mt-6">
+          <FriendsActivityFeed userId={userId} limit={10} />
         </TabsContent>
       </Tabs>
 
@@ -484,6 +521,15 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
           </div>
         </div>
       </motion.div>
+
+      {/* Link to Trip Modal */}
+      {selectedFriend && (
+        <LinkToTripModal
+          open={linkModalOpen}
+          onOpenChange={setLinkModalOpen}
+          friend={selectedFriend}
+        />
+      )}
     </motion.div>
   );
 }
