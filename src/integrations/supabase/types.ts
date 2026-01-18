@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      activities: {
+        Row: {
+          accessibility_info: Json | null
+          best_times: Json | null
+          booking_required: boolean | null
+          booking_url: string | null
+          category: string | null
+          coordinates: Json | null
+          created_at: string
+          crowd_levels: string | null
+          description: string | null
+          destination_id: string
+          duration_minutes: number | null
+          id: string
+          name: string
+          price_range: Json | null
+          tags: string | null
+          updated_at: string
+        }
+        Insert: {
+          accessibility_info?: Json | null
+          best_times?: Json | null
+          booking_required?: boolean | null
+          booking_url?: string | null
+          category?: string | null
+          coordinates?: Json | null
+          created_at?: string
+          crowd_levels?: string | null
+          description?: string | null
+          destination_id: string
+          duration_minutes?: number | null
+          id?: string
+          name: string
+          price_range?: Json | null
+          tags?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accessibility_info?: Json | null
+          best_times?: Json | null
+          booking_required?: boolean | null
+          booking_url?: string | null
+          category?: string | null
+          coordinates?: Json | null
+          created_at?: string
+          crowd_levels?: string | null
+          description?: string | null
+          destination_id?: string
+          duration_minutes?: number | null
+          id?: string
+          name?: string
+          price_range?: Json | null
+          tags?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feature_flags: {
         Row: {
           category: string
