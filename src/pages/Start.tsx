@@ -50,20 +50,15 @@ function AirportAutocomplete({
   
   const debouncedQuery = useDebounce(inputValue, 300);
 
-  // Load major airports on mount
+  // Only search when user has typed something
   useEffect(() => {
-    getMajorAirports(30).then(setAirports);
-  }, []);
-
-  // Search as user types
-  useEffect(() => {
-    if (debouncedQuery.length >= 2) {
+    if (debouncedQuery.length >= 1) {
       setLoading(true);
-      searchAirports(debouncedQuery, 15)
+      searchAirports(debouncedQuery, 12)
         .then(setAirports)
         .finally(() => setLoading(false));
-    } else if (debouncedQuery.length === 0) {
-      getMajorAirports(30).then(setAirports);
+    } else {
+      setAirports([]);
     }
   }, [debouncedQuery]);
 
@@ -73,6 +68,9 @@ function AirportAutocomplete({
     onChange(display);
     setIsOpen(false);
   };
+
+  // Only show dropdown when user is typing and has results
+  const showDropdown = isOpen && inputValue.length >= 1;
 
   return (
     <div className="relative">
@@ -84,11 +82,13 @@ function AirportAutocomplete({
           onChange(e.target.value);
           setIsOpen(true);
         }}
-        onFocus={() => setIsOpen(true)}
+        onFocus={() => {
+          if (inputValue.length >= 1) setIsOpen(true);
+        }}
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
         className="h-14 text-lg bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40"
       />
-      {isOpen && (
+      {showDropdown && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -97,7 +97,7 @@ function AirportAutocomplete({
           {loading ? (
             <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Searching airports...
+              Searching...
             </div>
           ) : airports.length > 0 ? (
             airports.map((airport) => (
@@ -116,11 +116,11 @@ function AirportAutocomplete({
                 </div>
               </button>
             ))
-          ) : (
+          ) : inputValue.length >= 1 ? (
             <div className="px-4 py-6 text-center text-muted-foreground">
-              No airports found. Try a different search.
+              No airports found for "{inputValue}"
             </div>
-          )}
+          ) : null}
         </motion.div>
       )}
     </div>
@@ -144,20 +144,15 @@ function DestinationAutocomplete({
   
   const debouncedQuery = useDebounce(inputValue, 300);
 
-  // Load featured destinations on mount
+  // Only search when user has typed something
   useEffect(() => {
-    getFeaturedDestinations(12).then(setDestinations);
-  }, []);
-
-  // Search as user types
-  useEffect(() => {
-    if (debouncedQuery.length >= 2) {
+    if (debouncedQuery.length >= 1) {
       setLoading(true);
-      searchDestinations(debouncedQuery, 15)
+      searchDestinations(debouncedQuery, 12)
         .then(setDestinations)
         .finally(() => setLoading(false));
-    } else if (debouncedQuery.length === 0) {
-      getFeaturedDestinations(12).then(setDestinations);
+    } else {
+      setDestinations([]);
     }
   }, [debouncedQuery]);
 
@@ -167,6 +162,9 @@ function DestinationAutocomplete({
     onChange(display);
     setIsOpen(false);
   };
+
+  // Only show dropdown when user is typing and has results
+  const showDropdown = isOpen && inputValue.length >= 1;
 
   return (
     <div className="relative">
@@ -178,11 +176,13 @@ function DestinationAutocomplete({
           onChange(e.target.value);
           setIsOpen(true);
         }}
-        onFocus={() => setIsOpen(true)}
+        onFocus={() => {
+          if (inputValue.length >= 1) setIsOpen(true);
+        }}
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
         className="h-14 text-lg bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40"
       />
-      {isOpen && (
+      {showDropdown && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -191,7 +191,7 @@ function DestinationAutocomplete({
           {loading ? (
             <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Searching destinations...
+              Searching...
             </div>
           ) : destinations.length > 0 ? (
             destinations.map((dest) => (
@@ -215,11 +215,11 @@ function DestinationAutocomplete({
                 </div>
               </button>
             ))
-          ) : (
+          ) : inputValue.length >= 1 ? (
             <div className="px-4 py-6 text-center text-muted-foreground">
-              No destinations found. Try a different search.
+              No destinations found for "{inputValue}"
             </div>
-          )}
+          ) : null}
         </motion.div>
       )}
     </div>
