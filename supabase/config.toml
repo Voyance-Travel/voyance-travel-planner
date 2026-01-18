@@ -53,3 +53,9 @@ verify_jwt = false
 
 [functions.destination-images]
 verify_jwt = false
+
+[functions.send-trip-reminders]
+verify_jwt = false
+
+[functions.test-email]
+verify_jwt = false
