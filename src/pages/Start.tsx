@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, Heart, Briefcase, Mountain, Palmtree, UserPlus } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -172,12 +172,12 @@ function AirportAutocomplete({
   );
 }
 
-// Trip type options - using Lucide icons instead of emojis
+// Trip type options - text only, no icons
 const tripTypes = [
-  { id: 'romantic', label: 'Romantic', icon: Heart, description: 'Couples getaway' },
-  { id: 'business', label: 'Business', icon: Briefcase, description: 'Work travel' },
-  { id: 'adventure', label: 'Adventure', icon: Mountain, description: 'Explore & discover' },
-  { id: 'leisure', label: 'Leisure', icon: Palmtree, description: 'Relax & unwind' },
+  { id: 'romantic', label: 'Romantic', description: 'Couples getaway' },
+  { id: 'business', label: 'Business', description: 'Work travel' },
+  { id: 'adventure', label: 'Adventure', description: 'Explore & discover' },
+  { id: 'leisure', label: 'Leisure', description: 'Relax & unwind' },
 ];
 
 // Featured destinations with editorial imagery
@@ -543,25 +543,21 @@ export default function Start() {
                   Trip Type
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {tripTypes.map((type) => {
-                    const Icon = type.icon;
-                    return (
-                      <button
-                        key={type.id}
-                        type="button"
-                        onClick={() => setTripType(type.id)}
-                        className={cn(
-                          "flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all",
-                          tripType === type.id
-                            ? "bg-primary/10 border-primary text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/50"
-                        )}
-                      >
-                        <Icon className="h-5 w-5" />
-                        <span className="text-xs font-medium">{type.label}</span>
-                      </button>
-                    );
-                  })}
+                  {tripTypes.map((type) => (
+                    <button
+                      key={type.id}
+                      type="button"
+                      onClick={() => setTripType(type.id)}
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all min-h-[60px]",
+                        tripType === type.id
+                          ? "bg-primary/10 border-primary text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      )}
+                    >
+                      <span className="text-sm font-medium">{type.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
