@@ -214,8 +214,6 @@ export default function EditorialPreferencesView() {
     );
   }
 
-  const hasPreferences = preferences?.quiz_completed;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -234,32 +232,13 @@ export default function EditorialPreferencesView() {
           </div>
           <h2 className="text-2xl font-serif text-foreground mb-2">Your Preferences</h2>
           <p className="text-sm text-muted-foreground max-w-lg">
-            These preferences shape every recommendation, from flights to activities. 
-            {!hasPreferences && ' Complete the travel quiz to personalize your experience.'}
+            These preferences shape every recommendation, from flights to activities.
           </p>
         </div>
       </div>
 
-      {!hasPreferences ? (
-        /* Empty State - Not Completed Quiz */
-        <div className="bg-gradient-to-br from-muted/30 to-muted/10 rounded-xl p-8 md:p-12 text-center">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-            <Compass className="h-8 w-8 text-primary" />
-          </div>
-          <h3 className="text-xl font-serif text-foreground mb-3">
-            Discover Your Travel DNA
-          </h3>
-          <p className="text-muted-foreground max-w-md mx-auto mb-6">
-            Take our 5-minute travel quiz to unlock personalized recommendations tailored to your unique travel style.
-          </p>
-          <Button asChild size="lg">
-            <Link to={ROUTES.QUIZ}>
-              Take the Quiz
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Link>
-          </Button>
-        </div>
-      ) : (
+      {/* Preferences Display */}
+      <div className="space-y-10">
         /* Preferences Display */
         <div className="space-y-10">
           {/* Travel Style Section */}
@@ -718,7 +697,7 @@ export default function EditorialPreferencesView() {
             </div>
           </div>
         </div>
-      )}
+      </div>
     </motion.div>
   );
 }
