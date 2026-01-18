@@ -1,10 +1,10 @@
 /**
- * Link to Trip Modal
- * Allows users to link a friend to one of their trips
+ * Link to Trip Modal - Editorial Redesign
+ * Clean, sophisticated trip selection
  */
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
@@ -23,8 +23,7 @@ import {
   Check, 
   Loader2,
   Users,
-  Sparkles,
-  Link2
+  Info
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -108,84 +107,83 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Link2 className="h-5 w-5 text-primary" />
-            Link Friend to Trip
+          <DialogTitle className="text-lg font-medium">
+            Link to Trip
           </DialogTitle>
-          <DialogDescription>
-            Include {friend.display_name || friend.handle}'s preferences when generating your itinerary
+          <DialogDescription className="text-sm">
+            Include their preferences when generating your itinerary
           </DialogDescription>
         </DialogHeader>
 
         {/* Friend preview */}
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 dark:from-pink-900/10 dark:to-purple-900/10 border border-pink-100 dark:border-pink-800/30">
-          <Avatar className="h-12 w-12 ring-2 ring-white dark:ring-gray-800">
+        <div className="flex items-center gap-3 py-3 border-b border-border">
+          <Avatar className="h-10 w-10">
             <AvatarImage src={friend.avatar_url || undefined} />
-            <AvatarFallback className="bg-gradient-to-br from-pink-400 to-purple-400 text-white">
+            <AvatarFallback className="bg-muted text-muted-foreground">
               {(friend.display_name || friend.handle || '?')[0].toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div>
-            <p className="font-semibold text-foreground">{friend.display_name || friend.handle}</p>
-            {friend.handle && <p className="text-sm text-muted-foreground">@{friend.handle}</p>}
+            <p className="text-sm font-medium text-foreground">{friend.display_name || friend.handle}</p>
+            {friend.handle && <p className="text-xs text-muted-foreground">@{friend.handle}</p>}
           </div>
         </div>
 
         {/* Trip selection */}
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">Select a trip:</p>
+        <div className="space-y-3">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Select a trip</p>
           
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : trips.length === 0 ? (
-            <div className="text-center py-8 px-4 rounded-xl bg-muted/30 border-2 border-dashed border-muted">
-              <Plane className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-muted-foreground">No upcoming trips</p>
-              <p className="text-sm text-muted-foreground">Start planning a trip to link friends!</p>
+            <div className="text-center py-8 border border-dashed border-border rounded-lg">
+              <Plane className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No upcoming trips</p>
+              <p className="text-xs text-muted-foreground">Start planning a trip to link friends</p>
             </div>
           ) : (
-            <ScrollArea className="h-[240px] pr-3">
-              <div className="space-y-2">
+            <ScrollArea className="h-[200px]">
+              <div className="space-y-2 pr-3">
                 {trips.map((trip, index) => (
                   <motion.button
                     key={trip.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.03 }}
                     onClick={() => setSelectedTripId(trip.id)}
                     className={cn(
-                      "w-full text-left p-4 rounded-xl border-2 transition-all",
+                      "w-full text-left p-3 rounded-lg border transition-all",
                       selectedTripId === trip.id
-                        ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                        : "border-border hover:border-muted-foreground/50 bg-card"
+                        ? "border-foreground bg-muted/50"
+                        : "border-border hover:border-muted-foreground/50"
                     )}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-semibold text-foreground">{trip.name}</h4>
+                          <h4 className="text-sm font-medium text-foreground truncate">{trip.name}</h4>
                           {selectedTripId === trip.id && (
-                            <Check className="h-4 w-4 text-primary" />
+                            <Check className="h-4 w-4 text-foreground flex-shrink-0" />
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="h-3.5 w-3.5" />
-                          <span>{trip.destination}{trip.destination_country ? `, ${trip.destination_country}` : ''}</span>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3" />
+                          <span className="truncate">{trip.destination}{trip.destination_country ? `, ${trip.destination_country}` : ''}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-3.5 w-3.5" />
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
                           <span>
-                            {format(new Date(trip.start_date), 'MMM d')} - {format(new Date(trip.end_date), 'MMM d, yyyy')}
+                            {format(new Date(trip.start_date), 'MMM d')} – {format(new Date(trip.end_date), 'MMM d, yyyy')}
                           </span>
                         </div>
                       </div>
                       <Badge 
-                        variant={trip.status === 'booked' ? 'default' : 'secondary'}
-                        className="capitalize"
+                        variant="outline"
+                        className="capitalize text-xs font-normal flex-shrink-0"
                       >
                         {trip.status}
                       </Badge>
@@ -197,30 +195,30 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
           )}
         </div>
 
-        {/* Info about what linking does */}
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/10 text-sm">
-          <Sparkles className="h-4 w-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-          <p className="text-muted-foreground">
-            Their travel preferences will be considered when generating your itinerary—finding experiences you'll both love!
+        {/* Info note */}
+        <div className="flex items-start gap-2 py-3 border-t border-border text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <p>
+            Their travel preferences will be considered when generating your itinerary.
           </p>
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            size="sm"
             onClick={handleLink}
             disabled={!selectedTripId || addCollaborator.isPending}
-            className="gap-2 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
           >
             {addCollaborator.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
             ) : (
-              <Users className="h-4 w-4" />
+              <Users className="h-4 w-4 mr-1.5" />
             )}
-            Link to Trip
+            Link
           </Button>
         </div>
       </DialogContent>
