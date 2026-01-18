@@ -102,7 +102,7 @@ export default function EditorialTripSummary({
 }: EditorialTripSummaryProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [costExpanded, setCostExpanded] = useState(false);
+  const [costExpanded, setCostExpanded] = useState(false); // collapsed by default
 
   const nights = Math.ceil(
     (new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24)
@@ -162,164 +162,153 @@ export default function EditorialTripSummary({
   };
 
   return (
-    <motion.div ref={printRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-5xl mx-auto print:max-w-none">
-      {/* Hero */}
-      <div className="relative mb-10 rounded-3xl overflow-hidden shadow-soft">
+    <motion.div ref={printRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto print:max-w-none">
+      {/* Compact Hero */}
+      <div className="relative mb-6 rounded-2xl overflow-hidden h-40 md:h-48">
         <DynamicDestinationPhotos destination={data.destination} startDate={data.startDate} endDate={data.endDate} travelers={data.travelers} variant="hero" />
         {daysUntilTrip > 0 && (
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="absolute top-5 right-5 bg-background/95 backdrop-blur-sm rounded-2xl px-5 py-4 shadow-elevated border border-border"
-          >
-            <p className="text-xs text-muted-foreground">Your trip in</p>
-            <p className="text-3xl font-bold text-foreground">{daysUntilTrip} days</p>
-          </motion.div>
+          <div className="absolute top-3 right-3 bg-background/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow border border-border">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Trip in</p>
+            <p className="text-xl font-bold text-foreground">{daysUntilTrip} days</p>
+          </div>
         )}
       </div>
 
-      {/* Trip Ready */}
+      {/* Compact Header */}
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={{ y: 10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10 pb-6 border-b border-border"
+        transition={{ delay: 0.15 }}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-border"
       >
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <Sparkles className="w-6 h-6 text-primary" />
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-serif font-semibold text-foreground">Your Trip is Ready!</h1>
-            <p className="text-muted-foreground">{data.tripName || `${nights} nights in ${data.destination}`}</p>
+            <h1 className="text-xl font-serif font-semibold text-foreground">Your Trip is Ready</h1>
+            <p className="text-sm text-muted-foreground">{data.tripName || `${nights} nights in ${data.destination}`}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2"><Share2 className="w-4 h-4" />Share</Button>
+              <Button variant="ghost" size="sm" className="gap-1.5 h-8"><Share2 className="w-3.5 h-3.5" />Share</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => handleShare('copy')}><ExternalLink className="w-4 h-4 mr-2" />Copy Link</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleShare('email')}><Mail className="w-4 h-4 mr-2" />Send via Email</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleShare('message')}><MessageCircle className="w-4 h-4 mr-2" />Share to Message</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleShare('email')}><Mail className="w-4 h-4 mr-2" />Email</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleShare('message')}><MessageCircle className="w-4 h-4 mr-2" />Message</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => toast.info('PDF download coming soon!')}><Download className="w-4 h-4 mr-2" />Download PDF</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" className="gap-2 print:hidden" onClick={handlePrint}><Printer className="w-4 h-4" />Print</Button>
+          <Button variant="ghost" size="sm" className="gap-1.5 h-8 print:hidden" onClick={handlePrint}><Printer className="w-3.5 h-3.5" /></Button>
         </div>
       </motion.div>
 
-      {/* Price Lock Warning */}
+      {/* Price Lock Warning - compact */}
       {priceLockExpiry && timeRemaining > 0 && (
         <motion.div
-          initial={{ y: 10, opacity: 0 }}
+          initial={{ y: 5, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mb-8 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center gap-4"
+          transition={{ delay: 0.2 }}
+          className="mb-6 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-3"
         >
-          <Clock className="w-6 h-6 text-amber-600 shrink-0" />
+          <Clock className="w-5 h-5 text-amber-600 shrink-0" />
           <div className="flex-1">
-            <p className="font-medium text-amber-800">Price locked for {timeRemaining} min</p>
-            <p className="text-sm text-amber-600">Book now to secure this rate.</p>
+            <p className="font-medium text-sm text-amber-800">Price locked for {timeRemaining} min</p>
           </div>
-          <Button onClick={onBook} size="sm">Book Now</Button>
+          <Button onClick={onBook} size="sm" variant="default">Book Now</Button>
         </motion.div>
       )}
 
-      {/* Two-column layout */}
-      <div className="grid lg:grid-cols-5 gap-10">
+      {/* Two-column layout - tighter */}
+      <div className="grid lg:grid-cols-5 gap-6">
         {/* Left - Details */}
-        <div className="lg:col-span-3 space-y-8">
+        <div className="lg:col-span-3 space-y-5">
           {/* Flights */}
           {data.outboundFlight && (
-            <motion.section initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35 }} className="space-y-4">
-              <div className="flex items-center gap-2 mb-2">
+            <motion.section initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.25 }} className="space-y-3">
+              <div className="flex items-center gap-2">
                 <Plane className="w-4 h-4 text-primary" />
-                <h2 className="font-medium text-muted-foreground uppercase text-xs tracking-wide">Flights</h2>
+                <h2 className="font-medium text-muted-foreground uppercase text-[11px] tracking-wide">Flights</h2>
               </div>
               {/* Outbound */}
-              <div className="bg-card rounded-2xl border border-border p-5 flex items-center justify-between">
-                <div className="flex items-center gap-6">
+              <div className="bg-card rounded-xl border border-border p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
                   <div>
-                    <p className="text-2xl font-bold">{data.outboundFlight.departure}</p>
-                    <p className="text-xs text-muted-foreground">{data.outboundFlight.departureAirport}</p>
+                    <p className="text-lg font-bold">{data.outboundFlight.departure}</p>
+                    <p className="text-[11px] text-muted-foreground">{data.outboundFlight.departureAirport}</p>
                   </div>
-                  <div className="text-muted-foreground">→</div>
+                  <div className="text-muted-foreground text-sm">→</div>
                   <div>
-                    <p className="text-2xl font-bold">{data.outboundFlight.arrival}</p>
-                    <p className="text-xs text-muted-foreground">{data.outboundFlight.arrivalAirport}</p>
+                    <p className="text-lg font-bold">{data.outboundFlight.arrival}</p>
+                    <p className="text-[11px] text-muted-foreground">{data.outboundFlight.arrivalAirport}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-muted-foreground">{data.outboundFlight.airline}</p>
-                  <Badge variant="secondary" className="mt-1">{formatCabin(data.outboundFlight.cabin)}</Badge>
+                  <p className="text-xs text-muted-foreground">{data.outboundFlight.airline}</p>
+                  <Badge variant="secondary" className="text-[10px] mt-0.5">{formatCabin(data.outboundFlight.cabin)}</Badge>
                 </div>
               </div>
               {/* Return */}
               {data.returnFlight && (
-                <div className="bg-card rounded-2xl border border-border p-5 flex items-center justify-between">
-                  <div className="flex items-center gap-6">
+                <div className="bg-card rounded-xl border border-border p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
                     <div>
-                      <p className="text-2xl font-bold">{data.returnFlight.departure}</p>
-                      <p className="text-xs text-muted-foreground">{data.returnFlight.departureAirport}</p>
+                      <p className="text-lg font-bold">{data.returnFlight.departure}</p>
+                      <p className="text-[11px] text-muted-foreground">{data.returnFlight.departureAirport}</p>
                     </div>
-                    <div className="text-muted-foreground">→</div>
+                    <div className="text-muted-foreground text-sm">→</div>
                     <div>
-                      <p className="text-2xl font-bold">{data.returnFlight.arrival}</p>
-                      <p className="text-xs text-muted-foreground">{data.returnFlight.arrivalAirport}</p>
+                      <p className="text-lg font-bold">{data.returnFlight.arrival}</p>
+                      <p className="text-[11px] text-muted-foreground">{data.returnFlight.arrivalAirport}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-muted-foreground">{data.returnFlight.airline}</p>
-                    <Badge variant="secondary" className="mt-1">{formatCabin(data.returnFlight.cabin)}</Badge>
+                    <p className="text-xs text-muted-foreground">{data.returnFlight.airline}</p>
+                    <Badge variant="secondary" className="text-[10px] mt-0.5">{formatCabin(data.returnFlight.cabin)}</Badge>
                   </div>
                 </div>
               )}
             </motion.section>
           )}
 
-          {/* Hotel */}
+          {/* Hotel - compact */}
           {data.hotel && (
-            <motion.section initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.45 }}>
-              <div className="flex items-center gap-2 mb-3">
+            <motion.section initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
+              <div className="flex items-center gap-2 mb-2">
                 <Hotel className="w-4 h-4 text-primary" />
-                <h2 className="font-medium text-muted-foreground uppercase text-xs tracking-wide">Your Accommodation</h2>
+                <h2 className="font-medium text-muted-foreground uppercase text-[11px] tracking-wide">Accommodation</h2>
               </div>
-              <div className="bg-card rounded-2xl border border-border overflow-hidden flex">
+              <div className="bg-card rounded-xl border border-border overflow-hidden flex">
                 {(data.hotel as any).imageUrl && (
-                  <img src={(data.hotel as any).imageUrl} alt={data.hotel.name} className="w-36 h-36 object-cover shrink-0" />
+                  <img src={(data.hotel as any).imageUrl} alt={data.hotel.name} className="w-28 h-28 object-cover shrink-0" />
                 )}
-                <div className="p-5 flex-1 flex flex-col justify-between">
+                <div className="p-4 flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className="text-xl font-semibold mb-1">{data.hotel.name}</h3>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                      <MapPin className="w-3.5 h-3.5" />
+                    <h3 className="text-base font-semibold mb-1">{data.hotel.name}</h3>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <MapPin className="w-3 h-3" />
                       <span>{data.hotel.neighborhood}</span>
                       <span className="flex items-center gap-0.5">
                         {[...Array(data.hotel.stars)].map((_, i) => (
-                          <Star key={i} className="h-3 w-3 fill-primary text-primary" />
+                          <Star key={i} className="h-2.5 w-2.5 fill-primary text-primary" />
                         ))}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground">{data.hotel.roomType}</p>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {data.hotel.amenities.slice(0, 4).map((a, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">{a}</Badge>
-                      ))}
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{data.hotel.roomType}</p>
                   </div>
                 </div>
-                <div className="p-5 text-right shrink-0 flex flex-col justify-between">
+                <div className="p-4 text-right shrink-0 flex flex-col justify-between text-xs">
                   <div>
-                    <p className="text-xs text-muted-foreground">Check-in</p>
-                    <p className="font-medium">{format(new Date(data.startDate), 'EEE, MMM d')}</p>
+                    <p className="text-muted-foreground">Check-in</p>
+                    <p className="font-medium">{format(new Date(data.startDate), 'MMM d')}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Check-out</p>
-                    <p className="font-medium">{format(new Date(data.endDate), 'EEE, MMM d')}</p>
+                    <p className="text-muted-foreground">Check-out</p>
+                    <p className="font-medium">{format(new Date(data.endDate), 'MMM d')}</p>
                   </div>
                 </div>
               </div>
