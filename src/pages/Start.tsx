@@ -248,16 +248,26 @@ export default function Start() {
 
   const handleStart = () => {
     if (!destination || !startDate || !endDate) return;
-    
+
+    const start = format(startDate, 'yyyy-MM-dd');
+    const end = format(endDate, 'yyyy-MM-dd');
+
     setBasics({
       destination,
-      startDate: format(startDate, 'yyyy-MM-dd'),
-      endDate: format(endDate, 'yyyy-MM-dd'),
+      startDate: start,
+      endDate: end,
       travelers,
       originCity: origin,
     });
-    
-    navigate(ROUTES.PLANNER.ROOT);
+
+    const params = new URLSearchParams();
+    params.set('destination', destination);
+    if (origin) params.set('origin', origin);
+    params.set('startDate', start);
+    params.set('endDate', end);
+    params.set('travelers', String(travelers));
+
+    navigate(`${ROUTES.PLANNER.FLIGHT}?${params.toString()}`);
   };
 
   const selectInspiration = (dest: typeof inspirationDestinations[0]) => {

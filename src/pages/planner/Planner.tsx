@@ -234,21 +234,22 @@ export default function Planner() {
     scrollToTop();
 
     switch (step) {
-      case 'context':
-        await saveTrip();
-        setCurrentStep('flights');
-        break;
-      case 'flights':
-        setCurrentStep('hotels');
-        break;
-      case 'hotels':
-        setCurrentStep('booking');
-        break;
-      case 'booking':
-        // This is handled by the booking options
-        break;
-      case 'itinerary':
-        handleTripSubmission();
+      case 'context': {
+        const tripId = await saveTrip();
+
+        const params = new URLSearchParams();
+        params.set('destination', formData.destination);
+        if (formData.departureCity) params.set('origin', formData.departureCity);
+        params.set('startDate', formData.startDate);
+        params.set('endDate', formData.endDate);
+        params.set('travelers', String(formData.travelers || 1));
+        if (tripId) params.set('tripId', tripId);
+
+        navigate(`/planner/flight?${params.toString()}`);
+        return;
+      }
+      default:
+        // Legacy flow retained for safety, but Start now routes into /planner/flight directly.
         break;
     }
   };

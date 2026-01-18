@@ -48,6 +48,7 @@ import Settings from "./pages/Settings";
 import Planner from "./pages/planner/Planner";
 import PlannerFlight from "./pages/planner/PlannerFlightEnhanced";
 import PlannerHotel from "./pages/planner/PlannerHotelEnhanced";
+import PlannerSummary from "./pages/planner/PlannerSummary";
 import PlannerItinerary from "./pages/planner/PlannerItinerary";
 import PlannerBooking from "./pages/planner/PlannerBooking";
 
@@ -116,6 +117,7 @@ const App = () => (
                 <Route path="/planner" element={<Planner />} />
                 <Route path="/planner/flight" element={<PlannerFlight />} />
                 <Route path="/planner/hotel" element={<PlannerHotel />} />
+                <Route path="/planner/summary" element={<PlannerSummary />} />
                 <Route path="/planner/itinerary" element={<PlannerItinerary />} />
                 <Route path="/planner/booking" element={<PlannerBooking />} />
                 

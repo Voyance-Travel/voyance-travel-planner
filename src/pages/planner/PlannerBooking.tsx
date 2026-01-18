@@ -53,7 +53,9 @@ export default function PlannerBooking() {
   }, [wasCanceled]);
 
   // Calculate costs
-  const flightTotal = (state.flights?.departure?.price || 0) + (state.flights?.return?.price || 0);
+  const travelers = state.basics.travelers || 1;
+  const perPersonFlightTotal = (state.flights?.departure?.price || 0) + (state.flights?.return?.price || 0);
+  const flightTotal = perPersonFlightTotal * travelers;
   const nights = state.basics.startDate && state.basics.endDate 
     ? Math.ceil((new Date(state.basics.endDate).getTime() - new Date(state.basics.startDate).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
