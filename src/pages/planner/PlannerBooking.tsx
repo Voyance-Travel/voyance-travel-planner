@@ -2,19 +2,20 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { 
-  CreditCard, 
-  Plane, 
-  Hotel, 
-  MapPin, 
-  Calendar, 
-  Users, 
-  Loader2, 
+import {
+  CreditCard,
+  Plane,
+  Hotel,
+  MapPin,
+  Calendar,
+  Users,
+  Loader2,
   CheckCircle,
   AlertCircle,
   Shield,
   Lock,
-  Eye
+  Eye,
+  Star,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -22,12 +23,11 @@ import { Button } from '@/components/ui/button';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 
 export default function PlannerBooking() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { state, loadTrip, calculateTotal } = useTripPlanner();
+  const { state, loadTrip } = useTripPlanner();
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,6 @@ export default function PlannerBooking() {
   const tripId = searchParams.get('tripId') || state.tripId;
   const wasCanceled = searchParams.get('canceled') === 'true';
 
-  // Load trip if needed
   useEffect(() => {
     async function init() {
       if (tripId && !state.basics.destination) {
@@ -46,34 +45,24 @@ export default function PlannerBooking() {
     init();
   }, [tripId]);
 
-  // Show cancel message
   useEffect(() => {
-    if (wasCanceled) {
-      toast.info('Payment was canceled. You can try again when ready.');
-    }
+    if (wasCanceled) toast.info('Payment was canceled. You can try again when ready.');
   }, [wasCanceled]);
 
-  // Calculate costs with detailed breakdown
   const travelers = state.basics.travelers || 1;
   const outboundFlightBase = (state.flights?.departure?.price || 0) * travelers;
   const returnFlightBase = (state.flights?.return?.price || 0) * travelers;
   const flightSubtotal = outboundFlightBase + returnFlightBase;
-  
-  // Estimated taxes (typically 10-15% for flights)
   const flightTaxRate = 0.12;
   const flightTaxes = flightSubtotal * flightTaxRate;
   const flightTotal = flightSubtotal + flightTaxes;
-  
-  const nights = state.basics.startDate && state.basics.endDate 
+  const nights = state.basics.startDate && state.basics.endDate
     ? Math.ceil((new Date(state.basics.endDate).getTime() - new Date(state.basics.startDate).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
   const hotelSubtotal = (state.hotel?.pricePerNight || 0) * nights;
-  
-  // Hotel taxes (typically 12-18% including resort fees)
   const hotelTaxRate = 0.15;
   const hotelTaxes = hotelSubtotal * hotelTaxRate;
   const hotelTotal = hotelSubtotal + hotelTaxes;
-  
   const activitiesTotal = state.itinerary.reduce(
     (sum, day) => sum + day.activities.reduce((daySum, act) => daySum + (act.price || 0), 0),
     0
@@ -82,36 +71,24 @@ export default function PlannerBooking() {
   const totalTaxes = flightTaxes + hotelTaxes;
   const grandTotal = flightSubtotal + hotelSubtotal + activitiesTotal + totalTaxes + serviceFee;
 
-  // Handle checkout
   const handleCheckout = async () => {
     if (!tripId) {
       toast.error('No trip found');
       return;
     }
-
-    // Check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       toast.error('Please sign in to complete your booking');
       navigate(`/signin?redirect=/planner/booking?tripId=${tripId}`);
       return;
     }
-
     setIsProcessing(true);
     setError(null);
-
     try {
       const { data, error } = await supabase.functions.invoke('create-booking-checkout', {
-        body: {
-          tripId,
-          flightTotal,
-          hotelTotal,
-          activitiesTotal,
-        },
+        body: { tripId, flightTotal, hotelTotal, activitiesTotal },
       });
-
       if (error) throw error;
-
       if (data?.url) {
         window.location.href = data.url;
       } else {
@@ -130,10 +107,8 @@ export default function PlannerBooking() {
     return (
       <MainLayout>
         <Head title="Complete Booking | Voyance" />
-        <section className="pt-24 pb-16 min-h-screen">
-          <div className="max-w-4xl mx-auto px-4 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
+        <section className="pt-24 pb-16 min-h-screen flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </section>
       </MainLayout>
     );
@@ -144,15 +119,11 @@ export default function PlannerBooking() {
       <MainLayout>
         <Head title="Complete Booking | Voyance" />
         <section className="pt-24 pb-16 min-h-screen">
-          <div className="max-w-4xl mx-auto px-4 text-center">
+          <div className="max-w-4xl mx-auto px-6 text-center">
             <AlertCircle className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <h1 className="text-2xl font-bold mb-2">No Trip Found</h1>
-            <p className="text-muted-foreground mb-6">
-              Please start planning a trip first.
-            </p>
-            <Button onClick={() => navigate('/planner')}>
-              Start Planning
-            </Button>
+            <p className="text-muted-foreground mb-6">Please start planning a trip first.</p>
+            <Button onClick={() => navigate('/planner')}>Start Planning</Button>
           </div>
         </section>
       </MainLayout>
@@ -162,44 +133,39 @@ export default function PlannerBooking() {
   return (
     <MainLayout>
       <Head title={`Book Trip to ${state.basics.destination} | Voyance`} />
-      
-      <section className="pt-24 pb-16 min-h-screen bg-gradient-to-b from-background to-secondary/20">
-        <div className="max-w-6xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            {/* Editorial Header with Destination Image */}
-            <div className="relative mb-12 rounded-2xl overflow-hidden h-64 md:h-80">
-              <img 
-                src={`https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80`}
+
+      <section className="py-10 min-h-screen bg-background">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            {/* Hero */}
+            <div className="relative mb-12 rounded-3xl overflow-hidden h-64 md:h-80">
+              <img
+                src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80"
                 alt={state.basics.destination}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate/90 via-slate/50 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-8 text-foreground">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium mb-3"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 backdrop-blur-sm rounded-full text-sm font-medium mb-3"
                 >
-                  <CheckCircle className="h-4 w-4" />
+                  <CheckCircle className="h-4 w-4 text-primary" />
                   Ready to book
                 </motion.div>
-                <h1 className="text-4xl md:text-5xl font-serif font-normal text-white mb-2">
-                  {state.basics.destination}
-                </h1>
-                <p className="text-lg text-white/80 flex items-center gap-3">
+                <h1 className="text-4xl md:text-5xl font-serif font-normal text-foreground mb-2">{state.basics.destination}</h1>
+                <p className="text-lg text-muted-foreground flex items-center gap-3">
                   <span className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4" />
                     {state.basics.startDate && state.basics.endDate ? (
                       <>
                         {format(new Date(state.basics.startDate), 'MMM d')} – {format(new Date(state.basics.endDate), 'MMM d, yyyy')}
                       </>
-                    ) : 'Dates not set'} 
+                    ) : 'Dates not set'}
                   </span>
-                  <span className="text-white/50">•</span>
+                  <span className="text-muted-foreground/50">•</span>
                   <span className="flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
                     {travelers} traveler{travelers > 1 ? 's' : ''}
@@ -208,205 +174,130 @@ export default function PlannerBooking() {
               </div>
             </div>
 
-            <div className="grid lg:grid-cols-5 gap-8">
-              {/* Trip Details - 3 columns */}
-              <div className="lg:col-span-3 space-y-6">
-                {/* Flights Card */}
+            <div className="grid lg:grid-cols-5 gap-10">
+              {/* Left: Details */}
+              <div className="lg:col-span-3 space-y-8">
+                {/* Flights */}
                 {state.flights && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
-                    className="bg-card rounded-2xl border border-border overflow-hidden"
-                  >
-                    <div className="bg-primary p-5 border-b border-border">
-                      <h2 className="text-lg font-semibold flex items-center gap-3 text-primary-foreground">
-                        <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                          <Plane className="h-5 w-5" />
-                        </div>
-                        Flights
-                      </h2>
+                  <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Plane className="w-4 h-4 text-primary" />
+                      <h2 className="font-medium text-muted-foreground uppercase text-xs tracking-wide">Flights</h2>
                     </div>
-                    <div className="p-5 space-y-4">
-                      {state.flights.departure && (
-                        <div className="flex justify-between items-center py-3 px-4 bg-muted/30 rounded-xl">
-                          <div className="flex items-center gap-3">
-                            <div className="text-center">
-                              <p className="text-xs text-muted-foreground uppercase">Outbound</p>
-                              <p className="font-semibold">{state.flights.departure.airline}</p>
-                            </div>
-                            <div className="h-8 w-px bg-border" />
-                            <div>
-                              <p className="text-sm text-muted-foreground">
-                                {state.flights.departure.cabin && `${state.flights.departure.cabin} class`}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {state.flights.departure.departureTime} → {state.flights.departure.arrivalTime}
-                              </p>
-                            </div>
+                    {state.flights.departure && (
+                      <div className="bg-card rounded-2xl border border-border p-5 flex items-center justify-between">
+                        <div className="flex items-center gap-6">
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase">Outbound</p>
+                            <p className="font-semibold">{state.flights.departure.airline}</p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold">${state.flights.departure.price.toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">per person</p>
+                          <div className="h-8 w-px bg-border" />
+                          <div>
+                            <p className="text-sm text-muted-foreground">{state.flights.departure.cabin && `${state.flights.departure.cabin} class`}</p>
+                            <p className="text-xs text-muted-foreground">{state.flights.departure.departureTime} → {state.flights.departure.arrivalTime}</p>
                           </div>
-                        </div>
-                      )}
-                      {state.flights.return && (
-                        <div className="flex justify-between items-center py-3 px-4 bg-muted/30 rounded-xl">
-                          <div className="flex items-center gap-3">
-                            <div className="text-center">
-                              <p className="text-xs text-muted-foreground uppercase">Return</p>
-                              <p className="font-semibold">{state.flights.return.airline}</p>
-                            </div>
-                            <div className="h-8 w-px bg-border" />
-                            <div>
-                              <p className="text-sm text-muted-foreground">
-                                {state.flights.return.cabin && `${state.flights.return.cabin} class`}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {state.flights.return.departureTime} → {state.flights.return.arrivalTime}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold">${state.flights.return.price.toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">per person</p>
-                          </div>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center pt-2 border-t border-border">
-                        <span className="text-muted-foreground">Flights subtotal ({travelers} travelers)</span>
-                        <span className="font-semibold">${flightTotal.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Hotel Card */}
-                {state.hotel && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="bg-card rounded-2xl border border-border overflow-hidden"
-                  >
-                    <div className="bg-secondary p-5 border-b border-border">
-                      <h2 className="text-lg font-semibold flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                          <Hotel className="h-5 w-5 text-foreground" />
-                        </div>
-                        Accommodation
-                      </h2>
-                    </div>
-                    <div className="p-5">
-                      <div className="flex gap-4">
-                        {state.hotel.imageUrl && (
-                          <img 
-                            src={state.hotel.imageUrl} 
-                            alt={state.hotel.name}
-                            className="w-24 h-24 rounded-xl object-cover"
-                          />
-                        )}
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-lg">{state.hotel.name}</h3>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                            <MapPin className="h-4 w-4" />
-                            {state.hotel.location}
-                          </p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {state.hotel.roomType} • {nights} night{nights > 1 ? 's' : ''}
-                          </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold">${hotelTotal.toFixed(2)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            ${state.hotel.pricePerNight}/night
-                          </p>
+                          <p className="text-lg font-bold">${state.flights.departure.price.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">per person</p>
                         </div>
                       </div>
+                    )}
+                    {state.flights.return && (
+                      <div className="bg-card rounded-2xl border border-border p-5 flex items-center justify-between">
+                        <div className="flex items-center gap-6">
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase">Return</p>
+                            <p className="font-semibold">{state.flights.return.airline}</p>
+                          </div>
+                          <div className="h-8 w-px bg-border" />
+                          <div>
+                            <p className="text-sm text-muted-foreground">{state.flights.return.cabin && `${state.flights.return.cabin} class`}</p>
+                            <p className="text-xs text-muted-foreground">{state.flights.return.departureTime} → {state.flights.return.arrivalTime}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold">${state.flights.return.price.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">per person</p>
+                        </div>
+                      </div>
+                    )}
+                  </motion.section>
+                )}
+
+                {/* Hotel */}
+                {state.hotel && (
+                  <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Hotel className="w-4 h-4 text-primary" />
+                      <h2 className="font-medium text-muted-foreground uppercase text-xs tracking-wide">Accommodation</h2>
                     </div>
-                  </motion.div>
+                    <div className="bg-card rounded-2xl border border-border overflow-hidden flex">
+                      {state.hotel.imageUrl && (
+                        <img src={state.hotel.imageUrl} alt={state.hotel.name} className="w-28 h-28 object-cover shrink-0" />
+                      )}
+                      <div className="p-5 flex-1">
+                        <h3 className="font-semibold text-lg">{state.hotel.name}</h3>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                          <MapPin className="h-4 w-4" />
+                          {state.hotel.location}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">{state.hotel.roomType} • {nights} night{nights > 1 ? 's' : ''}</p>
+                      </div>
+                      <div className="p-5 text-right flex flex-col justify-between">
+                        <p className="text-lg font-bold">${hotelTotal.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">${state.hotel.pricePerNight}/night</p>
+                      </div>
+                    </div>
+                  </motion.section>
                 )}
               </div>
 
-              {/* Payment Summary - 2 columns */}
+              {/* Right: Payment Summary */}
               <div className="lg:col-span-2">
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.25 }}
-                  className="bg-card rounded-2xl border border-border overflow-hidden sticky top-24"
+                  className="sticky top-24 bg-card rounded-2xl border border-border overflow-hidden"
                 >
                   <div className="bg-primary p-6">
                     <h2 className="text-xl font-semibold text-primary-foreground">Your Trip Total</h2>
                   </div>
-                  
-                  <div className="p-6 space-y-4">
-                    {/* Flight breakdown */}
+
+                  <div className="p-6 space-y-5">
                     {flightSubtotal > 0 && (
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Flights</p>
-                        <div className="space-y-1.5 pl-3 border-l-2 border-primary/20">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Outbound × {travelers}</span>
-                            <span>${outboundFlightBase.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Return × {travelers}</span>
-                            <span>${returnFlightBase.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm text-muted-foreground/80">
-                            <span>Taxes & carrier fees (est.)</span>
-                            <span>${flightTaxes.toFixed(2)}</span>
-                          </div>
+                        <div className="space-y-1.5 pl-4 border-l-2 border-primary/20 text-sm">
+                          <div className="flex justify-between"><span className="text-muted-foreground">Outbound × {travelers}</span><span>${outboundFlightBase.toFixed(2)}</span></div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Return × {travelers}</span><span>${returnFlightBase.toFixed(2)}</span></div>
+                          <div className="flex justify-between text-muted-foreground/80"><span>Taxes & carrier fees (est.)</span><span>${flightTaxes.toFixed(2)}</span></div>
                         </div>
                       </div>
                     )}
-                    
-                    {/* Hotel breakdown */}
                     {hotelSubtotal > 0 && (
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Accommodation</p>
-                        <div className="space-y-1.5 pl-3 border-l-2 border-accent/20">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">{nights} nights × ${state.hotel?.pricePerNight}/night</span>
-                            <span>${hotelSubtotal.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm text-muted-foreground/80">
-                            <span>Taxes & resort fees (est.)</span>
-                            <span>${hotelTaxes.toFixed(2)}</span>
-                          </div>
+                        <div className="space-y-1.5 pl-4 border-l-2 border-secondary/20 text-sm">
+                          <div className="flex justify-between"><span className="text-muted-foreground">{nights} nights × ${state.hotel?.pricePerNight}/night</span><span>${hotelSubtotal.toFixed(2)}</span></div>
+                          <div className="flex justify-between text-muted-foreground/80"><span>Taxes & resort fees (est.)</span><span>${hotelTaxes.toFixed(2)}</span></div>
                         </div>
                       </div>
                     )}
-                    
-                    {/* Activities */}
                     {activitiesTotal > 0 && (
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Experiences</p>
-                        <div className="pl-3 border-l-2 border-secondary/20">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Activities & tours</span>
-                            <span>${activitiesTotal.toFixed(2)}</span>
-                          </div>
+                        <div className="pl-4 border-l-2 border-secondary/20 text-sm">
+                          <div className="flex justify-between"><span className="text-muted-foreground">Activities & tours</span><span>${activitiesTotal.toFixed(2)}</span></div>
                         </div>
                       </div>
                     )}
-                    
-                    {/* Taxes summary */}
-                    <div className="border-t border-dashed border-border pt-3 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Total estimated taxes & fees</span>
-                        <span>${totalTaxes.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Voyance concierge fee</span>
-                        <span>${serviceFee.toFixed(2)}</span>
-                      </div>
+                    <div className="border-t border-dashed border-border pt-4 space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-muted-foreground">Total estimated taxes & fees</span><span>${totalTaxes.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Voyance concierge fee</span><span>${serviceFee.toFixed(2)}</span></div>
                     </div>
-                    
-                    {/* Grand total */}
-                    <div className="border-t border-border pt-4 mt-4">
+                    <div className="border-t border-border pt-5">
                       <div className="flex justify-between items-baseline">
                         <span className="text-lg font-semibold">Total</span>
                         <div className="text-right">
@@ -425,12 +316,7 @@ export default function PlannerBooking() {
                       </div>
                     )}
 
-                    <Button
-                      onClick={handleCheckout}
-                      disabled={isProcessing}
-                      size="lg"
-                      className="w-full h-14 text-lg"
-                    >
+                    <Button onClick={handleCheckout} disabled={isProcessing} size="lg" className="w-full h-14 text-lg">
                       {isProcessing ? (
                         <>
                           <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -444,24 +330,17 @@ export default function PlannerBooking() {
                       )}
                     </Button>
 
-                    {/* Trust badges */}
-                    <div className="pt-4 space-y-3 border-t border-border">
+                    <div className="pt-5 space-y-3 border-t border-border">
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                          <Lock className="h-4 w-4" />
-                        </div>
+                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0"><Lock className="h-4 w-4" /></div>
                         <span>Secure payment via Stripe</span>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                          <Shield className="h-4 w-4" />
-                        </div>
+                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0"><Shield className="h-4 w-4" /></div>
                         <span>Your data is encrypted and protected</span>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                          <CheckCircle className="h-4 w-4" />
-                        </div>
+                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0"><CheckCircle className="h-4 w-4" /></div>
                         <span>Free cancellation up to 24h before</span>
                       </div>
                     </div>
@@ -470,16 +349,10 @@ export default function PlannerBooking() {
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="mt-10 flex flex-wrap gap-4">
-              <Button variant="outline" onClick={() => navigate(-1)}>
-                ← Back to Trip Summary
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={() => navigate(`/planner/itinerary?tripId=${tripId}`)}
-                disabled={!tripId}
-              >
+            {/* Footer Actions */}
+            <div className="mt-12 flex flex-wrap gap-4">
+              <Button variant="outline" onClick={() => navigate(-1)}>← Back to Trip Summary</Button>
+              <Button variant="secondary" onClick={() => navigate(`/planner/itinerary?tripId=${tripId}`)} disabled={!tripId}>
                 <Eye className="h-4 w-4 mr-2" />
                 Preview Itinerary
               </Button>
