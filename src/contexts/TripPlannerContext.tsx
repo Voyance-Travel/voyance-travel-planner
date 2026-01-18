@@ -3,6 +3,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { tripsAPI, itineraryAPI } from '@/services/voyanceAPI';
 import { useAuth } from './AuthContext';
 
+// Anonymous session management
+const ANON_SESSION_KEY = 'voyance_anonymous_session';
+
+function getOrCreateAnonymousSession(): string {
+  let sessionId = localStorage.getItem(ANON_SESSION_KEY);
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    localStorage.setItem(ANON_SESSION_KEY, sessionId);
+  }
+  return sessionId;
+}
+
 export interface TripBasics {
   destination?: string;
   destinationId?: string;
@@ -64,6 +76,7 @@ export interface ItineraryDay {
 
 export interface TripPlannerState {
   tripId: string | null;
+  sessionId: string | null; // For anonymous trips
   step: number;
   basics: TripBasics;
   flights: FlightSelection | null;
@@ -86,11 +99,13 @@ interface TripPlannerContextType {
   calculateTotal: () => number;
   reset: () => void;
   saveTrip: () => Promise<string | null>;
+  saveTripToNeon: () => Promise<string | null>;
   loadTrip: (tripId: string) => Promise<void>;
 }
 
 const initialState: TripPlannerState = {
   tripId: null,
+  sessionId: null,
   step: 1,
   basics: {},
   flights: null,
@@ -176,12 +191,68 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
   };
 
   /**
+   * Save trip to Neon DB (works for both anonymous and authenticated users)
+   */
+  const saveTripToNeon = useCallback(async (): Promise<string | null> => {
+    if (!state.basics.destination || !state.basics.startDate || !state.basics.endDate) {
+      console.warn('[TripPlanner] Cannot save to Neon: missing required fields');
+      return null;
+    }
+
+    setState(prev => ({ ...prev, isSaving: true }));
+
+    try {
+      const sessionId = state.sessionId || getOrCreateAnonymousSession();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/neon-db/trips/anonymous`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({
+          sessionId,
+          origin: state.basics.originCity,
+          destination: state.basics.destination,
+          startDate: state.basics.startDate,
+          endDate: state.basics.endDate,
+          travelers: state.basics.travelers || 1,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      setState(prev => ({ 
+        ...prev, 
+        sessionId: result.sessionId || sessionId,
+        isSaving: false, 
+        lastSaved: new Date() 
+      }));
+
+      console.log('[TripPlanner] Trip saved to Neon:', result.sessionId || sessionId);
+      return result.sessionId || sessionId;
+    } catch (error) {
+      console.error('[TripPlanner] Neon save error:', error);
+      setState(prev => ({ ...prev, isSaving: false }));
+      return null;
+    }
+  }, [state]);
+
+  /**
    * Save trip to BOTH Supabase (primary) and Railway backend
+   * Only works for authenticated users
    */
   const saveTrip = useCallback(async (): Promise<string | null> => {
+    // If not authenticated, save to Neon instead
     if (!isAuthenticated || !user) {
-      console.warn('[TripPlanner] Cannot save: not authenticated');
-      return null;
+      console.log('[TripPlanner] Not authenticated, saving to Neon');
+      return saveTripToNeon();
     }
 
     if (!state.basics.destination || !state.basics.startDate || !state.basics.endDate) {
@@ -284,14 +355,12 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
       setState(prev => ({ ...prev, isSaving: false }));
       return null;
     }
-  }, [state, user, isAuthenticated, calculateTotal]);
+  }, [state, user, isAuthenticated, calculateTotal, saveTripToNeon]);
 
   /**
    * Load trip from Supabase
    */
   const loadTrip = useCallback(async (tripId: string): Promise<void> => {
-    if (!isAuthenticated) return;
-
     try {
       const { data, error } = await supabase
         .from('trips')
@@ -309,6 +378,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
       setState({
         tripId: data.id,
+        sessionId: null,
         step: metadata?.lastStep || 1,
         basics: {
           destination: data.destination,
@@ -331,7 +401,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('[TripPlanner] Load error:', error);
     }
-  }, [isAuthenticated]);
+  }, []);
 
   const reset = () => {
     setState(initialState);
@@ -339,10 +409,14 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
   // Auto-save on significant changes (debounced)
   useEffect(() => {
-    if (!state.tripId || !isAuthenticated) return;
+    if (!state.basics.destination) return;
     
     const timer = setTimeout(() => {
-      saveTrip();
+      if (isAuthenticated && state.tripId) {
+        saveTrip();
+      } else if (state.sessionId) {
+        saveTripToNeon();
+      }
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -362,6 +436,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         calculateTotal,
         reset,
         saveTrip,
+        saveTripToNeon,
         loadTrip,
       }}
     >
