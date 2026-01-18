@@ -31,9 +31,10 @@ async function getAmadeusToken(): Promise<string> {
     throw new Error('Amadeus credentials not configured');
   }
 
-  console.log('[Hotels] Fetching new Amadeus access token');
+  console.log('[Hotels] Fetching new Amadeus access token (TEST MODE)');
   
-  const response = await fetch('https://api.amadeus.com/v1/security/oauth2/token', {
+  // Using TEST environment for development
+  const response = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `grant_type=client_credentials&client_id=${apiKey}&client_secret=${apiSecret}`,
@@ -127,9 +128,9 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
   
   console.log('[Hotels] Searching in:', cityCode, 'for', params.destination);
 
-  // Step 1: Get hotels by city
+  // Step 1: Get hotels by city (TEST environment)
   const hotelsResponse = await fetch(
-    `https://api.amadeus.com/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=50&radiusUnit=KM&hotelSource=ALL`,
+    `https://test.api.amadeus.com/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=50&radiusUnit=KM&hotelSource=ALL`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }
@@ -161,8 +162,9 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     currency: 'USD',
   });
 
+  // Step 2: Get offers for these hotels (TEST environment)
   const offersResponse = await fetch(
-    `https://api.amadeus.com/v3/shopping/hotel-offers?${offersParams}`,
+    `https://test.api.amadeus.com/v3/shopping/hotel-offers?${offersParams}`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }
