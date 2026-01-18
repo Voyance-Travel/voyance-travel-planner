@@ -66,11 +66,13 @@ async function getPexelsPhoto(destination: string, apiKey: string): Promise<Dest
 
 async function getGooglePlacesPhoto(destination: string, apiKey: string): Promise<DestinationImage | null> {
   try {
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(
-      destination
-    )}&inputtype=textquery&fields=place_id,name,photos&key=${apiKey}`;
+    // Use Text Search API which is more reliable for destinations
+    const query = `${destination} city landmark`;
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+      query
+    )}&key=${apiKey}`;
 
-    console.log("[Images] Searching Google Places for:", destination);
+    console.log("[Images] Searching Google Places (textsearch) for:", destination);
 
     const searchResponse = await fetch(searchUrl);
     if (!searchResponse.ok) {
@@ -79,26 +81,29 @@ async function getGooglePlacesPhoto(destination: string, apiKey: string): Promis
     }
 
     const searchData = await searchResponse.json();
+    console.log("[Images] Google Places status:", searchData.status, "results:", searchData.results?.length || 0);
 
-    if (searchData.status !== "OK" || !searchData.candidates?.[0]) {
+    if (searchData.status !== "OK" || !searchData.results?.length) {
       console.log("[Images] No Google Places results for:", destination);
       return null;
     }
 
-    const candidate = searchData.candidates[0];
-    const photoRef = candidate.photos?.[0]?.photo_reference;
-
-    if (!photoRef) {
-      console.log("[Images] No photos available for:", destination);
+    // Find the first result with photos
+    const resultWithPhoto = searchData.results.find((r: any) => r.photos?.length > 0);
+    if (!resultWithPhoto) {
+      console.log("[Images] No photos in any Google Places results for:", destination);
       return null;
     }
 
+    const photoRef = resultWithPhoto.photos[0].photo_reference;
     const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1600&photo_reference=${photoRef}&key=${apiKey}`;
 
+    console.log("[Images] ✅ Found Google Places photo for:", destination);
+
     return {
-      id: `google-${candidate.place_id}`,
+      id: `google-${resultWithPhoto.place_id}`,
       url: photoUrl,
-      alt: `${candidate.name || destination} - Photo`,
+      alt: `${resultWithPhoto.name || destination} - Photo`,
       type: "hero",
       source: "google_places",
       width: 1600,
@@ -281,22 +286,22 @@ serve(async (req) => {
 
     let images: DestinationImage[] = [];
 
-    // Priority 1: Lovable AI Generated (best quality, always preferred)
-    if (lovableApiKey) {
-      console.log("[Images] Generating Lovable AI image for:", resolvedDestination);
+    // Priority 1: Google Places (most reliable for real destination photos)
+    if (googleApiKey) {
+      const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
+      if (googleImage) {
+        images = [googleImage];
+        console.log("[Images] ✅ Using Google Places image for:", resolvedDestination);
+      }
+    }
+
+    // Priority 2: Lovable AI Generated (fallback if Google fails)
+    if (images.length === 0 && lovableApiKey) {
+      console.log("[Images] Trying Lovable AI image for:", resolvedDestination);
       const aiImage = await generateAIImage(resolvedDestination, lovableApiKey);
       if (aiImage) {
         images = [aiImage];
         console.log("[Images] ✅ Using AI-generated image for:", resolvedDestination);
-      }
-    }
-
-    // Priority 2: Google Places (fallback for real photos)
-    if (images.length === 0 && googleApiKey) {
-      const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
-      if (googleImage) {
-        images = [googleImage];
-        console.log("[Images] Using Google Places image for:", resolvedDestination);
       }
     }
 
