@@ -51,21 +51,82 @@ export default function TripDetail() {
   const [error, setError] = useState<string | null>(null);
   const scheduleNotifications = useScheduleNotifications();
 
+  const loadLocalTrip = (id: string): Trip | null => {
+    try {
+      // Preferred demo/local storage format (TripPlannerContext)
+      const demoTripsRaw = localStorage.getItem('voyance_demo_trips');
+      if (demoTripsRaw) {
+        const demoTrips = JSON.parse(demoTripsRaw);
+        if (demoTrips?.[id]) return demoTrips[id] as Trip;
+      }
+
+      // Legacy anonymous format used in some planner flows
+      const legacyRaw = localStorage.getItem(`trip_${id}`);
+      if (legacyRaw) {
+        const parsed = JSON.parse(legacyRaw);
+        if (parsed?.destination && parsed?.startDate && parsed?.endDate) {
+          return {
+            id,
+            user_id: 'local',
+            name: parsed.name || `Trip to ${parsed.destination}`,
+            destination: parsed.destination,
+            destination_country: parsed.destination_country || null,
+            start_date: parsed.startDate,
+            end_date: parsed.endDate,
+            status: parsed.status || 'draft',
+            trip_type: parsed.tripType || null,
+            travelers: parsed.travelers || 1,
+            origin_city: parsed.originCity || null,
+            budget_tier: parsed.budgetTier || null,
+            flight_selection: parsed.flight_selection || parsed.flights || null,
+            hotel_selection: parsed.hotel_selection || parsed.hotel || null,
+            itinerary_data: parsed.itinerary_data || (parsed.itinerary ? { days: parsed.itinerary } : null),
+            itinerary_status: null,
+            metadata: parsed.metadata || null,
+            price_lock_expires_at: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as unknown as Trip;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     async function fetchTripData() {
       if (!tripId) return;
 
       try {
         setLoading(true);
-        
-        // Fetch trip details
+        setError(null);
+
+        // Fetch trip details (don't use .single() to avoid hard failure on 0 rows)
         const { data: tripData, error: tripError } = await supabase
           .from('trips')
           .select('*')
           .eq('id', tripId)
-          .single();
+          .maybeSingle();
 
         if (tripError) throw tripError;
+
+        // If backend doesn't have the trip (common for demo/anonymous flows), fall back to local storage
+        if (!tripData) {
+          const localTrip = loadLocalTrip(tripId);
+          if (localTrip) {
+            setTrip(localTrip);
+            setActivities([]);
+            return;
+          }
+
+          setTrip(null);
+          setError('Trip not found');
+          return;
+        }
+
         setTrip(tripData);
 
         // Fetch activities
@@ -90,12 +151,12 @@ export default function TripDetail() {
             .from('trips')
             .update({ status: 'active' })
             .eq('id', tripId);
-          setTrip(prev => prev ? { ...prev, status: 'active' } : null);
-          
+          setTrip(prev => (prev ? { ...prev, status: 'active' } : null));
+
           // Schedule notifications for the active trip
-          scheduleNotifications.mutate({ 
-            tripId, 
-            userId: tripData.user_id 
+          scheduleNotifications.mutate({
+            tripId,
+            userId: tripData.user_id,
           });
         } else if ((tripData.status === 'active' || tripData.status === 'booked') && isAfter(now, endDate)) {
           // Trip should be completed
@@ -103,11 +164,11 @@ export default function TripDetail() {
             .from('trips')
             .update({ status: 'completed' })
             .eq('id', tripId);
-          setTrip(prev => prev ? { ...prev, status: 'completed' } : null);
+          setTrip(prev => (prev ? { ...prev, status: 'completed' } : null));
         }
-
       } catch (err) {
         console.error('Error fetching trip:', err);
+        setTrip(null);
         setError('Failed to load trip details');
       } finally {
         setLoading(false);
@@ -271,7 +332,7 @@ export default function TripDetail() {
           <div className="max-w-4xl mx-auto px-4 text-center">
             <h1 className="text-3xl font-bold mb-4">Trip Not Found</h1>
             <p className="text-muted-foreground mb-6">{error || 'This trip does not exist.'}</p>
-            <Button onClick={() => navigate('/dashboard')}>
+            <Button onClick={() => navigate('/trip/dashboard')}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Dashboard
             </Button>
