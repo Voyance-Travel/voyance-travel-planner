@@ -1556,6 +1556,18 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      insert_audit_log: {
+        Args: {
+          p_action: string
+          p_action_type?: string
+          p_actor?: string
+          p_metadata?: Json
+          p_target?: string
+          p_target_id?: string
+          p_user_id?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "user" | "admin" | "moderator"
