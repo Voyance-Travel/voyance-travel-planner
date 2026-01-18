@@ -11,21 +11,20 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: "hero" | "gallery" | "activity";
-  source: "google_places" | "fallback"; // Intentionally NOT using database images
+  source: "google_places" | "lovable_ai" | "fallback";
   width?: number;
   height?: number;
 }
 
 interface RequestParams {
-  destinationId?: string | null;
-  destination?: string | null;
-  imageType?: string | null;
-  limit?: number | null;
+  destinationId?: string;
+  destination?: string;
+  imageType?: string;
+  limit?: number;
 }
 
 async function getGooglePlacesPhoto(destination: string, apiKey: string): Promise<DestinationImage | null> {
   try {
-    // Find a place candidate (includes photos)
     const searchUrl = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(
       destination
     )}&inputtype=textquery&fields=place_id,name,photos&key=${apiKey}`;
@@ -53,7 +52,6 @@ async function getGooglePlacesPhoto(destination: string, apiKey: string): Promis
       return null;
     }
 
-    // Returns actual image bytes (HTTP 302 to CDN)
     const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1600&photo_reference=${photoRef}&key=${apiKey}`;
 
     return {
@@ -67,6 +65,57 @@ async function getGooglePlacesPhoto(destination: string, apiKey: string): Promis
     };
   } catch (error) {
     console.error("[Images] Google Places error:", error);
+    return null;
+  }
+}
+
+async function generateAIImage(destination: string, lovableApiKey: string): Promise<DestinationImage | null> {
+  try {
+    console.log("[Images] Generating AI image for:", destination);
+    
+    const prompt = `A beautiful, high-quality travel photograph of ${destination}. Scenic landmark view, golden hour lighting, professional travel photography, no people, ultra high resolution. 16:9 aspect ratio.`;
+    
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image-preview",
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        modalities: ["image", "text"]
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[Images] AI generation failed:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+    if (!imageUrl) {
+      console.error("[Images] No image URL in AI response");
+      return null;
+    }
+
+    console.log("[Images] Successfully generated AI image for:", destination);
+
+    return {
+      id: `ai-${destination.replace(/\s/g, "-").toLowerCase()}-${Date.now()}`,
+      url: imageUrl,
+      alt: `${destination} - AI Generated Travel Photo`,
+      type: "hero",
+      source: "lovable_ai",
+      width: 1024,
+      height: 1024,
+    };
+  } catch (error) {
+    console.error("[Images] AI generation error:", error);
     return null;
   }
 }
@@ -88,7 +137,6 @@ async function getDestinationName(supabase: any, destinationId: string): Promise
 }
 
 function generateFallbackGradient(destination: string): DestinationImage {
-  // Generate consistent colors based on destination name
   let hash = 0;
   for (let i = 0; i < destination.length; i++) {
     hash = destination.charCodeAt(i) + ((hash << 5) - hash);
@@ -121,43 +169,47 @@ function generateFallbackGradient(destination: string): DestinationImage {
   };
 }
 
-function getParamsFromUrl(url: URL): RequestParams {
-  const destinationId = url.searchParams.get("destinationId");
-  const destination = url.searchParams.get("destination");
-  const imageType = url.searchParams.get("imageType");
-  const limitRaw = url.searchParams.get("limit");
-
-  return {
-    destinationId,
-    destination,
-    imageType,
-    limit: limitRaw ? Number(limitRaw) : null,
-  };
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Parse params from both query string and body
     const url = new URL(req.url);
+    let params: RequestParams = {};
 
-    // Support both GET (query params) and POST (JSON body)
-    let params: RequestParams = getParamsFromUrl(url);
+    // Get query params first
+    const qDestinationId = url.searchParams.get("destinationId");
+    const qDestination = url.searchParams.get("destination");
+    const qImageType = url.searchParams.get("imageType");
+    const qLimit = url.searchParams.get("limit");
+
+    if (qDestinationId) params.destinationId = qDestinationId;
+    if (qDestination) params.destination = qDestination;
+    if (qImageType) params.imageType = qImageType;
+    if (qLimit) params.limit = parseInt(qLimit);
+
+    // Then try to parse body (POST)
     if (req.method === "POST") {
       try {
-        const body = (await req.json()) as RequestParams;
-        params = { ...params, ...body };
-      } catch {
-        // ignore malformed JSON and fall back to URL params
+        const body = await req.json();
+        console.log("[Images] Received body:", JSON.stringify(body));
+        if (body.destinationId) params.destinationId = body.destinationId;
+        if (body.destination) params.destination = body.destination;
+        if (body.imageType) params.imageType = body.imageType;
+        if (body.limit) params.limit = body.limit;
+      } catch (e) {
+        console.log("[Images] Could not parse body:", e);
       }
     }
 
-    const destinationId = params.destinationId ?? undefined;
-    const destination = params.destination ?? undefined;
-    const imageType = (params.imageType ?? undefined) || undefined;
-    const limit = Math.max(1, Math.min(Number(params.limit ?? 10) || 10, 20));
+    console.log("[Images] Parsed params:", JSON.stringify(params));
+
+    const destinationId = params.destinationId;
+    const destination = params.destination;
+    const imageType = params.imageType || "hero";
+    const limit = Math.max(1, Math.min(params.limit || 1, 10));
 
     if (!destinationId && !destination) {
       return new Response(JSON.stringify({ error: "destinationId or destination name is required" }), {
@@ -171,16 +223,24 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const googleApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
     let resolvedDestination = destination;
     if (!resolvedDestination && destinationId) {
-      resolvedDestination = (await getDestinationName(supabase, destinationId)) ?? undefined;
+      resolvedDestination = await getDestinationName(supabase, destinationId) || undefined;
+    }
+
+    if (!resolvedDestination) {
+      return new Response(JSON.stringify({ error: "Could not resolve destination name" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     let images: DestinationImage[] = [];
 
-    // Primary: Google Places
-    if (resolvedDestination && googleApiKey) {
+    // Priority 1: Google Places
+    if (googleApiKey) {
       const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
       if (googleImage) {
         images = [googleImage];
@@ -188,20 +248,23 @@ serve(async (req) => {
       }
     }
 
-    // Final fallback: gradient placeholder
-    if (images.length === 0 && resolvedDestination) {
+    // Priority 2: Lovable AI Generated
+    if (images.length === 0 && lovableApiKey) {
+      const aiImage = await generateAIImage(resolvedDestination, lovableApiKey);
+      if (aiImage) {
+        images = [aiImage];
+        console.log("[Images] Using AI-generated image for:", resolvedDestination);
+      }
+    }
+
+    // Priority 3: Gradient fallback
+    if (images.length === 0) {
       images = [generateFallbackGradient(resolvedDestination)];
       console.log("[Images] Using gradient fallback for:", resolvedDestination);
     }
 
-    // If caller asked for more than 1 image (gallery/activity), repeat hero for now
-    if (images.length === 1 && limit > 1) {
-      images = Array.from({ length: limit }, (_, i) => ({
-        ...images[0],
-        id: `${images[0].id}-${i}`,
-        type: (imageType as any) || images[0].type,
-      }));
-    } else if (imageType && images[0]) {
+    // Update type if specified
+    if (images[0]) {
       images[0] = { ...images[0], type: imageType as any };
     }
 
