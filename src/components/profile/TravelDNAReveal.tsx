@@ -1,0 +1,337 @@
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Sparkles, 
+  Star, 
+  Zap, 
+  Heart, 
+  TrendingUp,
+  ChevronRight,
+  RefreshCw,
+  Award
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ROUTES } from '@/config/routes';
+import { 
+  getArchetypeNarrative, 
+  getCategoryColors, 
+  type ArchetypeNarrative 
+} from '@/data/archetypeNarratives';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
+
+interface TravelDNARevealProps {
+  userId: string;
+  className?: string;
+}
+
+interface TravelDNAData {
+  primary_archetype_name: string | null;
+  secondary_archetype_name: string | null;
+  dna_confidence_score: number | null;
+  dna_rarity: string | null;
+  trait_scores: unknown;
+  tone_tags: string[] | null;
+  emotional_drivers: string[] | null;
+  summary: string | null;
+}
+
+export default function TravelDNAReveal({ userId, className }: TravelDNARevealProps) {
+  const [dnaData, setDnaData] = useState<TravelDNAData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('identity');
+
+  useEffect(() => {
+    async function loadDNA() {
+      if (!userId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('travel_dna_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        if (error) throw error;
+        setDnaData(data);
+      } catch (error) {
+        console.error('Failed to load travel DNA:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    loadDNA();
+  }, [userId]);
+
+  if (isLoading) {
+    return (
+      <div className={cn("bg-card rounded-xl border border-border p-8", className)}>
+        <div className="flex items-center gap-3 animate-pulse">
+          <div className="w-12 h-12 rounded-full bg-muted" />
+          <div className="space-y-2">
+            <div className="h-4 w-32 bg-muted rounded" />
+            <div className="h-3 w-24 bg-muted rounded" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!dnaData?.primary_archetype_name) {
+    return (
+      <div className={cn("bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl border border-border p-8", className)}>
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <Sparkles className="h-8 w-8 text-primary" />
+          </div>
+          <h3 className="font-serif text-2xl font-semibold text-foreground mb-2">
+            Discover Your Travel DNA
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            Take our quick quiz to uncover your unique travel personality. 
+            It's like a horoscope, but for wanderlust.
+          </p>
+          <Button asChild size="lg" className="gap-2">
+            <Link to={ROUTES.QUIZ}>
+              <Sparkles className="h-4 w-4" />
+              Take the Quiz
+            </Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const narrative = getArchetypeNarrative(dnaData.primary_archetype_name);
+  const colors = getCategoryColors(narrative.category);
+  const confidence = dnaData.dna_confidence_score || 85;
+  const rarity = dnaData.dna_rarity || 'Uncommon';
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn("rounded-xl border border-border overflow-hidden", className)}
+    >
+      {/* Hero Section */}
+      <div className={cn("p-8 bg-gradient-to-br", colors.bg, colors.border, "border-b")}>
+        <div className="flex flex-col md:flex-row md:items-center gap-6">
+          {/* Archetype Icon */}
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className={cn(
+              "w-20 h-20 rounded-2xl flex items-center justify-center text-4xl",
+              "bg-gradient-to-br shadow-lg",
+              colors.primary
+            )}
+          >
+            {narrative.emoji}
+          </motion.div>
+
+          <div className="flex-1">
+            {/* Rarity Badge */}
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <Badge className={cn("mb-2", colors.bg, colors.text, colors.border)}>
+                <Star className="h-3 w-3 mr-1" />
+                {rarity} • {confidence}% Match
+              </Badge>
+            </motion.div>
+
+            {/* Name */}
+            <motion.h2 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="font-serif text-2xl md:text-3xl font-bold text-foreground mb-1"
+            >
+              You are {narrative.name}
+            </motion.h2>
+
+            {/* Hook Line */}
+            <motion.p 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className={cn("text-lg italic", colors.text)}
+            >
+              "{narrative.hookLine}"
+            </motion.p>
+          </div>
+
+          {/* Retake Button */}
+          <Button variant="outline" size="sm" asChild className="gap-2 self-start">
+            <Link to={ROUTES.QUIZ}>
+              <RefreshCw className="h-4 w-4" />
+              Retake
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabbed Content */}
+      <div className="p-6 bg-card">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full justify-start mb-6 bg-muted/50">
+            <TabsTrigger value="identity" className="gap-2">
+              <Heart className="h-4 w-4" />
+              What This Means
+            </TabsTrigger>
+            <TabsTrigger value="superpowers" className="gap-2">
+              <Zap className="h-4 w-4" />
+              Superpowers
+            </TabsTrigger>
+            <TabsTrigger value="growth" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Growth Edges
+            </TabsTrigger>
+          </TabsList>
+
+          <AnimatePresence mode="wait">
+            <TabsContent value="identity" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                {/* Core Description */}
+                <p className="text-foreground leading-relaxed text-lg">
+                  {narrative.coreDescription}
+                </p>
+
+                {/* What This Means */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Award className="h-4 w-4 text-primary" />
+                    This Is Why You Travel
+                  </h4>
+                  <ul className="space-y-2">
+                    {narrative.whatThisMeans.map((item, i) => (
+                      <motion.li 
+                        key={i}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                        className="flex items-start gap-3 text-muted-foreground"
+                      >
+                        <span className={cn("w-1.5 h-1.5 rounded-full mt-2", colors.text.replace('text-', 'bg-'))} />
+                        {item}
+                      </motion.li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Traits */}
+                {dnaData.tone_tags && dnaData.tone_tags.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-3">Your Travel Traits</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {dnaData.tone_tags.map((tag, i) => (
+                        <Badge key={i} variant="secondary" className="capitalize">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </TabsContent>
+
+            <TabsContent value="superpowers" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
+              >
+                <p className="text-muted-foreground mb-6">
+                  These are the unique strengths you bring to every journey.
+                </p>
+                {narrative.superpowers.map((power, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.15 }}
+                    className={cn(
+                      "p-4 rounded-lg flex items-center gap-4",
+                      colors.bg, colors.border, "border"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center",
+                      "bg-gradient-to-br", colors.primary
+                    )}>
+                      <Zap className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="text-foreground font-medium">{power}</span>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </TabsContent>
+
+            <TabsContent value="growth" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
+              >
+                <p className="text-muted-foreground mb-6">
+                  Every traveler has room to grow. These gentle nudges might open new horizons.
+                </p>
+                {narrative.growthEdges.map((edge, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.15 }}
+                    className="p-4 rounded-lg bg-muted/30 flex items-center gap-4"
+                  >
+                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-foreground">{edge}</span>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </TabsContent>
+          </AnimatePresence>
+        </Tabs>
+
+        {/* Perfect Trip Preview */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className={cn(
+            "mt-8 p-6 rounded-lg border",
+            colors.bg, colors.border
+          )}
+        >
+          <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Your Perfect Trip Looks Like...
+          </h4>
+          <p className="text-muted-foreground italic">
+            "{narrative.perfectTripPreview}"
+          </p>
+          <Button variant="link" asChild className="mt-2 px-0 gap-1">
+            <Link to={ROUTES.START}>
+              Plan a trip like this
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
