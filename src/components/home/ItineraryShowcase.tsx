@@ -43,8 +43,13 @@ export default function ItineraryShowcase() {
   const activeItinerary = itineraries[activeIndex];
 
   return (
-    <section className="py-24 bg-background">
-      <div className="max-w-7xl mx-auto px-4">
+    <section className="py-24 bg-background relative overflow-hidden">
+      {/* Decorative background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-secondary/20 to-transparent" />
+      <div className="absolute top-20 right-20 w-72 h-72 bg-ocean/5 rounded-full blur-3xl" />
+      <div className="absolute bottom-20 left-20 w-56 h-56 bg-gold/5 rounded-full blur-3xl" />
+      
+      <div className="max-w-7xl mx-auto px-4 relative z-10">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -52,7 +57,7 @@ export default function ItineraryShowcase() {
           viewport={{ once: true }}
           className="text-center mb-12"
         >
-          <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
+          <span className="inline-block px-4 py-1.5 rounded-full bg-gradient-to-r from-accent/20 to-gold/20 text-accent text-sm font-medium mb-4 border border-accent/20">
             Featured Itineraries
           </span>
           <h2 className="text-3xl md:text-5xl font-display font-bold text-foreground mb-4">
@@ -71,8 +76,8 @@ export default function ItineraryShowcase() {
               onClick={() => setActiveIndex(index)}
               className={`px-5 py-2.5 rounded-full font-medium text-sm transition-all ${
                 activeIndex === index
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  ? 'bg-gradient-to-r from-primary to-emerald text-white shadow-md'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
               }`}
             >
               {itinerary.destination}

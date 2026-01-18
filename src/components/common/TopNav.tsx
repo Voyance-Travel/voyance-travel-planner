@@ -96,13 +96,19 @@ export default function TopNav() {
   };
 
   return (
-    <header
-      className={`sticky top-0 z-50 transition-all duration-300 ${
-        isTransparent
-          ? 'bg-transparent'
-          : 'bg-background/95 backdrop-blur-md border-b border-border shadow-sm'
-      }`}
-    >
+    <>
+      {/* Fixed gradient backdrop for hero pages - ensures header text is always readable */}
+      {location.pathname === '/' && !hasScrolled && (
+        <div className="fixed top-0 left-0 right-0 h-24 bg-gradient-to-b from-black/50 via-black/25 to-transparent z-40 pointer-events-none" />
+      )}
+      
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          isTransparent
+            ? 'bg-transparent'
+            : 'bg-background/95 backdrop-blur-md border-b border-border shadow-sm'
+        }`}
+      >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
@@ -378,5 +384,6 @@ export default function TopNav() {
         )}
       </AnimatePresence>
     </header>
+    </>
   );
 }
