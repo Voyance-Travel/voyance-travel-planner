@@ -236,9 +236,9 @@ export default function TripConfirmation() {
     <MainLayout>
       <Head title={`Trip Confirmed - ${cleanDestination} | Voyance`} />
 
-      {/* Hero Section with Destination Image */}
-      <section className="relative min-h-[50vh] flex items-center justify-center overflow-hidden">
-        {/* Background Image */}
+      {/* Full-bleed Hero Section */}
+      <section className="relative min-h-[65vh] flex items-end overflow-hidden">
+        {/* Background Image with Rich Overlay */}
         {trip && (
           <div className="absolute inset-0">
             <DynamicDestinationPhotos
@@ -247,161 +247,206 @@ export default function TripConfirmation() {
               hideOverlayText
               className="absolute inset-0"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
+            {/* Luxurious gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-accent/10" />
           </div>
         )}
 
-        {/* Content */}
-        <div className="relative z-10 max-w-4xl mx-auto px-4 py-24 text-center">
+        {/* Hero Content */}
+        <div className="relative z-10 w-full max-w-5xl mx-auto px-6 pb-16">
           <motion.div
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className="mb-8"
-          >
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-500/20 backdrop-blur-sm border border-green-500/30">
-              <CheckCircle className="h-10 w-10 text-green-500" />
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+            className="text-center md:text-left"
           >
-            <Badge variant="secondary" className="mb-4 text-sm px-4 py-1">
-              <Sparkles className="h-3 w-3 mr-1" />
-              Booking Confirmed
-            </Badge>
+            {/* Success Badge */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
+              className="inline-flex items-center gap-2 mb-6 px-5 py-2.5 rounded-full bg-green-500/15 backdrop-blur-md border border-green-500/25"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+              </span>
+              <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                Booking Confirmed
+              </span>
+            </motion.div>
 
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-foreground mb-4">
-              You're going to {cleanDestination}!
+            {/* Destination Title */}
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif font-bold text-foreground mb-4 tracking-tight">
+              {cleanDestination}
             </h1>
 
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Your adventure awaits. We've prepared everything for an unforgettable journey.
-            </p>
+            {/* Trip Overview Pills */}
+            <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/80 backdrop-blur-sm border border-border/50">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">
+                  {format(new Date(trip?.start_date || new Date()), 'MMM d')} – {format(new Date(trip?.end_date || new Date()), 'MMM d')}
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/80 backdrop-blur-sm border border-border/50">
+                <Users className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">
+                  {trip?.travelers || 1} {(trip?.travelers || 1) === 1 ? 'Traveler' : 'Travelers'}
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/80 backdrop-blur-sm border border-border/50">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">{nights} Nights</span>
+              </div>
+            </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Trip Details Section */}
-      <section className="py-12 bg-background">
-        <div className="max-w-4xl mx-auto px-4">
+      {/* Main Content Section */}
+      <section className="relative -mt-8 pb-20">
+        <div className="max-w-5xl mx-auto px-6">
           {trip && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="relative"
+              transition={{ delay: 0.4, duration: 0.5 }}
             >
-              {/* Editorial Card */}
-              <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-xl">
-                {/* Card Header */}
-                <div className="p-8 md:p-10 bg-gradient-to-br from-primary/5 via-transparent to-accent/5">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+              {/* Primary Card */}
+              <div className="relative bg-card rounded-3xl overflow-hidden shadow-2xl border border-border/50">
+                {/* Decorative top accent */}
+                <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary via-accent to-primary" />
+
+                {/* Card Content */}
+                <div className="p-8 md:p-12">
+                  {/* Header Row */}
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-10">
                     <div>
-                      <p className="text-sm uppercase tracking-widest text-muted-foreground mb-2">
-                        Your Itinerary
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3 font-medium">
+                        Confirmation Number
                       </p>
-                      <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground">
-                        {cleanDestination}
-                      </h2>
-                    </div>
-                    <Badge className="self-start md:self-auto bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 px-4 py-2">
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Confirmed
-                    </Badge>
-                  </div>
-
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <div className="text-center md:text-left">
-                      <div className="flex items-center justify-center md:justify-start gap-2 text-muted-foreground mb-2">
-                        <Calendar className="h-4 w-4" />
-                        <span className="text-xs uppercase tracking-wide">Dates</span>
-                      </div>
-                      <p className="text-lg font-semibold text-foreground">
-                        {format(new Date(trip.start_date), 'MMM d')} – {format(new Date(trip.end_date), 'MMM d')}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{nights} nights</p>
-                    </div>
-
-                    <div className="text-center md:text-left">
-                      <div className="flex items-center justify-center md:justify-start gap-2 text-muted-foreground mb-2">
-                        <Users className="h-4 w-4" />
-                        <span className="text-xs uppercase tracking-wide">Travelers</span>
-                      </div>
-                      <p className="text-lg font-semibold text-foreground">
-                        {trip.travelers || 1} {(trip.travelers || 1) === 1 ? 'Guest' : 'Guests'}
-                      </p>
-                    </div>
-
-                    <div className="text-center md:text-left">
-                      <div className="flex items-center justify-center md:justify-start gap-2 text-muted-foreground mb-2">
-                        <MapPin className="h-4 w-4" />
-                        <span className="text-xs uppercase tracking-wide">Confirmation</span>
-                      </div>
-                      <p className="text-lg font-mono font-semibold text-foreground">
+                      <p className="text-2xl md:text-3xl font-mono font-bold text-foreground tracking-wide">
                         #{trip.id.slice(0, 8).toUpperCase()}
                       </p>
                     </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                        <CheckCircle className="h-6 w-6 text-green-500" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm text-muted-foreground">Status</p>
+                        <p className="font-semibold text-green-600 dark:text-green-400">Confirmed</p>
+                      </div>
+                    </div>
+                  </div>
 
-                    {amountPaid && (
-                      <div className="text-center md:text-left">
-                        <div className="flex items-center justify-center md:justify-start gap-2 text-muted-foreground mb-2">
-                          <span className="text-xs uppercase tracking-wide">Total Paid</span>
+                  {/* Divider */}
+                  <div className="border-t border-dashed border-border my-8" />
+
+                  {/* Trip Details Grid */}
+                  <div className="grid md:grid-cols-3 gap-8">
+                    {/* Departure */}
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                        Departure
+                      </p>
+                      <p className="text-2xl font-serif font-bold text-foreground">
+                        {format(new Date(trip.start_date), 'MMMM d')}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(trip.start_date), 'EEEE, yyyy')}
+                      </p>
+                    </div>
+
+                    {/* Duration */}
+                    <div className="flex flex-col items-center justify-center">
+                      <div className="w-full flex items-center gap-2">
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-border" />
+                        <div className="px-4 py-2 rounded-full bg-muted border border-border">
+                          <span className="text-sm font-medium">{nights} nights</span>
                         </div>
-                        <p className="text-lg font-semibold text-foreground">
+                        <div className="flex-1 h-px bg-gradient-to-r from-border via-border to-transparent" />
+                      </div>
+                    </div>
+
+                    {/* Return */}
+                    <div className="space-y-2 md:text-right">
+                      <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                        Return
+                      </p>
+                      <p className="text-2xl font-serif font-bold text-foreground">
+                        {format(new Date(trip.end_date), 'MMMM d')}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(trip.end_date), 'EEEE, yyyy')}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Bookings Summary */}
+                  {(trip.flight_selection || trip.hotel_selection) && (
+                    <>
+                      <div className="border-t border-dashed border-border my-8" />
+                      <div className="grid md:grid-cols-2 gap-4">
+                        {trip.flight_selection && (
+                          <div className="group relative p-5 rounded-2xl bg-gradient-to-br from-primary/5 to-transparent border border-primary/10 hover:border-primary/20 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <Plane className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Flights</p>
+                                <p className="font-semibold text-foreground">Booked & Confirmed</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {trip.hotel_selection && (
+                          <div className="group relative p-5 rounded-2xl bg-gradient-to-br from-accent/5 to-transparent border border-accent/10 hover:border-accent/20 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <Hotel className="h-5 w-5 text-accent-foreground" />
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Accommodation</p>
+                                <p className="font-semibold text-foreground">
+                                  {(trip.hotel_selection as any)?.name || 'Booked & Confirmed'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Amount Paid */}
+                  {amountPaid && (
+                    <>
+                      <div className="border-t border-dashed border-border my-8" />
+                      <div className="flex items-center justify-between">
+                        <p className="text-muted-foreground">Total Paid</p>
+                        <p className="text-3xl font-serif font-bold text-foreground">
                           ${(amountPaid / 100).toFixed(2)}
                         </p>
                       </div>
-                    )}
-                  </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Bookings Summary */}
-                {(trip.flight_selection || trip.hotel_selection) && (
-                  <div className="border-t border-border px-8 md:px-10 py-6">
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {trip.flight_selection && (
-                        <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/50">
-                          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Plane className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Flights</p>
-                            <p className="font-semibold text-foreground">Booked & Confirmed</p>
-                          </div>
-                        </div>
-                      )}
-                      {trip.hotel_selection && (
-                        <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/50">
-                          <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-                            <Hotel className="h-5 w-5 text-accent-foreground" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Accommodation</p>
-                            <p className="font-semibold text-foreground">
-                              {(trip.hotel_selection as any)?.name || 'Booked & Confirmed'}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="border-t border-border px-8 md:px-10 py-6 bg-muted/30">
+                {/* Card Footer */}
+                <div className="px-8 md:px-12 py-6 bg-muted/30 border-t border-border">
                   <div className="flex flex-col sm:flex-row gap-4">
-                    <Button size="lg" className="flex-1" asChild>
+                    <Button size="lg" className="flex-1 h-12 text-base shadow-lg shadow-primary/20" asChild>
                       <Link to={`/trip/${tripId}`}>
                         View Full Itinerary
                         <ArrowRight className="h-4 w-4 ml-2" />
                       </Link>
                     </Button>
-                    <Button size="lg" variant="outline" asChild>
+                    <Button size="lg" variant="outline" className="h-12 text-base" asChild>
                       <Link to="/trip/dashboard">
                         My Trips
                       </Link>
@@ -414,35 +459,39 @@ export default function TripConfirmation() {
 
           {/* Email Notice */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
-            className="mt-8 text-center"
+            className="mt-10"
           >
-            <div className="inline-flex items-center gap-3 px-6 py-4 rounded-2xl bg-muted/50 border border-border">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <div className="flex items-center justify-center gap-4 p-5 rounded-2xl bg-gradient-to-r from-primary/5 via-transparent to-accent/5 border border-border/50">
+              <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <Mail className="h-5 w-5 text-primary" />
               </div>
-              <p className="text-muted-foreground">
-                A confirmation email with all details has been sent to your inbox.
+              <p className="text-muted-foreground text-sm md:text-base">
+                A confirmation email with your complete itinerary has been sent to your inbox.
               </p>
             </div>
           </motion.div>
 
           {/* Quick Actions */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
-            className="mt-12 flex flex-wrap justify-center gap-4"
+            className="mt-10 flex flex-wrap justify-center gap-2"
           >
-            <Button variant="ghost" size="sm" className="gap-2">
+            <Button variant="ghost" className="gap-2 text-muted-foreground hover:text-foreground">
               <Share2 className="h-4 w-4" />
               Share Trip
             </Button>
-            <Button variant="ghost" size="sm" className="gap-2">
+            <Button variant="ghost" className="gap-2 text-muted-foreground hover:text-foreground">
               <Download className="h-4 w-4" />
               Download PDF
+            </Button>
+            <Button variant="ghost" className="gap-2 text-muted-foreground hover:text-foreground">
+              <Calendar className="h-4 w-4" />
+              Add to Calendar
             </Button>
           </motion.div>
         </div>
