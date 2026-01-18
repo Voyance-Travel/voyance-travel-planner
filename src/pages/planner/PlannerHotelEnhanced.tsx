@@ -156,7 +156,7 @@ export default function PlannerHotelEnhanced() {
   const nights = calculateNights(startDate, endDate);
 
   const [filters, setFilters] = useState<HotelFiltersState>({
-    priceRange: [0, 1000],
+    priceRange: [0, 10000], // High default to accommodate all currencies
     starRating: [],
     amenities: [],
     propertyTypes: [],
@@ -172,13 +172,22 @@ export default function PlannerHotelEnhanced() {
       checkIn: startDate,
       checkOut: endDate,
       guests: travelers,
-      priceMin: filters.priceRange[0],
-      priceMax: filters.priceRange[1],
+      // Don't pass price filters to API - filter on frontend after receiving data
     }),
-    [destination, startDate, endDate, travelers, filters.priceRange]
+    [destination, startDate, endDate, travelers]
   );
 
   const { data: hotels, isLoading, error } = useHotelSearch(hotelParams);
+
+  // Calculate actual price range from hotels to set dynamic filter bounds
+  const priceStats = useMemo(() => {
+    if (!hotels?.length) return { min: 0, max: 10000 };
+    const prices = hotels.map(h => h.pricePerNight);
+    return {
+      min: Math.floor(Math.min(...prices)),
+      max: Math.ceil(Math.max(...prices) * 1.1), // 10% buffer
+    };
+  }, [hotels]);
 
   useEffect(() => {
     if (!isLoading) setShowInterlude(false);
@@ -193,9 +202,12 @@ export default function PlannerHotelEnhanced() {
       result = result.filter((h) => filters.starRating.includes(h.stars));
     }
 
-    result = result.filter(
-      (h) => h.pricePerNight >= filters.priceRange[0] && h.pricePerNight <= filters.priceRange[1]
-    );
+    // Only apply price filter if user has explicitly adjusted it (not default max)
+    if (filters.priceRange[1] < priceStats.max) {
+      result = result.filter(
+        (h) => h.pricePerNight >= filters.priceRange[0] && h.pricePerNight <= filters.priceRange[1]
+      );
+    }
 
     if (filters.guestRating > 0) {
       result = result.filter((h) => h.rating >= filters.guestRating);
