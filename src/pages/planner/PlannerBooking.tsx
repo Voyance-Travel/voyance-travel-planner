@@ -89,6 +89,14 @@ export default function PlannerBooking() {
       return;
     }
 
+    // Check if user is authenticated
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast.error('Please sign in to complete your booking');
+      navigate(`/sign-in?redirect=/planner/booking?tripId=${tripId}`);
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
 
@@ -211,8 +219,8 @@ export default function PlannerBooking() {
                     transition={{ delay: 0.15 }}
                     className="bg-card rounded-2xl border border-border overflow-hidden"
                   >
-                    <div className="bg-slate p-5 border-b border-border">
-                      <h2 className="text-lg font-semibold flex items-center gap-3 text-slate-foreground">
+                    <div className="bg-primary p-5 border-b border-border">
+                      <h2 className="text-lg font-semibold flex items-center gap-3 text-primary-foreground">
                         <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
                           <Plane className="h-5 w-5" />
                         </div>
@@ -329,8 +337,8 @@ export default function PlannerBooking() {
                   transition={{ delay: 0.25 }}
                   className="bg-card rounded-2xl border border-border overflow-hidden sticky top-24"
                 >
-                  <div className="bg-slate p-6">
-                    <h2 className="text-xl font-semibold text-slate-foreground">Your Trip Total</h2>
+                  <div className="bg-primary p-6">
+                    <h2 className="text-xl font-semibold text-primary-foreground">Your Trip Total</h2>
                   </div>
                   
                   <div className="p-6 space-y-4">
@@ -402,7 +410,7 @@ export default function PlannerBooking() {
                       <div className="flex justify-between items-baseline">
                         <span className="text-lg font-semibold">Total</span>
                         <div className="text-right">
-                          <span className="text-3xl font-bold text-slate">${grandTotal.toFixed(2)}</span>
+                          <span className="text-3xl font-bold text-foreground">${grandTotal.toFixed(2)}</span>
                           <p className="text-xs text-muted-foreground">USD • Final price at checkout</p>
                         </div>
                       </div>
@@ -421,7 +429,7 @@ export default function PlannerBooking() {
                       onClick={handleCheckout}
                       disabled={isProcessing}
                       size="lg"
-                      className="w-full h-14 text-lg bg-slate text-slate-foreground hover:bg-slate/90"
+                      className="w-full h-14 text-lg"
                     >
                       {isProcessing ? (
                         <>

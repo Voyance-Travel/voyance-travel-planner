@@ -330,260 +330,256 @@ export default function Start() {
       />
       
       {/* Hero Section - Editorial Magazine Style */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate">
+      <section className="relative min-h-[60vh] flex items-center justify-center overflow-hidden">
         {/* Background Image */}
         <div className="absolute inset-0">
           <img 
             src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80"
             alt=""
-            className="w-full h-full object-cover opacity-40"
+            className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate/60 via-slate/80 to-slate" />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate/40 via-slate/60 to-slate/90" />
         </div>
 
-        {/* Editorial Grid Lines */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute left-8 md:left-16 top-0 bottom-0 w-px bg-white/5" />
-          <div className="absolute right-8 md:right-16 top-0 bottom-0 w-px bg-white/5" />
+        {/* Hero Content */}
+        <div className="relative z-10 w-full max-w-4xl mx-auto px-8 md:px-16 py-24 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-white"
+          >
+            {/* Eyebrow */}
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <div className="w-8 h-px bg-white/40" />
+              <span className="text-xs tracking-[0.3em] uppercase text-white/60 font-sans">
+                Plan Your Journey
+              </span>
+              <div className="w-8 h-px bg-white/40" />
+            </div>
+            
+            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-normal mb-6 leading-[0.95]">
+              Where to <em className="font-normal italic">next?</em>
+            </h1>
+            
+            <p className="text-lg text-white/70 font-sans font-light leading-relaxed max-w-lg mx-auto">
+              Tell us your destination and dates. We'll craft an itinerary that's thoughtfully planned down to every detail.
+            </p>
+          </motion.div>
         </div>
+      </section>
 
-        {/* Content */}
-        <div className="relative z-10 w-full max-w-5xl mx-auto px-8 md:px-16 py-32">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            {/* Left: Editorial Text */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              className="text-white"
-            >
-              {/* Eyebrow */}
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-8 h-px bg-white/40" />
-                <span className="text-xs tracking-[0.3em] uppercase text-white/60 font-sans">
-                  Plan Your Journey
-                </span>
+      {/* Planning Form - Centered Below Hero */}
+      <section className="relative -mt-16 pb-24">
+        <div className="max-w-2xl mx-auto px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="bg-card p-8 md:p-10 shadow-elevated rounded-xl border border-border"
+          >
+            <div className="space-y-6">
+              {/* Origin */}
+              <div>
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                  Departing from
+                </label>
+                <AirportAutocomplete
+                  value={origin}
+                  onChange={setOrigin}
+                  placeholder="Your city or airport"
+                />
               </div>
               
-              <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-normal mb-6 leading-[0.95]">
-                Where to <em className="font-normal italic">next?</em>
-              </h1>
-              
-              <p className="text-lg text-white/70 font-sans font-light leading-relaxed max-w-md">
-                Tell us your destination and dates. We'll craft an itinerary that's thoughtfully planned down to every detail.
-              </p>
-            </motion.div>
+              {/* Destination */}
+              <div>
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                  Destination
+                </label>
+                <AirportAutocomplete
+                  value={destination}
+                  onChange={setDestination}
+                  placeholder="Where do you want to go?"
+                />
+              </div>
 
-            {/* Right: Planning Form - Editorial Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="bg-card p-8 md:p-10 shadow-elevated"
-            >
-              <div className="space-y-8">
-                {/* Origin */}
+              {/* Dates Row */}
+              <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                    Departing from
+                    Departure
                   </label>
-                  <AirportAutocomplete
-                    value={origin}
-                    onChange={setOrigin}
-                    placeholder="Your city or airport"
-                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
+                          !startDate && "text-muted-foreground"
+                        )}
+                      >
+                        {startDate ? format(startDate, "MMM d, yyyy") : "Select date"}
+                        <CalendarIcon className="h-4 w-4 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={(date) => {
+                          setStartDate(date);
+                          if (date && (!endDate || isBefore(endDate, date))) {
+                            setEndDate(addDays(date, 7));
+                          }
+                        }}
+                        disabled={(date) => isBefore(date, today)}
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 
-                {/* Destination */}
                 <div>
                   <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                    Destination
+                    Return
                   </label>
-                  <DestinationAutocomplete
-                    value={destination}
-                    onChange={setDestination}
-                    placeholder="Where do you want to go?"
-                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
+                          !endDate && "text-muted-foreground"
+                        )}
+                      >
+                        {endDate ? format(endDate, "MMM d, yyyy") : "Select date"}
+                        <CalendarIcon className="h-4 w-4 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={setEndDate}
+                        disabled={(date) => 
+                          isBefore(date, today) || 
+                          (startDate ? isBefore(date, startDate) : false)
+                        }
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
-
-                {/* Dates Row */}
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                      Departure
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          className={cn(
-                            "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
-                            !startDate && "text-muted-foreground"
-                          )}
-                        >
-                          {startDate ? format(startDate, "MMM d, yyyy") : "Select date"}
-                          <CalendarIcon className="h-4 w-4 opacity-60" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={startDate}
-                          onSelect={(date) => {
-                            setStartDate(date);
-                            if (date && (!endDate || isBefore(endDate, date))) {
-                              setEndDate(addDays(date, 7));
-                            }
-                          }}
-                          disabled={(date) => isBefore(date, today)}
-                          initialFocus
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                      Return
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          className={cn(
-                            "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
-                            !endDate && "text-muted-foreground"
-                          )}
-                        >
-                          {endDate ? format(endDate, "MMM d, yyyy") : "Select date"}
-                          <CalendarIcon className="h-4 w-4 opacity-60" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={endDate}
-                          onSelect={setEndDate}
-                          disabled={(date) => 
-                            isBefore(date, today) || 
-                            (startDate ? isBefore(date, startDate) : false)
-                          }
-                          initialFocus
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-
-                {/* Travelers & Budget Row */}
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                      Travelers
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          className="w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            {travelers} {travelers === 1 ? 'guest' : 'guests'}
-                          </span>
-                          <ChevronDown className="h-4 w-4 opacity-60" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-56 p-4" align="start">
-                        <div className="flex items-center justify-between">
-                          <span className="font-sans text-sm">Travelers</span>
-                          <div className="flex items-center gap-3">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={() => setTravelers(Math.max(1, travelers - 1))}
-                              disabled={travelers <= 1}
-                            >
-                              -
-                            </Button>
-                            <span className="w-6 text-center font-sans">{travelers}</span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={() => setTravelers(Math.min(10, travelers + 1))}
-                              disabled={travelers >= 10}
-                            >
-                              +
-                            </Button>
-                          </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                      Budget
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          className={cn(
-                            "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
-                            !budget && "text-muted-foreground"
-                          )}
-                        >
-                          <span className="flex items-center gap-2">
-                            <DollarSign className="h-4 w-4 text-muted-foreground" />
-                            {budget ? budget.charAt(0).toUpperCase() + budget.slice(1) : 'Any'}
-                          </span>
-                          <ChevronDown className="h-4 w-4 opacity-60" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-56 p-2" align="start">
-                        <div className="space-y-1">
-                          {[
-                            { value: '', label: 'Any budget' },
-                            { value: 'budget', label: 'Budget' },
-                            { value: 'moderate', label: 'Moderate' },
-                            { value: 'premium', label: 'Premium' },
-                            { value: 'luxury', label: 'Luxury' },
-                          ].map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => setBudget(option.value)}
-                              className={cn(
-                                'w-full px-3 py-2 text-left text-sm font-sans transition-colors',
-                                budget === option.value ? 'bg-primary/10 text-primary' : 'hover:bg-secondary'
-                              )}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-
-                {/* CTA Button */}
-                <Button
-                  size="lg"
-                  onClick={handleStart}
-                  disabled={!isFormValid}
-                  className="w-full h-14 text-base font-sans font-medium tracking-wide mt-4 bg-slate text-slate-foreground hover:bg-slate/90"
-                >
-                  Plan My Trip
-                  <ArrowRight className="ml-3 h-4 w-4" />
-                </Button>
               </div>
-            </motion.div>
-          </div>
+
+              {/* Travelers & Budget Row */}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                    Travelers
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          {travelers} {travelers === 1 ? 'guest' : 'guests'}
+                        </span>
+                        <ChevronDown className="h-4 w-4 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-4" align="start">
+                      <div className="flex items-center justify-between">
+                        <span className="font-sans text-sm">Travelers</span>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setTravelers(Math.max(1, travelers - 1))}
+                            disabled={travelers <= 1}
+                          >
+                            -
+                          </Button>
+                          <span className="w-6 text-center font-sans">{travelers}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setTravelers(Math.min(10, travelers + 1))}
+                            disabled={travelers >= 10}
+                          >
+                            +
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div>
+                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
+                    Budget
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
+                          !budget && "text-muted-foreground"
+                        )}
+                      >
+                        <span className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                          {budget ? budget.charAt(0).toUpperCase() + budget.slice(1) : 'Any'}
+                        </span>
+                        <ChevronDown className="h-4 w-4 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-2" align="start">
+                      <div className="space-y-1">
+                        {[
+                          { value: '', label: 'Any budget' },
+                          { value: 'budget', label: 'Budget' },
+                          { value: 'moderate', label: 'Moderate' },
+                          { value: 'premium', label: 'Premium' },
+                          { value: 'luxury', label: 'Luxury' },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => setBudget(option.value)}
+                            className={cn(
+                              'w-full px-3 py-2 text-left text-sm font-sans rounded transition-colors',
+                              budget === option.value ? 'bg-primary/10 text-primary' : 'hover:bg-secondary'
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* CTA Button */}
+              <Button
+                size="lg"
+                onClick={handleStart}
+                disabled={!isFormValid}
+                className="w-full h-14 text-base font-sans font-medium tracking-wide mt-4"
+              >
+                Plan My Trip
+                <ArrowRight className="ml-3 h-4 w-4" />
+              </Button>
+            </div>
+          </motion.div>
         </div>
       </section>
 

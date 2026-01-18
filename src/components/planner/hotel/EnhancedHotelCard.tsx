@@ -122,14 +122,14 @@ export default function EnhancedHotelCard({
       className={cn(
         'relative bg-card rounded-xl border transition-all duration-200 overflow-hidden',
         isSelected 
-          ? 'border-slate shadow-lg ring-2 ring-slate/20' 
-          : 'border-border hover:border-slate/50 hover:shadow-md'
+          ? 'border-primary shadow-lg ring-2 ring-primary/20' 
+          : 'border-border hover:border-primary/50 hover:shadow-md'
       )}
     >
       {/* Recommended Badge */}
       {hotel.isRecommended && (
         <div className="absolute top-4 left-4 z-20">
-          <Badge className="bg-slate text-slate-foreground gap-1 shadow-lg">
+          <Badge className="bg-primary text-primary-foreground gap-1 shadow-lg">
             <Star className="h-3 w-3 fill-current" />
             Top Pick for You
           </Badge>
@@ -210,7 +210,7 @@ export default function EnhancedHotelCard({
             
             {/* Rating */}
             <div className="text-right shrink-0">
-              <div className="bg-slate text-slate-foreground text-sm font-bold px-2.5 py-1.5 rounded-lg">
+              <div className="bg-primary text-primary-foreground text-sm font-bold px-2.5 py-1.5 rounded-lg">
                 {hotel.rating.toFixed(1)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -298,8 +298,8 @@ export default function EnhancedHotelCard({
                       className={cn(
                         'p-4 rounded-lg border cursor-pointer transition-all',
                         selectedRoomId === room.id
-                          ? 'border-slate bg-slate/5'
-                          : 'border-border hover:border-slate/50'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50'
                       )}
                     >
                       <div className="flex items-start justify-between">
@@ -307,7 +307,7 @@ export default function EnhancedHotelCard({
                           <div className="flex items-center gap-2 mb-1">
                             <h5 className="font-medium">{room.name}</h5>
                             {selectedRoomId === room.id && (
-                              <Check className="h-4 w-4 text-slate" />
+                              <Check className="h-4 w-4 text-primary" />
                             )}
                           </div>
                           <div className="flex items-center gap-3 text-sm text-muted-foreground mb-2">
@@ -383,7 +383,7 @@ export default function EnhancedHotelCard({
                   <ul className="space-y-1">
                     {hotel.rationale.map((reason, i) => (
                       <li key={i} className="flex items-center gap-2 text-sm">
-                        <Check className="h-3.5 w-3.5 text-slate shrink-0" />
+                        <Check className="h-3.5 w-3.5 text-primary shrink-0" />
                         {reason}
                       </li>
                     ))}
