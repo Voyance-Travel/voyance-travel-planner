@@ -141,6 +141,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.9,
             tags: ['Luxury Villa', 'Infinity Pool', 'Butler Service'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=400'],
           },
           {
             id: 'bali-1-4',
@@ -154,6 +155,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.6,
             tags: ['Local Institution', 'Famous Duck', 'Traditional'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400'],
           },
           {
             id: 'bali-1-5',
@@ -167,6 +169,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 5.0,
             tags: ['Private Yoga', 'Sunset Views', 'Master Teacher'],
             isLocked: true,
+            photos: ['https://images.unsplash.com/photo-1545389336-cf090694435e?w=400'],
           },
           {
             id: 'bali-1-6',
@@ -180,6 +183,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.9,
             tags: ['Fine Dining', 'Award Winner', 'Indonesian Innovation'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400'],
           },
         ],
         totalCost: 370,
@@ -205,6 +209,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.8,
             tags: ['Traditional Breakfast', 'Kopi Luwak', 'Villa Service'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400'],
           },
           {
             id: 'bali-2-2',
@@ -218,6 +223,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.9,
             tags: ['Sacred Temple', 'Ocean Views', 'Hindu Ceremony'],
             isLocked: true,
+            photos: ['https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400'],
           },
           {
             id: 'bali-2-3',
@@ -231,6 +237,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 5.0,
             tags: ['Holy Water', 'Purification', 'Sacred Spring'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=400'],
           },
           {
             id: 'bali-2-4',
@@ -244,6 +251,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.5,
             tags: ['Local Warung', 'Family Recipe', 'Authentic'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=400'],
           },
           {
             id: 'bali-2-5',
@@ -257,6 +265,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.8,
             tags: ['Master Craftsman', 'Hands-on', 'Take-home Creation'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400'],
           },
           {
             id: 'bali-2-6',
@@ -270,6 +279,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             rating: 4.9,
             tags: ['Fine Dining', 'French-Indonesian', 'Garden Setting'],
             isLocked: false,
+            photos: ['https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400'],
           },
         ],
         totalCost: 470,
