@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus } from 'lucide-react';
@@ -206,12 +206,7 @@ export default function Start() {
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [tripType, setTripType] = useState<string>('leisure');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
   const today = startOfToday();
-
-  // Debounced values for auto-save
-  const debouncedOrigin = useDebounce(origin, 1000);
-  const debouncedDestination = useDebounce(destination, 1000);
 
   useEffect(() => {
     if (plannerState.basics.destination && plannerState.basics.destination !== destination) {
@@ -237,44 +232,6 @@ export default function Start() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plannerState.basics]);
-
-  // Auto-save trip data to database when form values change
-  const autoSaveTripData = useCallback(async () => {
-    if (!user) return; // Only save for authenticated users
-    
-    // Only save if we have meaningful data
-    if (!debouncedDestination && !debouncedOrigin && !startDate && !endDate) return;
-
-    setIsSaving(true);
-    try {
-      const tripData = {
-        destination: debouncedDestination || undefined,
-        originCity: debouncedOrigin || undefined,
-        startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-        endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
-        travelers,
-        budgetTier: 'moderate',
-      };
-
-      // Update context first
-      setBasics(tripData);
-
-      // If we have minimum required data (destination + dates), save to database
-      if (debouncedDestination && startDate && endDate) {
-        await saveTrip();
-        console.log('[Start] Trip auto-saved to database');
-      }
-    } catch (error) {
-      console.error('[Start] Auto-save error:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [user, debouncedDestination, debouncedOrigin, startDate, endDate, travelers, setBasics, saveTrip]);
-
-  // Trigger auto-save when debounced values change
-  useEffect(() => {
-    autoSaveTripData();
-  }, [debouncedDestination, debouncedOrigin, startDate, endDate, travelers]);
 
   const handleStart = async () => {
     if (!destination || !startDate || !endDate) return;
@@ -561,13 +518,6 @@ export default function Start() {
                 </div>
               </div>
 
-              {/* Save indicator */}
-              {isSaving && user && (
-                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  <span>Saving...</span>
-                </div>
-              )}
 
               {/* CTA Button */}
               <Button
