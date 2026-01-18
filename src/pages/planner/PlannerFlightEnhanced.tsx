@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { prefetchDestinationImages } from '@/utils/imagePrefetch';
 
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -234,6 +235,13 @@ export default function PlannerFlightEnhanced() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destination, origin, startDate, endDate, travelers]);
+
+  // Prefetch destination images for later pages (hotel selection, summary)
+  useEffect(() => {
+    if (destination) {
+      prefetchDestinationImages(destination);
+    }
+  }, [destination]);
 
   const [outboundFilters, setOutboundFilters] = useState<FlightFiltersState>({
     directOnly: false,

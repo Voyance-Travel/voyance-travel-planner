@@ -76,7 +76,7 @@ function transformProfile(
 // Demo mode for preview testing (dev only)
 const DEMO_MODE_KEY = 'voyance_demo_mode';
 const DEMO_USER: User = {
-  id: 'demo-user-001',
+  id: '00000000-0000-0000-0000-000000000001', // Valid UUID for demo user
   email: 'demo@voyance.travel',
   name: 'Demo Traveler',
   avatar: undefined,
