@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  User, Bell, Shield, Link2, Moon, Sun, 
-  ChevronRight, Mail, Smartphone, Globe,
-  LogOut, Trash2
+  User, Bell, Shield, Link2,
+  ChevronRight, Mail, Smartphone, 
+  LogOut, Trash2, Loader2, KeyRound
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 import { 
   Card, 
   CardContent, 
@@ -30,29 +31,147 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Settings() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   
-  // Notification preferences
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  
+  // Notification preferences (loaded from DB)
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(false);
   const [marketingEmails, setMarketingEmails] = useState(false);
   const [tripReminders, setTripReminders] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
   
-  // Display preferences
-  const [darkMode, setDarkMode] = useState(false);
+  // Phone number
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [tempPhone, setTempPhone] = useState('');
   
-  // Linked accounts (mock data for now)
+  // Password change dialog
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  
+  // Linked accounts (only Google now - removed Apple)
   const linkedAccounts = [
-    { provider: 'google', email: user?.email, connected: true },
-    { provider: 'apple', email: null, connected: false },
+    { provider: 'google', email: user?.email, connected: !!user?.email },
   ];
+
+  // Load preferences from database
+  useEffect(() => {
+    async function loadPreferences() {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('user_preferences')
+          .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, phone_number')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (error) {
+          console.error('Error loading preferences:', error);
+        } else if (data) {
+          setEmailNotifications(data.email_notifications ?? true);
+          setPushNotifications(data.push_notifications ?? false);
+          setMarketingEmails(data.marketing_emails ?? false);
+          setTripReminders(data.trip_reminders ?? true);
+          setPriceAlerts(data.price_alerts ?? true);
+          setPhoneNumber(data.phone_number ?? '');
+        }
+      } catch (err) {
+        console.error('Failed to load preferences:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadPreferences();
+  }, [user?.id]);
+
+  // Save preference to database
+  const savePreference = async (field: string, value: boolean | string) => {
+    if (!user?.id) return;
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({ 
+          user_id: user.id, 
+          [field]: value 
+        }, { onConflict: 'user_id' });
+      
+      if (error) {
+        toast.error('Failed to save preference');
+        console.error('Save error:', error);
+      } else {
+        toast.success('Preference saved');
+      }
+    } catch (err) {
+      toast.error('Failed to save preference');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle notification toggle changes
+  const handleEmailNotifications = (checked: boolean) => {
+    setEmailNotifications(checked);
+    savePreference('email_notifications', checked);
+  };
+  
+  const handlePushNotifications = (checked: boolean) => {
+    setPushNotifications(checked);
+    savePreference('push_notifications', checked);
+  };
+  
+  const handleMarketingEmails = (checked: boolean) => {
+    setMarketingEmails(checked);
+    savePreference('marketing_emails', checked);
+  };
+  
+  const handleTripReminders = (checked: boolean) => {
+    setTripReminders(checked);
+    savePreference('trip_reminders', checked);
+  };
+  
+  const handlePriceAlerts = (checked: boolean) => {
+    setPriceAlerts(checked);
+    savePreference('price_alerts', checked);
+  };
+
+  // Save phone number
+  const handleSavePhone = async () => {
+    if (!user?.id) return;
+    
+    await savePreference('phone_number', tempPhone);
+    setPhoneNumber(tempPhone);
+    setEditingPhone(false);
+  };
 
   const handleLogout = () => {
     logout();
@@ -60,15 +179,68 @@ export default function Settings() {
     toast.success('You have been signed out');
   };
 
-  const handleDeleteAccount = () => {
-    // This would trigger actual account deletion
-    toast.error('Account deletion is not yet implemented');
+  // Password change handler
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    
+    setChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+      
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success('Password updated successfully');
+        setShowPasswordDialog(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (err) {
+      toast.error('Failed to update password');
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    // Would actually toggle theme here
-    toast.info('Dark mode coming soon!');
+  // Account deletion handler
+  const handleDeleteAccount = async () => {
+    if (!user?.id) return;
+    
+    setDeletingAccount(true);
+    try {
+      // Delete user data from various tables
+      const deletePromises = [
+        supabase.from('trips').delete().eq('user_id', user.id),
+        supabase.from('user_preferences').delete().eq('user_id', user.id),
+        supabase.from('profiles').delete().eq('id', user.id),
+        supabase.from('quiz_responses').delete().eq('user_id', user.id),
+        supabase.from('saved_items').delete().eq('user_id', user.id),
+      ];
+      
+      await Promise.all(deletePromises);
+      
+      // Sign out the user
+      await supabase.auth.signOut();
+      
+      toast.success('Your account has been deleted');
+      navigate(ROUTES.HOME);
+    } catch (err) {
+      console.error('Delete account error:', err);
+      toast.error('Failed to delete account. Please contact support.');
+    } finally {
+      setDeletingAccount(false);
+    }
   };
 
   const containerVariants = {
@@ -83,6 +255,16 @@ export default function Settings() {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0 }
   };
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="min-h-screen pt-24 pb-16 px-4 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -142,19 +324,47 @@ export default function Settings() {
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
                   </button>
                   
-                  <button 
-                    onClick={() => navigate(ROUTES.PROFILE.EDIT)}
-                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
+                  <div className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
                     <div className="flex items-center gap-3">
                       <Smartphone className="w-5 h-5 text-muted-foreground" />
                       <div className="text-left">
                         <div className="font-medium text-sm">Phone</div>
-                        <div className="text-sm text-muted-foreground">Not set</div>
+                        {editingPhone ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input
+                              type="tel"
+                              placeholder="+1 (555) 123-4567"
+                              value={tempPhone}
+                              onChange={(e) => setTempPhone(e.target.value)}
+                              className="h-8 text-sm w-40"
+                            />
+                            <Button size="sm" onClick={handleSavePhone} disabled={saving}>
+                              Save
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingPhone(false)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">
+                            {phoneNumber || 'Not set'}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                  </button>
+                    {!editingPhone && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          setTempPhone(phoneNumber);
+                          setEditingPhone(true);
+                        }}
+                      >
+                        {phoneNumber ? 'Edit' : 'Add'}
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -186,7 +396,8 @@ export default function Settings() {
                     <Switch
                       id="email-notifications"
                       checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
+                      onCheckedChange={handleEmailNotifications}
+                      disabled={saving}
                     />
                   </div>
                   
@@ -204,7 +415,8 @@ export default function Settings() {
                     <Switch
                       id="push-notifications"
                       checked={pushNotifications}
-                      onCheckedChange={setPushNotifications}
+                      onCheckedChange={handlePushNotifications}
+                      disabled={saving}
                     />
                   </div>
                   
@@ -222,7 +434,8 @@ export default function Settings() {
                     <Switch
                       id="trip-reminders"
                       checked={tripReminders}
-                      onCheckedChange={setTripReminders}
+                      onCheckedChange={handleTripReminders}
+                      disabled={saving}
                     />
                   </div>
                   
@@ -240,7 +453,8 @@ export default function Settings() {
                     <Switch
                       id="price-alerts"
                       checked={priceAlerts}
-                      onCheckedChange={setPriceAlerts}
+                      onCheckedChange={handlePriceAlerts}
+                      disabled={saving}
                     />
                   </div>
                   
@@ -258,14 +472,15 @@ export default function Settings() {
                     <Switch
                       id="marketing"
                       checked={marketingEmails}
-                      onCheckedChange={setMarketingEmails}
+                      onCheckedChange={handleMarketingEmails}
+                      disabled={saving}
                     />
                   </div>
                 </CardContent>
               </Card>
             </motion.div>
 
-            {/* Linked Accounts Section */}
+            {/* Linked Accounts Section - Only Google */}
             <motion.div variants={itemVariants}>
               <Card>
                 <CardHeader>
@@ -301,70 +516,10 @@ export default function Settings() {
                     <Button 
                       variant={linkedAccounts[0].connected ? "outline" : "default"}
                       size="sm"
+                      disabled
                     >
-                      {linkedAccounts[0].connected ? 'Disconnect' : 'Connect'}
+                      {linkedAccounts[0].connected ? 'Connected' : 'Connect'}
                     </Button>
-                  </div>
-                  
-                  {/* Apple */}
-                  <div className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="font-medium text-sm">Apple</div>
-                        <div className="text-sm text-muted-foreground">
-                          {linkedAccounts[1].connected ? 'Connected' : 'Not connected'}
-                        </div>
-                      </div>
-                    </div>
-                    <Button 
-                      variant={linkedAccounts[1].connected ? "outline" : "default"}
-                      size="sm"
-                    >
-                      {linkedAccounts[1].connected ? 'Disconnect' : 'Connect'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Appearance Section */}
-            <motion.div variants={itemVariants}>
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-purple-500/10">
-                      <Globe className="w-5 h-5 text-purple-500" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg">Appearance</CardTitle>
-                      <CardDescription>Customize how Voyance looks</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {darkMode ? (
-                        <Moon className="w-5 h-5 text-muted-foreground" />
-                      ) : (
-                        <Sun className="w-5 h-5 text-muted-foreground" />
-                      )}
-                      <div>
-                        <div className="font-medium text-sm">Dark mode</div>
-                        <div className="text-sm text-muted-foreground">
-                          Switch between light and dark themes
-                        </div>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={darkMode}
-                      onCheckedChange={toggleDarkMode}
-                    />
                   </div>
                 </CardContent>
               </Card>
@@ -386,13 +541,16 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <button 
-                    onClick={() => navigate('/forgot-password')}
+                    onClick={() => setShowPasswordDialog(true)}
                     className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
                   >
-                    <div className="text-left">
-                      <div className="font-medium text-sm">Change password</div>
-                      <div className="text-sm text-muted-foreground">
-                        Update your account password
+                    <div className="flex items-center gap-3">
+                      <KeyRound className="w-5 h-5 text-muted-foreground" />
+                      <div className="text-left">
+                        <div className="font-medium text-sm">Change password</div>
+                        <div className="text-sm text-muted-foreground">
+                          Update your account password
+                        </div>
                       </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -423,8 +581,13 @@ export default function Settings() {
                       <Button
                         variant="outline"
                         className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                        disabled={deletingAccount}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {deletingAccount ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
                         Delete account
                       </Button>
                     </AlertDialogTrigger>
@@ -433,7 +596,8 @@ export default function Settings() {
                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                         <AlertDialogDescription>
                           This action cannot be undone. This will permanently delete your
-                          account and remove all your data including saved trips and preferences.
+                          account and remove all your data including saved trips, preferences,
+                          and quiz responses.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -453,6 +617,55 @@ export default function Settings() {
           </motion.div>
         </div>
       </div>
+      
+      {/* Password Change Dialog */}
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Enter your new password below. Password must be at least 6 characters.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPasswordDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleChangePassword} disabled={changingPassword}>
+              {changingPassword ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Update Password'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

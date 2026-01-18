@@ -1221,6 +1221,7 @@ export type Database = {
           direct_flights_only: boolean | null
           downtime_ratio: string | null
           eco_friendly: boolean | null
+          email_notifications: boolean | null
           emotional_drivers: string[] | null
           flight_preferences: Json | null
           flight_time_preference: string | null
@@ -1232,14 +1233,18 @@ export type Database = {
           id: string
           interests: string[] | null
           loyalty_programs: string[] | null
+          marketing_emails: boolean | null
           mobility_level: string | null
           mobility_needs: string | null
           personal_notes: string | null
+          phone_number: string | null
           planning_preference: string | null
           preferred_airlines: string[] | null
           preferred_group_size: string | null
           preferred_regions: string[] | null
+          price_alerts: boolean | null
           primary_goal: string | null
+          push_notifications: boolean | null
           quiz_completed: boolean | null
           quiz_version: string | null
           schedule_flexibility: string | null
@@ -1252,6 +1257,7 @@ export type Database = {
           travel_vibes: string[] | null
           traveler_type: string | null
           trip_duration: string | null
+          trip_reminders: boolean | null
           trip_structure_preference: string | null
           updated_at: string
           user_id: string
@@ -1276,6 +1282,7 @@ export type Database = {
           direct_flights_only?: boolean | null
           downtime_ratio?: string | null
           eco_friendly?: boolean | null
+          email_notifications?: boolean | null
           emotional_drivers?: string[] | null
           flight_preferences?: Json | null
           flight_time_preference?: string | null
@@ -1287,14 +1294,18 @@ export type Database = {
           id?: string
           interests?: string[] | null
           loyalty_programs?: string[] | null
+          marketing_emails?: boolean | null
           mobility_level?: string | null
           mobility_needs?: string | null
           personal_notes?: string | null
+          phone_number?: string | null
           planning_preference?: string | null
           preferred_airlines?: string[] | null
           preferred_group_size?: string | null
           preferred_regions?: string[] | null
+          price_alerts?: boolean | null
           primary_goal?: string | null
+          push_notifications?: boolean | null
           quiz_completed?: boolean | null
           quiz_version?: string | null
           schedule_flexibility?: string | null
@@ -1307,6 +1318,7 @@ export type Database = {
           travel_vibes?: string[] | null
           traveler_type?: string | null
           trip_duration?: string | null
+          trip_reminders?: boolean | null
           trip_structure_preference?: string | null
           updated_at?: string
           user_id: string
@@ -1331,6 +1343,7 @@ export type Database = {
           direct_flights_only?: boolean | null
           downtime_ratio?: string | null
           eco_friendly?: boolean | null
+          email_notifications?: boolean | null
           emotional_drivers?: string[] | null
           flight_preferences?: Json | null
           flight_time_preference?: string | null
@@ -1342,14 +1355,18 @@ export type Database = {
           id?: string
           interests?: string[] | null
           loyalty_programs?: string[] | null
+          marketing_emails?: boolean | null
           mobility_level?: string | null
           mobility_needs?: string | null
           personal_notes?: string | null
+          phone_number?: string | null
           planning_preference?: string | null
           preferred_airlines?: string[] | null
           preferred_group_size?: string | null
           preferred_regions?: string[] | null
+          price_alerts?: boolean | null
           primary_goal?: string | null
+          push_notifications?: boolean | null
           quiz_completed?: boolean | null
           quiz_version?: string | null
           schedule_flexibility?: string | null
@@ -1362,6 +1379,7 @@ export type Database = {
           travel_vibes?: string[] | null
           traveler_type?: string | null
           trip_duration?: string | null
+          trip_reminders?: boolean | null
           trip_structure_preference?: string | null
           updated_at?: string
           user_id?: string
