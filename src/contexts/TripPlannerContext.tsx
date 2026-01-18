@@ -203,40 +203,28 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
     try {
       const sessionId = state.sessionId || getOrCreateAnonymousSession();
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/neon-db/trips/anonymous`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey,
-        },
-        body: JSON.stringify({
-          sessionId,
-          origin: state.basics.originCity,
-          destination: state.basics.destination,
-          startDate: state.basics.startDate,
-          endDate: state.basics.endDate,
-          travelers: state.basics.travelers || 1,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
+      // Save to localStorage for anonymous users
+      const tripData = {
+        sessionId,
+        origin: state.basics.originCity,
+        destination: state.basics.destination,
+        startDate: state.basics.startDate,
+        endDate: state.basics.endDate,
+        travelers: state.basics.travelers || 1,
+      };
+      
+      localStorage.setItem(`trip_${sessionId}`, JSON.stringify(tripData));
 
       setState(prev => ({ 
         ...prev, 
-        sessionId: result.sessionId || sessionId,
+        sessionId,
         isSaving: false, 
         lastSaved: new Date() 
       }));
 
-      console.log('[TripPlanner] Trip saved to Neon:', result.sessionId || sessionId);
-      return result.sessionId || sessionId;
+      console.log('[TripPlanner] Trip saved to localStorage:', sessionId);
+      return sessionId;
     } catch (error) {
       console.error('[TripPlanner] Neon save error:', error);
       setState(prev => ({ ...prev, isSaving: false }));
