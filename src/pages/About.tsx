@@ -27,11 +27,11 @@ function ChaosMockup() {
           {/* Multiple tabs - chaos! */}
           <div className="flex-1 flex gap-0.5 ml-3 overflow-hidden">
             {[
-              { name: 'Google Flights', color: 'bg-white', active: true },
-              { name: 'Booking.com', color: 'bg-[#003580]/10' },
-              { name: 'TripAdvisor', color: 'bg-[#34e0a1]/10' },
-              { name: 'Yelp', color: 'bg-[#d32323]/10' },
-              { name: 'Reddit', color: 'bg-[#ff4500]/10' },
+              { name: 'Flights', color: 'bg-white', active: true },
+              { name: 'Hotels', color: 'bg-blue-50' },
+              { name: 'Reviews', color: 'bg-green-50' },
+              { name: 'Maps', color: 'bg-amber-50' },
+              { name: 'Blog', color: 'bg-purple-50' },
               { name: '+8', color: 'bg-gray-200' },
             ].map((tab, i) => (
               <div 
@@ -109,17 +109,17 @@ function ChaosMockup() {
             </div>
           </div>
           
-          {/* Overlapping browser windows */}
+          {/* Overlapping browser windows - generic */}
           <motion.div 
             className="absolute top-4 right-2 w-48 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[3deg] opacity-95"
             animate={{ rotate: [3, 4, 3] }}
             transition={{ duration: 3, repeat: Infinity }}
           >
-            <div className="bg-[#003580] text-white px-2 py-1 text-[8px] font-bold">Booking.com</div>
+            <div className="bg-blue-600 text-white px-2 py-1 text-[8px] font-bold">Hotels Site</div>
             <div className="p-2 text-[8px]">
-              <div className="text-[#003580] font-bold mb-1">Paris Hotels</div>
+              <div className="text-blue-600 font-bold mb-1">Paris Hotels</div>
               <div className="text-[#5f6368]">1,247 properties</div>
-              <div className="text-[#008234] font-medium mt-1">From $89/night</div>
+              <div className="text-green-600 font-medium mt-1">From $89/night</div>
             </div>
           </motion.div>
           
@@ -128,7 +128,7 @@ function ChaosMockup() {
             animate={{ rotate: [-2, -3, -2] }}
             transition={{ duration: 2.5, repeat: Infinity }}
           >
-            <div className="bg-[#34e0a1] px-2 py-1 text-[8px] font-bold text-[#1a202c]">TripAdvisor</div>
+            <div className="bg-emerald-500 px-2 py-1 text-[8px] font-bold text-white">Reviews Site</div>
             <div className="p-2 text-[8px]">
               <div className="font-bold mb-1">Things to Do</div>
               <div className="text-[#5f6368]">Eiffel Tower ★★★★★</div>
@@ -284,28 +284,9 @@ function VoyanceMockup() {
 }
 
 export default function About() {
-  const principles = [
-    {
-      icon: <Heart className="h-6 w-6" />,
-      title: 'Anti-Influencer',
-      description: 'Real recommendations based on your preferences, not paid partnerships or sponsored content. Transparency is non-negotiable.',
-    },
-    {
-      icon: <Clock className="h-6 w-6" />,
-      title: 'Your Time Matters',
-      description: 'What takes 10+ hours of research, we compress into minutes. Your vacation planning shouldn\'t feel like a second job.',
-    },
-    {
-      icon: <Shield className="h-6 w-6" />,
-      title: 'Radical Transparency',
-      description: 'No hidden fees, no surprise markups. What you see is what you pay. We believe trust is earned through honesty.',
-    },
-  ];
-
   const stats = [
-    { value: '10+', label: 'Hours saved per trip' },
-    { value: '50k+', label: 'Destinations mapped' },
-    { value: '92%', label: 'Match accuracy' },
+    { value: '15+', label: 'Hours saved per trip' },
+    { value: '190+', label: 'Countries covered' },
   ];
 
   return (
@@ -409,7 +390,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Core Principles */}
+      {/* Core Principles - Creative Bento Layout */}
       <section className="py-24 bg-background relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute top-20 left-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl" />
@@ -428,46 +409,82 @@ export default function About() {
             </h2>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {principles.map((principle, idx) => (
-              <motion.div
-                key={principle.title}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.15 }}
-                className="relative group"
-              >
-                {/* Card with enhanced styling */}
-                <div className="bg-gradient-to-br from-card to-card/80 rounded-2xl border border-border p-8 h-full transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-1">
-                  {/* Gradient overlay on hover */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  <div className="relative z-10">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center mb-6 group-hover:from-primary/30 group-hover:to-primary/15 transition-colors shadow-lg shadow-primary/10">
-                      <div className="text-primary">{principle.icon}</div>
-                    </div>
-                    <h3 className="font-serif text-xl font-bold mb-3">{principle.title}</h3>
-                    <p className="text-muted-foreground leading-relaxed">{principle.description}</p>
-                  </div>
+          {/* Bento Grid Layout */}
+          <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Large featured card */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="md:row-span-2 relative group"
+            >
+              <div className="h-full bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-3xl border border-primary/20 p-8 md:p-10 transition-all duration-300 hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/10">
+                <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-8">
+                  <Heart className="w-8 h-8 text-primary" />
                 </div>
-              </motion.div>
-            ))}
+                <h3 className="font-serif text-2xl md:text-3xl font-bold mb-4">Anti-Influencer</h3>
+                <p className="text-muted-foreground leading-relaxed text-lg">
+                  Real recommendations based on your preferences, not paid partnerships or sponsored content. 
+                  <span className="block mt-4 text-foreground font-medium">Transparency is non-negotiable.</span>
+                </p>
+                <div className="absolute bottom-8 right-8 w-24 h-24 rounded-full bg-primary/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Sparkles className="w-10 h-10 text-primary/40" />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Time card */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="relative group"
+            >
+              <div className="h-full bg-gradient-to-br from-accent/20 via-accent/10 to-transparent rounded-3xl border border-accent/30 p-8 transition-all duration-300 hover:border-accent/50 hover:shadow-xl">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
+                    <Clock className="w-6 h-6 text-foreground" />
+                  </div>
+                  <span className="text-4xl font-bold text-accent/60">15+</span>
+                </div>
+                <h3 className="font-serif text-xl font-bold mb-2">Your Time Matters</h3>
+                <p className="text-muted-foreground text-sm">
+                  Hours saved per trip. Your vacation planning shouldn't feel like a second job.
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Transparency card */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.2 }}
+              className="relative group"
+            >
+              <div className="h-full bg-gradient-to-br from-secondary via-secondary/80 to-secondary/50 rounded-3xl border border-border/50 p-8 transition-all duration-300 hover:shadow-xl">
+                <div className="w-12 h-12 rounded-xl bg-background/50 backdrop-blur flex items-center justify-center mb-4">
+                  <Shield className="w-6 h-6 text-foreground" />
+                </div>
+                <h3 className="font-serif text-xl font-bold mb-2">Radical Transparency</h3>
+                <p className="text-muted-foreground text-sm">
+                  No hidden fees, no surprise markups. What you see is what you pay. Trust is earned through honesty.
+                </p>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
 
-      {/* How It Works - Visual */}
-      <section className="py-24 bg-gradient-to-b from-muted/40 via-muted/20 to-background relative overflow-hidden">
-        {/* Decorative vertical line */}
-        <div className="absolute left-1/2 top-48 bottom-20 w-px bg-gradient-to-b from-primary/20 via-primary/10 to-transparent hidden lg:block" />
-        
+      {/* How It Works - Interactive Timeline */}
+      <section className="py-24 bg-gradient-to-b from-muted/40 via-background to-background relative overflow-hidden">
         <div className="container mx-auto px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-20"
           >
             <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Process</span>
             <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4">
@@ -475,52 +492,76 @@ export default function About() {
             </h2>
           </motion.div>
 
-          <div className="max-w-4xl mx-auto">
+          {/* Visual Timeline */}
+          <div className="max-w-4xl mx-auto relative">
+            {/* Animated connecting line */}
+            <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-primary/20 hidden md:block" />
+            
             {[
               {
                 step: '01',
                 title: 'Discover Your Travel DNA',
                 description: 'Our comprehensive quiz understands your preferences, pace, budget, and style — far beyond basic filters.',
                 icon: <Search className="w-6 h-6" />,
+                image: 'https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=400&q=80',
               },
               {
                 step: '02',
                 title: 'AI-Curated Recommendations',
                 description: 'We analyze thousands of options and surface only what matches your unique profile. No generic suggestions.',
                 icon: <Sparkles className="w-6 h-6" />,
+                image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&q=80',
               },
               {
                 step: '03',
                 title: 'Plan, Customize, Perfect',
                 description: 'Get a complete itinerary with flights, hotels, and activities. Tweak anything until it\'s exactly right.',
                 icon: <Calendar className="w-6 h-6" />,
+                image: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400&q=80',
               },
               {
                 step: '04',
                 title: 'Book with Confidence',
                 description: 'Transparent pricing, verified options, and support when you need it. No surprises, just great trips.',
                 icon: <CreditCard className="w-6 h-6" />,
+                image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400&q=80',
               },
             ].map((item, idx) => (
               <motion.div
                 key={item.step}
-                initial={{ opacity: 0, x: idx % 2 === 0 ? -30 : 30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
                 transition={{ delay: idx * 0.1 }}
-                className="flex gap-6 mb-12 last:mb-0 group"
+                className={`relative grid md:grid-cols-2 gap-8 mb-16 last:mb-0 items-center ${
+                  idx % 2 === 1 ? 'md:direction-rtl' : ''
+                }`}
               >
-                <div className="flex-shrink-0">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/10 group-hover:from-primary/30 group-hover:to-primary/15 transition-all group-hover:scale-105">
-                    {item.icon}
+                {/* Timeline node */}
+                <div className="absolute left-8 md:left-1/2 top-0 w-4 h-4 rounded-full bg-primary ring-4 ring-background transform -translate-x-1/2 hidden md:block" />
+                
+                {/* Content */}
+                <div className={`${idx % 2 === 1 ? 'md:order-2 md:text-right' : ''}`}>
+                  <div className={`inline-flex items-center gap-3 mb-4 ${idx % 2 === 1 ? 'md:flex-row-reverse' : ''}`}>
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/10">
+                      {item.icon}
+                    </div>
+                    <span className="text-sm font-bold text-primary tracking-wider bg-primary/10 px-3 py-1 rounded-full">{item.step}</span>
                   </div>
+                  <h3 className="font-serif text-2xl font-bold mb-3">{item.title}</h3>
+                  <p className="text-muted-foreground leading-relaxed">{item.description}</p>
                 </div>
-                <div className="flex-1 pt-2 bg-gradient-to-r from-card/50 to-transparent rounded-xl p-4 -ml-2 border-l-2 border-primary/20 group-hover:border-primary/40 transition-colors">
-                  <div className="flex items-baseline gap-3 mb-2">
-                    <span className="text-xs font-bold text-primary tracking-wider bg-primary/10 px-2 py-0.5 rounded">{item.step}</span>
-                    <h3 className="font-serif text-xl font-bold">{item.title}</h3>
+
+                {/* Image */}
+                <div className={`${idx % 2 === 1 ? 'md:order-1' : ''} relative`}>
+                  <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl">
+                    <img 
+                      src={item.image} 
+                      alt={item.title}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                    />
                   </div>
-                  <p className="text-muted-foreground">{item.description}</p>
+                  <div className="absolute -bottom-3 -right-3 w-20 h-20 bg-primary/10 rounded-2xl -z-10" />
                 </div>
               </motion.div>
             ))}
