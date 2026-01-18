@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { getTrips, getTrip, createTrip, updateTrip } from '@/services/voyanceAPI';
 import { useAuth } from './AuthContext';
 
 // Anonymous session management
@@ -60,15 +59,16 @@ export interface HotelSelection {
 export interface Activity {
   id: string;
   name: string;
-  description: string;
-  duration: string;
-  price: number;
-  category: string;
-  imageUrl?: string;
+  description?: string;
   time?: string;
+  duration?: number;
+  location?: string;
+  category?: string;
+  price?: number;
+  isLocked?: boolean;
 }
 
-export interface ItineraryDay {
+export interface DayItinerary {
   date: string;
   dayNumber: number;
   activities: Activity[];
@@ -76,219 +76,134 @@ export interface ItineraryDay {
 
 export interface TripPlannerState {
   tripId: string | null;
-  sessionId: string | null; // For anonymous trips
+  sessionId: string;
   step: number;
   basics: TripBasics;
-  flights: FlightSelection | null;
+  flight: FlightSelection | null;
   hotel: HotelSelection | null;
-  itinerary: ItineraryDay[];
+  itinerary: DayItinerary[];
   totalPrice: number;
-  isSaving: boolean;
-  lastSaved: Date | null;
+  isLoading: boolean;
+  error: string | null;
 }
 
 interface TripPlannerContextType {
   state: TripPlannerState;
   setStep: (step: number) => void;
-  setBasics: (basics: TripBasics) => void;
-  setFlights: (flights: FlightSelection) => void;
-  setHotel: (hotel: HotelSelection) => void;
-  setItinerary: (itinerary: ItineraryDay[]) => void;
-  addActivity: (dayIndex: number, activity: Activity) => void;
-  removeActivity: (dayIndex: number, activityId: string) => void;
-  calculateTotal: () => number;
-  reset: () => void;
+  setBasics: (basics: Partial<TripBasics>) => void;
+  setFlight: (flight: FlightSelection | null) => void;
+  setHotel: (hotel: HotelSelection | null) => void;
+  setItinerary: (itinerary: DayItinerary[]) => void;
   saveTrip: () => Promise<string | null>;
-  saveTripToNeon: () => Promise<string | null>;
   loadTrip: (tripId: string) => Promise<void>;
+  resetTrip: () => void;
+  calculateTotalPrice: () => number;
 }
 
 const initialState: TripPlannerState = {
   tripId: null,
-  sessionId: null,
+  sessionId: getOrCreateAnonymousSession(),
   step: 1,
   basics: {},
-  flights: null,
+  flight: null,
   hotel: null,
   itinerary: [],
   totalPrice: 0,
-  isSaving: false,
-  lastSaved: null,
+  isLoading: false,
+  error: null,
 };
 
 const TripPlannerContext = createContext<TripPlannerContextType | undefined>(undefined);
 
 export function TripPlannerProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [state, setState] = useState<TripPlannerState>(initialState);
-  const { user, isAuthenticated } = useAuth();
+
+  // Calculate total price
+  const calculateTotalPrice = useCallback(() => {
+    let total = 0;
+    
+    if (state.flight?.departure?.price) {
+      total += state.flight.departure.price;
+    }
+    if (state.flight?.return?.price) {
+      total += state.flight.return.price;
+    }
+    
+    if (state.hotel?.pricePerNight && state.basics.startDate && state.basics.endDate) {
+      const nights = Math.ceil(
+        (new Date(state.basics.endDate).getTime() - new Date(state.basics.startDate).getTime()) / 
+        (1000 * 60 * 60 * 24)
+      );
+      total += state.hotel.pricePerNight * nights;
+    }
+    
+    return total;
+  }, [state.flight, state.hotel, state.basics]);
+
+  // Update total price when selections change
+  useEffect(() => {
+    const newTotal = calculateTotalPrice();
+    if (newTotal !== state.totalPrice) {
+      setState(prev => ({ ...prev, totalPrice: newTotal }));
+    }
+  }, [calculateTotalPrice, state.totalPrice]);
 
   const setStep = (step: number) => {
     setState(prev => ({ ...prev, step }));
   };
 
-  const setBasics = (basics: TripBasics) => {
-    setState(prev => ({ ...prev, basics }));
+  const setBasics = (basics: Partial<TripBasics>) => {
+    setState(prev => ({ 
+      ...prev, 
+      basics: { ...prev.basics, ...basics } 
+    }));
   };
 
-  const setFlights = (flights: FlightSelection) => {
-    setState(prev => ({ ...prev, flights }));
+  const setFlight = (flight: FlightSelection | null) => {
+    setState(prev => ({ ...prev, flight }));
   };
 
-  const setHotel = (hotel: HotelSelection) => {
+  const setHotel = (hotel: HotelSelection | null) => {
     setState(prev => ({ ...prev, hotel }));
   };
 
-  const setItinerary = (itinerary: ItineraryDay[]) => {
+  const setItinerary = (itinerary: DayItinerary[]) => {
     setState(prev => ({ ...prev, itinerary }));
   };
 
-  const addActivity = (dayIndex: number, activity: Activity) => {
-    setState(prev => {
-      const newItinerary = [...prev.itinerary];
-      if (newItinerary[dayIndex]) {
-        newItinerary[dayIndex].activities.push(activity);
-      }
-      return { ...prev, itinerary: newItinerary };
-    });
-  };
-
-  const removeActivity = (dayIndex: number, activityId: string) => {
-    setState(prev => {
-      const newItinerary = [...prev.itinerary];
-      if (newItinerary[dayIndex]) {
-        newItinerary[dayIndex].activities = newItinerary[dayIndex].activities.filter(
-          a => a.id !== activityId
-        );
-      }
-      return { ...prev, itinerary: newItinerary };
-    });
-  };
-
-  const calculateTotal = () => {
-    let total = 0;
-    
-    if (state.flights?.departure) {
-      total += state.flights.departure.price;
-    }
-    if (state.flights?.return) {
-      total += state.flights.return.price;
-    }
-    
-    if (state.hotel && state.basics.startDate && state.basics.endDate) {
-      const start = new Date(state.basics.startDate);
-      const end = new Date(state.basics.endDate);
-      const nights = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-      total += state.hotel.pricePerNight * nights;
-    }
-    
-    state.itinerary.forEach(day => {
-      day.activities.forEach(activity => {
-        total += activity.price;
-      });
-    });
-    
-    return total;
-  };
-
-  /**
-   * Save trip to Neon DB (works for both anonymous and authenticated users)
-   */
-  const saveTripToNeon = useCallback(async (): Promise<string | null> => {
-    if (!state.basics.destination || !state.basics.startDate || !state.basics.endDate) {
-      console.warn('[TripPlanner] Cannot save to Neon: missing required fields');
+  const saveTrip = async (): Promise<string | null> => {
+    if (!user) {
+      console.warn('[TripPlanner] Cannot save trip: user not authenticated');
       return null;
     }
 
-    setState(prev => ({ ...prev, isSaving: true }));
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const sessionId = state.sessionId || getOrCreateAnonymousSession();
+      const tripName = state.basics.destination 
+        ? `Trip to ${state.basics.destination}` 
+        : 'New Trip';
 
-      // Save to localStorage for anonymous users
       const tripData = {
-        sessionId,
-        origin: state.basics.originCity,
-        destination: state.basics.destination,
-        startDate: state.basics.startDate,
-        endDate: state.basics.endDate,
-        travelers: state.basics.travelers || 1,
-      };
-      
-      localStorage.setItem(`trip_${sessionId}`, JSON.stringify(tripData));
-
-      setState(prev => ({ 
-        ...prev, 
-        sessionId,
-        isSaving: false, 
-        lastSaved: new Date() 
-      }));
-
-      console.log('[TripPlanner] Trip saved to localStorage:', sessionId);
-      return sessionId;
-    } catch (error) {
-      console.error('[TripPlanner] Neon save error:', error);
-      setState(prev => ({ ...prev, isSaving: false }));
-      return null;
-    }
-  }, [state]);
-
-  /**
-   * Save trip to BOTH Supabase (primary) and Railway backend
-   * Only works for authenticated users
-   * DEMO MODE: Skip Supabase save entirely - demo user ID is not a valid UUID
-   */
-  const saveTrip = useCallback(async (): Promise<string | null> => {
-    // Check if demo mode is enabled (demo user ID is not a valid UUID)
-    const isDemoMode = user?.id === 'demo-user-001' || localStorage.getItem('voyance_demo_mode') === 'true';
-    
-    // Demo mode: skip persistence entirely - just update local state
-    if (isDemoMode) {
-      console.log('[TripPlanner] Demo mode - skipping database save');
-      const demoTripId = state.tripId || `demo-trip-${Date.now()}`;
-      setState(prev => ({ 
-        ...prev, 
-        tripId: demoTripId,
-        isSaving: false,
-        lastSaved: new Date()
-      }));
-      return demoTripId;
-    }
-    
-    // If not authenticated, save to Neon instead
-    if (!isAuthenticated || !user) {
-      console.log('[TripPlanner] Not authenticated, saving to Neon');
-      return saveTripToNeon();
-    }
-
-    if (!state.basics.destination || !state.basics.startDate || !state.basics.endDate) {
-      console.warn('[TripPlanner] Cannot save: missing required fields');
-      return null;
-    }
-
-    setState(prev => ({ ...prev, isSaving: true }));
-
-    try {
-      const tripName = `Trip to ${state.basics.destination}`;
-      
-      // 1. Save to Supabase (primary data store)
-      const supabaseTripData = {
         user_id: user.id,
         name: tripName,
-        destination: state.basics.destination,
-        start_date: state.basics.startDate,
-        end_date: state.basics.endDate,
+        destination: state.basics.destination || 'Unknown',
+        destination_country: null,
+        start_date: state.basics.startDate || new Date().toISOString().split('T')[0],
+        end_date: state.basics.endDate || new Date().toISOString().split('T')[0],
+        trip_type: state.basics.tripType || 'vacation',
         travelers: state.basics.travelers || 1,
-        trip_type: state.basics.tripType || 'solo',
         origin_city: state.basics.originCity,
         budget_tier: state.basics.budgetTier || 'moderate',
-        status: 'planning' as const,
-        flight_selection: state.flights ? JSON.parse(JSON.stringify(state.flights)) : null,
-        hotel_selection: state.hotel ? JSON.parse(JSON.stringify(state.hotel)) : null,
-        itinerary_data: state.itinerary.length > 0 ? JSON.parse(JSON.stringify({ days: state.itinerary })) : null,
-        metadata: JSON.parse(JSON.stringify({
-          totalPrice: calculateTotal(),
-          lastStep: state.step,
-        })),
+        status: 'draft' as const,
+        flight_selection: state.flight as unknown as Record<string, unknown> | null,
+        hotel_selection: state.hotel as unknown as Record<string, unknown> | null,
+        itinerary_data: state.itinerary.length > 0 ? { days: state.itinerary } : null,
+        metadata: {
+          sessionId: state.sessionId,
+          lastUpdated: new Date().toISOString(),
+        },
       };
 
       let tripId = state.tripId;
@@ -297,18 +212,16 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         // Update existing trip
         const { error } = await supabase
           .from('trips')
-          .update({
-            ...supabaseTripData,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', tripId);
+          .update(tripData)
+          .eq('id', tripId)
+          .eq('user_id', user.id);
 
         if (error) throw error;
       } else {
         // Create new trip
         const { data, error } = await supabase
           .from('trips')
-          .insert([supabaseTripData])
+          .insert([tripData])
           .select('id')
           .single();
 
@@ -316,116 +229,85 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         tripId = data.id;
       }
 
-      // 2. Also sync to Railway backend (for itinerary generation)
-      try {
-        if (state.tripId) {
-          await tripsAPI.update(tripId!, {
-            name: tripName,
-            destination: state.basics.destination,
-            startDate: state.basics.startDate,
-            endDate: state.basics.endDate,
-            travelers: state.basics.travelers,
-            budgetRange: state.basics.budgetTier as 'tight' | 'moderate' | 'flexible' | 'luxury',
-            tripType: state.basics.tripType,
-            departureCity: state.basics.originCity,
-          });
-        } else {
-          await tripsAPI.create({
-            name: tripName,
-            destination: state.basics.destination,
-            startDate: state.basics.startDate,
-            endDate: state.basics.endDate,
-            travelers: state.basics.travelers,
-            budgetRange: state.basics.budgetTier as 'tight' | 'moderate' | 'flexible' | 'luxury',
-            tripType: state.basics.tripType,
-            departureCity: state.basics.originCity,
-          });
-        }
-      } catch (railwayError) {
-        // Don't fail if Railway sync fails - Supabase is primary
-        console.warn('[TripPlanner] Railway sync failed (non-critical):', railwayError);
-      }
-
       setState(prev => ({ 
         ...prev, 
-        tripId, 
-        isSaving: false, 
-        lastSaved: new Date() 
+        tripId,
+        isLoading: false 
       }));
 
       console.log('[TripPlanner] Trip saved successfully:', tripId);
       return tripId;
+
     } catch (error) {
-      console.error('[TripPlanner] Save error:', error);
-      setState(prev => ({ ...prev, isSaving: false }));
+      console.error('[TripPlanner] Error saving trip:', error);
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : 'Failed to save trip' 
+      }));
       return null;
     }
-  }, [state, user, isAuthenticated, calculateTotal, saveTripToNeon]);
+  };
 
-  /**
-   * Load trip from Supabase
-   */
-  const loadTrip = useCallback(async (tripId: string): Promise<void> => {
+  const loadTrip = async (tripId: string) => {
+    if (!user) {
+      console.warn('[TripPlanner] Cannot load trip: user not authenticated');
+      return;
+    }
+
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+
     try {
-      const { data, error } = await supabase
+      const { data: trip, error } = await supabase
         .from('trips')
         .select('*')
         .eq('id', tripId)
+        .eq('user_id', user.id)
         .single();
 
       if (error) throw error;
-      if (!data) throw new Error('Trip not found');
+      if (!trip) throw new Error('Trip not found');
 
-      const itineraryData = data.itinerary_data as { days?: ItineraryDay[] } | null;
-      const flightData = data.flight_selection as unknown as FlightSelection | null;
-      const hotelData = data.hotel_selection as unknown as HotelSelection | null;
-      const metadata = data.metadata as { lastStep?: number; totalPrice?: number } | null;
+      const metadata = trip.metadata as Record<string, unknown> | null;
+      const itineraryData = trip.itinerary_data as { days?: DayItinerary[] } | null;
 
-      setState({
-        tripId: data.id,
-        sessionId: null,
-        step: metadata?.lastStep || 1,
+      setState(prev => ({
+        ...prev,
+        tripId: trip.id,
+        sessionId: (metadata?.sessionId as string) || prev.sessionId,
         basics: {
-          destination: data.destination,
-          startDate: data.start_date,
-          endDate: data.end_date,
-          travelers: data.travelers || 1,
-          tripType: data.trip_type as TripBasics['tripType'],
-          originCity: data.origin_city || undefined,
-          budgetTier: data.budget_tier || 'moderate',
+          destination: trip.destination,
+          startDate: trip.start_date,
+          endDate: trip.end_date,
+          travelers: trip.travelers || 1,
+          tripType: trip.trip_type as TripBasics['tripType'],
+          originCity: trip.origin_city || undefined,
+          budgetTier: trip.budget_tier || undefined,
         },
-        flights: flightData,
-        hotel: hotelData,
+        flight: trip.flight_selection as unknown as FlightSelection | null,
+        hotel: trip.hotel_selection as unknown as HotelSelection | null,
         itinerary: itineraryData?.days || [],
-        totalPrice: metadata?.totalPrice || 0,
-        isSaving: false,
-        lastSaved: new Date(data.updated_at),
-      });
+        isLoading: false,
+      }));
 
       console.log('[TripPlanner] Trip loaded:', tripId);
-    } catch (error) {
-      console.error('[TripPlanner] Load error:', error);
-    }
-  }, []);
 
-  const reset = () => {
-    setState(initialState);
+    } catch (error) {
+      console.error('[TripPlanner] Error loading trip:', error);
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : 'Failed to load trip' 
+      }));
+    }
   };
 
-  // Auto-save on significant changes (debounced)
-  useEffect(() => {
-    if (!state.basics.destination) return;
-    
-    const timer = setTimeout(() => {
-      if (isAuthenticated && state.tripId) {
-        saveTrip();
-      } else if (state.sessionId) {
-        saveTripToNeon();
-      }
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [state.basics, state.flights, state.hotel, state.step]);
+  const resetTrip = () => {
+    setState({
+      ...initialState,
+      sessionId: getOrCreateAnonymousSession(),
+    });
+  };
 
   return (
     <TripPlannerContext.Provider
@@ -433,16 +315,13 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         state,
         setStep,
         setBasics,
-        setFlights,
+        setFlight,
         setHotel,
         setItinerary,
-        addActivity,
-        removeActivity,
-        calculateTotal,
-        reset,
         saveTrip,
-        saveTripToNeon,
         loadTrip,
+        resetTrip,
+        calculateTotalPrice,
       }}
     >
       {children}
@@ -457,5 +336,3 @@ export function useTripPlanner() {
   }
   return context;
 }
-
-export default TripPlannerContext;

@@ -237,7 +237,7 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
     accountAge,
     milestones: {
       quiz: quizCompleted,
-      profile: true, // Profile is always created
+      profile: true,
       firstTrip: hasTrips,
       profileGuide: !isNewUser,
     },
