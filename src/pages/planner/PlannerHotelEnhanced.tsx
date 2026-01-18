@@ -352,7 +352,7 @@ export default function PlannerHotelEnhanced() {
             </div>
 
             <div className="hidden lg:block">
-              <div className="sticky top-24">
+              <div className="sticky top-24 space-y-4">
                 <EditorialProgressTracker
                   destination={destination}
                   startDate={startDate}
@@ -364,6 +364,23 @@ export default function PlannerHotelEnhanced() {
                   flightDetails={plannerState.flights?.departure ? { airline: plannerState.flights.departure.airline } : undefined}
                   hotelDetails={plannerState.hotel ? { name: plannerState.hotel.name, pricePerNight: plannerState.hotel.pricePerNight } : undefined}
                 />
+                
+                {/* Floating Continue Button */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <Button 
+                    onClick={handleContinue} 
+                    disabled={!plannerState.hotel?.id} 
+                    size="lg"
+                    className="w-full h-12"
+                  >
+                    Continue to Trip Summary
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </motion.div>
               </div>
             </div>
           </div>
