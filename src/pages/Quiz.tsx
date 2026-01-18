@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, Sparkles, Compass, Plane, Hotel, Utensils, Sun, Heart, Clock, Users, MapPin } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Sparkles, Compass, Plane, Hotel, Utensils, Sun, Heart, Clock, Users, MapPin, Wand2 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -27,10 +27,10 @@ const questions = [
     subtitle: 'Choose the one that resonates most with how you approach travel',
     icon: <Compass className="w-5 h-5" />,
     options: [
-      { value: 'explorer', label: 'The Explorer', description: 'You seek authentic, off-the-beaten-path adventures and hidden gems' },
-      { value: 'escape_artist', label: 'The Escape Artist', description: 'Travel is about disconnecting, recharging, and finding inner peace' },
-      { value: 'curated_luxe', label: 'Curated Luxe', description: 'You appreciate refined experiences, premium service, and elegant surroundings' },
-      { value: 'story_seeker', label: 'The Story Seeker', description: 'Every trip is about collecting memorable moments and cultural experiences' },
+      { value: 'explorer', label: 'Curiosity-Driven', description: 'You seek authentic, off-the-beaten-path adventures and hidden gems' },
+      { value: 'escape_artist', label: 'Peace-Seeking', description: 'Travel is about disconnecting, recharging, and finding inner peace' },
+      { value: 'curated_luxe', label: 'Refinement-Focused', description: 'You appreciate curated experiences, premium service, and elegant surroundings' },
+      { value: 'story_seeker', label: 'Moment-Collecting', description: 'Every trip is about collecting memorable moments and cultural experiences' },
     ],
   },
   {
@@ -265,6 +265,128 @@ const stepCategories = [
   { step: 10, category: 'Environment', label: 'Logistics' },
 ];
 
+// Welcome/Intro Screen Component
+function QuizIntro({ onStart }: { onStart: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-[80vh] flex items-center justify-center px-4"
+    >
+      <div className="max-w-2xl mx-auto text-center">
+        {/* Animated compass icon */}
+        <motion.div
+          initial={{ scale: 0, rotate: -180 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.2 }}
+          className="relative mx-auto mb-8"
+        >
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mx-auto">
+            <motion.div
+              animate={{ rotate: [0, 10, -10, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Wand2 className="w-10 h-10 text-primary" />
+            </motion.div>
+          </div>
+          {/* Floating particles */}
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute w-2 h-2 rounded-full bg-primary/40"
+              style={{
+                top: '50%',
+                left: '50%',
+              }}
+              animate={{
+                x: [0, Math.cos(i * 60 * Math.PI / 180) * 60],
+                y: [0, Math.sin(i * 60 * Math.PI / 180) * 60],
+                opacity: [0, 1, 0],
+                scale: [0.5, 1, 0.5],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                delay: i * 0.2,
+                ease: "easeInOut"
+              }}
+            />
+          ))}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
+            <Sparkles className="w-4 h-4" />
+            5 minutes to personalized travel
+          </span>
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight"
+        >
+          Discover Your{' '}
+          <span className="text-primary italic">Travel DNA</span>
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="text-lg md:text-xl text-muted-foreground mb-10 max-w-lg mx-auto"
+        >
+          Answer a few questions about how you love to travel, and we'll craft 
+          a unique profile that powers personalized recommendations just for you.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="space-y-4"
+        >
+          <Button
+            size="lg"
+            onClick={onStart}
+            className="gap-3 h-14 px-10 text-lg shadow-xl shadow-primary/25 hover:shadow-primary/35 transition-all"
+          >
+            Begin Your Journey
+            <ArrowRight className="w-5 h-5" />
+          </Button>
+
+          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mt-8">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <Clock className="w-4 h-4" />
+              </div>
+              <span>~5 minutes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <span>10 questions</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <Heart className="w-4 h-4" />
+              </div>
+              <span>Your unique profile</span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
 // Enhanced Quiz Option Component
 function QuizOptionCard({ 
   value, 
@@ -298,13 +420,18 @@ function QuizOptionCard({
       whileHover={{ scale: 1.01, y: -2 }}
       whileTap={{ scale: 0.99 }}
       className={cn(
-        'relative p-5 rounded-xl border-2 text-left transition-all w-full group',
-        'hover:shadow-lg hover:shadow-primary/5',
+        'relative p-6 rounded-2xl border-2 text-left transition-all w-full group overflow-hidden',
         isSelected
-          ? 'border-primary bg-primary/5 shadow-md shadow-primary/10'
-          : 'border-border bg-card hover:border-primary/40'
+          ? 'border-primary bg-gradient-to-br from-primary/10 to-primary/5 shadow-lg shadow-primary/10'
+          : 'border-border/60 bg-card/50 hover:border-primary/40 hover:bg-card hover:shadow-md'
       )}
     >
+      {/* Background gradient on hover */}
+      <div className={cn(
+        'absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 transition-opacity',
+        !isSelected && 'group-hover:opacity-100'
+      )} />
+      
       {/* Selection indicator */}
       <motion.div
         initial={false}
@@ -312,9 +439,9 @@ function QuizOptionCard({
           scale: isSelected ? 1 : 0.8,
           opacity: isSelected ? 1 : 0,
         }}
-        className="absolute top-4 right-4"
+        className="absolute top-4 right-4 z-10"
       >
-        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/30">
           <Check className="w-4 h-4 text-primary-foreground" />
         </div>
       </motion.div>
@@ -326,24 +453,24 @@ function QuizOptionCard({
           scale: isSelected ? 0.8 : 1,
           opacity: isSelected ? 0 : 1,
         }}
-        className="absolute top-4 right-4"
+        className="absolute top-4 right-4 z-10"
       >
         <div className={cn(
-          'w-7 h-7 rounded-full border-2 transition-colors',
-          isMultiSelect ? 'rounded-md' : 'rounded-full',
-          'border-border group-hover:border-primary/50'
+          'w-8 h-8 border-2 transition-colors bg-background/50',
+          isMultiSelect ? 'rounded-lg' : 'rounded-full',
+          'border-border/60 group-hover:border-primary/40'
         )} />
       </motion.div>
       
       {/* Content */}
-      <div className="pr-12">
+      <div className="pr-14 relative z-10">
         <div className={cn(
-          'font-medium text-lg mb-1 transition-colors',
-          isSelected ? 'text-primary' : 'text-foreground'
+          'font-semibold text-lg mb-1.5 transition-colors',
+          isSelected ? 'text-primary' : 'text-foreground group-hover:text-foreground'
         )}>
           {label}
         </div>
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground leading-relaxed">
           {description}
         </div>
       </div>
@@ -351,53 +478,81 @@ function QuizOptionCard({
   );
 }
 
-// Progress bar component
+// Progress bar component with enhanced visuals
 function QuizProgressBar({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
   const progress = ((currentStep + 1) / totalSteps) * 100;
   
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-3xl mx-auto">
       {/* Step indicators for desktop */}
-      <div className="hidden md:flex justify-between mb-3">
+      <div className="hidden lg:flex justify-between mb-4 px-2">
         {stepCategories.map((s, idx) => (
-          <div 
+          <motion.div 
             key={idx}
-            className={cn(
-              'text-xs font-medium transition-colors',
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.05 }}
+            className="flex flex-col items-center"
+          >
+            <div className={cn(
+              'w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium mb-1.5 transition-all',
+              idx === currentStep 
+                ? 'bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30' 
+                : idx < currentStep 
+                  ? 'bg-primary/20 text-primary' 
+                  : 'bg-muted text-muted-foreground'
+            )}>
+              {idx < currentStep ? <Check className="w-4 h-4" /> : idx + 1}
+            </div>
+            <span className={cn(
+              'text-[10px] font-medium transition-colors text-center',
               idx === currentStep ? 'text-primary' : 
               idx < currentStep ? 'text-muted-foreground' : 'text-muted-foreground/50'
-            )}
-          >
-            {s.label}
-          </div>
+            )}>
+              {s.label}
+            </span>
+          </motion.div>
         ))}
       </div>
       
-      {/* Progress bar */}
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+      {/* Progress bar with glow effect */}
+      <div className="relative h-2 bg-muted rounded-full overflow-hidden shadow-inner">
         <motion.div 
-          className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary via-primary to-accent rounded-full"
           initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+        />
+        {/* Glow effect */}
+        <motion.div 
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary via-primary to-accent rounded-full blur-sm opacity-50"
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
         />
       </div>
       
       {/* Mobile step indicator */}
-      <div className="md:hidden text-center mt-3">
-        <span className="text-sm text-muted-foreground">
-          Step {currentStep + 1} of {totalSteps}
-        </span>
-        <span className="mx-2 text-muted-foreground">·</span>
-        <span className="text-sm font-medium text-foreground">
-          {stepCategories[currentStep]?.label}
-        </span>
+      <div className="lg:hidden text-center mt-4">
+        <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-muted/50">
+          <span className="text-sm font-medium text-primary">
+            Step {currentStep + 1}
+          </span>
+          <span className="text-muted-foreground">/</span>
+          <span className="text-sm text-muted-foreground">
+            {totalSteps}
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span className="text-sm font-medium text-foreground">
+            {stepCategories[currentStep]?.label}
+          </span>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function Quiz() {
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [isComplete, setIsComplete] = useState(false);
@@ -409,10 +564,10 @@ export default function Quiz() {
 
   const stepQuestions = getQuestionsForStep(currentStep + 1);
 
-  // Initialize quiz session when user is available
+  // Initialize quiz session when user is available and quiz starts
   useEffect(() => {
     const initSession = async () => {
-      if (user && !sessionId) {
+      if (user && !sessionId && hasStarted) {
         const newSessionId = await createQuizSession({
           userId: user.id,
           quizVersion: 'v4',
@@ -427,7 +582,7 @@ export default function Quiz() {
       }
     };
     initSession();
-  }, [user, sessionId]);
+  }, [user, sessionId, hasStarted]);
 
   const handleSelect = async (questionId: string, value: string, isMultiSelect: boolean) => {
     let newAnswers: Record<string, string | string[]>;
@@ -546,14 +701,22 @@ export default function Quiz() {
         description="Take our comprehensive quiz to get personalized travel recommendations tailored to your unique preferences."
       />
       
-      <div className="min-h-screen pt-20 pb-8 flex flex-col bg-gradient-to-b from-background via-background to-muted/30">
+      <div className="min-h-screen flex flex-col relative overflow-hidden">
+        {/* Background gradients */}
+        <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5 -z-10" />
+        <div className="fixed top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl -z-10" />
+        <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl -z-10" />
+        
         <AnimatePresence mode="wait">
-          {isComplete ? (
+          {!hasStarted ? (
+            <QuizIntro key="intro" onStart={() => setHasStarted(true)} />
+          ) : isComplete ? (
             <motion.div
               key="completion"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              className="flex-1 pt-20"
             >
               <QuizCompletion onContinue={handleComplete} />
             </motion.div>
@@ -563,10 +726,10 @@ export default function Quiz() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex-1 flex flex-col"
+              className="flex-1 flex flex-col pt-24 pb-8"
             >
               {/* Progress */}
-              <div className="px-4 mb-8">
+              <div className="px-4 mb-10">
                 <QuizProgressBar currentStep={currentStep} totalSteps={totalSteps} />
               </div>
               
@@ -586,30 +749,30 @@ export default function Quiz() {
                     className="max-w-2xl w-full space-y-12"
                   >
                     {stepQuestions.map((question, qIdx) => (
-                      <div key={question.id} className={qIdx > 0 ? 'pt-8 border-t border-border/50' : ''}>
+                      <div key={question.id} className={qIdx > 0 ? 'pt-10 border-t border-border/30' : ''}>
                         {/* Question header */}
                         <motion.div 
-                          className="text-center mb-8"
+                          className="text-center mb-10"
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.1 + qIdx * 0.1 }}
                         >
-                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium uppercase tracking-wider mb-4">
+                          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 text-primary text-xs font-semibold uppercase tracking-wider mb-5 border border-primary/20">
                             {question.icon}
                             {question.category}
                           </div>
-                          <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-2">
+                          <h1 className="text-2xl md:text-4xl font-serif font-bold text-foreground mb-3 leading-tight">
                             {question.title}
                           </h1>
-                          <p className="text-muted-foreground">
+                          <p className="text-muted-foreground text-lg">
                             {question.subtitle}
-                            {question.optional && <span className="text-xs ml-2">(optional)</span>}
+                            {question.optional && <span className="text-xs ml-2 text-muted-foreground/60">(optional)</span>}
                           </p>
                         </motion.div>
                         
                         {/* Options */}
                         <div className={cn(
-                          'grid gap-3',
+                          'grid gap-4',
                           question.options.length > 4 ? 'md:grid-cols-2' : ''
                         )}>
                           {question.options.map((option, index) => (
@@ -633,9 +796,9 @@ export default function Quiz() {
               
               {/* Navigation */}
               <motion.div 
-                className="max-w-2xl mx-auto w-full px-4 mt-8 pt-6 border-t border-border/50"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                className="max-w-2xl mx-auto w-full px-4 mt-10 pt-6 border-t border-border/30"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
               >
                 <div className="flex justify-between items-center">
@@ -643,20 +806,32 @@ export default function Quiz() {
                     variant="ghost"
                     onClick={handleBack}
                     disabled={currentStep === 0}
-                    className="gap-2 h-12 px-6"
+                    className="gap-2 h-12 px-6 text-muted-foreground hover:text-foreground"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     Back
                   </Button>
                   
-                  <div className="text-sm text-muted-foreground">
-                    {currentStep + 1} / {totalSteps}
+                  <div className="hidden sm:flex items-center gap-2">
+                    {[...Array(totalSteps)].map((_, idx) => (
+                      <div 
+                        key={idx}
+                        className={cn(
+                          'w-2 h-2 rounded-full transition-all',
+                          idx === currentStep 
+                            ? 'bg-primary w-6' 
+                            : idx < currentStep 
+                              ? 'bg-primary/40' 
+                              : 'bg-muted'
+                        )}
+                      />
+                    ))}
                   </div>
                   
                   <Button
                     onClick={handleNext}
                     disabled={!canProceed() || isSubmitting}
-                    className="gap-2 h-12 px-8"
+                    className="gap-2 h-12 px-8 shadow-lg shadow-primary/20"
                   >
                     {isSubmitting ? (
                       <>
