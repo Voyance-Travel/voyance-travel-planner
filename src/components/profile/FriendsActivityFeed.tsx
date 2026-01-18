@@ -1,6 +1,6 @@
 /**
- * Friends Activity Feed
- * Shows when friends are planning trips or completed adventures
+ * Friends Activity Feed - Editorial Redesign
+ * Clean, minimal activity stream
  */
 
 import { motion } from 'framer-motion';
@@ -9,16 +9,11 @@ import {
   Plane, 
   MapPin, 
   Calendar, 
-  Sparkles, 
   CheckCircle,
-  Clock,
-  PartyPopper,
   Loader2,
   Users
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -128,39 +123,23 @@ async function fetchFriendsActivity(limit: number): Promise<FriendActivity[]> {
   return activities;
 }
 
-// Activity type configurations
+// Activity type configurations - minimal editorial style
 const activityConfig = {
   planning: {
     icon: Plane,
-    label: 'is planning a trip to',
-    gradient: 'from-sky-100 to-cyan-100 dark:from-sky-900/20 dark:to-cyan-900/20',
-    iconColor: 'text-sky-500',
-    badge: 'Planning',
-    badgeVariant: 'secondary' as const,
+    label: 'is planning',
   },
   upcoming: {
     icon: Calendar,
-    label: 'has a trip coming up to',
-    gradient: 'from-violet-100 to-purple-100 dark:from-violet-900/20 dark:to-purple-900/20',
-    iconColor: 'text-violet-500',
-    badge: 'Upcoming',
-    badgeVariant: 'default' as const,
+    label: 'has booked',
   },
   active: {
     icon: MapPin,
-    label: 'is currently traveling in',
-    gradient: 'from-emerald-100 to-teal-100 dark:from-emerald-900/20 dark:to-teal-900/20',
-    iconColor: 'text-emerald-500',
-    badge: 'Traveling Now',
-    badgeVariant: 'default' as const,
+    label: 'is traveling in',
   },
   completed: {
     icon: CheckCircle,
-    label: 'completed a trip to',
-    gradient: 'from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20',
-    iconColor: 'text-amber-500',
-    badge: 'Completed',
-    badgeVariant: 'secondary' as const,
+    label: 'visited',
   },
 };
 
@@ -169,125 +148,95 @@ export default function FriendsActivityFeed({ userId, className, limit = 5 }: Fr
     queryKey: ['friends-activity', userId, limit],
     queryFn: () => fetchFriendsActivity(limit),
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000, // Refresh every 5 minutes
+    refetchInterval: 5 * 60_000,
   });
 
   if (isLoading) {
     return (
-      <div className={cn("flex justify-center py-8", className)}>
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className={cn("flex justify-center py-12", className)}>
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!activities || activities.length === 0) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={cn(
-          "text-center py-12 px-6 rounded-2xl bg-gradient-to-br from-muted/30 via-muted/20 to-transparent border-2 border-dashed border-muted",
-          className
-        )}
-      >
-        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 flex items-center justify-center mx-auto mb-4">
-          <Users className="h-8 w-8 text-indigo-500" />
-        </div>
-        <h3 className="font-semibold text-lg text-foreground mb-1">No friend activity yet</h3>
-        <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-          When your friends plan or complete trips, you'll see their adventures here!
+      <div className={cn(
+        "text-center py-16 border border-dashed border-border rounded-lg",
+        className
+      )}>
+        <Users className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-sm font-medium text-foreground mb-1">No activity yet</h3>
+        <p className="text-sm text-muted-foreground">
+          Your friends' travel adventures will appear here
         </p>
-      </motion.div>
+      </div>
     );
   }
 
   return (
-    <div className={cn("space-y-4", className)}>
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30">
-          <Sparkles className="h-5 w-5 text-indigo-500" />
-        </div>
-        <div>
-          <h3 className="font-semibold text-foreground">Friends' Adventures</h3>
-          <p className="text-sm text-muted-foreground">See what your travel crew is up to</p>
-        </div>
-      </div>
+    <div className={cn("divide-y divide-border", className)}>
+      {activities.map((activity, index) => {
+        const config = activityConfig[activity.type];
+        const Icon = config.icon;
 
-      {/* Activity list */}
-      <div className="space-y-3">
-        {activities.map((activity, index) => {
-          const config = activityConfig[activity.type];
-          const Icon = config.icon;
+        return (
+          <motion.div
+            key={activity.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: index * 0.03 }}
+            className="py-4"
+          >
+            <div className="flex items-start gap-4">
+              {/* Friend avatar with hover preview */}
+              <FriendProfileCard friendId={activity.friend.id}>
+                <button className="flex-shrink-0">
+                  <Avatar className="h-10 w-10 cursor-pointer hover:opacity-80 transition-opacity">
+                    <AvatarImage src={activity.friend.avatar_url || undefined} />
+                    <AvatarFallback className="bg-muted text-muted-foreground text-sm">
+                      {(activity.friend.display_name || activity.friend.handle || '?')[0].toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </FriendProfileCard>
 
-          return (
-            <motion.div
-              key={activity.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className={cn(
-                "p-4 rounded-xl bg-gradient-to-r transition-all hover:shadow-md",
-                config.gradient
-              )}
-            >
-              <div className="flex items-start gap-3">
-                {/* Friend avatar with hover preview */}
-                <FriendProfileCard friendId={activity.friend.id}>
-                  <button className="flex-shrink-0">
-                    <Avatar className="h-11 w-11 ring-2 ring-white dark:ring-gray-800 shadow-sm cursor-pointer hover:ring-primary transition-all">
-                      <AvatarImage src={activity.friend.avatar_url || undefined} />
-                      <AvatarFallback className="bg-white dark:bg-gray-800">
-                        {(activity.friend.display_name || activity.friend.handle || '?')[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </button>
-                </FriendProfileCard>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm">
+                  <span className="font-medium text-foreground">
+                    {activity.friend.display_name || activity.friend.handle}
+                  </span>
+                  <span className="text-muted-foreground"> {config.label} </span>
+                  <span className="font-medium text-foreground">
+                    {activity.trip.destination}
+                    {activity.trip.destination_country ? `, ${activity.trip.destination_country}` : ''}
+                  </span>
+                </p>
+                
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Icon className="h-3 w-3" />
+                    {activity.type === 'completed' ? 'Completed' : 
+                     activity.type === 'active' ? 'Traveling now' :
+                     activity.type === 'upcoming' ? 'Upcoming' : 'Planning'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                  </span>
+                </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm">
-                    <span className="font-semibold text-foreground">
-                      {activity.friend.display_name || activity.friend.handle}
-                    </span>
-                    <span className="text-muted-foreground"> {config.label} </span>
-                    <span className="font-semibold text-foreground">
-                      {activity.trip.destination}
-                      {activity.trip.destination_country ? `, ${activity.trip.destination_country}` : ''}
-                    </span>
+                {/* Trip dates for upcoming/active */}
+                {(activity.type === 'upcoming' || activity.type === 'active') && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {format(new Date(activity.trip.start_date), 'MMM d')} – {format(new Date(activity.trip.end_date), 'MMM d, yyyy')}
                   </p>
-                  
-                  <div className="flex items-center gap-3 mt-2">
-                    <Badge variant={config.badgeVariant} className="gap-1 text-xs">
-                      <Icon className={cn("h-3 w-3", config.iconColor)} />
-                      {config.badge}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
-                    </span>
-                  </div>
-
-                  {/* Trip dates for upcoming/active */}
-                  {(activity.type === 'upcoming' || activity.type === 'active') && (
-                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {format(new Date(activity.trip.start_date), 'MMM d')} - {format(new Date(activity.trip.end_date), 'MMM d, yyyy')}
-                    </p>
-                  )}
-                </div>
-
-                {/* Activity type icon */}
-                <div className={cn(
-                  "p-2 rounded-full bg-white/80 dark:bg-gray-800/80",
-                  config.iconColor
-                )}>
-                  <Icon className="h-4 w-4" />
-                </div>
+                )}
               </div>
-            </motion.div>
-          );
-        })}
-      </div>
+            </div>
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
