@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Mail, MessageSquare, Send, Loader2, CheckCircle, Clock, MapPin } from "lucide-react";
+import { Mail, Send, Loader2, CheckCircle, ArrowRight } from "lucide-react";
 import MainLayout from "@/components/layout/MainLayout";
 import Head from "@/components/common/Head";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ const contactSchema = z.object({
   email: z.string().email("Please enter a valid email"),
   subject: z.string().optional(),
   message: z.string().min(10, "Message must be at least 10 characters").max(5000),
-  type: z.enum(["general", "support", "feedback", "bug_report", "feature_request"]).default("general"),
+  type: z.enum(["general", "support", "feedback", "partnership"]).default("general"),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
@@ -74,203 +74,229 @@ const Contact = () => {
 
   const contactTypes = [
     { value: "general", label: "General Inquiry" },
-    { value: "support", label: "Support Request" },
+    { value: "support", label: "Trip Support" },
     { value: "feedback", label: "Feedback" },
-    { value: "bug_report", label: "Report a Bug" },
-    { value: "feature_request", label: "Feature Request" },
+    { value: "partnership", label: "Partnership" },
   ];
 
   return (
     <MainLayout>
-      <Head title="Contact Us | Voyance" description="Get in touch with the Voyance team. We're here to help with your travel planning questions and feedback." />
+      <Head 
+        title="Contact Us | Voyance" 
+        description="Get in touch with the Voyance team. We're here to help with your travel planning questions and feedback." 
+      />
 
-      <div className="min-h-screen bg-background">
-        {/* Hero Section */}
-        <section className="relative pt-32 pb-16 px-4 bg-gradient-to-br from-primary/10 via-background to-accent/10">
-          <div className="container max-w-4xl mx-auto text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <MessageSquare className="w-8 h-8 text-primary" />
-              </div>
-              <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">Get in Touch</h1>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Have a question, feedback, or need help? We'd love to hear from you.
-              </p>
-            </motion.div>
-          </div>
-        </section>
+      {/* Hero with image */}
+      <section className="relative pt-20 pb-32 overflow-hidden">
+        <div className="absolute inset-0">
+          <img 
+            src="https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=1920&q=80"
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-background" />
+        </div>
 
-        {/* Contact Info Cards */}
-        <section className="py-8 px-4 -mt-8">
-          <div className="container max-w-4xl mx-auto">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <motion.div 
+        <div className="relative z-10 container max-w-4xl mx-auto px-4 pt-24 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h1 className="font-display text-4xl md:text-6xl font-bold text-white mb-6">
+              Let's Talk Travel
+            </h1>
+            <p className="text-xl text-white/80 max-w-2xl mx-auto">
+              Questions about your trip? Ideas to share? We're all ears.
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Contact Form Section */}
+      <section className="py-16 -mt-20 relative z-20">
+        <div className="container max-w-4xl mx-auto px-4">
+          <div className="grid lg:grid-cols-5 gap-8">
+            {/* Form */}
+            <div className="lg:col-span-3">
+              {isSuccess ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-card border border-border rounded-2xl p-8 md:p-12 text-center shadow-lg"
+                >
+                  <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
+                    <CheckCircle className="w-8 h-8 text-green-600" />
+                  </div>
+                  <h2 className="text-2xl font-display font-bold mb-3">Message Received!</h2>
+                  <p className="text-muted-foreground mb-8">
+                    We'll get back to you within {CONTACT_CONFIG.RESPONSE_TIME}. 
+                    Keep an eye on your inbox.
+                  </p>
+                  <Button variant="outline" onClick={() => setIsSuccess(false)}>
+                    Send Another Message
+                  </Button>
+                </motion.div>
+              ) : (
+                <motion.form
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onSubmit={handleSubmit(onSubmit)}
+                  className="bg-card border border-border rounded-2xl p-6 md:p-8 shadow-lg"
+                >
+                  <h2 className="text-xl font-display font-semibold mb-6">Send us a message</h2>
+                  
+                  <div className="space-y-5">
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Your name</Label>
+                        <Input
+                          id="name"
+                          placeholder="Jane Smith"
+                          {...register("name")}
+                          className={errors.name ? "border-destructive" : ""}
+                        />
+                        {errors.name && (
+                          <p className="text-sm text-destructive">{errors.name.message}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="jane@example.com"
+                          {...register("email")}
+                          className={errors.email ? "border-destructive" : ""}
+                        />
+                        {errors.email && (
+                          <p className="text-sm text-destructive">{errors.email.message}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="type">What's this about?</Label>
+                        <Select
+                          defaultValue="general"
+                          onValueChange={(value) => setValue("type", value as ContactFormData["type"])}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {contactTypes.map((type) => (
+                              <SelectItem key={type.value} value={type.value}>
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="subject">Subject (optional)</Label>
+                        <Input
+                          id="subject"
+                          placeholder="Brief subject"
+                          {...register("subject")}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="message">Your message</Label>
+                      <Textarea
+                        id="message"
+                        placeholder="Tell us what's on your mind..."
+                        rows={5}
+                        {...register("message")}
+                        className={errors.message ? "border-destructive" : ""}
+                      />
+                      {errors.message && (
+                        <p className="text-sm text-destructive">{errors.message.message}</p>
+                      )}
+                    </div>
+
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="w-full gap-2"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          Send Message
+                          <Send className="w-4 h-4" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </motion.form>
+              )}
+            </div>
+
+            {/* Sidebar */}
+            <div className="lg:col-span-2 space-y-6">
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="bg-card border border-border rounded-xl p-5 flex items-start gap-4"
+                className="bg-card border border-border rounded-2xl p-6 shadow-lg"
               >
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Mail className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-1">Email Us</h3>
-                  <a href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`} className="text-sm text-primary hover:underline">
-                    {CONTACT_CONFIG.SUPPORT_EMAIL}
-                  </a>
-                </div>
+                <h3 className="font-semibold mb-4">Email us directly</h3>
+                <a 
+                  href={`mailto:${CONTACT_CONFIG.SUPPORT_EMAIL}`}
+                  className="flex items-center gap-3 text-primary hover:underline"
+                >
+                  <Mail className="h-5 w-5" />
+                  {CONTACT_CONFIG.SUPPORT_EMAIL}
+                </a>
+                <p className="text-sm text-muted-foreground mt-3">
+                  We typically respond within {CONTACT_CONFIG.RESPONSE_TIME}.
+                </p>
               </motion.div>
-              <motion.div 
+
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="bg-card border border-border rounded-xl p-5 flex items-start gap-4"
+                className="bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20 rounded-2xl p-6"
               >
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Clock className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-1">Response Time</h3>
-                  <p className="text-sm text-muted-foreground">Usually within {CONTACT_CONFIG.RESPONSE_TIME}</p>
-                </div>
+                <h3 className="font-semibold mb-2">Looking for help?</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Check out our Help Center for quick answers to common questions.
+                </p>
+                <Button variant="outline" size="sm" asChild>
+                  <a href="/help" className="gap-2">
+                    Visit Help Center
+                    <ArrowRight className="h-4 w-4" />
+                  </a>
+                </Button>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="rounded-2xl overflow-hidden"
+              >
+                <img 
+                  src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&q=80"
+                  alt="Travel inspiration"
+                  className="w-full h-48 object-cover"
+                />
               </motion.div>
             </div>
           </div>
-        </section>
-
-        {/* Contact Form Section */}
-        <section className="py-12 px-4">
-          <div className="container max-w-2xl mx-auto">
-            {isSuccess ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-center py-12 bg-card border border-border rounded-2xl"
-              >
-                <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center mx-auto mb-6">
-                  <CheckCircle className="w-10 h-10 text-green-600" />
-                </div>
-                <h2 className="text-2xl font-display font-bold mb-4">Message Sent!</h2>
-                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                  Thank you for reaching out. We'll get back to you within {CONTACT_CONFIG.RESPONSE_TIME}.
-                </p>
-                <Button onClick={() => setIsSuccess(false)} variant="outline">
-                  Send Another Message
-                </Button>
-              </motion.div>
-            ) : (
-              <motion.form
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.2 }}
-                onSubmit={handleSubmit(onSubmit)}
-                className="space-y-6 bg-card p-8 rounded-2xl border border-border shadow-sm"
-              >
-                <div className="text-center mb-2">
-                  <h2 className="text-xl font-semibold">Send Us a Message</h2>
-                  <p className="text-sm text-muted-foreground">Fill out the form below and we'll respond promptly.</p>
-                </div>
-                
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name *</Label>
-                    <Input
-                      id="name"
-                      placeholder="Your name"
-                      {...register("name")}
-                      className={errors.name ? "border-destructive" : ""}
-                    />
-                    {errors.name && (
-                      <p className="text-sm text-destructive">{errors.name.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="your@email.com"
-                      {...register("email")}
-                      className={errors.email ? "border-destructive" : ""}
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email.message}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="type">Type</Label>
-                    <Select
-                      defaultValue="general"
-                      onValueChange={(value) => setValue("type", value as ContactFormData["type"])}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {contactTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="subject">Subject (optional)</Label>
-                    <Input
-                      id="subject"
-                      placeholder="Brief subject line"
-                      {...register("subject")}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="message">Message *</Label>
-                  <Textarea
-                    id="message"
-                    placeholder="Tell us how we can help..."
-                    rows={6}
-                    {...register("message")}
-                    className={errors.message ? "border-destructive" : ""}
-                  />
-                  {errors.message && (
-                    <p className="text-sm text-destructive">{errors.message.message}</p>
-                  )}
-                </div>
-
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4 mr-2" />
-                      Send Message
-                    </>
-                  )}
-                </Button>
-              </motion.form>
-            )}
-          </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </MainLayout>
   );
 };
