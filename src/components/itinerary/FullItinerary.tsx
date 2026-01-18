@@ -9,6 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
   FlightInfo, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
@@ -116,11 +117,11 @@ export default function FullItinerary({
               </div>
               <div>
                 <span className="text-slate-400 text-sm">Style</span>
-                <p className="font-semibold capitalize">{tripSummary.style}</p>
+                <p className="font-semibold">{formatEnumDisplay(tripSummary.style)}</p>
               </div>
               <div>
                 <span className="text-slate-400 text-sm">Pace</span>
-                <p className="font-semibold capitalize">{tripSummary.pace}</p>
+                <p className="font-semibold">{formatEnumDisplay(tripSummary.pace)}</p>
               </div>
             </div>
 

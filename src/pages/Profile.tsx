@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { tripsApi, Trip } from '@/services/neonDb';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { formatEnumDisplay } from '@/utils/textFormatting';
 import { toast } from 'sonner';
 
 type TabType = 'overview' | 'trips' | 'preferences' | 'subscription';
@@ -411,8 +412,8 @@ export default function Profile() {
                   </div>
                   <div className="flex flex-wrap gap-2 mb-4">
                     {travelDNA.traits.map((trait) => (
-                      <span key={trait} className="px-3 py-1 bg-background rounded-full text-sm text-muted-foreground capitalize">
-                        {trait}
+                      <span key={trait} className="px-3 py-1 bg-background rounded-full text-sm text-muted-foreground">
+                        {formatEnumDisplay(trait)}
                       </span>
                     ))}
                   </div>
@@ -421,8 +422,8 @@ export default function Profile() {
                       <p className="text-sm text-muted-foreground mb-2">Interests</p>
                       <div className="flex flex-wrap gap-2">
                         {travelDNA.interests.map((interest) => (
-                          <span key={interest} className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm capitalize">
-                            {interest}
+                          <span key={interest} className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm">
+                            {formatEnumDisplay(interest)}
                           </span>
                         ))}
                       </div>
@@ -800,7 +801,7 @@ function PreferenceSection({ title, items, isTags }: { title: string; items: { l
           {items.map((item) => (
             <div key={item.label} className="flex justify-between items-center py-2 border-b border-border">
               <span className="text-muted-foreground">{item.label}</span>
-              <span className="text-foreground capitalize">{item.value}</span>
+              <span className="text-foreground">{formatEnumDisplay(item.value)}</span>
             </div>
           ))}
         </div>
