@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, Sparkles, Compass, Plane, Hotel, Utensils, Sun, Heart, Clock, Users, MapPin, Wand2 } from 'lucide-react';
+import { 
+  ArrowLeft, ArrowRight, Check, Sparkles, Compass, Plane, Hotel, Utensils, 
+  Sun, Heart, Clock, Users, MapPin, Wand2, DollarSign, Briefcase, Glasses,
+  UserCircle2, Palette, Mountain, Coffee, Luggage, Globe, Star
+} from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -16,6 +20,161 @@ import {
   saveQuizResponse,
   type TravelDNAPayload 
 } from '@/utils/quizMapping';
+
+// Themed motifs per category - these float/animate during transitions
+const categoryMotifs: Record<string, { icons: React.ReactNode[]; color: string }> = {
+  'Identity': {
+    icons: [
+      <Compass key="1" className="w-6 h-6" />,
+      <Star key="2" className="w-5 h-5" />,
+      <Globe key="3" className="w-7 h-7" />,
+    ],
+    color: 'from-violet-500/30 to-purple-500/30',
+  },
+  'Vibes': {
+    icons: [
+      <Glasses key="1" className="w-6 h-6" />,
+      <Sun key="2" className="w-7 h-7" />,
+      <Heart key="3" className="w-5 h-5" />,
+    ],
+    color: 'from-pink-500/30 to-rose-500/30',
+  },
+  'Habits': {
+    icons: [
+      <Plane key="1" className="w-7 h-7" />,
+      <Luggage key="2" className="w-6 h-6" />,
+      <Clock key="3" className="w-5 h-5" />,
+    ],
+    color: 'from-sky-500/30 to-blue-500/30',
+  },
+  'Preferences': {
+    icons: [
+      <DollarSign key="1" className="w-7 h-7" />,
+      <DollarSign key="2" className="w-5 h-5" />,
+      <Sparkles key="3" className="w-6 h-6" />,
+    ],
+    color: 'from-emerald-500/30 to-green-500/30',
+  },
+  'Style': {
+    icons: [
+      <Palette key="1" className="w-6 h-6" />,
+      <Briefcase key="2" className="w-5 h-5" />,
+      <MapPin key="3" className="w-7 h-7" />,
+    ],
+    color: 'from-amber-500/30 to-orange-500/30',
+  },
+  'Context': {
+    icons: [
+      <Users key="1" className="w-7 h-7" />,
+      <UserCircle2 key="2" className="w-6 h-6" />,
+      <Heart key="3" className="w-5 h-5" />,
+    ],
+    color: 'from-red-500/30 to-pink-500/30',
+  },
+  'Interests': {
+    icons: [
+      <Heart key="1" className="w-6 h-6" />,
+      <Mountain key="2" className="w-7 h-7" />,
+      <Star key="3" className="w-5 h-5" />,
+    ],
+    color: 'from-indigo-500/30 to-violet-500/30',
+  },
+  'Accommodations': {
+    icons: [
+      <Hotel key="1" className="w-7 h-7" />,
+      <Star key="2" className="w-5 h-5" />,
+      <Sparkles key="3" className="w-6 h-6" />,
+    ],
+    color: 'from-teal-500/30 to-cyan-500/30',
+  },
+  'Food': {
+    icons: [
+      <Utensils key="1" className="w-7 h-7" />,
+      <Coffee key="2" className="w-6 h-6" />,
+      <Heart key="3" className="w-5 h-5" />,
+    ],
+    color: 'from-orange-500/30 to-red-500/30',
+  },
+  'Environment': {
+    icons: [
+      <Sun key="1" className="w-7 h-7" />,
+      <Plane key="2" className="w-6 h-6" />,
+      <Globe key="3" className="w-5 h-5" />,
+    ],
+    color: 'from-cyan-500/30 to-blue-500/30',
+  },
+};
+
+// Floating motif component for transitions
+function FloatingMotifs({ category, isActive }: { category: string; isActive: boolean }) {
+  const motif = categoryMotifs[category] || categoryMotifs['Identity'];
+  
+  if (!isActive) return null;
+  
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {motif.icons.map((icon, i) => (
+        <motion.div
+          key={i}
+          className={`absolute text-primary/60`}
+          style={{
+            left: `${15 + i * 30}%`,
+            top: '20%',
+          }}
+          initial={{ 
+            opacity: 0, 
+            scale: 0,
+            y: 100,
+            rotate: -30,
+          }}
+          animate={{ 
+            opacity: [0, 1, 1, 0],
+            scale: [0.5, 1.2, 1, 0.8],
+            y: [100, -20, -40, -100],
+            rotate: [-30, 10, -5, 15],
+          }}
+          transition={{
+            duration: 1.5,
+            delay: i * 0.15,
+            ease: "easeOut",
+          }}
+        >
+          {icon}
+        </motion.div>
+      ))}
+      
+      {/* Central burst */}
+      <motion.div
+        className={`absolute top-1/3 left-1/2 -translate-x-1/2 w-40 h-40 rounded-full bg-gradient-to-br ${motif.color} blur-3xl`}
+        initial={{ opacity: 0, scale: 0 }}
+        animate={{ opacity: [0, 0.6, 0], scale: [0, 1.5, 2] }}
+        transition={{ duration: 1.2, ease: "easeOut" }}
+      />
+    </div>
+  );
+}
+
+// Page flip variants for storybook effect
+const pageFlipVariants = {
+  enter: (direction: number) => ({
+    rotateY: direction > 0 ? 90 : -90,
+    opacity: 0,
+    scale: 0.9,
+    transformOrigin: direction > 0 ? 'left center' : 'right center',
+  }),
+  center: {
+    rotateY: 0,
+    opacity: 1,
+    scale: 1,
+    transformOrigin: 'center center',
+  },
+  exit: (direction: number) => ({
+    rotateY: direction > 0 ? -90 : 90,
+    opacity: 0,
+    scale: 0.9,
+    transformOrigin: direction > 0 ? 'right center' : 'left center',
+  }),
+};
 
 // Comprehensive 10-step quiz based on the detailed quiz documentation
 const questions = [
@@ -554,6 +713,8 @@ function QuizProgressBar({ currentStep, totalSteps }: { currentStep: number; tot
 export default function Quiz() {
   const [hasStarted, setHasStarted] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
+  const [showMotifs, setShowMotifs] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [isComplete, setIsComplete] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -563,6 +724,7 @@ export default function Quiz() {
   const navigate = useNavigate();
 
   const stepQuestions = getQuestionsForStep(currentStep + 1);
+  const currentCategory = stepCategories[currentStep]?.category || 'Identity';
 
   // Initialize quiz session when user is available and quiz starts
   useEffect(() => {
@@ -644,6 +806,9 @@ export default function Quiz() {
   const handleNext = async () => {
     if (currentStep < totalSteps - 1) {
       const nextStep = currentStep + 1;
+      setDirection(1);
+      setShowMotifs(true);
+      setTimeout(() => setShowMotifs(false), 1500);
       setCurrentStep(nextStep);
       
       // Update session progress
@@ -686,6 +851,9 @@ export default function Quiz() {
 
   const handleBack = () => {
     if (currentStep > 0) {
+      setDirection(-1);
+      setShowMotifs(true);
+      setTimeout(() => setShowMotifs(false), 1500);
       setCurrentStep(currentStep - 1);
     }
   };
@@ -787,22 +955,35 @@ export default function Quiz() {
                 <QuizProgressBar currentStep={currentStep} totalSteps={totalSteps} />
               </div>
               
-              {/* Questions for this step with magical transitions */}
-              <div className="flex-1 flex items-start justify-center px-4 overflow-y-auto">
-                <AnimatePresence mode="wait">
+              {/* Questions for this step with page-flip transitions */}
+              <div className="flex-1 flex items-start justify-center px-4 overflow-y-auto perspective-1000">
+                {/* Floating themed motifs */}
+                <FloatingMotifs category={currentCategory} isActive={showMotifs} />
+                
+                <AnimatePresence mode="wait" custom={direction}>
                   <motion.div
                     key={currentStep}
-                    initial={{ opacity: 0, scale: 0.95, y: 30 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 1.02, y: -20 }}
+                    custom={direction}
+                    variants={pageFlipVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
                     transition={{ 
                       type: 'spring',
-                      stiffness: 200,
-                      damping: 25,
+                      stiffness: 300,
+                      damping: 30,
                       mass: 0.8,
                     }}
+                    style={{ transformStyle: 'preserve-3d' }}
                     className="max-w-2xl w-full space-y-12 relative"
                   >
+                    {/* Storybook page effect - paper texture feel */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="absolute -inset-8 bg-gradient-to-br from-background via-background to-muted/30 rounded-3xl -z-10 shadow-2xl"
+                    />
+                    
                     {/* Step transition sparkle burst */}
                     <motion.div
                       initial={{ opacity: 1, scale: 0 }}
@@ -810,7 +991,7 @@ export default function Quiz() {
                       transition={{ duration: 0.8, ease: "easeOut" }}
                       className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                     >
-                      <div className="w-20 h-20 bg-primary/20 rounded-full blur-xl" />
+                      <div className={`w-24 h-24 bg-gradient-to-br ${categoryMotifs[currentCategory]?.color || 'from-primary/20 to-accent/20'} rounded-full blur-2xl`} />
                     </motion.div>
                     
                     {stepQuestions.map((question, qIdx) => (
