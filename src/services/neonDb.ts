@@ -78,7 +78,6 @@ async function callNeonDbDirect<T = unknown>(
 // Profiles API
 export interface Profile {
   user_id: string;
-  email: string;
   name: string | null;
   avatar_url: string | null;
   home_airport: string | null;
@@ -94,7 +93,7 @@ export const profilesApi = {
     });
   },
   
-  update: async (userId: string, profile: { email?: string; name?: string; avatarUrl?: string; homeAirport?: string }) => {
+  update: async (userId: string, profile: { name?: string; avatarUrl?: string; homeAirport?: string }) => {
     return callNeonDbDirect<Profile[]>('/profiles', {
       method: 'PUT',
       body: { userId, ...profile },

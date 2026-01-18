@@ -39,7 +39,6 @@ async function ensureProfilesTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS profiles (
       user_id UUID PRIMARY KEY,
-      email TEXT,
       name TEXT,
       avatar_url TEXT,
       home_airport TEXT,
@@ -111,9 +110,8 @@ Deno.serve(async (req) => {
 
       // Create or update user profile
       case path === '/profiles' && req.method === 'PUT': {
-        const { userId, email, name, avatarUrl, homeAirport } = (body || {}) as { 
+        const { userId, name, avatarUrl, homeAirport } = (body || {}) as { 
           userId?: string; 
-          email?: string;
           name?: string;
           avatarUrl?: string;
           homeAirport?: string;
@@ -127,17 +125,16 @@ Deno.serve(async (req) => {
         
         await ensureProfilesTable();
         const result = await query(
-          `INSERT INTO profiles (user_id, email, name, avatar_url, home_airport, updated_at)
-           VALUES ($1, $2, $3, $4, $5, NOW())
+          `INSERT INTO profiles (user_id, name, avatar_url, home_airport, updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
            ON CONFLICT (user_id) 
            DO UPDATE SET 
-             email = COALESCE(EXCLUDED.email, profiles.email),
              name = COALESCE(EXCLUDED.name, profiles.name),
              avatar_url = COALESCE(EXCLUDED.avatar_url, profiles.avatar_url),
              home_airport = COALESCE(EXCLUDED.home_airport, profiles.home_airport),
              updated_at = NOW()
            RETURNING *`,
-          [userId, email || null, name || null, avatarUrl || null, homeAirport || null]
+          [userId, name || null, avatarUrl || null, homeAirport || null]
         );
         
         return new Response(
