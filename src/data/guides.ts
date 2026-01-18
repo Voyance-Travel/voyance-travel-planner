@@ -27,7 +27,7 @@ export const guides: Guide[] = [
     subtitle: "Experience iconic attractions authentically and affordably",
     category: "Smart Travel",
     readTime: "6 min read",
-    coverImage: "/images/guides/avoiding-tourist-traps.jpg",
+    coverImage: "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800&q=80", // Paris Eiffel Tower
     summary: "Strategic approaches to experiencing iconic attractions like the Eiffel Tower, Times Square, and the Taj Mahal without falling into common tourist traps that diminish experiences and inflate costs.",
     content: `# Avoiding Tourist Traps (Without Missing the Icons)
 
@@ -134,7 +134,7 @@ By applying even a few of these strategies, you can transform potentially disapp
     subtitle: "How to immerse in local culture, not just see it",
     category: "Destinations",
     readTime: "5 min read",
-    coverImage: "/images/guides/travel-like-a-local.jpg",
+    coverImage: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&q=80", // Street market scene
     summary: "Move beyond tourist hotspots and experience destinations authentically—from morning routines to evening traditions—creating deeper connections and more meaningful travel experiences.",
     content: `# Travel Like a Local
 
@@ -277,7 +277,7 @@ The most rewarding travel doesn't require abandoning tourist activities entirely
     subtitle: "The art of minimalist packing without sacrificing comfort",
     category: "Packing",
     readTime: "5 min read",
-    coverImage: "/images/guides/packing-for-one-bag-travel.jpg",
+    coverImage: "https://images.unsplash.com/photo-1553531384-cc64ac80f931?w=800&q=80", // Travel backpack
     summary: "Master the art of traveling with just one bag—reducing stress, saving money on baggage fees, and gaining mobility without sacrificing essentials or style.",
     content: `# Packing for One-Bag Travel
 
@@ -416,7 +416,7 @@ Remember that true one-bag mastery comes not from following a rigid formula, but
     subtitle: "Turn waiting time into mini-adventures",
     category: "Airport Hacks",
     readTime: "5 min read",
-    coverImage: "/images/guides/maximizing-long-layovers.jpg",
+    coverImage: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&q=80", // Airport window with plane
     summary: "Strategic advice for converting layovers into valuable exploration time at cities like Singapore, Istanbul, and Seoul, including time calculations, transit options, and practical tips.",
     content: `# How to Maximize Long Layovers
 
@@ -505,7 +505,7 @@ With strategic planning, your next long layover could transform from dead time i
     subtitle: "Discovering the extraordinary beyond the tourist track",
     category: "Destinations",
     readTime: "6 min read",
-    coverImage: "/images/guides/hidden-gems-in-big-cities.jpg",
+    coverImage: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80", // London hidden alley
     summary: "Venture beyond the iconic landmarks to discover authentic local experiences in the world's most visited cities—from secret gardens and underground speakeasies to neighborhood eateries where tourists rarely tread.",
     content: `# Hidden Gems in Big Cities
 
@@ -614,7 +614,7 @@ The best hidden gems aren't specific locations but moments of connection—when 
     subtitle: "Strategic timing to secure the best deals and availability",
     category: "Travel Tips",
     readTime: "4 min read",
-    coverImage: "/images/guides/best-time-to-book-2025.jpg",
+    coverImage: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80", // Mountain landscape at sunrise
     summary: "A strategic guide to timing your 2025 travel bookings for maximum savings and availability, with month-by-month recommendations for popular destinations.",
     content: `# Best Time to Book for 2025
 

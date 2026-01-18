@@ -47,10 +47,7 @@ export default function VoyanceGuides() {
               <Link to={`/guides/${guide.slug}`} className="block">
                 <div className="relative aspect-[16/10] rounded-xl overflow-hidden mb-4">
                   <img
-                    src={guide.coverImage.startsWith('/') 
-                      ? `https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&q=80`
-                      : guide.coverImage
-                    }
+                    src={guide.coverImage}
                     alt={guide.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
