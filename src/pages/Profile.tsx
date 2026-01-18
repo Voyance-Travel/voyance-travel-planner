@@ -36,7 +36,7 @@ import RotatingCoverPhoto from '@/components/profile/RotatingCoverPhoto';
 import FriendsSection from '@/components/profile/FriendsSection';
 import MemoryLane from '@/components/profile/MemoryLane';
 
-type TabType = 'overview' | 'trips' | 'preferences' | 'subscription';
+type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences';
 
 // Subscription tiers config
 const SUBSCRIPTION_TIERS = {
@@ -270,6 +270,7 @@ export default function Profile() {
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'trips' as const, label: 'My Trips' },
+    { id: 'friends' as const, label: 'Friends' },
     { id: 'subscription' as const, label: 'Subscription' },
     { id: 'preferences' as const, label: 'Preferences' },
   ];
@@ -382,8 +383,7 @@ export default function Profile() {
             {/* Travel Map */}
             <TravelMap userId={user?.id || ''} />
 
-            {/* Friends Section */}
-            <FriendsSection userId={user?.id || ''} />
+            {/* Removed from overview - now in its own tab */}
 
             {/* Surprise Trip Card - show as premium for demo users */}
             <SurpriseTripCard isPremium={isDemo || !!subscription?.subscribed} />
@@ -539,6 +539,15 @@ export default function Profile() {
                 </div>
               </>
             )}
+          </motion.div>
+        )}
+
+        {activeTab === 'friends' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <FriendsSection userId={user?.id || ''} />
           </motion.div>
         )}
 
