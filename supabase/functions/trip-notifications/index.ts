@@ -323,17 +323,19 @@ serve(async (req) => {
         );
       }
 
-      // Get active trips for user
+      // Get active trips for user - handle gracefully if none found
       const { data: trips, error } = await supabase
         .from('trips')
         .select('id, name, destination, metadata')
         .eq('user_id', userId)
-        .eq('status', 'active');
+        .in('status', ['active', 'planning', 'booked']);
 
       if (error) {
+        console.error('[trip-notifications] Error fetching trips:', error);
+        // Return empty notifications instead of error
         return new Response(
-          JSON.stringify({ error: 'Failed to fetch trips' }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ success: true, notifications: [] }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
