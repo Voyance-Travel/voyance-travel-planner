@@ -400,24 +400,24 @@ export default function PlannerFlightEnhanced() {
     <MainLayout>
       <Head title="Select Flights | Voyance" description="Choose your outbound and return flights" />
 
-      <section className="py-8 min-h-screen bg-background">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+      <section className="py-10 min-h-screen bg-background">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
           <DynamicDestinationPhotos
             destination={destination}
             startDate={startDate}
             endDate={endDate}
             travelers={travelers}
             variant="banner"
-            className="mb-6"
+            className="mb-8"
           />
 
-          <div className="grid lg:grid-cols-[1fr_320px] gap-6">
+          <div className="grid lg:grid-cols-[1fr_340px] gap-10">
             <div>
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-                <h1 className="font-serif text-2xl sm:text-3xl font-bold text-foreground mb-2">
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+                <h1 className="font-serif text-3xl sm:text-4xl font-bold text-foreground mb-3">
                   Select Your Flights
                 </h1>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground text-lg">
                   {origin} ↔ {destination} · {travelers} traveler{travelers > 1 ? 's' : ''}
                 </p>
               </motion.div>
@@ -436,7 +436,7 @@ export default function PlannerFlightEnhanced() {
                     priceRange={[0, 5000]}
                   />
 
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <AnimatePresence mode="wait">
                       {outboundLoading ? (
                         <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
@@ -459,7 +459,7 @@ export default function PlannerFlightEnhanced() {
                           </CardContent>
                         </Card>
                       ) : (
-                        <motion.div key="flights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                        <motion.div key="flights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
                           {enhancedOutbound.map((flight) => (
                             <EnhancedFlightCard
                               key={flight.id}
@@ -484,7 +484,7 @@ export default function PlannerFlightEnhanced() {
                     priceRange={[0, 5000]}
                   />
 
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <AnimatePresence mode="wait">
                       {returnLoading ? (
                         <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
@@ -507,7 +507,7 @@ export default function PlannerFlightEnhanced() {
                           </CardContent>
                         </Card>
                       ) : (
-                        <motion.div key="flights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                        <motion.div key="flights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
                           {enhancedReturn.map((flight) => (
                             <EnhancedFlightCard
                               key={flight.id}

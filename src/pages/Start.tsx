@@ -30,7 +30,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// Airport Autocomplete - Editorial Style
+// Airport Autocomplete - Editorial Style with Metro Area Grouping
 function AirportAutocomplete({
   value,
   onChange,
@@ -46,7 +46,8 @@ function AirportAutocomplete({
   const [inputValue, setInputValue] = useState(value);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [loading, setLoading] = useState(false);
-  
+  const [metroName, setMetroName] = useState<string | null>(null);
+
   const debouncedQuery = useDebounce(inputValue, 300);
 
   useEffect(() => {
@@ -59,11 +60,16 @@ function AirportAutocomplete({
   useEffect(() => {
     if (debouncedQuery.length >= 1) {
       setLoading(true);
+      import('@/services/locationSearchAPI').then(({ getMetroAreaInfo }) => {
+        const metro = getMetroAreaInfo(debouncedQuery);
+        setMetroName(metro?.name || null);
+      });
       searchAirports(debouncedQuery, 12)
         .then(setAirports)
         .finally(() => setLoading(false));
     } else {
       setAirports([]);
+      setMetroName(null);
     }
   }, [debouncedQuery]);
 
@@ -96,10 +102,10 @@ function AirportAutocomplete({
         className="h-12 pl-8 text-base bg-transparent border-0 border-b border-border rounded-none focus:border-primary focus:ring-0 font-sans"
       />
       {showDropdown && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 overflow-hidden max-h-72 overflow-y-auto"
+          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 overflow-hidden max-h-80 overflow-y-auto rounded-xl"
         >
           {loading ? (
             <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
@@ -107,20 +113,32 @@ function AirportAutocomplete({
               <span className="text-sm font-sans">Searching airports...</span>
             </div>
           ) : airports.length > 0 ? (
-            airports.map((airport) => (
-              <button
-                key={airport.id}
-                type="button"
-                className="w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
-                onMouseDown={() => handleSelect(airport)}
-              >
-                <span className="text-xs font-medium text-primary tracking-wide w-10">{airport.code}</span>
-                <div className="min-w-0">
-                  <p className="font-sans text-sm text-foreground truncate">{airport.name}</p>
-                  <p className="text-xs text-muted-foreground">{airport.city}, {airport.country}</p>
+            <>
+              {/* Metro grouping header */}
+              {metroName && airports.length > 1 && (
+                <div className="px-4 py-2 bg-primary/5 border-b border-border flex items-center gap-2">
+                  <MapPin className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-medium text-primary uppercase tracking-wide">{metroName} Area Airports</span>
                 </div>
-              </button>
-            ))
+              )}
+              {airports.map((airport, idx) => (
+                <button
+                  key={airport.id}
+                  type="button"
+                  className={cn(
+                    "w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3 transition-colors",
+                    idx < airports.length - 1 && "border-b border-border/50"
+                  )}
+                  onMouseDown={() => handleSelect(airport)}
+                >
+                  <span className="text-xs font-semibold text-primary tracking-wide w-10">{airport.code}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-sans text-sm text-foreground truncate">{airport.name}</p>
+                    <p className="text-xs text-muted-foreground">{airport.city}, {airport.country}</p>
+                  </div>
+                </button>
+              ))}
+            </>
           ) : inputValue.length >= 1 ? (
             <div className="px-4 py-6 text-center text-muted-foreground text-sm font-sans">
               No airports found
