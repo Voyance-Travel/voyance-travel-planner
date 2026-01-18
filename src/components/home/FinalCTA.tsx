@@ -52,23 +52,6 @@ export default function FinalCTA() {
               </Link>
             </Button>
 
-            {/* Trust Indicators */}
-            <div className="mt-12 pt-8 border-t border-border">
-              <div className="flex flex-wrap gap-8 text-sm text-muted-foreground font-sans">
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  No booking fees
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  Best price guarantee
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  24/7 support
-                </div>
-              </div>
-            </div>
           </motion.div>
 
           {/* Right: Stacked Image Composition */}
@@ -79,12 +62,12 @@ export default function FinalCTA() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="relative"
           >
-            {/* Main large image */}
+            {/* Main large image - Amalfi Coast */}
             <div className="relative z-10">
               <div className="aspect-[4/5] overflow-hidden">
                 <img
-                  src="https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=800"
-                  alt="Travel inspiration"
+                  src="https://images.unsplash.com/photo-1534008897995-27a23e859048?w=800"
+                  alt="Amalfi Coast, Italy"
                   className="w-full h-full object-cover"
                 />
               </div>
