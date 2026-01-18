@@ -1,12 +1,12 @@
 /**
  * Users Search API Service
- * Endpoints for searching users by name, username, or email
+ * 
+ * Search users by name or handle - now using Supabase directly.
+ * Uses profiles table for search functionality.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // TYPES
@@ -25,59 +25,39 @@ export interface UsersSearchResponse {
 }
 
 // ============================================================================
-// API HELPERS
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  return { 'Content-Type': 'application/json' };
-}
-
-// ============================================================================
-// API FUNCTIONS
+// API FUNCTIONS - Using Supabase profiles table
 // ============================================================================
 
 /**
- * Search users by name, username, or email
+ * Search users by name or handle
  * Requires at least 2 characters in query
  */
 export async function searchUsers(query: string): Promise<UserSearchResult[]> {
   if (!query || query.length < 2) {
     return [];
   }
-  
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(
-    `${BACKEND_URL}/api/v1/users/search?q=${encodeURIComponent(query)}`,
-    {
-      method: 'GET',
-      headers,
-    }
-  );
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Failed to search users: ${response.statusText}`);
+
+  const searchPattern = `%${query}%`;
+
+  // Search by display_name or handle
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, handle, avatar_url')
+    .or(`display_name.ilike.${searchPattern},handle.ilike.${searchPattern}`)
+    .limit(20);
+
+  if (error) {
+    console.error('[UsersSearchAPI] Search error:', error);
+    throw new Error(error.message);
   }
-  
-  const data: UsersSearchResponse = await response.json();
-  return data.results;
+
+  return (data || []).map(profile => ({
+    id: profile.id,
+    name: profile.display_name || 'User',
+    username: profile.handle || '',
+    email: '', // Email not exposed for privacy
+    avatar: profile.avatar_url || undefined,
+  }));
 }
 
 // ============================================================================

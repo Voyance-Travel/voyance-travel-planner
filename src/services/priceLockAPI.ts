@@ -1,16 +1,12 @@
 /**
  * Voyance Price Lock API Service
  * 
- * Integrates with Railway backend price lock endpoints:
- * - POST /api/v1/price-lock - Create a new price lock
- * - GET /api/v1/price-lock/:id - Get price lock status
- * - DELETE /api/v1/price-lock/:id - Cancel a price lock
+ * Price lock functionality - now client-side with trip metadata.
+ * Stores price lock data in trip metadata field.
  */
 
 import { supabase } from '@/integrations/supabase/client';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ============================================================================
 // Types
@@ -24,6 +20,7 @@ export interface CreatePriceLockInput {
   itemId: string;
   price: number;
   currency?: string;
+  tripId?: string;
 }
 
 export interface PriceLockData {
@@ -33,9 +30,9 @@ export interface PriceLockData {
   lockedPrice: number;
   currency: string;
   status: PriceLockStatus;
-  expiresIn: number; // seconds until expiration
+  expiresIn: number;
   expiresAt?: string;
-  clientSecret?: string; // Stripe client secret for payment
+  clientSecret?: string;
 }
 
 export interface PriceLockResponse {
@@ -44,7 +41,6 @@ export interface PriceLockResponse {
     expiresAt: string;
     amount: number;
   };
-  // Legacy fields for backward compatibility
   id: string;
   itemType: PriceLockItemType;
   itemId: string;
@@ -61,28 +57,34 @@ export interface PriceLockStatusResponse {
   error?: string;
 }
 
+// Price lock duration (30 minutes)
+const PRICE_LOCK_DURATION_MS = 30 * 60 * 1000;
+
 // ============================================================================
-// API Helpers
+// Price Lock Storage (using localStorage as fallback)
 // ============================================================================
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    };
+const PRICE_LOCKS_KEY = 'voyance_price_locks';
+
+function getPriceLocks(): Record<string, PriceLockData> {
+  try {
+    const stored = localStorage.getItem(PRICE_LOCKS_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
   }
-  
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  return { 'Content-Type': 'application/json' };
+}
+
+function savePriceLock(lock: PriceLockData): void {
+  const locks = getPriceLocks();
+  locks[lock.id] = lock;
+  localStorage.setItem(PRICE_LOCKS_KEY, JSON.stringify(locks));
+}
+
+function removePriceLock(lockId: string): void {
+  const locks = getPriceLocks();
+  delete locks[lockId];
+  localStorage.setItem(PRICE_LOCKS_KEY, JSON.stringify(locks));
 }
 
 // ============================================================================
@@ -95,25 +97,65 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 export async function createPriceLock(
   input: CreatePriceLockInput
 ): Promise<PriceLockResponse> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}/api/v1/price-lock`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      itemType: input.itemType,
-      itemId: input.itemId,
-      price: input.price,
-      currency: input.currency || 'USD',
-    }),
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
+  const lockId = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + PRICE_LOCK_DURATION_MS).toISOString();
+  const expiresIn = Math.floor(PRICE_LOCK_DURATION_MS / 1000);
+
+  const lock: PriceLockData = {
+    id: lockId,
+    itemType: input.itemType,
+    itemId: input.itemId,
+    lockedPrice: input.price,
+    currency: input.currency || 'USD',
+    status: 'active',
+    expiresIn,
+    expiresAt,
+  };
+
+  savePriceLock(lock);
+
+  // If tripId provided, also update trip metadata
+  if (input.tripId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('metadata')
+        .eq('id', input.tripId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (trip) {
+        const metadata = (trip.metadata as Record<string, unknown>) || {};
+        const priceLocks = (metadata.priceLocks as Record<string, unknown>) || {};
+        priceLocks[lockId] = lock;
+
+        await supabase
+          .from('trips')
+          .update({
+            metadata: JSON.parse(JSON.stringify({ ...metadata, priceLocks })),
+            price_lock_expires_at: expiresAt,
+          })
+          .eq('id', input.tripId)
+          .eq('user_id', user.id);
+      }
+    }
   }
-  
-  return response.json();
+
+  return {
+    priceLock: {
+      id: lockId,
+      expiresAt,
+      amount: input.price,
+    },
+    id: lockId,
+    itemType: input.itemType,
+    itemId: input.itemId,
+    lockedPrice: input.price,
+    currency: input.currency || 'USD',
+    status: 'active',
+    expiresIn,
+  };
 }
 
 /**
@@ -122,19 +164,23 @@ export async function createPriceLock(
 export async function getPriceLockStatus(
   lockId: string
 ): Promise<PriceLockStatusResponse> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}/api/v1/price-lock/${lockId}`, {
-    method: 'GET',
-    headers,
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `HTTP ${response.status}`);
+  const locks = getPriceLocks();
+  const lock = locks[lockId];
+
+  if (!lock) {
+    return { success: false, error: 'Price lock not found' };
   }
-  
-  return response.json();
+
+  // Check if expired
+  if (lock.expiresAt && new Date(lock.expiresAt) < new Date()) {
+    lock.status = 'expired';
+    lock.expiresIn = 0;
+    savePriceLock(lock);
+  } else if (lock.expiresAt) {
+    lock.expiresIn = Math.max(0, Math.floor((new Date(lock.expiresAt).getTime() - Date.now()) / 1000));
+  }
+
+  return { success: true, priceLock: lock };
 }
 
 /**
@@ -143,19 +189,17 @@ export async function getPriceLockStatus(
 export async function cancelPriceLock(
   lockId: string
 ): Promise<{ success: boolean; message?: string }> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}/api/v1/price-lock/${lockId}`, {
-    method: 'DELETE',
-    headers,
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `HTTP ${response.status}`);
+  const locks = getPriceLocks();
+  const lock = locks[lockId];
+
+  if (!lock) {
+    return { success: false, message: 'Price lock not found' };
   }
-  
-  return response.json();
+
+  lock.status = 'cancelled';
+  savePriceLock(lock);
+
+  return { success: true, message: 'Price lock cancelled' };
 }
 
 /**
@@ -169,14 +213,14 @@ export function calculateTimeRemaining(expiresAt: string): {
   const now = Date.now();
   const expiry = new Date(expiresAt).getTime();
   const remaining = Math.max(0, Math.floor((expiry - now) / 1000));
-  
+
   if (remaining === 0) {
     return { expired: true, seconds: 0, formatted: 'Expired' };
   }
-  
+
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
-  
+
   return {
     expired: false,
     seconds: remaining,
@@ -188,21 +232,19 @@ export function calculateTimeRemaining(expiresAt: string): {
 // React Query Hooks
 // ============================================================================
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
 export function usePriceLockStatus(lockId: string | null) {
   return useQuery({
     queryKey: ['price-lock', lockId],
     queryFn: () => lockId ? getPriceLockStatus(lockId) : Promise.reject('No lock ID'),
     enabled: !!lockId,
-    staleTime: 10_000, // 10 seconds - refresh frequently for timer accuracy
-    refetchInterval: 10_000, // Auto-refresh every 10 seconds
+    staleTime: 10_000,
+    refetchInterval: 10_000,
   });
 }
 
 export function useCreatePriceLock() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: createPriceLock,
     onSuccess: (data) => {
@@ -216,7 +258,7 @@ export function useCreatePriceLock() {
 
 export function useCancelPriceLock() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: cancelPriceLock,
     onSuccess: (_, lockId) => {

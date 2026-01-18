@@ -1,16 +1,12 @@
 /**
  * Voyance Dashboard API Service
  * 
- * Integrates with Railway backend dashboard endpoints:
- * - GET /api/v1/dashboard - Get user's saved trips and active sessions
- * - GET /api/v1/user/budget-zone - Get user's budget zone visualization
+ * Dashboard data - now using Supabase directly.
+ * Aggregates data from trips table.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // Types
@@ -49,83 +45,166 @@ export interface BudgetZoneResponse {
 }
 
 // ============================================================================
-// API Helpers
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  return { 'Content-Type': 'application/json' };
-}
-
-// ============================================================================
-// Dashboard API
+// Dashboard API - Using Supabase trips table
 // ============================================================================
 
 /**
- * Get user's dashboard data (saved trips and active sessions)
+ * Get user's dashboard data (saved trips)
  */
 export async function getDashboard(): Promise<DashboardResponse> {
-  try {
-    const headers = await getAuthHeader();
-    
-    const response = await fetch(`${BACKEND_URL}/api/v1/dashboard`, {
-      method: 'GET',
-      headers,
-      credentials: 'include',
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || errorData._error || `HTTP ${response.status}`);
-    }
-    
-    return response.json();
-  } catch (error) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { trips: [], redisCache: [] };
+  }
+
+  const { data: trips, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
     console.error('[DashboardAPI] Get dashboard error:', error);
     throw error;
   }
+
+  const savedTrips: SavedTrip[] = (trips || []).map(trip => {
+    const metadata = trip.metadata as Record<string, unknown> | null;
+    return {
+      sessionId: (metadata?.sessionId as string) || trip.id,
+      tripDetails: {
+        id: trip.id,
+        destination: trip.destination,
+        startDate: trip.start_date,
+        endDate: trip.end_date,
+        status: trip.status,
+        travelers: trip.travelers,
+        budgetTier: trip.budget_tier,
+      },
+      createdAt: trip.created_at,
+      updatedAt: trip.updated_at,
+    };
+  });
+
+  return {
+    trips: savedTrips,
+    redisCache: [], // No longer using Redis cache
+  };
 }
 
 /**
- * Get user's budget zone visualization
+ * Get user's budget zone based on their preferences or provided budget
  */
 export async function getBudgetZone(budget?: number): Promise<BudgetZoneResponse> {
-  try {
-    const headers = await getAuthHeader();
-    
-    const queryParams = budget ? `?budget=${budget}` : '';
-    
-    const response = await fetch(`${BACKEND_URL}/api/v1/user/budget-zone${queryParams}`, {
-      method: 'GET',
-      headers,
-      credentials: 'include',
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || errorData._error || `HTTP ${response.status}`);
-    }
-    
-    return response.json();
-  } catch (error) {
-    console.error('[DashboardAPI] Get budget zone error:', error);
-    throw error;
+  // If budget provided, calculate directly
+  if (budget !== undefined) {
+    return calculateBudgetZone(budget);
   }
+
+  // Otherwise, get from user preferences
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return getDefaultBudgetZone();
+  }
+
+  const { data: preferences } = await supabase
+    .from('user_preferences')
+    .select('budget_tier, budget_range')
+    .eq('user_id', user.id)
+    .single();
+
+  if (preferences?.budget_tier) {
+    return getBudgetZoneFromTier(preferences.budget_tier);
+  }
+
+  if (preferences?.budget_range) {
+    const range = preferences.budget_range as { max?: number };
+    if (range.max) {
+      return calculateBudgetZone(range.max);
+    }
+  }
+
+  return getDefaultBudgetZone();
+}
+
+function calculateBudgetZone(budget: number): BudgetZoneResponse {
+  if (budget < 1000) {
+    return {
+      zone: 'budget',
+      color: 'green',
+      description: 'You prefer affordable, value-focused travel experiences.',
+      threshold: { min: 0, max: 1000 },
+    };
+  } else if (budget < 3000) {
+    return {
+      zone: 'moderate',
+      color: 'blue',
+      description: 'You balance comfort and value in your travel choices.',
+      threshold: { min: 1000, max: 3000 },
+    };
+  } else if (budget < 7000) {
+    return {
+      zone: 'premium',
+      color: 'purple',
+      description: 'You enjoy elevated experiences and premium amenities.',
+      threshold: { min: 3000, max: 7000 },
+    };
+  } else {
+    return {
+      zone: 'luxury',
+      color: 'amber',
+      description: 'You seek the finest travel experiences without limits.',
+      threshold: { min: 7000, max: 50000 },
+    };
+  }
+}
+
+function getBudgetZoneFromTier(tier: string): BudgetZoneResponse {
+  switch (tier.toLowerCase()) {
+    case 'budget':
+    case 'safe':
+      return {
+        zone: 'budget',
+        color: 'green',
+        description: 'You prefer affordable, value-focused travel experiences.',
+        threshold: { min: 0, max: 1000 },
+      };
+    case 'moderate':
+    case 'stretch':
+      return {
+        zone: 'moderate',
+        color: 'blue',
+        description: 'You balance comfort and value in your travel choices.',
+        threshold: { min: 1000, max: 3000 },
+      };
+    case 'premium':
+    case 'splurge':
+      return {
+        zone: 'premium',
+        color: 'purple',
+        description: 'You enjoy elevated experiences and premium amenities.',
+        threshold: { min: 3000, max: 7000 },
+      };
+    case 'luxury':
+      return {
+        zone: 'luxury',
+        color: 'amber',
+        description: 'You seek the finest travel experiences without limits.',
+        threshold: { min: 7000, max: 50000 },
+      };
+    default:
+      return getDefaultBudgetZone();
+  }
+}
+
+function getDefaultBudgetZone(): BudgetZoneResponse {
+  return {
+    zone: 'moderate',
+    color: 'blue',
+    description: 'You balance comfort and value in your travel choices.',
+    threshold: { min: 1000, max: 3000 },
+  };
 }
 
 // ============================================================================
