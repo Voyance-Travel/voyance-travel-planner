@@ -25,8 +25,12 @@ const steps = [
 
 export default function HowItWorksCarousel() {
   return (
-    <section className="py-24 bg-background border-t border-border">
-      <div className="max-w-6xl mx-auto px-4">
+    <section className="py-24 bg-gradient-to-b from-background to-secondary/30 border-t border-border relative overflow-hidden">
+      {/* Subtle decorative elements */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-3xl" />
+      <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-accent/5 to-transparent rounded-full blur-3xl" />
+      
+      <div className="max-w-6xl mx-auto px-4 relative z-10">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -34,7 +38,7 @@ export default function HowItWorksCarousel() {
           viewport={{ once: true }}
           className="max-w-2xl mb-16"
         >
-          <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase mb-4">
+          <p className="text-sm font-medium tracking-widest text-accent uppercase mb-4">
             How It Works
           </p>
           <h2 className="text-3xl md:text-4xl font-display font-semibold text-foreground leading-tight">
@@ -55,7 +59,7 @@ export default function HowItWorksCarousel() {
             >
               <div className="flex gap-6">
                 {/* Number */}
-                <span className="text-5xl font-display font-light text-muted-foreground/30 group-hover:text-primary/40 transition-colors">
+                <span className="text-5xl font-display font-light text-primary/20 group-hover:text-accent/60 transition-colors">
                   {step.number}
                 </span>
                 

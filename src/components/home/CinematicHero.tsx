@@ -18,7 +18,9 @@ export default function CinematicHero() {
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-black/40" />
+        {/* Richer gradient overlay with color */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-black/60" />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-transparent to-accent/10" />
       </div>
 
       {/* Content */}
@@ -56,7 +58,7 @@ export default function CinematicHero() {
             <Button 
               asChild 
               size="lg" 
-              className="text-base px-8 bg-white text-foreground hover:bg-white/90"
+              className="text-base px-8 bg-gradient-to-r from-accent to-gold text-white hover:opacity-90 shadow-accent"
             >
               <Link to={ROUTES.START}>
                 Start Planning

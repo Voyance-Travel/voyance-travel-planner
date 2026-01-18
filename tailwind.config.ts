@@ -47,6 +47,14 @@ export default {
           DEFAULT: "hsl(var(--gold))",
           foreground: "hsl(var(--gold-foreground))",
         },
+        emerald: {
+          DEFAULT: "hsl(var(--emerald))",
+          foreground: "hsl(var(--emerald-foreground))",
+        },
+        ocean: {
+          DEFAULT: "hsl(var(--ocean))",
+          foreground: "hsl(var(--ocean-foreground))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
@@ -76,6 +84,14 @@ export default {
         'medium': 'var(--shadow-medium)',
         'elevated': 'var(--shadow-elevated)',
         'glow': 'var(--shadow-glow)',
+        'accent': 'var(--shadow-accent)',
+      },
+      backgroundImage: {
+        'gradient-accent': 'var(--gradient-accent)',
+        'gradient-primary': 'var(--gradient-primary)',
+        'gradient-sunset': 'var(--gradient-sunset)',
+        'gradient-ocean': 'var(--gradient-ocean)',
+        'gradient-warm': 'var(--gradient-warm)',
       },
       keyframes: {
         "accordion-down": {
