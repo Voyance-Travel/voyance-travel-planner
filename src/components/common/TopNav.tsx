@@ -28,9 +28,9 @@ const VoyanceLogo = ({ isTransparent }: { isTransparent: boolean }) => (
 );
 
 const navLinks = [
+  { href: ROUTES.START, label: 'Start Planning', highlight: true },
   { href: ROUTES.EXPLORE, label: 'Explore' },
   { href: ROUTES.DESTINATIONS, label: 'Destinations' },
-  { href: ROUTES.ABOUT, label: 'About' },
   { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
 ];
 
@@ -123,7 +123,11 @@ export default function TopNav() {
                 key={link.href}
                 to={link.href}
                 className={`text-sm font-medium transition-colors hover:opacity-80 ${
-                  location.pathname === link.href
+                  link.highlight
+                    ? isTransparent
+                      ? 'text-white font-semibold'
+                      : 'text-primary font-semibold'
+                    : location.pathname === link.href
                     ? isTransparent
                       ? 'text-white'
                       : 'text-primary'
