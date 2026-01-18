@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, 
   Plane, 
   Calendar, 
-  Globe,
-  CheckCircle,
-  Clock,
-  Stamp
+  Heart,
+  Star,
+  Camera
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -29,117 +27,128 @@ interface TripDestination {
   end_date: string | null;
 }
 
-// Approximate coordinates for major cities/countries for the world map
-const LOCATION_COORDS: Record<string, { x: number; y: number }> = {
-  // Cities
-  'paris': { x: 48, y: 28 },
-  'london': { x: 47, y: 25 },
-  'rome': { x: 51, y: 32 },
-  'tokyo': { x: 82, y: 35 },
-  'kyoto': { x: 81, y: 36 },
-  'osaka': { x: 81, y: 37 },
-  'new york': { x: 25, y: 32 },
-  'los angeles': { x: 12, y: 36 },
-  'san francisco': { x: 10, y: 34 },
-  'bali': { x: 76, y: 58 },
-  'sydney': { x: 88, y: 72 },
-  'melbourne': { x: 86, y: 74 },
-  'dubai': { x: 62, y: 42 },
-  'singapore': { x: 74, y: 52 },
-  'bangkok': { x: 72, y: 46 },
-  'hong kong': { x: 76, y: 42 },
-  'seoul': { x: 80, y: 34 },
-  'barcelona': { x: 47, y: 32 },
-  'amsterdam': { x: 49, y: 24 },
-  'berlin': { x: 52, y: 24 },
-  'vienna': { x: 53, y: 28 },
-  'prague': { x: 52, y: 26 },
-  'lisbon': { x: 43, y: 34 },
-  'madrid': { x: 45, y: 32 },
-  'venice': { x: 51, y: 30 },
-  'florence': { x: 50, y: 32 },
-  'milan': { x: 50, y: 30 },
-  'athens': { x: 55, y: 36 },
-  'istanbul': { x: 58, y: 32 },
-  'cairo': { x: 58, y: 42 },
-  'marrakech': { x: 44, y: 40 },
-  'cape town': { x: 54, y: 72 },
-  'nairobi': { x: 60, y: 52 },
-  'mumbai': { x: 68, y: 44 },
-  'delhi': { x: 68, y: 40 },
-  'maldives': { x: 68, y: 52 },
-  'phuket': { x: 72, y: 50 },
-  'hanoi': { x: 74, y: 44 },
-  'ho chi minh': { x: 74, y: 50 },
-  'reykjavik': { x: 38, y: 16 },
-  'mexico city': { x: 18, y: 44 },
-  'cancun': { x: 22, y: 44 },
-  'rio de janeiro': { x: 34, y: 64 },
-  'buenos aires': { x: 30, y: 72 },
-  'santorini': { x: 56, y: 35 },
-  'mykonos': { x: 56, y: 34 },
-  'amalfi': { x: 52, y: 33 },
-  'swiss alps': { x: 50, y: 28 },
-  'zurich': { x: 50, y: 28 },
-  'queenstown': { x: 92, y: 76 },
-  'fiji': { x: 95, y: 60 },
-  'tahiti': { x: 5, y: 60 },
+interface Destination {
+  id: string;
+  name: string;
+  country: string;
+  visited?: boolean;
+  upcoming?: boolean;
+  dream?: boolean;
+  visitDate?: string;
+  upcomingDate?: string;
+  rating?: number;
+  lat: number;
+  lng: number;
+}
+
+// Real lat/lng coordinates for major cities
+const LOCATION_COORDS: Record<string, { lat: number; lng: number }> = {
+  'paris': { lat: 48.8566, lng: 2.3522 },
+  'london': { lat: 51.5074, lng: -0.1278 },
+  'rome': { lat: 41.9028, lng: 12.4964 },
+  'tokyo': { lat: 35.6762, lng: 139.6503 },
+  'kyoto': { lat: 35.0116, lng: 135.7681 },
+  'osaka': { lat: 34.6937, lng: 135.5023 },
+  'new york': { lat: 40.7128, lng: -74.0060 },
+  'los angeles': { lat: 34.0522, lng: -118.2437 },
+  'san francisco': { lat: 37.7749, lng: -122.4194 },
+  'bali': { lat: -8.3405, lng: 115.0920 },
+  'sydney': { lat: -33.8688, lng: 151.2093 },
+  'melbourne': { lat: -37.8136, lng: 144.9631 },
+  'dubai': { lat: 25.2048, lng: 55.2708 },
+  'singapore': { lat: 1.3521, lng: 103.8198 },
+  'bangkok': { lat: 13.7563, lng: 100.5018 },
+  'hong kong': { lat: 22.3193, lng: 114.1694 },
+  'seoul': { lat: 37.5665, lng: 126.9780 },
+  'barcelona': { lat: 41.3851, lng: 2.1734 },
+  'amsterdam': { lat: 52.3676, lng: 4.9041 },
+  'berlin': { lat: 52.5200, lng: 13.4050 },
+  'vienna': { lat: 48.2082, lng: 16.3738 },
+  'prague': { lat: 50.0755, lng: 14.4378 },
+  'lisbon': { lat: 38.7223, lng: -9.1393 },
+  'madrid': { lat: 40.4168, lng: -3.7038 },
+  'venice': { lat: 45.4408, lng: 12.3155 },
+  'florence': { lat: 43.7696, lng: 11.2558 },
+  'milan': { lat: 45.4642, lng: 9.1900 },
+  'athens': { lat: 37.9838, lng: 23.7275 },
+  'istanbul': { lat: 41.0082, lng: 28.9784 },
+  'cairo': { lat: 30.0444, lng: 31.2357 },
+  'marrakech': { lat: 31.6295, lng: -7.9811 },
+  'cape town': { lat: -33.9249, lng: 18.4241 },
+  'nairobi': { lat: -1.2921, lng: 36.8219 },
+  'mumbai': { lat: 19.0760, lng: 72.8777 },
+  'delhi': { lat: 28.7041, lng: 77.1025 },
+  'maldives': { lat: 3.2028, lng: 73.2207 },
+  'phuket': { lat: 7.8804, lng: 98.3923 },
+  'hanoi': { lat: 21.0278, lng: 105.8342 },
+  'ho chi minh': { lat: 10.8231, lng: 106.6297 },
+  'reykjavik': { lat: 64.1466, lng: -21.9426 },
+  'mexico city': { lat: 19.4326, lng: -99.1332 },
+  'cancun': { lat: 21.1619, lng: -86.8515 },
+  'rio de janeiro': { lat: -22.9068, lng: -43.1729 },
+  'buenos aires': { lat: -34.6037, lng: -58.3816 },
+  'santorini': { lat: 36.3932, lng: 25.4615 },
+  'mykonos': { lat: 37.4467, lng: 25.3289 },
+  'amalfi': { lat: 40.6340, lng: 14.6027 },
+  'zurich': { lat: 47.3769, lng: 8.5417 },
+  'queenstown': { lat: -45.0312, lng: 168.6626 },
+  'fiji': { lat: -17.7134, lng: 178.0650 },
+  'tahiti': { lat: -17.6509, lng: -149.4260 },
   // Countries (center points)
-  'france': { x: 47, y: 30 },
-  'italy': { x: 51, y: 32 },
-  'spain': { x: 45, y: 33 },
-  'germany': { x: 51, y: 26 },
-  'uk': { x: 46, y: 24 },
-  'japan': { x: 82, y: 36 },
-  'usa': { x: 20, y: 35 },
-  'australia': { x: 85, y: 68 },
-  'thailand': { x: 72, y: 48 },
-  'indonesia': { x: 76, y: 56 },
-  'vietnam': { x: 74, y: 46 },
-  'india': { x: 68, y: 44 },
-  'brazil': { x: 32, y: 58 },
-  'mexico': { x: 18, y: 44 },
-  'greece': { x: 55, y: 35 },
-  'portugal': { x: 43, y: 34 },
-  'netherlands': { x: 49, y: 24 },
-  'morocco': { x: 44, y: 40 },
-  'egypt': { x: 58, y: 42 },
-  'south africa': { x: 56, y: 70 },
-  'new zealand': { x: 94, y: 76 },
-  'canada': { x: 22, y: 22 },
-  'argentina': { x: 28, y: 72 },
-  'peru': { x: 24, y: 58 },
-  'chile': { x: 26, y: 68 },
-  'colombia': { x: 24, y: 50 },
-  'costa rica': { x: 22, y: 48 },
-  'iceland': { x: 38, y: 16 },
-  'norway': { x: 50, y: 18 },
-  'sweden': { x: 52, y: 18 },
-  'finland': { x: 56, y: 16 },
-  'russia': { x: 70, y: 20 },
-  'china': { x: 74, y: 36 },
-  'korea': { x: 80, y: 34 },
-  'malaysia': { x: 74, y: 52 },
-  'philippines': { x: 78, y: 48 },
-  'uae': { x: 62, y: 42 },
-  'israel': { x: 58, y: 40 },
-  'jordan': { x: 58, y: 40 },
-  'turkey': { x: 58, y: 34 },
-  'croatia': { x: 52, y: 30 },
-  'kenya': { x: 60, y: 52 },
-  'tanzania': { x: 60, y: 56 },
+  'france': { lat: 46.2276, lng: 2.2137 },
+  'italy': { lat: 41.8719, lng: 12.5674 },
+  'spain': { lat: 40.4637, lng: -3.7492 },
+  'germany': { lat: 51.1657, lng: 10.4515 },
+  'uk': { lat: 55.3781, lng: -3.4360 },
+  'japan': { lat: 36.2048, lng: 138.2529 },
+  'usa': { lat: 37.0902, lng: -95.7129 },
+  'australia': { lat: -25.2744, lng: 133.7751 },
+  'thailand': { lat: 15.8700, lng: 100.9925 },
+  'indonesia': { lat: -0.7893, lng: 113.9213 },
+  'vietnam': { lat: 14.0583, lng: 108.2772 },
+  'india': { lat: 20.5937, lng: 78.9629 },
+  'brazil': { lat: -14.2350, lng: -51.9253 },
+  'mexico': { lat: 23.6345, lng: -102.5528 },
+  'greece': { lat: 39.0742, lng: 21.8243 },
+  'portugal': { lat: 39.3999, lng: -8.2245 },
+  'netherlands': { lat: 52.1326, lng: 5.2913 },
+  'morocco': { lat: 31.7917, lng: -7.0926 },
+  'egypt': { lat: 26.8206, lng: 30.8025 },
+  'south africa': { lat: -30.5595, lng: 22.9375 },
+  'new zealand': { lat: -40.9006, lng: 174.8860 },
+  'canada': { lat: 56.1304, lng: -106.3468 },
+  'argentina': { lat: -38.4161, lng: -63.6167 },
 };
 
-function getCoordinates(destination: string): { x: number; y: number } | null {
+// Equirectangular projection for lat/lng to percentage position
+const equirectangularProjection = (lat: number, lng: number) => {
+  const x = ((lng + 180) / 360) * 100;
+  const y = ((90 - lat) / 180) * 100;
+  return { left: `${x}%`, top: `${y}%` };
+};
+
+// Get pin styling based on destination type
+const getPinStyling = (destination: Destination) => {
+  if (destination.visited) return 'bg-emerald-500 border-emerald-600';
+  if (destination.upcoming) return 'bg-blue-500 border-blue-600';
+  if (destination.dream) return 'bg-pink-500 border-pink-600';
+  return 'bg-gray-500 border-gray-600';
+};
+
+const getPinIcon = (destination: Destination) => {
+  if (destination.visited) return MapPin;
+  if (destination.upcoming) return Plane;
+  if (destination.dream) return Heart;
+  return MapPin;
+};
+
+function getCoordinates(destination: string): { lat: number; lng: number } | null {
   const lower = destination.toLowerCase();
-  
-  // Try exact match first
   for (const [key, coords] of Object.entries(LOCATION_COORDS)) {
     if (lower.includes(key)) {
       return coords;
     }
   }
-  
   return null;
 }
 
@@ -154,36 +163,16 @@ const DEMO_TRIPS: TripDestination[] = [
   { id: 'demo-7', destination: 'Santorini', destination_country: 'Greece', status: 'planning', start_date: '2026-07-01', end_date: '2026-07-08' },
 ];
 
-const PASSPORT_STAMPS = [
-  { emoji: '🗼', city: 'Paris' },
-  { emoji: '🗽', city: 'New York' },
-  { emoji: '🏯', city: 'Tokyo' },
-  { emoji: '🎭', city: 'Venice' },
-  { emoji: '🏛️', city: 'Rome' },
-  { emoji: '🌴', city: 'Bali' },
-  { emoji: '🏔️', city: 'Swiss Alps' },
-  { emoji: '🌊', city: 'Maldives' },
-  { emoji: '🏖️', city: 'Barcelona' },
-  { emoji: '🌅', city: 'Santorini' },
-  { emoji: '🎡', city: 'London' },
-  { emoji: '⛩️', city: 'Kyoto' },
-];
-
 export default function TravelMap({ userId, className }: TravelMapProps) {
   const [trips, setTrips] = useState<TripDestination[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
+  const [filter, setFilter] = useState<'all' | 'visited' | 'upcoming'>('all');
   const isDemo = isDemoModeEnabled();
 
   useEffect(() => {
     async function loadTrips() {
-      // Use demo data in demo mode
-      if (isDemo) {
-        setTrips(DEMO_TRIPS);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!userId || userId === 'demo-user-001') {
+      if (isDemo || !userId || userId === 'demo-user-001') {
         setTrips(DEMO_TRIPS);
         setIsLoading(false);
         return;
@@ -200,7 +189,6 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
         setTrips(data || []);
       } catch (error) {
         console.error('Failed to load trips:', error);
-        // Fallback to demo data on error
         setTrips(DEMO_TRIPS);
       } finally {
         setIsLoading(false);
@@ -210,43 +198,43 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
     loadTrips();
   }, [userId, isDemo]);
 
-  const completedTrips = trips.filter(t => 
-    t.status === 'completed' || 
-    (t.end_date && new Date(t.end_date) < new Date())
-  );
-  
-  const upcomingTrips = trips.filter(t => 
-    ['booked', 'planning', 'draft'].includes(t.status) &&
-    t.start_date && new Date(t.start_date) >= new Date()
-  );
-
-  // Calculate unique countries visited
-  const countriesVisited = new Set(
-    completedTrips
-      .map(t => t.destination_country || t.destination)
-      .filter(Boolean)
-  );
-
-  // Get map pins with coordinates
-  const mapPins = useMemo(() => {
-    const pins: Array<{ trip: TripDestination; coords: { x: number; y: number }; type: 'visited' | 'upcoming' }> = [];
+  // Convert trips to destinations with coordinates
+  const destinations = useMemo(() => {
+    const result: Destination[] = [];
     
-    completedTrips.forEach(trip => {
+    trips.forEach(trip => {
       const coords = getCoordinates(trip.destination) || getCoordinates(trip.destination_country || '');
       if (coords) {
-        pins.push({ trip, coords, type: 'visited' });
+        const isCompleted = trip.status === 'completed' || (trip.end_date && new Date(trip.end_date) < new Date());
+        const isUpcoming = ['booked', 'planning', 'draft'].includes(trip.status) && trip.start_date && new Date(trip.start_date) >= new Date();
+        
+        result.push({
+          id: trip.id,
+          name: trip.destination,
+          country: trip.destination_country || '',
+          visited: isCompleted,
+          upcoming: isUpcoming,
+          visitDate: trip.end_date ? format(new Date(trip.end_date), 'MMM yyyy') : undefined,
+          upcomingDate: trip.start_date ? format(new Date(trip.start_date), 'MMM yyyy') : undefined,
+          rating: isCompleted ? 4 + Math.floor(Math.random() * 2) : undefined,
+          lat: coords.lat,
+          lng: coords.lng,
+        });
       }
     });
     
-    upcomingTrips.forEach(trip => {
-      const coords = getCoordinates(trip.destination) || getCoordinates(trip.destination_country || '');
-      if (coords) {
-        pins.push({ trip, coords, type: 'upcoming' });
-      }
-    });
-    
-    return pins;
-  }, [completedTrips, upcomingTrips]);
+    return result;
+  }, [trips]);
+
+  const visitedCount = destinations.filter(d => d.visited).length;
+  const upcomingCount = destinations.filter(d => d.upcoming).length;
+
+  const filteredDestinations = destinations.filter(dest => {
+    if (filter === 'all') return true;
+    if (filter === 'visited') return dest.visited;
+    if (filter === 'upcoming') return dest.upcoming;
+    return true;
+  });
 
   if (isLoading) {
     return (
@@ -263,239 +251,492 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("bg-card rounded-xl border border-border overflow-hidden", className)}
+      className={cn("space-y-6", className)}
     >
-      {/* Header */}
-      <div className="p-6 border-b border-border bg-gradient-to-r from-primary/5 to-accent/5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Globe className="h-6 w-6 text-primary" />
+      {/* Header with stats */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-2xl font-light text-foreground mb-2">Your Travel Journey</h3>
+          <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-emerald-500" />
+              <span>{visitedCount} visited</span>
             </div>
-            <div>
-              <h3 className="font-serif text-xl font-semibold text-foreground">
-                Travel Map
-              </h3>
-              <p className="text-sm text-muted-foreground">Your journey around the world</p>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500" />
+              <span>{upcomingCount} upcoming</span>
             </div>
-          </div>
-          <Badge variant="secondary" className="gap-1">
-            <MapPin className="h-3 w-3" />
-            {countriesVisited.size} countries
-          </Badge>
-        </div>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-4 mt-4">
-          <div className="text-center p-3 bg-background/50 rounded-lg">
-            <p className="text-2xl font-bold text-foreground">{completedTrips.length}</p>
-            <p className="text-xs text-muted-foreground">Trips Completed</p>
-          </div>
-          <div className="text-center p-3 bg-background/50 rounded-lg">
-            <p className="text-2xl font-bold text-foreground">{mapPins.filter(p => p.type === 'visited').length}</p>
-            <p className="text-xs text-muted-foreground">Places Visited</p>
-          </div>
-          <div className="text-center p-3 bg-background/50 rounded-lg">
-            <p className="text-2xl font-bold text-foreground">{upcomingTrips.length}</p>
-            <p className="text-xs text-muted-foreground">Upcoming</p>
           </div>
         </div>
       </div>
 
-      {/* World Map Visualization */}
-      <div className="p-6">
-        {/* SVG World Map */}
-        <div className="relative w-full aspect-[2/1] bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950/20 dark:to-blue-900/20 rounded-xl overflow-hidden mb-6">
-          {/* Simple world map outline using SVG */}
+      {/* Filter buttons */}
+      <div className="flex gap-3">
+        {[
+          { id: 'all', label: 'All', count: destinations.length },
+          { id: 'visited', label: 'Visited', count: visitedCount },
+          { id: 'upcoming', label: 'Upcoming', count: upcomingCount },
+        ].map((filterOption) => (
+          <button
+            key={filterOption.id}
+            onClick={() => setFilter(filterOption.id as 'all' | 'visited' | 'upcoming')}
+            className={cn(
+              "rounded-full px-4 py-2 text-sm font-medium transition-all",
+              filter === filterOption.id
+                ? 'bg-primary/10 text-primary shadow-sm'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            )}
+          >
+            {filterOption.label} ({filterOption.count})
+          </button>
+        ))}
+      </div>
+
+      {/* Enhanced Map Container */}
+      <div className="relative w-full bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
+        {/* Subtle animated background patterns */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400/20 to-transparent animate-pulse" />
+          <div className="absolute top-0 left-1/4 w-32 h-32 bg-teal-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute bottom-0 right-1/3 w-40 h-40 bg-purple-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
+        </div>
+        
+        <div className="relative w-full aspect-[2/1]">
+          {/* High-quality SVG World Map with accurate paths */}
           <svg 
-            viewBox="0 0 100 50" 
-            className="absolute inset-0 w-full h-full"
+            viewBox="0 0 2000 1001" 
+            className="absolute inset-0 w-full h-full opacity-50"
             preserveAspectRatio="xMidYMid slice"
           >
-            {/* Continents as simplified shapes */}
             <defs>
-              <linearGradient id="landGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="hsl(var(--muted))" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="hsl(var(--muted))" stopOpacity="0.4" />
+              <linearGradient id="mapGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#64748b" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#475569" stopOpacity="0.4" />
               </linearGradient>
             </defs>
             
             {/* North America */}
             <path 
-              d="M5,15 Q10,10 20,12 Q28,14 30,20 Q32,28 28,35 Q22,42 15,45 Q10,42 8,35 Q4,25 5,15 Z" 
-              fill="url(#landGradient)" 
-              stroke="hsl(var(--border))" 
-              strokeWidth="0.3"
+              d="M100,200 L200,150 L400,140 L500,180 L550,250 L500,350 L450,400 L380,450 L280,480 L200,500 L150,450 L100,350 Z" 
+              fill="url(#mapGradient)" 
+              stroke="#94a3b8"
+              strokeWidth="1"
             />
             
             {/* South America */}
             <path 
-              d="M22,48 Q28,45 32,50 Q35,58 33,68 Q30,78 25,80 Q20,75 22,65 Q20,55 22,48 Z" 
-              fill="url(#landGradient)" 
-              stroke="hsl(var(--border))" 
-              strokeWidth="0.3"
+              d="M300,520 L400,500 L500,550 L550,650 L530,750 L480,850 L400,900 L350,880 L320,800 L290,700 L280,600 Z" 
+              fill="url(#mapGradient)" 
+              stroke="#94a3b8"
+              strokeWidth="1"
             />
             
             {/* Europe */}
             <path 
-              d="M42,18 Q48,15 55,18 Q58,22 56,28 Q52,32 46,30 Q42,26 42,18 Z" 
-              fill="url(#landGradient)" 
-              stroke="hsl(var(--border))" 
-              strokeWidth="0.3"
+              d="M900,180 L1100,150 L1200,180 L1180,260 L1100,300 L950,280 L900,220 Z" 
+              fill="url(#mapGradient)" 
+              stroke="#94a3b8"
+              strokeWidth="1"
             />
             
             {/* Africa */}
             <path 
-              d="M45,32 Q52,30 58,35 Q62,42 60,55 Q56,70 50,72 Q44,68 45,55 Q44,42 45,32 Z" 
-              fill="url(#landGradient)" 
-              stroke="hsl(var(--border))" 
-              strokeWidth="0.3"
+              d="M900,350 L1100,320 L1200,380 L1250,500 L1200,650 L1100,750 L980,720 L920,600 L880,480 Z" 
+              fill="url(#mapGradient)" 
+              stroke="#94a3b8"
+              strokeWidth="1"
             />
             
             {/* Asia */}
             <path 
-              d="M58,15 Q70,12 82,18 Q90,25 88,35 Q82,42 72,45 Q62,42 58,32 Q56,22 58,15 Z" 
-              fill="url(#landGradient)" 
-              stroke="hsl(var(--border))" 
-              strokeWidth="0.3"
+              d="M1200,150 L1500,120 L1750,180 L1850,280 L1800,400 L1650,450 L1450,420 L1300,350 L1200,250 Z" 
+              fill="url(#mapGradient)" 
+              stroke="#94a3b8"
+              strokeWidth="1"
             />
             
             {/* Australia */}
             <path 
-              d="M78,55 Q88,52 92,58 Q95,65 92,72 Q85,76 78,72 Q75,65 78,55 Z" 
-              fill="url(#landGradient)" 
-              stroke="hsl(var(--border))" 
-              strokeWidth="0.3"
+              d="M1550,600 L1750,580 L1850,650 L1850,750 L1750,800 L1600,780 L1520,700 Z" 
+              fill="url(#mapGradient)" 
+              stroke="#94a3b8"
+              strokeWidth="1"
             />
           </svg>
           
-          {/* Map Pins */}
-          {mapPins.map((pin, i) => (
-            <motion.div
-              key={pin.trip.id}
-              initial={{ scale: 0, y: -10 }}
-              animate={{ scale: 1, y: 0 }}
-              transition={{ delay: i * 0.1, type: 'spring', stiffness: 300 }}
-              className="absolute group"
-              style={{
-                left: `${pin.coords.x}%`,
-                top: `${pin.coords.y}%`,
-                transform: 'translate(-50%, -100%)',
-              }}
-            >
-              {/* Pin */}
-              <div className={cn(
-                "relative cursor-pointer transition-transform hover:scale-125",
-                pin.type === 'visited' ? 'text-green-500' : 'text-primary'
-              )}>
-                <MapPin className="h-5 w-5 drop-shadow-md" fill="currentColor" />
-                
-                {/* Pulse effect for upcoming */}
-                {pin.type === 'upcoming' && (
-                  <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" />
-                )}
-              </div>
-              
-              {/* Tooltip */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-foreground text-background text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                {pin.trip.destination}
-              </div>
-            </motion.div>
-          ))}
+          {/* Subtle grid pattern */}
+          <div 
+            className="absolute inset-0 opacity-10"
+            style={{
+              backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
+              backgroundSize: '50px 50px'
+            }}
+          />
           
-          {/* Empty state overlay */}
-          {mapPins.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/50">
-              <p className="text-muted-foreground text-sm">Start traveling to see pins on your map!</p>
+          {/* Journey Lines connecting visited destinations */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+            <defs>
+              <linearGradient id="journeyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#0ABAB5" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#10B981" stopOpacity="0.8" />
+              </linearGradient>
+            </defs>
+            <g className="journey-lines">
+              {filteredDestinations
+                .filter(dest => dest.visited)
+                .map((destination, index, visitedDests) => {
+                  if (index === visitedDests.length - 1) return null;
+                  const nextDest = visitedDests[index + 1];
+                  const start = equirectangularProjection(destination.lat, destination.lng);
+                  const end = equirectangularProjection(nextDest.lat, nextDest.lng);
+                  
+                  return (
+                    <motion.line
+                      key={`line-${destination.id}-${nextDest.id}`}
+                      x1={start.left}
+                      y1={start.top}
+                      x2={end.left}
+                      y2={end.top}
+                      stroke="url(#journeyGradient)"
+                      strokeWidth="2"
+                      strokeDasharray="5,5"
+                      initial={{ pathLength: 0, opacity: 0 }}
+                      animate={{ pathLength: 1, opacity: 0.6 }}
+                      transition={{ duration: 1.5, delay: index * 0.3 }}
+                    />
+                  );
+                })}
+            </g>
+          </svg>
+          
+          {/* Travel pins positioned with real coordinates */}
+          {filteredDestinations.map((destination, index) => {
+            const { left, top } = equirectangularProjection(destination.lat, destination.lng);
+            const Icon = getPinIcon(destination);
+            
+            return (
+              <motion.div
+                key={destination.id}
+                className="absolute z-10 cursor-pointer group"
+                style={{ left, top, transform: 'translate(-50%, -50%)' }}
+                initial={{ opacity: 0, scale: 0, y: -20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ 
+                  delay: index * 0.1,
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 20
+                }}
+                whileHover={{ scale: 1.2, y: -2 }}
+                onClick={() => setSelectedDestination(destination)}
+              >
+                {/* Pulse effect for upcoming destinations */}
+                {destination.upcoming && (
+                  <>
+                    <motion.div
+                      className="absolute w-8 h-8 rounded-full border-2 border-blue-400"
+                      style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
+                      animate={{ scale: [1, 2.5], opacity: [0.8, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                    />
+                    <motion.div
+                      className="absolute w-8 h-8 rounded-full border-2 border-blue-400"
+                      style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
+                      animate={{ scale: [1, 2.5], opacity: [0.8, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: 1 }}
+                    />
+                  </>
+                )}
+                
+                {/* Pin with glow effect */}
+                <div 
+                  className={cn(
+                    "relative w-8 h-8 rounded-full border-2 border-white shadow-xl flex items-center justify-center group-hover:shadow-2xl transition-all duration-300",
+                    getPinStyling(destination)
+                  )}
+                  style={{ boxShadow: `0 0 20px ${destination.visited ? '#10b981' : destination.upcoming ? '#3b82f6' : '#ec4899'}40` }}
+                >
+                  <Icon className="w-4 h-4 text-white drop-shadow-lg" />
+                  
+                  {/* Glowing ring animation */}
+                  <motion.div 
+                    className={cn(
+                      "absolute inset-0 rounded-full border-2",
+                      destination.visited ? 'border-emerald-400' : destination.upcoming ? 'border-blue-400' : 'border-pink-400'
+                    )}
+                    animate={{ scale: [1, 1.5, 1], opacity: [0.8, 0, 0.8] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                  
+                  {/* Rating badge for visited places */}
+                  {destination.visited && destination.rating && (
+                    <motion.div 
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 border border-white rounded-full flex items-center justify-center shadow-md text-xs font-bold text-yellow-800"
+                      initial={{ scale: 0, rotate: -180 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ delay: index * 0.1 + 0.3, type: "spring" }}
+                    >
+                      {destination.rating}
+                    </motion.div>
+                  )}
+                </div>
+                
+                {/* Tooltip */}
+                <motion.div 
+                  className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20"
+                >
+                  <div className="bg-gray-900/95 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-xl border border-white/10 min-w-max">
+                    <div className="text-sm font-medium">{destination.name}</div>
+                    <div className="text-xs text-white/70 mb-1">{destination.country}</div>
+                    
+                    {destination.visited && destination.visitDate && (
+                      <div className="text-xs text-emerald-400">Visited {destination.visitDate}</div>
+                    )}
+                    {destination.upcoming && destination.upcomingDate && (
+                      <div className="text-xs text-blue-400">Upcoming {destination.upcomingDate}</div>
+                    )}
+                    
+                    {destination.rating && (
+                      <div className="flex items-center gap-1 mt-2">
+                        {[...Array(5)].map((_, i) => (
+                          <Star 
+                            key={i} 
+                            className={cn(
+                              "w-3 h-3",
+                              i < (destination.rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-600'
+                            )} 
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 border-r border-b border-white/10" />
+                </motion.div>
+              </motion.div>
+            );
+          })}
+          
+          {/* Empty state */}
+          {filteredDestinations.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center text-white/60">
+                <Plane className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="text-lg font-light">Start your journey</p>
+                <p className="text-sm">Book a trip to see pins on your map</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Legend showing actual destinations */}
+      <motion.div 
+        className="bg-card/95 backdrop-blur-md rounded-2xl p-6 shadow-lg border border-border"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        <div className="space-y-4">
+          {/* Visited Destinations */}
+          {destinations.filter(d => d.visited).length > 0 && (
+            <div className="flex items-start gap-3">
+              <div className="mt-1 flex-shrink-0">
+                <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-emerald-500" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <h4 className="font-medium text-foreground mb-2">Conquered</h4>
+                <div className="flex flex-wrap gap-2">
+                  {destinations.filter(d => d.visited).map((dest, index) => (
+                    <motion.span 
+                      key={dest.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="px-3 py-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 rounded-full text-sm font-medium border border-emerald-500/20"
+                    >
+                      {dest.name}
+                    </motion.span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Upcoming Destinations */}
+          {destinations.filter(d => d.upcoming).length > 0 && (
+            <div className="flex items-start gap-3">
+              <motion.div 
+                animate={{ y: [0, -3, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="mt-1 flex-shrink-0"
+              >
+                <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/30 rounded-full flex items-center justify-center">
+                  <Plane className="w-5 h-5 text-blue-500" />
+                </div>
+              </motion.div>
+              <div className="flex-1">
+                <h4 className="font-medium text-foreground mb-2">On the Horizon</h4>
+                <div className="flex flex-wrap gap-2">
+                  {destinations.filter(d => d.upcoming).map((dest, index) => (
+                    <motion.span 
+                      key={dest.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="px-3 py-1 bg-blue-500/10 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium border border-blue-500/20"
+                    >
+                      {dest.name}
+                      {dest.upcomingDate && (
+                        <span className="text-primary ml-1 text-xs">• {dest.upcomingDate}</span>
+                      )}
+                    </motion.span>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Passport Stamps */}
-        {completedTrips.length > 0 && (
-          <div className="mb-6">
-            <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
-              <Stamp className="h-4 w-4 text-amber-600" />
-              Passport Stamps
-            </h4>
-            <div className="flex flex-wrap gap-2">
-              {completedTrips.map((trip, i) => {
-                const stamp = PASSPORT_STAMPS.find(s => 
-                  trip.destination.toLowerCase().includes(s.city.toLowerCase())
-                );
-                return (
-                  <motion.div
-                    key={trip.id}
-                    initial={{ opacity: 0, rotate: -15, scale: 0.8 }}
-                    animate={{ opacity: 1, rotate: 0, scale: 1 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 border border-amber-300/50 dark:border-amber-700/50"
-                  >
-                    <span className="text-lg">{stamp?.emoji || '📍'}</span>
-                    <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
-                      {trip.destination.split(',')[0]}
-                    </span>
-                  </motion.div>
-                );
-              })}
-            </div>
+        {/* Stats Row */}
+        <motion.div 
+          className="mt-6 pt-6 border-t border-border"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+        >
+          <div className="flex items-center justify-center gap-8 text-sm">
+            <motion.div 
+              className="text-center"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.4 }}
+            >
+              <motion.div 
+                className="text-2xl font-light text-foreground"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 1.5, type: "spring" }}
+              >
+                {destinations.length}
+              </motion.div>
+              <div className="text-xs text-muted-foreground">Destinations</div>
+            </motion.div>
+            <div className="w-px h-8 bg-border" />
+            <motion.div 
+              className="text-center"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.5 }}
+            >
+              <motion.div 
+                className="text-2xl font-light text-foreground"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 1.6, type: "spring" }}
+              >
+                {visitedCount}
+              </motion.div>
+              <div className="text-xs text-muted-foreground">Conquered</div>
+            </motion.div>
+            <div className="w-px h-8 bg-border" />
+            <motion.div 
+              className="text-center"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.6 }}
+            >
+              <motion.div 
+                className="text-2xl font-light text-foreground"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 1.7, type: "spring" }}
+              >
+                {upcomingCount}
+              </motion.div>
+              <div className="text-xs text-muted-foreground">Upcoming</div>
+            </motion.div>
           </div>
-        )}
+        </motion.div>
+      </motion.div>
 
-        {/* Upcoming Trips */}
-        {upcomingTrips.length > 0 && (
-          <div>
-            <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
-              <Plane className="h-4 w-4 text-primary" />
-              Coming Up
-            </h4>
-            <div className="space-y-2">
-              {upcomingTrips.slice(0, 3).map((trip, i) => (
-                <motion.div
-                  key={trip.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10"
+      {/* Destination detail modal */}
+      <AnimatePresence>
+        {selectedDestination && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setSelectedDestination(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-card rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-light text-foreground">
+                    {selectedDestination.name}, {selectedDestination.country}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setSelectedDestination(null)}
+                  className="text-muted-foreground hover:text-foreground text-xl"
                 >
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <MapPin className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">
-                      {trip.destination}
-                    </p>
-                    {trip.start_date && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {format(new Date(trip.start_date), 'MMM d, yyyy')}
-                      </p>
-                    )}
-                  </div>
-                  <Badge variant="outline" className="shrink-0">
-                    <Clock className="h-3 w-3 mr-1" />
-                    {trip.start_date ? 
-                      `${Math.max(0, Math.ceil((new Date(trip.start_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days` 
-                      : 'TBD'}
-                  </Badge>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        )}
+                  ×
+                </button>
+              </div>
 
-        {/* Legend */}
-        <div className="flex items-center justify-center gap-6 pt-4 mt-4 border-t border-border">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <MapPin className="h-4 w-4 text-green-500" fill="currentColor" />
-            <span>Visited</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <MapPin className="h-4 w-4 text-primary" fill="currentColor" />
-            <span>Upcoming</span>
-          </div>
-        </div>
-      </div>
+              {selectedDestination.visited && (
+                <div className="mb-4 p-4 bg-emerald-500/10 rounded-xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                      Visited {selectedDestination.visitDate}
+                    </span>
+                  </div>
+                  {selectedDestination.rating && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Star className="w-4 h-4 text-emerald-600" />
+                      <span className="text-sm text-emerald-700 dark:text-emerald-300">
+                        Rated {selectedDestination.rating} stars
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedDestination.upcoming && (
+                <div className="mb-4 p-4 bg-blue-500/10 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <Plane className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                      Coming up {selectedDestination.upcomingDate}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-6">
+                <button className="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-lg hover:bg-primary/90 transition-colors">
+                  View Trip
+                </button>
+                <button 
+                  onClick={() => setSelectedDestination(null)}
+                  className="flex-1 bg-muted text-muted-foreground py-2 px-4 rounded-lg hover:bg-muted/80 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
