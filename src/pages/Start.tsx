@@ -48,6 +48,14 @@ function AirportAutocomplete({
   
   const debouncedQuery = useDebounce(inputValue, 300);
 
+  // Sync inputValue when parent value changes (for persistence)
+  useEffect(() => {
+    if (value !== inputValue) {
+      setInputValue(value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
   useEffect(() => {
     if (debouncedQuery.length >= 1) {
       setLoading(true);
@@ -143,6 +151,14 @@ function DestinationAutocomplete({
   
   const debouncedQuery = useDebounce(inputValue, 300);
 
+  // Sync inputValue when parent value changes (for persistence)
+  useEffect(() => {
+    if (value !== inputValue) {
+      setInputValue(value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
   useEffect(() => {
     if (debouncedQuery.length >= 1) {
       setLoading(true);
@@ -235,16 +251,50 @@ const inspirationDestinations = [
 ];
 
 export default function Start() {
-  const { setBasics } = useTripPlanner();
+  const { state: plannerState, setBasics } = useTripPlanner();
   const navigate = useNavigate();
   
-  const [origin, setOrigin] = useState('');
-  const [destination, setDestination] = useState('');
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
-  const [travelers, setTravelers] = useState(2);
-  const [budget, setBudget] = useState<string>('');
+  // Initialize state from context for persistence when navigating back
+  const [origin, setOrigin] = useState(plannerState.basics.originCity || '');
+  const [destination, setDestination] = useState(plannerState.basics.destination || '');
+  const [startDate, setStartDate] = useState<Date | undefined>(
+    plannerState.basics.startDate ? new Date(plannerState.basics.startDate) : undefined
+  );
+  const [endDate, setEndDate] = useState<Date | undefined>(
+    plannerState.basics.endDate ? new Date(plannerState.basics.endDate) : undefined
+  );
+  const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
+  const [budget, setBudget] = useState<string>(plannerState.basics.budgetTier || '');
   const today = startOfToday();
+
+  // Sync state when context changes (e.g., loading a saved trip)
+  useEffect(() => {
+    if (plannerState.basics.destination && plannerState.basics.destination !== destination) {
+      setDestination(plannerState.basics.destination);
+    }
+    if (plannerState.basics.originCity && plannerState.basics.originCity !== origin) {
+      setOrigin(plannerState.basics.originCity);
+    }
+    if (plannerState.basics.startDate) {
+      const contextDate = new Date(plannerState.basics.startDate);
+      if (!startDate || contextDate.getTime() !== startDate.getTime()) {
+        setStartDate(contextDate);
+      }
+    }
+    if (plannerState.basics.endDate) {
+      const contextDate = new Date(plannerState.basics.endDate);
+      if (!endDate || contextDate.getTime() !== endDate.getTime()) {
+        setEndDate(contextDate);
+      }
+    }
+    if (plannerState.basics.travelers && plannerState.basics.travelers !== travelers) {
+      setTravelers(plannerState.basics.travelers);
+    }
+    if (plannerState.basics.budgetTier && plannerState.basics.budgetTier !== budget) {
+      setBudget(plannerState.basics.budgetTier);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plannerState.basics]);
 
   const handleStart = () => {
     if (!destination || !startDate || !endDate) return;
@@ -258,6 +308,7 @@ export default function Start() {
       endDate: end,
       travelers,
       originCity: origin,
+      budgetTier: budget || 'moderate',
     });
 
     const params = new URLSearchParams();
@@ -266,6 +317,7 @@ export default function Start() {
     params.set('startDate', start);
     params.set('endDate', end);
     params.set('travelers', String(travelers));
+    if (budget) params.set('budget', budget);
 
     navigate(`${ROUTES.PLANNER.FLIGHT}?${params.toString()}`);
   };
