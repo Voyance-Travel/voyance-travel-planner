@@ -19,11 +19,32 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
+// Travel style to destination mapping
+const styleToDestinations: Record<string, string[]> = {
+  luxury: ['paris', 'santorini', 'singapore', 'vienna', 'florence'],
+  adventure: ['cape-town', 'reykjavik', 'petra', 'cusco', 'vancouver'],
+  culture: ['kyoto', 'marrakech', 'mexico-city', 'hanoi', 'oaxaca'],
+  wellness: ['bali', 'copenhagen', 'lisbon', 'porto', 'barcelona'],
+  culinary: ['tokyo', 'bangkok', 'new-orleans', 'mexico-city', 'buenos-aires'],
+  romantic: ['santorini', 'paris', 'florence', 'cartagena', 'porto'],
+};
+
+// Style labels for display
+const styleLabels: Record<string, string> = {
+  luxury: 'Luxury',
+  adventure: 'Adventure', 
+  culture: 'Culture',
+  wellness: 'Wellness',
+  culinary: 'Culinary',
+  romantic: 'Romantic',
+};
+
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
+  const activeStyle = searchParams.get('style');
   const [filters, setFilters] = useState({ 
     region: searchParams.get('region') as string | null, 
     budget: null as string | null, 
@@ -32,9 +53,15 @@ export default function Explore() {
   const destinationGridRef = useRef<HTMLDivElement>(null);
   const searchResultsRef = useRef<HTMLDivElement>(null);
 
-  // Filter destinations based on search and filters
+  // Filter destinations based on search, style, and filters
   const filteredDestinations = useMemo(() => {
     let results = allDestinations;
+    
+    // Filter by travel style
+    if (activeStyle && styleToDestinations[activeStyle]) {
+      const styleDestIds = styleToDestinations[activeStyle];
+      results = results.filter(d => styleDestIds.includes(d.id));
+    }
     
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -53,9 +80,9 @@ export default function Explore() {
     }
     
     return results;
-  }, [searchQuery, filters.region]);
+  }, [searchQuery, filters.region, activeStyle]);
 
-  const isSearching = searchQuery || filters.region || filters.budget || filters.vibe;
+  const isSearching = searchQuery || filters.region || filters.budget || filters.vibe || activeStyle;
 
   useEffect(() => {
     scrollToTop();
@@ -166,9 +193,17 @@ export default function Explore() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                  {filteredDestinations.length} Destination{filteredDestinations.length !== 1 ? 's' : ''} Found
+                  {activeStyle && styleLabels[activeStyle] ? `${styleLabels[activeStyle]} Destinations` : `${filteredDestinations.length} Destination${filteredDestinations.length !== 1 ? 's' : ''} Found`}
                 </h2>
                 <div className="flex flex-wrap gap-2">
+                  {activeStyle && styleLabels[activeStyle] && (
+                    <Badge variant="default" className="gap-1 bg-primary">
+                      {styleLabels[activeStyle]}
+                      <button onClick={() => setSearchParams({})} className="ml-1 hover:text-primary-foreground/80">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
                   {searchQuery && (
                     <Badge variant="secondary" className="gap-1">
                       "{searchQuery}"
@@ -187,7 +222,7 @@ export default function Explore() {
                   )}
                 </div>
               </div>
-              <Button variant="ghost" onClick={() => { clearSearch(); setFilters({ region: null, budget: null, vibe: null }); }}>
+              <Button variant="ghost" onClick={() => { clearSearch(); setFilters({ region: null, budget: null, vibe: null }); setSearchParams({}); }}>
                 Clear All
               </Button>
             </div>

@@ -52,18 +52,11 @@ export default function DestinationWelcome({
     }
   };
 
-  // Get a placeholder image URL
-  const getDestinationImage = (): string => {
-    const imageMap: Record<string, string> = {
-      'Tokyo': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
-      'Kyoto': 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80',
-      'Paris': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
-      'New York': 'https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=800&q=80',
-      'London': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80',
-      'Rome': 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&q=80',
-      'Barcelona': 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&q=80'
-    };
-    return imageMap[destination] || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80';
+  // Use centralized curated image utility
+  const getDestinationImageUrl = (): string => {
+    // Import at runtime to avoid circular dependencies
+    const { getDestinationImage } = require('@/utils/destinationImages');
+    return getDestinationImage(destination);
   };
 
   return (
@@ -71,7 +64,7 @@ export default function DestinationWelcome({
       <div className="relative h-[200px] overflow-hidden">
         {/* Destination Image */}
         <img
-          src={getDestinationImage()}
+          src={getDestinationImageUrl()}
           alt={destination}
           className="w-full h-full object-cover"
         />

@@ -13,13 +13,7 @@ import {
   getDestinationRegions,
   type Destination 
 } from '@/services/supabase/destinations';
-
-// Fallback images for destinations without stock_image_url
-const fallbackImages = [
-  'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200&q=80',
-  'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=1200&q=80',
-  'https://images.unsplash.com/photo-1518730518541-d0843268c287?w=1200&q=80',
-];
+import { getDestinationImage as getCuratedImage } from '@/utils/destinationImages';
 
 // Region images mapping (replacing emojis with photos)
 const regionImages: Record<string, string> = {
@@ -35,8 +29,9 @@ const regionImages: Record<string, string> = {
   'Antarctica': 'https://images.unsplash.com/photo-1551415923-a2297c7fda79?w=100&h=100&fit=crop',
 };
 
-function getDestinationImage(destination: Destination, index: number): string {
-  return destination.stock_image_url || fallbackImages[index % fallbackImages.length];
+// Use curated Unsplash images - not database images
+function getDestinationImage(destination: Destination): string {
+  return getCuratedImage(destination.city);
 }
 
 function getDestinationSlug(destination: Destination): string {
@@ -121,7 +116,7 @@ export default function Destinations() {
         <section className="relative h-[70vh] min-h-[500px]">
           <div className="absolute inset-0">
             <img
-              src={getDestinationImage(heroDestination, 0)}
+              src={getDestinationImage(heroDestination)}
               alt={heroDestination.city}
               className="w-full h-full object-cover"
             />
@@ -208,7 +203,7 @@ export default function Destinations() {
                 >
                   <div className="relative aspect-[4/5] rounded-xl overflow-hidden mb-4">
                     <img
-                      src={getDestinationImage(destination, index)}
+                      src={getDestinationImage(destination)}
                       alt={destination.city}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
@@ -281,7 +276,7 @@ export default function Destinations() {
                   <div className="flex items-center gap-4">
                     <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
                       <img
-                        src={getDestinationImage(destination, index)}
+                        src={getDestinationImage(destination)}
                         alt={destination.city}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
@@ -384,7 +379,7 @@ export default function Destinations() {
               >
                 <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3">
                   <img
-                    src={getDestinationImage(destination, index)}
+                    src={getDestinationImage(destination)}
                     alt={destination.city}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
