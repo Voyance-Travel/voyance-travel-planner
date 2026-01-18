@@ -13,7 +13,7 @@ import {
   getDestinationRegions,
   type Destination 
 } from '@/services/supabase/destinations';
-import { getDestinationImage as getCuratedImage } from '@/utils/destinationImages';
+import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 
 // Region images mapping (replacing emojis with photos)
 const regionImages: Record<string, string> = {
@@ -28,11 +28,6 @@ const regionImages: Record<string, string> = {
   'Central America': 'https://images.unsplash.com/photo-1518638150340-f706e86654de?w=100&h=100&fit=crop',
   'Antarctica': 'https://images.unsplash.com/photo-1551415923-a2297c7fda79?w=100&h=100&fit=crop',
 };
-
-// Use curated Unsplash images - not database images
-function getDestinationImage(destination: Destination): string {
-  return getCuratedImage(destination.city);
-}
 
 function getDestinationSlug(destination: Destination): string {
   return destination.city.toLowerCase().replace(/\s+/g, '-');
@@ -115,10 +110,12 @@ export default function Destinations() {
       {heroDestination && (
         <section className="relative h-[70vh] min-h-[500px]">
           <div className="absolute inset-0">
-            <img
-              src={getDestinationImage(heroDestination)}
+            <DestinationHeroImage
+              destinationId={heroDestination.id}
+              destinationName={`${heroDestination.city}, ${heroDestination.country}`}
               alt={heroDestination.city}
               className="w-full h-full object-cover"
+              overlayGradient=""
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
           </div>
@@ -202,10 +199,12 @@ export default function Destinations() {
                   onClick={() => handleDestinationClick(destination)}
                 >
                   <div className="relative aspect-[4/5] rounded-xl overflow-hidden mb-4">
-                    <img
-                      src={getDestinationImage(destination)}
+                    <DestinationHeroImage
+                      destinationId={destination.id}
+                      destinationName={`${destination.city}, ${destination.country}`}
                       alt={destination.city}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      overlayGradient=""
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                     
@@ -275,10 +274,12 @@ export default function Destinations() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                      <img
-                        src={getDestinationImage(destination)}
+                      <DestinationHeroImage
+                        destinationId={destination.id}
+                        destinationName={`${destination.city}, ${destination.country}`}
                         alt={destination.city}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        overlayGradient=""
                       />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -378,10 +379,12 @@ export default function Destinations() {
                 onClick={() => handleDestinationClick(destination)}
               >
                 <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3">
-                  <img
-                    src={getDestinationImage(destination)}
+                  <DestinationHeroImage
+                    destinationId={destination.id}
+                    destinationName={`${destination.city}, ${destination.country}`}
                     alt={destination.city}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    overlayGradient=""
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3">

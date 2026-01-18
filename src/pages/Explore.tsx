@@ -12,6 +12,7 @@ import SeasonalCollections from '@/components/explore/sections/SeasonalCollectio
 import ExploreByStyle from '@/components/explore/sections/ExploreByStyle';
 import TrendingDestinationsEnhanced from '@/components/explore/sections/TrendingDestinationsEnhanced';
 import VoyanceGuides from '@/components/explore/sections/VoyanceGuides';
+import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 import { scrollToTop } from '@/utils/scrollUtils';
 import { destinations as allDestinations, searchDestinations, regions } from '@/lib/destinations';
 import { buildRoute } from '@/config/routes';
@@ -239,10 +240,11 @@ export default function Explore() {
                     onClick={() => handleDestinationClick(destination.id)}
                   >
                     <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3">
-                      <img
-                        src={destination.imageUrl}
+                      <DestinationHeroImage
+                        destinationName={`${destination.city}, ${destination.country}`}
                         alt={destination.city}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        overlayGradient=""
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                       <div className="absolute bottom-3 left-3 right-3">
