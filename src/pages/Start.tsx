@@ -576,9 +576,9 @@ export default function Start() {
                   size="lg"
                   onClick={handleStart}
                   disabled={!isFormValid}
-                  className="w-full h-14 text-base font-sans font-medium tracking-wide mt-4"
+                  className="w-full h-14 text-base font-sans font-medium tracking-wide mt-4 bg-slate text-slate-foreground hover:bg-slate/90"
                 >
-                  Create My Itinerary
+                  Plan My Trip
                   <ArrowRight className="ml-3 h-4 w-4" />
                 </Button>
               </div>

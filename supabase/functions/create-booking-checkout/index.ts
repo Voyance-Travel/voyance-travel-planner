@@ -28,7 +28,7 @@ serve(async (req) => {
 
     if (!tripId) throw new Error("tripId is required");
 
-    // Authenticate user using getClaims for proper JWT validation
+    // Authenticate user using getUser for proper JWT validation
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       logStep("Missing or invalid authorization header");
@@ -45,18 +45,19 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
     
-    if (claimsError || !claimsData?.claims?.sub) {
-      logStep("JWT validation failed", { error: claimsError?.message });
+    if (userError || !userData?.user) {
+      logStep("JWT validation failed", { error: userError?.message });
       return new Response(JSON.stringify({ error: "Unauthorized: Invalid session. Please sign in again." }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 401,
       });
     }
 
-    const userId = claimsData.claims.sub;
-    const userEmail = claimsData.claims.email as string;
+    const user = userData.user;
+    const userId = user.id;
+    const userEmail = user.email;
     logStep("User authenticated", { userId, email: userEmail });
 
     // Use service role client for database operations
@@ -95,7 +96,6 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
 
     // Calculate totals
-    const tripServiceFee = 2999; // $29.99 service fee in cents
     const flightCents = Math.round((flightTotal || 0) * 100);
     const hotelCents = Math.round((hotelTotal || 0) * 100);
     const activitiesCents = Math.round((activitiesTotal || 0) * 100);

@@ -74,9 +74,14 @@ interface EnhancedFlightCardProps {
 
 const cabinLabels: Record<string, string> = {
   economy: 'Economy',
-  premium_economy: 'Premium Economy',
+  premium_economy: 'Premium Econ',
   business: 'Business',
   first: 'First Class',
+};
+
+// Format cabin class for display
+const formatCabinClass = (cabin: string): string => {
+  return cabinLabels[cabin] || cabin.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
 const amenityIcons: Record<string, typeof Wifi> = {
@@ -121,15 +126,15 @@ export default function EnhancedFlightCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'relative bg-card rounded-xl border-2 transition-all duration-200 overflow-hidden',
+        'relative bg-card rounded-xl border transition-all duration-200 overflow-hidden',
         isSelected 
-          ? 'border-primary shadow-lg ring-2 ring-primary/20' 
-          : 'border-border hover:border-primary/50 hover:shadow-md'
+          ? 'border-slate shadow-lg ring-2 ring-slate/20' 
+          : 'border-border hover:border-slate/50 hover:shadow-md'
       )}
     >
       {/* Recommended Badge */}
       {flight.isRecommended && (
-        <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground text-xs font-medium py-1.5 px-4 flex items-center justify-center gap-1.5">
+        <div className="absolute top-0 left-0 right-0 bg-slate text-slate-foreground text-xs font-medium py-1.5 px-4 flex items-center justify-center gap-1.5">
           <Star className="h-3.5 w-3.5 fill-current" />
           Best match for your preferences
         </div>
@@ -158,25 +163,25 @@ export default function EnhancedFlightCard({
               <p className="text-sm text-muted-foreground mt-1">{primarySegment.departureAirport}</p>
             </div>
             
-            <div className="flex-1 flex flex-col items-center px-6">
-              <p className="text-sm text-muted-foreground mb-2">
+            <div className="flex-1 flex flex-col items-center px-4 min-w-0">
+              <p className="text-xs text-muted-foreground mb-1.5">
                 {formatDuration(flight.totalDuration)}
               </p>
-              <div className="relative w-full h-0.5 bg-border">
-                <div className="absolute inset-y-0 left-0 w-2.5 h-2.5 -mt-1 bg-primary rounded-full" />
-                <div className="absolute inset-y-0 right-0 w-2.5 h-2.5 -mt-1 bg-primary rounded-full" />
-                {flight.stops === 0 ? (
-                  <ArrowRight className="absolute left-1/2 -translate-x-1/2 -mt-2.5 h-5 w-5 text-primary" />
-                ) : (
-                  <div className="absolute left-1/2 -translate-x-1/2 -mt-1.5 flex gap-2">
-                    {Array.from({ length: flight.stops }).map((_, i) => (
-                      <div key={i} className="w-2.5 h-2.5 bg-accent rounded-full border-2 border-background" />
-                    ))}
-                  </div>
-                )}
+              <div className="relative w-full h-px bg-border max-w-[200px]">
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate rounded-full" />
+                <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate rounded-full" />
               </div>
-              <p className="text-sm text-muted-foreground mt-2">
-                {flight.stops === 0 ? 'Non-stop' : `${flight.stops} stop${flight.stops > 1 ? 's' : ''}`}
+              <p className={`text-xs mt-1.5 ${flight.stops === 0 ? 'text-slate font-medium' : 'text-muted-foreground'}`}>
+                {flight.stops === 0 ? 'Nonstop' : (
+                  <span className="flex items-center gap-1">
+                    {flight.stops} stop{flight.stops > 1 ? 's' : ''}
+                    {flight.layovers?.[0] && (
+                      <span className="text-muted-foreground/70">
+                        · {flight.layovers[0].city}
+                      </span>
+                    )}
+                  </span>
+                )}
               </p>
             </div>
             
@@ -196,31 +201,30 @@ export default function EnhancedFlightCard({
           </div>
         </div>
 
-        {/* Cabin Class Selection */}
         <div className="mt-4 pt-4 border-t border-border">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Select cabin class:</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Select cabin:</p>
           <div className="flex flex-wrap gap-2">
             {flight.cabinOptions.map((option, index) => (
               <button
                 key={option.cabin}
                 onClick={() => handleCabinSelect(index)}
                 className={cn(
-                  'flex-1 min-w-[140px] p-3 rounded-lg border-2 transition-all text-left',
+                  'flex-1 min-w-[100px] max-w-[140px] p-2.5 rounded-lg border transition-all text-left',
                   selectedCabinIndex === index
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50'
+                    ? 'border-slate bg-slate/5'
+                    : 'border-border hover:border-muted-foreground/40'
                 )}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-sm">{cabinLabels[option.cabin]}</span>
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="font-medium text-xs">{formatCabinClass(option.cabin)}</span>
                   {selectedCabinIndex === index && (
-                    <Check className="h-4 w-4 text-primary" />
+                    <Check className="h-3.5 w-3.5 text-slate" />
                   )}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold">${option.price}</span>
+                  <span className="text-base font-semibold">${option.price}</span>
                   {option.seatsRemaining && option.seatsRemaining < 5 && (
-                    <span className="text-xs text-destructive">
+                    <span className="text-[10px] text-destructive">
                       {option.seatsRemaining} left
                     </span>
                   )}
@@ -274,9 +278,9 @@ export default function EnhancedFlightCard({
                     
                     <div className="flex items-start gap-4">
                       <div className="flex flex-col items-center">
-                        <div className="w-3 h-3 rounded-full bg-primary" />
+                        <div className="w-3 h-3 rounded-full bg-slate" />
                         <div className="w-0.5 h-12 bg-border" />
-                        <div className="w-3 h-3 rounded-full bg-primary" />
+                        <div className="w-3 h-3 rounded-full bg-slate" />
                       </div>
                       
                       <div className="flex-1 space-y-2">
@@ -338,7 +342,7 @@ export default function EnhancedFlightCard({
                     <ul className="space-y-1">
                       {flight.rationale.map((reason, i) => (
                         <li key={i} className="flex items-center gap-2 text-sm">
-                          <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <Check className="h-3.5 w-3.5 text-slate shrink-0" />
                           {reason}
                         </li>
                       ))}
