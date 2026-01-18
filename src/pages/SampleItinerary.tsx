@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ChevronLeft, ChevronRight, MapPin, Clock, Star, 
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Clock, Star, 
   Lock, Unlock, RefreshCw, Plane, Hotel, Calendar,
-  Utensils, Camera, Palmtree, Users, ArrowRight
+  Utensils, Camera, Palmtree, Users, ArrowRight, Edit3, MoveUp, MoveDown
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -55,6 +55,11 @@ export default function SampleItinerary() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
 
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   useEffect(() => {
     const destinationParam = searchParams.get('destination') || 'bali-wellness';
     const data = getItineraryBySlug(destinationParam);
@@ -95,6 +100,18 @@ export default function SampleItinerary() {
 
   const handleDayRegenerate = (dayIndex: number) => {
     toast.info(`Sign in to regenerate Day ${dayIndex + 1}`);
+  };
+
+  const handleActivityEdit = () => {
+    toast.info('Sign in to edit and customize activities');
+  };
+
+  const handleActivityMove = (direction: 'up' | 'down') => {
+    toast.info(`Sign in to reorder activities ${direction}`);
+  };
+
+  const handleHotelClick = () => {
+    toast.info('Sign in to view full hotel details and alternatives');
   };
 
   const handleSaveItinerary = () => {
@@ -349,6 +366,8 @@ export default function SampleItinerary() {
                       onActivityLock={handleActivityLock}
                       onDayLock={handleDayLock}
                       onDayRegenerate={handleDayRegenerate}
+                      onActivityEdit={handleActivityEdit}
+                      onActivityMove={handleActivityMove}
                     />
                   ))}
                 </motion.div>
@@ -386,21 +405,30 @@ export default function SampleItinerary() {
                 </div>
               </div>
 
-              {/* Hotel Info */}
-              <div className="bg-card border border-border overflow-hidden">
+              {/* Hotel Info - Clickable */}
+              <div 
+                className="bg-card border border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group"
+                onClick={handleHotelClick}
+              >
                 {itineraryData.hotelInfo.images[0] && (
-                  <img
-                    src={itineraryData.hotelInfo.images[0]}
-                    alt={itineraryData.hotelInfo.name}
-                    className="w-full h-40 object-cover"
-                  />
+                  <div className="relative overflow-hidden">
+                    <img
+                      src={itineraryData.hotelInfo.images[0]}
+                      alt={itineraryData.hotelInfo.name}
+                      className="w-full h-40 object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                  </div>
                 )}
                 <div className="p-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Hotel className="h-4 w-4 text-primary" />
-                    <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground">Accommodation</span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Hotel className="h-4 w-4 text-primary" />
+                      <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground">Accommodation</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                  <h3 className="font-serif text-lg mb-1">{itineraryData.hotelInfo.name}</h3>
+                  <h3 className="font-serif text-lg mb-1 group-hover:text-primary transition-colors">{itineraryData.hotelInfo.name}</h3>
                   <p className="text-sm text-muted-foreground mb-3">{itineraryData.hotelInfo.type}</p>
                   <div className="flex items-center gap-2 mb-4">
                     <Star className="h-4 w-4 text-amber-500 fill-current" />
@@ -472,9 +500,11 @@ interface DayCardProps {
   onActivityLock: (dayIndex: number, activityId: string, locked: boolean) => void;
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: (dayIndex: number) => void;
+  onActivityEdit: () => void;
+  onActivityMove: (direction: 'up' | 'down') => void;
 }
 
-function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLock, onDayRegenerate }: DayCardProps) {
+function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLock, onDayRegenerate, onActivityEdit, onActivityMove }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
 
   return (
@@ -493,31 +523,33 @@ function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLoc
           </div>
           
           {/* Day Actions - At Top */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={() => onDayLock(dayIndex)}
-              className="text-xs"
+              className="h-8 w-8"
+              title={allLocked ? 'Unlock Day' : 'Lock Day'}
             >
-              {allLocked ? <Lock className="h-3.5 w-3.5 mr-1" /> : <Unlock className="h-3.5 w-3.5 mr-1" />}
-              {allLocked ? 'Unlock Day' : 'Lock Day'}
+              {allLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
             </Button>
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={() => onDayRegenerate(dayIndex)}
-              className="text-xs"
+              className="h-8 w-8"
+              title="Regenerate Day"
             >
-              <RefreshCw className="h-3.5 w-3.5 mr-1" />
-              Regenerate
+              <RefreshCw className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={onToggle}
+              className="h-8 w-8"
+              title={isExpanded ? 'Collapse' : 'Expand'}
             >
-              {isExpanded ? 'Collapse' : 'Expand'}
+              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
           </div>
         </div>
@@ -538,8 +570,12 @@ function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLoc
                   key={activity.id}
                   activity={activity}
                   dayIndex={dayIndex}
+                  activityIndex={activityIndex}
+                  totalActivities={day.activities.length}
                   isLast={activityIndex === day.activities.length - 1}
                   onLock={onActivityLock}
+                  onEdit={onActivityEdit}
+                  onMove={onActivityMove}
                 />
               ))}
             </div>
@@ -568,11 +604,15 @@ function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLoc
 interface ActivityRowProps {
   activity: ItineraryActivity;
   dayIndex: number;
+  activityIndex: number;
+  totalActivities: number;
   isLast: boolean;
   onLock: (dayIndex: number, activityId: string, locked: boolean) => void;
+  onEdit: () => void;
+  onMove: (direction: 'up' | 'down') => void;
 }
 
-function ActivityRow({ activity, dayIndex, isLast, onLock }: ActivityRowProps) {
+function ActivityRow({ activity, dayIndex, activityIndex, totalActivities, isLast, onLock, onEdit, onMove }: ActivityRowProps) {
   const style = activityStyles[activity.type];
   const showPhoto = activity.type !== 'transportation' && activity.photos?.[0];
 
@@ -625,21 +665,61 @@ function ActivityRow({ activity, dayIndex, isLast, onLock }: ActivityRowProps) {
             {activity.cost > 0 && (
               <span className="font-medium">${activity.cost}</span>
             )}
-            <button
-              onClick={() => onLock(dayIndex, activity.id, !activity.isLocked)}
-              className={cn(
-                "p-1.5 rounded transition-colors",
-                activity.isLocked 
-                  ? "bg-primary/10 text-primary" 
-                  : "hover:bg-secondary text-muted-foreground"
-              )}
-            >
-              {activity.isLocked ? (
-                <Lock className="h-4 w-4" />
-              ) : (
-                <Unlock className="h-4 w-4" />
-              )}
-            </button>
+            <div className="flex items-center gap-1">
+              {/* Move Up */}
+              <button
+                onClick={() => onMove('up')}
+                disabled={activityIndex === 0}
+                className={cn(
+                  "p-1.5 rounded transition-colors",
+                  activityIndex === 0 
+                    ? "opacity-30 cursor-not-allowed" 
+                    : "hover:bg-secondary text-muted-foreground"
+                )}
+                title="Move up"
+              >
+                <MoveUp className="h-3.5 w-3.5" />
+              </button>
+              {/* Move Down */}
+              <button
+                onClick={() => onMove('down')}
+                disabled={activityIndex === totalActivities - 1}
+                className={cn(
+                  "p-1.5 rounded transition-colors",
+                  activityIndex === totalActivities - 1 
+                    ? "opacity-30 cursor-not-allowed" 
+                    : "hover:bg-secondary text-muted-foreground"
+                )}
+                title="Move down"
+              >
+                <MoveDown className="h-3.5 w-3.5" />
+              </button>
+              {/* Edit */}
+              <button
+                onClick={onEdit}
+                className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                title="Edit activity"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+              </button>
+              {/* Lock */}
+              <button
+                onClick={() => onLock(dayIndex, activity.id, !activity.isLocked)}
+                className={cn(
+                  "p-1.5 rounded transition-colors",
+                  activity.isLocked 
+                    ? "bg-primary/10 text-primary" 
+                    : "hover:bg-secondary text-muted-foreground"
+                )}
+                title={activity.isLocked ? "Unlock" : "Lock"}
+              >
+                {activity.isLocked ? (
+                  <Lock className="h-3.5 w-3.5" />
+                ) : (
+                  <Unlock className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
