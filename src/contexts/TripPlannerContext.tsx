@@ -194,69 +194,63 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
   };
 
   const saveTrip = async (): Promise<string | null> => {
-    if (!user) {
-      console.warn('[TripPlanner] Cannot save trip: user not authenticated');
-      return null;
-    }
-
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const tripName = state.basics.destination 
-        ? `Trip to ${state.basics.destination}` 
-        : 'New Trip';
+      const tripName = state.basics.destination ? `Trip to ${state.basics.destination}` : 'New Trip';
 
-      const tripData = {
+      const tripData: Record<string, unknown> = {
         id: state.tripId || undefined,
-        user_id: user.id,
+        user_id: user?.id ?? null,
         name: tripName,
         destination: state.basics.destination || 'Unknown',
-        destination_country: null as string | null,
+        destination_country: null,
         start_date: state.basics.startDate || new Date().toISOString().split('T')[0],
         end_date: state.basics.endDate || new Date().toISOString().split('T')[0],
         trip_type: state.basics.tripType || 'vacation',
         travelers: state.basics.travelers || 1,
         origin_city: state.basics.originCity,
         budget_tier: state.basics.budgetTier || 'moderate',
-        status: 'draft' as const,
+        status: 'draft',
         flight_selection: state.flights ? JSON.parse(JSON.stringify(state.flights)) : null,
         hotel_selection: state.hotel ? JSON.parse(JSON.stringify(state.hotel)) : null,
         itinerary_data: state.itinerary.length > 0 ? JSON.parse(JSON.stringify({ days: state.itinerary })) : null,
-        metadata: JSON.parse(JSON.stringify({
-          sessionId: state.sessionId,
-          lastUpdated: new Date().toISOString(),
-        })),
+        metadata: JSON.parse(
+          JSON.stringify({
+            sessionId: state.sessionId,
+            lastUpdated: new Date().toISOString(),
+            anonymous: !user,
+          })
+        ),
       };
 
       let tripId = state.tripId;
 
-      // Demo mode: save to localStorage instead of Supabase
-      if (isDemoModeEnabled()) {
+      // Demo mode OR anonymous user: save to localStorage so the flow can continue
+      if (isDemoModeEnabled() || !user) {
         tripId = saveDemoTrip(tripData);
-        setState(prev => ({ 
-          ...prev, 
+        setState(prev => ({
+          ...prev,
           tripId,
-          isLoading: false 
+          isLoading: false,
         }));
-        console.log('[TripPlanner] Demo trip saved:', tripId);
+        console.log('[TripPlanner] Local trip saved:', tripId);
         return tripId;
       }
 
-      // Real mode: save to Supabase
+      // Real mode: save to backend
       if (tripId) {
-        // Update existing trip
         const { error } = await supabase
           .from('trips')
-          .update(tripData)
+          .update(tripData as any)
           .eq('id', tripId)
           .eq('user_id', user.id);
 
         if (error) throw error;
       } else {
-        // Create new trip
         const { data, error } = await supabase
           .from('trips')
-          .insert([tripData])
+          .insert([tripData as any])
           .select('id')
           .single();
 
@@ -264,43 +258,37 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         tripId = data.id;
       }
 
-      setState(prev => ({ 
-        ...prev, 
+      setState(prev => ({
+        ...prev,
         tripId,
-        isLoading: false 
+        isLoading: false,
       }));
 
       console.log('[TripPlanner] Trip saved successfully:', tripId);
       return tripId;
-
     } catch (error) {
       console.error('[TripPlanner] Error saving trip:', error);
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false, 
-        error: error instanceof Error ? error.message : 'Failed to save trip' 
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to save trip',
       }));
       return null;
     }
   };
 
   const loadTrip = async (tripId: string) => {
-    if (!user) {
-      console.warn('[TripPlanner] Cannot load trip: user not authenticated');
-      return;
-    }
-
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
       let trip: Record<string, unknown> | null = null;
 
-      // Demo mode: load from localStorage
-      if (isDemoModeEnabled()) {
+      // Demo mode OR anonymous user: load from localStorage
+      if (isDemoModeEnabled() || !user) {
         trip = loadDemoTrip(tripId);
-        if (!trip) throw new Error('Demo trip not found');
+        if (!trip) throw new Error('Trip not found');
       } else {
-        // Real mode: load from Supabase
+        // Real mode: load from backend
         const { data, error } = await supabase
           .from('trips')
           .select('*')
@@ -310,10 +298,10 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
         if (error) throw error;
         if (!data) throw new Error('Trip not found');
-        trip = data;
+        trip = data as unknown as Record<string, unknown>;
       }
 
-      const metadata = trip.metadata as Record<string, unknown> | null;
+      const metadata = (trip.metadata as Record<string, unknown> | null) || null;
       const itineraryData = trip.itinerary_data as { days?: DayItinerary[] } | null;
 
       setState(prev => ({
@@ -336,13 +324,12 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
       }));
 
       console.log('[TripPlanner] Trip loaded:', tripId);
-
     } catch (error) {
       console.error('[TripPlanner] Error loading trip:', error);
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false, 
-        error: error instanceof Error ? error.message : 'Failed to load trip' 
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to load trip',
       }));
     }
   };
