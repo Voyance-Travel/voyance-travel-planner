@@ -372,17 +372,6 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   />
                   
-                  {/* Rating badge for visited places */}
-                  {destination.visited && destination.rating && (
-                    <motion.div 
-                      className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 border border-white rounded-full flex items-center justify-center shadow-md text-xs font-bold text-yellow-800"
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ delay: index * 0.1 + 0.3, type: "spring" }}
-                    >
-                      {destination.rating}
-                    </motion.div>
-                  )}
                 </div>
                 
                 {/* Dark tooltip on hover */}
