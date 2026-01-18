@@ -33,6 +33,7 @@ import TravelDNAReveal from '@/components/profile/TravelDNAReveal';
 import TravelMap from '@/components/profile/TravelMap';
 import SurpriseTripCard from '@/components/profile/SurpriseTripCard';
 import RotatingCoverPhoto from '@/components/profile/RotatingCoverPhoto';
+import FriendsSection from '@/components/profile/FriendsSection';
 
 type TabType = 'overview' | 'trips' | 'preferences' | 'subscription';
 
@@ -283,7 +284,7 @@ export default function Profile() {
       {/* Hero Header */}
       <section className="relative pt-20">
         {/* Rotating Cover Photo */}
-        <RotatingCoverPhoto />
+        <RotatingCoverPhoto userId={user?.id} />
 
         {/* Profile Info */}
         <div className="max-w-5xl mx-auto px-4 -mt-20 relative z-10">
@@ -379,6 +380,9 @@ export default function Profile() {
 
             {/* Travel Map */}
             <TravelMap userId={user?.id || ''} />
+
+            {/* Friends Section */}
+            <FriendsSection userId={user?.id || ''} />
 
             {/* Surprise Trip Card - show as premium for demo users */}
             <SurpriseTripCard isPremium={isDemo || !!subscription?.subscribed} />
@@ -550,10 +554,9 @@ export default function Profile() {
                     : 'No active subscription'}
                 </p>
               </div>
-              <Button variant="ghost" size="sm" onClick={checkSubscription} disabled={isLoadingSubscription}>
-                <RefreshCw className={cn("h-4 w-4 mr-2", isLoadingSubscription && "animate-spin")} />
-                Refresh
-              </Button>
+              {isLoadingSubscription && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
             </div>
 
             {/* Subscription Cards */}

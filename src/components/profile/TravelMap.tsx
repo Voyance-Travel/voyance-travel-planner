@@ -6,12 +6,11 @@ import {
   Calendar, 
   Heart,
   Star,
-  Camera
+  Loader2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { isDemoModeEnabled } from '@/contexts/AuthContext';
 import worldSvgUrl from '@/assets/world.svg';
 
 interface TravelMapProps {
@@ -153,28 +152,17 @@ function getCoordinates(destination: string): { lat: number; lng: number } | nul
   return null;
 }
 
-// Demo trips for preview mode
-const DEMO_TRIPS: TripDestination[] = [
-  { id: 'demo-1', destination: 'Tokyo', destination_country: 'Japan', status: 'completed', start_date: '2024-03-15', end_date: '2024-03-25' },
-  { id: 'demo-2', destination: 'Paris', destination_country: 'France', status: 'completed', start_date: '2024-06-01', end_date: '2024-06-10' },
-  { id: 'demo-3', destination: 'Bali', destination_country: 'Indonesia', status: 'completed', start_date: '2024-09-10', end_date: '2024-09-20' },
-  { id: 'demo-4', destination: 'Rome', destination_country: 'Italy', status: 'completed', start_date: '2023-11-05', end_date: '2023-11-12' },
-  { id: 'demo-5', destination: 'New York', destination_country: 'USA', status: 'completed', start_date: '2023-05-20', end_date: '2023-05-27' },
-  { id: 'demo-6', destination: 'Barcelona', destination_country: 'Spain', status: 'booked', start_date: '2026-04-15', end_date: '2026-04-22' },
-  { id: 'demo-7', destination: 'Santorini', destination_country: 'Greece', status: 'planning', start_date: '2026-07-01', end_date: '2026-07-08' },
-];
-
 export default function TravelMap({ userId, className }: TravelMapProps) {
   const [trips, setTrips] = useState<TripDestination[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
   const [filter, setFilter] = useState<'all' | 'visited' | 'upcoming'>('all');
-  const isDemo = isDemoModeEnabled();
 
+  // Always fetch real data - no demo mode fallback
   useEffect(() => {
     async function loadTrips() {
-      if (isDemo || !userId || userId === 'demo-user-001') {
-        setTrips(DEMO_TRIPS);
+      if (!userId) {
+        setTrips([]);
         setIsLoading(false);
         return;
       }
@@ -190,14 +178,14 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
         setTrips(data || []);
       } catch (error) {
         console.error('Failed to load trips:', error);
-        setTrips(DEMO_TRIPS);
+        setTrips([]);
       } finally {
         setIsLoading(false);
       }
     }
     
     loadTrips();
-  }, [userId, isDemo]);
+  }, [userId]);
 
   // Convert trips to destinations with coordinates
   const destinations = useMemo(() => {
@@ -207,7 +195,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
       const coords = getCoordinates(trip.destination) || getCoordinates(trip.destination_country || '');
       if (coords) {
         const isCompleted = trip.status === 'completed' || (trip.end_date && new Date(trip.end_date) < new Date());
-        const isUpcoming = ['booked', 'planning', 'draft'].includes(trip.status) && trip.start_date && new Date(trip.start_date) >= new Date();
+        const isUpcoming = ['booked', 'planning', 'active'].includes(trip.status) && trip.start_date && new Date(trip.start_date) >= new Date();
         
         result.push({
           id: trip.id,
@@ -240,11 +228,52 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
   if (isLoading) {
     return (
       <div className={cn("bg-card rounded-xl border border-border p-8", className)}>
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 w-40 bg-muted rounded" />
-          <div className="h-48 bg-muted rounded-lg" />
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </div>
+    );
+  }
+
+  // Empty state when no trips
+  if (destinations.length === 0) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn("space-y-6", className)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10">
+            <MapPin className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Travel Map</h2>
+            <p className="text-sm text-muted-foreground">Your digital passport</p>
+          </div>
+        </div>
+
+        <div className="relative w-full bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 rounded-2xl overflow-hidden border border-slate-700">
+          <div className="relative w-full aspect-[2/1]">
+            <img 
+              src={worldSvgUrl} 
+              alt="World Map" 
+              className="absolute inset-0 w-full h-full object-cover opacity-40"
+              style={{ 
+                filter: 'contrast(1.2) brightness(0.8) hue-rotate(200deg) saturate(0.7)',
+                mixBlendMode: 'screen'
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <MapPin className="h-12 w-12 text-white/30 mx-auto mb-4" />
+                <p className="text-white/60 text-lg font-medium">No trips yet</p>
+                <p className="text-white/40 text-sm mt-1">Plan your first adventure to start filling your map</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
     );
   }
 
@@ -254,6 +283,19 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
       animate={{ opacity: 1, y: 0 }}
       className={cn("space-y-6", className)}
     >
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10">
+            <MapPin className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Travel Map</h2>
+            <p className="text-sm text-muted-foreground">Your digital passport</p>
+          </div>
+        </div>
+      </div>
+
       {/* Filter buttons */}
       <div className="flex gap-3">
         {[
@@ -281,8 +323,6 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
         {/* Subtle animated background patterns */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400/20 to-transparent animate-pulse" />
-          <div className="absolute top-0 left-1/4 w-32 h-32 bg-teal-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-          <div className="absolute bottom-0 right-1/3 w-40 h-40 bg-purple-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
         </div>
         
         <div className="relative w-full aspect-[2/1]">
@@ -299,16 +339,6 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
           
           {/* Ocean gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-br from-slate-800/40 via-blue-900/30 to-indigo-900/40 mix-blend-multiply" />
-          
-          {/* Subtle grid pattern */}
-          <div 
-            className="absolute inset-0 opacity-20"
-            style={{
-              backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-              backgroundSize: '40px 40px'
-            }}
-          />
-          
           
           {/* Travel pins positioned with real coordinates */}
           {filteredDestinations.map((destination, index) => {
@@ -361,17 +391,6 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                   }}
                 >
                   <Icon className="w-4 h-4 text-white drop-shadow-lg" />
-                  
-                  {/* Glowing ring animation */}
-                  <motion.div 
-                    className={cn(
-                      "absolute inset-0 rounded-full border-2",
-                      destination.visited ? 'border-emerald-400' : destination.upcoming ? 'border-blue-400' : 'border-pink-400'
-                    )}
-                    animate={{ scale: [1, 1.5, 1], opacity: [0.8, 0, 0.8] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                  />
-                  
                 </div>
                 
                 {/* Dark tooltip on hover */}
@@ -423,237 +442,51 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
         <div className="space-y-4">
           {/* Visited Destinations */}
           {destinations.filter(d => d.visited).length > 0 && (
-            <div className="flex items-start gap-3">
-              <motion.div 
-                animate={{ y: [0, -2, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="mt-1 flex-shrink-0"
-              >
-                <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center">
-                  <MapPin className="w-4 h-4 text-emerald-500" />
-                </div>
-              </motion.div>
-              <div className="flex-1">
-                <h4 className="font-medium text-foreground mb-2">Conquered</h4>
-                <div className="flex flex-wrap gap-2">
-                  {destinations.filter(d => d.visited).map((dest, index) => (
-                    <motion.span 
-                      key={dest.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="px-3 py-1 bg-muted text-foreground rounded-full text-sm font-medium border border-border"
-                    >
-                      {dest.name}
-                    </motion.span>
-                  ))}
-                </div>
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                <span className="text-sm font-medium text-foreground">Visited ({visitedCount})</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {destinations.filter(d => d.visited).slice(0, 8).map(d => (
+                  <span 
+                    key={d.id}
+                    className="px-3 py-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-medium"
+                  >
+                    {d.name}
+                  </span>
+                ))}
+                {destinations.filter(d => d.visited).length > 8 && (
+                  <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs">
+                    +{destinations.filter(d => d.visited).length - 8} more
+                  </span>
+                )}
               </div>
             </div>
           )}
 
           {/* Upcoming Destinations */}
           {destinations.filter(d => d.upcoming).length > 0 && (
-            <div className="flex items-start gap-3">
-              <motion.div 
-                animate={{ y: [0, -3, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-                className="mt-1 flex-shrink-0"
-              >
-                <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/30 rounded-full flex items-center justify-center">
-                  <Plane className="w-4 h-4 text-blue-500" />
-                </div>
-              </motion.div>
-              <div className="flex-1">
-                <h4 className="font-medium text-foreground mb-2">On the Horizon</h4>
-                <div className="flex flex-wrap gap-2">
-                  {destinations.filter(d => d.upcoming).map((dest, index) => (
-                    <motion.span 
-                      key={dest.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="px-3 py-1 bg-muted text-foreground rounded-full text-sm font-medium border border-border"
-                    >
-                      {dest.name}
-                      {dest.upcomingDate && (
-                        <span className="text-blue-500 ml-1 text-xs">• {dest.upcomingDate}</span>
-                      )}
-                    </motion.span>
-                  ))}
-                </div>
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <span className="text-sm font-medium text-foreground">Upcoming ({upcomingCount})</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {destinations.filter(d => d.upcoming).map(d => (
+                  <span 
+                    key={d.id}
+                    className="px-3 py-1 bg-blue-500/10 text-blue-700 dark:text-blue-400 rounded-full text-xs font-medium flex items-center gap-1"
+                  >
+                    <Calendar className="h-3 w-3" />
+                    {d.name} • {d.upcomingDate}
+                  </span>
+                ))}
               </div>
             </div>
           )}
         </div>
-
-        {/* Stats Row */}
-        <motion.div 
-          className="mt-6 pt-6 border-t border-border"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-        >
-          {/* Animated Legend */}
-          <div className="flex justify-center gap-6 mb-6 text-sm">
-            {[
-              { label: 'Visited', color: '#10B981', count: visitedCount },
-              { label: 'Upcoming', color: '#3B82F6', count: upcomingCount },
-            ].map((item, index) => (
-              <motion.div
-                key={item.label}
-                className="flex items-center gap-2"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 1 + index * 0.1 }}
-              >
-                <motion.div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, delay: index * 0.5 }}
-                />
-                <span className="text-muted-foreground">
-                  {item.label} ({item.count})
-                </span>
-              </motion.div>
-            ))}
-          </div>
-          
-          {/* Stats */}
-          <div className="flex items-center justify-center gap-6 text-sm">
-            <motion.div 
-              className="text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.2 }}
-            >
-              <motion.div 
-                className="text-2xl font-light text-foreground"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 1.3, type: "spring" }}
-              >
-                {destinations.length}
-              </motion.div>
-              <div className="text-xs text-muted-foreground">Total Destinations</div>
-            </motion.div>
-            <div className="w-px h-8 bg-border" />
-            <motion.div 
-              className="text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.3 }}
-            >
-              <motion.div 
-                className="text-2xl font-light text-foreground"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 1.4, type: "spring" }}
-              >
-                {(() => {
-                  const visitedWithRating = destinations.filter(d => d.visited && d.rating);
-                  if (visitedWithRating.length === 0) return '—';
-                  const avg = visitedWithRating.reduce((acc, d) => acc + (d.rating || 0), 0) / visitedWithRating.length;
-                  return avg.toFixed(1);
-                })()}
-              </motion.div>
-              <div className="text-xs text-muted-foreground">Avg Rating</div>
-            </motion.div>
-            <div className="w-px h-8 bg-border" />
-            <motion.div 
-              className="text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.4 }}
-            >
-              <motion.div 
-                className="text-2xl font-light text-foreground"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 1.5, type: "spring" }}
-              >
-                {upcomingCount}
-              </motion.div>
-              <div className="text-xs text-muted-foreground">Upcoming Trips</div>
-            </motion.div>
-          </div>
-        </motion.div>
       </motion.div>
-
-      {/* Destination detail modal */}
-      <AnimatePresence>
-        {selectedDestination && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-            onClick={() => setSelectedDestination(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              className="bg-card rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-light text-foreground">
-                    {selectedDestination.name}, {selectedDestination.country}
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setSelectedDestination(null)}
-                  className="text-muted-foreground hover:text-foreground text-xl"
-                >
-                  ×
-                </button>
-              </div>
-
-              {selectedDestination.visited && (
-                <div className="mb-4 p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="w-4 h-4 text-emerald-500" />
-                    <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                      Visited {selectedDestination.visitDate}
-                    </span>
-                  </div>
-                  {selectedDestination.rating && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <Star className="w-4 h-4 text-emerald-500" />
-                      <span className="text-sm text-emerald-600 dark:text-emerald-400">
-                        Rated {selectedDestination.rating} stars
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedDestination.upcoming && (
-                <div className="mb-4 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                  <div className="flex items-center gap-2">
-                    <Plane className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                      Coming up {selectedDestination.upcomingDate}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2 mt-6">
-                <button className="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-lg hover:bg-primary/90 transition-colors">
-                  View Trip
-                </button>
-                <button className="flex-1 bg-muted text-foreground py-2 px-4 rounded-lg hover:bg-muted/80 transition-colors">
-                  Learn More
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }
