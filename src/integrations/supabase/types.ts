@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      feature_flags: {
+        Row: {
+          category: string
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          value_type: string
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          description?: string | null
+          id: string
+          name: string
+          value_type?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          value_type?: string
+        }
+        Relationships: []
+      }
       friendships: {
         Row: {
           addressee_id: string
@@ -55,6 +82,87 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      plan_entitlements: {
+        Row: {
+          created_at: string | null
+          enabled: boolean | null
+          flag_id: string
+          id: string
+          plan_id: string
+          updated_at: string | null
+          value_json: Json | null
+          value_number: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          enabled?: boolean | null
+          flag_id: string
+          id?: string
+          plan_id: string
+          updated_at?: string | null
+          value_json?: Json | null
+          value_number?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          enabled?: boolean | null
+          flag_id?: string
+          id?: string
+          plan_id?: string
+          updated_at?: string | null
+          value_json?: Json | null
+          value_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_entitlements_flag_id_fkey"
+            columns: ["flag_id"]
+            isOneToOne: false
+            referencedRelation: "feature_flags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_entitlements_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plans: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          display_order: number | null
+          id: string
+          is_addon: boolean | null
+          name: string
+          stripe_price_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          id: string
+          is_addon?: boolean | null
+          name: string
+          stripe_price_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          id?: string
+          is_addon?: boolean | null
+          name?: string
+          stripe_price_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -244,6 +352,53 @@ export type Database = {
         }
         Relationships: []
       }
+      user_entitlement_overrides: {
+        Row: {
+          created_at: string | null
+          enabled: boolean | null
+          expires_at: string | null
+          flag_id: string
+          id: string
+          reason: string | null
+          updated_at: string | null
+          user_id: string
+          value_json: Json | null
+          value_number: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          enabled?: boolean | null
+          expires_at?: string | null
+          flag_id: string
+          id?: string
+          reason?: string | null
+          updated_at?: string | null
+          user_id: string
+          value_json?: Json | null
+          value_number?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          enabled?: boolean | null
+          expires_at?: string | null
+          flag_id?: string
+          id?: string
+          reason?: string | null
+          updated_at?: string | null
+          user_id?: string
+          value_json?: Json | null
+          value_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_entitlement_overrides_flag_id_fkey"
+            columns: ["flag_id"]
+            isOneToOne: false
+            referencedRelation: "feature_flags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences: {
         Row: {
           accommodation_style: string | null
@@ -306,6 +461,36 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_usage: {
+        Row: {
+          count: number | null
+          created_at: string | null
+          id: string
+          metric_key: string
+          period: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          count?: number | null
+          created_at?: string | null
+          id?: string
+          metric_key: string
+          period: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          count?: number | null
+          created_at?: string | null
+          id?: string
+          metric_key?: string
+          period?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []

@@ -1,0 +1,232 @@
+/**
+ * Entitlements Hook & Utilities
+ * 
+ * Provides subscription-aware feature gating throughout the app.
+ * Connects to Stripe subscriptions via the get-entitlements edge function.
+ */
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface Entitlement {
+  enabled: boolean;
+  limit?: number;
+  used?: number;
+}
+
+export interface EntitlementsResponse {
+  user_id: string;
+  plans: string[];
+  is_paid: boolean;
+  has_addon: boolean;
+  subscription_end: string | null;
+  entitlements: Record<string, Entitlement>;
+  usage: Record<string, number>;
+}
+
+// Feature flag keys for type safety
+export type FeatureFlag =
+  // AI / LLM
+  | 'ai.itinerary.generate'
+  | 'ai.itinerary.generate_quota_month'
+  | 'ai.itinerary.regenerate'
+  | 'ai.itinerary.max_regenerations_per_trip'
+  | 'ai.itinerary.reasoning'
+  | 'ai.dream_quiz'
+  | 'ai.chat_assistant'
+  // Trip saving
+  | 'trip.save.enabled'
+  | 'trip.save.max_drafts'
+  | 'trip.export'
+  // Booking
+  | 'booking.flight_search'
+  | 'booking.hotel_search'
+  | 'booking.checkout'
+  | 'booking.price_lock'
+  // Enrichment
+  | 'enrich.venue_details'
+  | 'enrich.photos'
+  | 'enrich.reviews'
+  | 'enrich.live_refresh'
+  | 'enrich.max_venues_per_trip';
+
+// ============================================================================
+// Hook
+// ============================================================================
+
+export function useEntitlements() {
+  const { user, isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['entitlements', user?.id],
+    queryFn: async (): Promise<EntitlementsResponse> => {
+      const { data, error } = await supabase.functions.invoke('get-entitlements');
+      if (error) throw error;
+      return data;
+    },
+    enabled: isAuthenticated && !!user?.id,
+    staleTime: 60000, // 1 minute
+    refetchOnWindowFocus: true,
+  });
+
+  // Refresh entitlements (e.g., after checkout)
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['entitlements'] });
+  };
+
+  return {
+    ...query,
+    refresh,
+    // Convenience accessors
+    isPaid: query.data?.is_paid ?? false,
+    hasAddon: query.data?.has_addon ?? false,
+    plans: query.data?.plans ?? ['free'],
+    entitlements: query.data?.entitlements ?? {},
+    usage: query.data?.usage ?? {},
+  };
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Check if a feature is enabled
+ */
+export function canUse(
+  entitlements: Record<string, Entitlement> | undefined,
+  flag: FeatureFlag
+): boolean {
+  if (!entitlements) return false;
+  const ent = entitlements[flag];
+  if (!ent) return false;
+  
+  // If it has a limit, check usage
+  if (ent.limit !== undefined && ent.used !== undefined) {
+    return ent.enabled && ent.used < ent.limit;
+  }
+  
+  return ent.enabled;
+}
+
+/**
+ * Get remaining quota for a feature
+ */
+export function getRemainingQuota(
+  entitlements: Record<string, Entitlement> | undefined,
+  flag: FeatureFlag
+): number | null {
+  if (!entitlements) return null;
+  const ent = entitlements[flag];
+  if (!ent || ent.limit === undefined) return null;
+  
+  const used = ent.used ?? 0;
+  return Math.max(0, ent.limit - used);
+}
+
+/**
+ * Check if user has hit their limit
+ */
+export function isAtLimit(
+  entitlements: Record<string, Entitlement> | undefined,
+  flag: FeatureFlag
+): boolean {
+  if (!entitlements) return true;
+  const ent = entitlements[flag];
+  if (!ent) return true;
+  
+  if (ent.limit !== undefined && ent.used !== undefined) {
+    return ent.used >= ent.limit;
+  }
+  
+  return !ent.enabled;
+}
+
+// ============================================================================
+// Usage Consumption Hook
+// ============================================================================
+
+export function useConsumeUsage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ metricKey, amount = 1 }: { metricKey: string; amount?: number }) => {
+      const { data, error } = await supabase.functions.invoke('consume-usage', {
+        body: { metric_key: metricKey, amount },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      // Refresh entitlements to get updated usage
+      queryClient.invalidateQueries({ queryKey: ['entitlements'] });
+    },
+  });
+}
+
+// ============================================================================
+// Gating Component Helper
+// ============================================================================
+
+interface FeatureGateResult {
+  allowed: boolean;
+  reason: 'enabled' | 'disabled' | 'limit_reached' | 'loading' | 'unauthenticated';
+  remaining?: number;
+  limit?: number;
+}
+
+export function checkFeatureAccess(
+  entitlements: Record<string, Entitlement> | undefined,
+  flag: FeatureFlag,
+  isLoading: boolean,
+  isAuthenticated: boolean
+): FeatureGateResult {
+  if (!isAuthenticated) {
+    return { allowed: false, reason: 'unauthenticated' };
+  }
+  
+  if (isLoading || !entitlements) {
+    return { allowed: false, reason: 'loading' };
+  }
+
+  const ent = entitlements[flag];
+  if (!ent) {
+    return { allowed: false, reason: 'disabled' };
+  }
+
+  if (!ent.enabled) {
+    return { allowed: false, reason: 'disabled' };
+  }
+
+  if (ent.limit !== undefined) {
+    const used = ent.used ?? 0;
+    const remaining = Math.max(0, ent.limit - used);
+    
+    if (remaining <= 0) {
+      return { allowed: false, reason: 'limit_reached', remaining: 0, limit: ent.limit };
+    }
+    
+    return { allowed: true, reason: 'enabled', remaining, limit: ent.limit };
+  }
+
+  return { allowed: true, reason: 'enabled' };
+}
+
+// ============================================================================
+// Export
+// ============================================================================
+
+export default {
+  useEntitlements,
+  useConsumeUsage,
+  canUse,
+  getRemainingQuota,
+  isAtLimit,
+  checkFeatureAccess,
+};
