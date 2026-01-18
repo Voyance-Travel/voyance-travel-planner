@@ -1,0 +1,448 @@
+/**
+ * Lovable AI Itinerary Generation Hook
+ * 
+ * Replaces Railway backend with Lovable AI Gateway for itinerary generation.
+ * Generates day-by-day with real progress tracking and streaming feedback.
+ */
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import type { DayItinerary, BackendDay } from '@/types/itinerary';
+import { convertBackendDay } from '@/types/itinerary';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type GenerationStep = 
+  | 'idle' 
+  | 'fetching-trip' 
+  | 'generating' 
+  | 'enriching' 
+  | 'saving' 
+  | 'complete' 
+  | 'error';
+
+export interface GenerationPreferences {
+  pace?: 'relaxed' | 'moderate' | 'packed';
+  interests?: string[];
+  budget?: 'budget' | 'moderate' | 'luxury';
+}
+
+export interface LovableItineraryState {
+  loading: boolean;
+  progress: number;
+  currentStep: GenerationStep;
+  currentDay: number;
+  totalDays: number;
+  message: string;
+  days: DayItinerary[];
+  error: Error | null;
+  hasExistingItinerary: boolean;
+  generationStartTime: number | null;
+  generationDuration: number | null;
+}
+
+interface TripDetails {
+  tripId: string;
+  destination: string;
+  destinationCountry?: string;
+  startDate: string;
+  endDate: string;
+  travelers: number;
+  tripType?: string;
+  budgetTier?: string;
+}
+
+interface GeneratedDay {
+  dayNumber: number;
+  date: string;
+  theme: string;
+  activities: Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    startTime: string;
+    endTime: string;
+    duration: string;
+    location: string;
+    estimatedCost: { amount: number; currency: string };
+    bookingRequired: boolean;
+    tips?: string;
+    coordinates?: { lat: number; lng: number };
+  }>;
+  narrative?: {
+    theme: string;
+    highlights: string[];
+  };
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function calculateDaysBetween(start: string, end: string): number {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+}
+
+function formatDate(startDate: string, dayOffset: number): string {
+  const date = new Date(startDate);
+  date.setDate(date.getDate() + dayOffset);
+  return date.toISOString().split('T')[0];
+}
+
+function convertGeneratedToBackendDay(day: GeneratedDay): BackendDay {
+  return {
+    dayNumber: day.dayNumber,
+    date: day.date,
+    theme: day.theme,
+    activities: day.activities.map(a => ({
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      category: a.category,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      duration: a.duration,
+      location: a.location,
+      estimatedCost: a.estimatedCost,
+      bookingRequired: a.bookingRequired,
+      tips: a.tips,
+      coordinates: a.coordinates,
+    })),
+  };
+}
+
+// ============================================================================
+// HOOK
+// ============================================================================
+
+export function useLovableItinerary(tripId: string | null) {
+  const [state, setState] = useState<LovableItineraryState>({
+    loading: false,
+    progress: 0,
+    currentStep: 'idle',
+    currentDay: 0,
+    totalDays: 0,
+    message: '',
+    days: [],
+    error: null,
+    hasExistingItinerary: false,
+    generationStartTime: null,
+    generationDuration: null,
+  });
+
+  const isMounted = useRef(true);
+  const abortController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      abortController.current?.abort();
+    };
+  }, []);
+
+  // Check for existing itinerary in database
+  const checkExisting = useCallback(async (): Promise<boolean> => {
+    if (!tripId) return false;
+
+    try {
+      const { data: trip, error } = await supabase
+        .from('trips')
+        .select('itinerary_data, itinerary_status')
+        .eq('id', tripId)
+        .single();
+
+      if (error) {
+        console.error('[useLovableItinerary] Error checking existing:', error);
+        return false;
+      }
+
+      const itineraryData = trip?.itinerary_data as { days?: BackendDay[] } | null;
+      
+      if (itineraryData?.days?.length) {
+        const convertedDays = itineraryData.days.map(convertBackendDay);
+        if (isMounted.current) {
+          setState(prev => ({
+            ...prev,
+            hasExistingItinerary: true,
+            days: convertedDays,
+            currentStep: 'complete',
+            progress: 100,
+            totalDays: convertedDays.length,
+          }));
+        }
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[useLovableItinerary] Error:', error);
+      return false;
+    }
+  }, [tripId]);
+
+  // Generate itinerary day by day using Lovable AI
+  const generateItinerary = useCallback(async (preferences?: GenerationPreferences) => {
+    if (!tripId) return;
+
+    const startTime = Date.now();
+    abortController.current = new AbortController();
+
+    setState(prev => ({
+      ...prev,
+      loading: true,
+      progress: 0,
+      error: null,
+      currentStep: 'fetching-trip',
+      message: 'Preparing your trip details...',
+      generationStartTime: startTime,
+      days: [],
+    }));
+
+    try {
+      // Step 1: Fetch trip details (5%)
+      console.log('[useLovableItinerary] Fetching trip details...');
+      const { data: tripResponse, error: tripError } = await supabase.functions.invoke('generate-itinerary', {
+        body: { action: 'get-trip', tripId }
+      });
+
+      if (tripError || !tripResponse?.success) {
+        throw new Error(tripResponse?.error || tripError?.message || 'Failed to fetch trip');
+      }
+
+      const tripDetails: TripDetails = tripResponse.trip;
+      const totalDays = calculateDaysBetween(tripDetails.startDate, tripDetails.endDate);
+
+      if (!isMounted.current) return;
+      setState(prev => ({
+        ...prev,
+        progress: 5,
+        totalDays,
+        currentStep: 'generating',
+        message: `Planning ${totalDays} days in ${tripDetails.destination}...`,
+      }));
+
+      // Step 2: Generate each day (5% - 80%)
+      const generatedDays: GeneratedDay[] = [];
+      const previousActivities: string[] = [];
+
+      for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+        if (!isMounted.current || abortController.current?.signal.aborted) break;
+
+        const dayProgress = 5 + ((dayNum - 1) / totalDays) * 75;
+        setState(prev => ({
+          ...prev,
+          currentDay: dayNum,
+          progress: dayProgress,
+          message: `Crafting Day ${dayNum} of ${totalDays}...`,
+        }));
+
+        console.log(`[useLovableItinerary] Generating day ${dayNum}/${totalDays}`);
+
+        const { data: dayResponse, error: dayError } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'generate-day',
+            tripId,
+            dayNumber: dayNum,
+            totalDays,
+            destination: tripDetails.destination,
+            destinationCountry: tripDetails.destinationCountry,
+            date: formatDate(tripDetails.startDate, dayNum - 1),
+            travelers: tripDetails.travelers,
+            tripType: tripDetails.tripType,
+            budgetTier: tripDetails.budgetTier,
+            preferences,
+            previousDayActivities: previousActivities.slice(-10), // Last 10 activities
+          }
+        });
+
+        if (dayError) {
+          console.error(`[useLovableItinerary] Day ${dayNum} error:`, dayError);
+          // Handle rate limiting
+          if (dayError.message?.includes('429') || dayError.message?.includes('Rate limit')) {
+            throw new Error('Rate limit exceeded. Please try again in a moment.');
+          }
+          if (dayError.message?.includes('402')) {
+            throw new Error('AI credits exhausted. Please add credits to continue.');
+          }
+          throw dayError;
+        }
+
+        if (!dayResponse?.success || !dayResponse?.day) {
+          throw new Error(`Failed to generate day ${dayNum}`);
+        }
+
+        const generatedDay = dayResponse.day as GeneratedDay;
+        generatedDays.push(generatedDay);
+
+        // Track activities to avoid repetition
+        generatedDay.activities.forEach(a => previousActivities.push(a.name));
+
+        // Update UI with new day immediately
+        const backendDay = convertGeneratedToBackendDay(generatedDay);
+        const frontendDay = convertBackendDay(backendDay);
+
+        if (isMounted.current) {
+          setState(prev => ({
+            ...prev,
+            days: [...prev.days, frontendDay],
+            progress: 5 + (dayNum / totalDays) * 75,
+          }));
+        }
+      }
+
+      if (!isMounted.current) return;
+
+      // Step 3: Enrich with weather/distances (80% - 90%)
+      setState(prev => ({
+        ...prev,
+        currentStep: 'enriching',
+        progress: 80,
+        message: 'Adding weather and walking distances...',
+      }));
+
+      try {
+        const { data: enrichResponse } = await supabase.functions.invoke('enrich-itinerary', {
+          body: {
+            tripId,
+            destination: tripDetails.destination,
+            days: generatedDays.map(d => ({
+              dayNumber: d.dayNumber,
+              date: d.date,
+              activities: d.activities.map(a => ({
+                id: a.id,
+                name: a.name,
+                location: a.location,
+                coordinates: a.coordinates,
+              })),
+            })),
+          }
+        });
+
+        if (enrichResponse?.success && enrichResponse?.days) {
+          // Merge enrichment data
+          const enrichedDays = generatedDays.map((day, idx) => {
+            const enrichment = enrichResponse.days[idx];
+            return {
+              ...day,
+              weather: enrichment?.weather,
+              activities: day.activities.map((a, aIdx) => ({
+                ...a,
+                walkingDistance: enrichment?.activities?.[aIdx]?.walkingDistance,
+                walkingTime: enrichment?.activities?.[aIdx]?.walkingTime,
+              })),
+            };
+          });
+
+          // Update state with enriched days
+          const convertedDays = enrichedDays.map(d => convertBackendDay(convertGeneratedToBackendDay(d)));
+          if (isMounted.current) {
+            setState(prev => ({ ...prev, days: convertedDays }));
+          }
+        }
+      } catch (enrichError) {
+        console.warn('[useLovableItinerary] Enrichment failed, continuing:', enrichError);
+        // Non-fatal, continue with unenriched data
+      }
+
+      // Step 4: Save to database (90% - 100%)
+      if (!isMounted.current) return;
+      setState(prev => ({
+        ...prev,
+        currentStep: 'saving',
+        progress: 90,
+        message: 'Saving your itinerary...',
+      }));
+
+      const itineraryToSave = {
+        days: generatedDays.map(convertGeneratedToBackendDay),
+        generatedAt: new Date().toISOString(),
+        destination: tripDetails.destination,
+      };
+
+      const { error: saveError } = await supabase.functions.invoke('generate-itinerary', {
+        body: {
+          action: 'save-itinerary',
+          tripId,
+          itinerary: itineraryToSave,
+        }
+      });
+
+      if (saveError) {
+        console.error('[useLovableItinerary] Save failed:', saveError);
+        // Non-fatal, itinerary is still in state
+      }
+
+      // Complete!
+      const duration = Date.now() - startTime;
+      if (isMounted.current) {
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          progress: 100,
+          currentStep: 'complete',
+          message: 'Your itinerary is ready!',
+          generationDuration: duration,
+          hasExistingItinerary: true,
+        }));
+      }
+
+      console.log(`[useLovableItinerary] Generation complete in ${(duration / 1000).toFixed(1)}s`);
+
+    } catch (error) {
+      console.error('[useLovableItinerary] Generation failed:', error);
+      if (isMounted.current) {
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          currentStep: 'error',
+          error: error instanceof Error ? error : new Error('Generation failed'),
+          message: error instanceof Error ? error.message : 'Something went wrong. Please try again.',
+        }));
+      }
+    }
+  }, [tripId]);
+
+  // Regenerate from scratch
+  const regenerate = useCallback(async (preferences?: GenerationPreferences) => {
+    setState(prev => ({
+      ...prev,
+      hasExistingItinerary: false,
+      days: [],
+      progress: 0,
+      currentStep: 'idle',
+      error: null,
+    }));
+    await generateItinerary(preferences);
+  }, [generateItinerary]);
+
+  // Cancel ongoing generation
+  const cancel = useCallback(() => {
+    abortController.current?.abort();
+    setState(prev => ({
+      ...prev,
+      loading: false,
+      currentStep: prev.days.length > 0 ? 'complete' : 'idle',
+      message: prev.days.length > 0 ? 'Generation stopped (partial itinerary)' : 'Generation cancelled',
+    }));
+  }, []);
+
+  // Clear error state
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null, currentStep: 'idle' }));
+  }, []);
+
+  return {
+    ...state,
+    checkExisting,
+    generateItinerary,
+    regenerate,
+    cancel,
+    clearError,
+  };
+}
