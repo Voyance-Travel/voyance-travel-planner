@@ -4,14 +4,16 @@ import { SignInForm } from '@/components/auth/SignInForm';
 import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
-import { useAuth } from '@/contexts/AuthContext';
-import { Compass, Sparkles, MapPin, Star, Plane } from 'lucide-react';
+import { useAuth, toggleDemoMode, isDemoModeEnabled } from '@/contexts/AuthContext';
+import { Compass, Sparkles, MapPin, Star, Plane, FlaskConical } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function SignIn() {
   const [searchParams] = useSearchParams();
   const { isLoading: authLoading } = useAuth();
   const nextPath = searchParams.get('next') || '/profile';
   const isRedirectedFromProtected = nextPath && nextPath.startsWith('/');
+  const demoActive = isDemoModeEnabled();
 
   const heroImage = {
     src: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80',
@@ -173,6 +175,24 @@ export default function SignIn() {
                 </div>
                 
                 <SignInForm />
+                
+                {/* Demo Mode Toggle - for preview testing */}
+                <div className="mt-6 p-4 bg-muted/50 border border-dashed border-border rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <FlaskConical className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">Preview Mode</p>
+                      <p className="text-xs text-muted-foreground">Test the app without real authentication</p>
+                    </div>
+                    <Button
+                      variant={demoActive ? 'destructive' : 'outline'}
+                      size="sm"
+                      onClick={() => toggleDemoMode(!demoActive)}
+                    >
+                      {demoActive ? 'Exit Demo' : 'Enter Demo'}
+                    </Button>
+                  </div>
+                </div>
                 
                 {/* Bottom legal */}
                 <motion.div

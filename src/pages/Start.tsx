@@ -38,7 +38,7 @@ function AirportAutocomplete({
   icon: Icon = Plane,
 }: {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, metroInfo?: { name: string; codes: string[] }) => void;
   placeholder: string;
   icon?: typeof Plane;
 }) {
@@ -46,7 +46,7 @@ function AirportAutocomplete({
   const [inputValue, setInputValue] = useState(value);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [loading, setLoading] = useState(false);
-  const [metroName, setMetroName] = useState<string | null>(null);
+  const [metroInfo, setMetroInfo] = useState<{ name: string; codes: string[] } | null>(null);
 
   const debouncedQuery = useDebounce(inputValue, 300);
 
@@ -62,16 +62,24 @@ function AirportAutocomplete({
       setLoading(true);
       import('@/services/locationSearchAPI').then(({ getMetroAreaInfo }) => {
         const metro = getMetroAreaInfo(debouncedQuery);
-        setMetroName(metro?.name || null);
+        setMetroInfo(metro);
       });
       searchAirports(debouncedQuery, 12)
         .then(setAirports)
         .finally(() => setLoading(false));
     } else {
       setAirports([]);
-      setMetroName(null);
+      setMetroInfo(null);
     }
   }, [debouncedQuery]);
+
+  const handleSelectMetro = () => {
+    if (!metroInfo) return;
+    const display = `${metroInfo.name} (All airports)`;
+    setInputValue(display);
+    onChange(display, metroInfo);
+    setIsOpen(false);
+  };
 
   const handleSelect = (airport: Airport) => {
     const display = formatAirportDisplay(airport);
@@ -114,12 +122,24 @@ function AirportAutocomplete({
             </div>
           ) : airports.length > 0 ? (
             <>
-              {/* Metro grouping header */}
-              {metroName && airports.length > 1 && (
-                <div className="px-4 py-2 bg-primary/5 border-b border-border flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs font-medium text-primary uppercase tracking-wide">{metroName} Area Airports</span>
-                </div>
+              {/* Metro area "All airports" option */}
+              {metroInfo && airports.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-left hover:bg-primary/10 flex items-center gap-3 transition-colors bg-primary/5 border-b border-primary/20"
+                    onMouseDown={handleSelectMetro}
+                  >
+                    <span className="text-xs font-bold text-primary tracking-wide w-10">ALL</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-sans text-sm font-medium text-primary">{metroInfo.name} (All airports)</p>
+                      <p className="text-xs text-muted-foreground">Search {metroInfo.codes.join(', ')} for best prices</p>
+                    </div>
+                  </button>
+                  <div className="px-4 py-1.5 bg-muted/50 border-b border-border">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Or choose specific airport</span>
+                  </div>
+                </>
               )}
               {airports.map((airport, idx) => (
                 <button

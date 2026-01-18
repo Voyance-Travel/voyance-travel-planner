@@ -90,10 +90,57 @@ function transformProfile(
   };
 }
 
+// Demo mode for preview testing (dev only)
+const DEMO_MODE_KEY = 'voyance_demo_mode';
+const DEMO_USER: User = {
+  id: 'demo-user-001',
+  email: 'demo@voyance.travel',
+  name: 'Demo Traveler',
+  avatar: undefined,
+  homeAirport: 'JFK',
+  createdAt: new Date().toISOString(),
+  quizCompleted: true,
+  preferences: {
+    style: 'boutique',
+    budget: 'moderate',
+    pace: 'relaxed',
+    accommodation: 'boutique',
+  },
+  travelDNA: {
+    type: 'Explorer',
+    secondary: 'Relaxer',
+    confidence: 85,
+  },
+};
+
+export function isDemoModeEnabled(): boolean {
+  return localStorage.getItem(DEMO_MODE_KEY) === 'true';
+}
+
+export function toggleDemoMode(enabled: boolean): void {
+  if (enabled) {
+    localStorage.setItem(DEMO_MODE_KEY, 'true');
+  } else {
+    localStorage.removeItem(DEMO_MODE_KEY);
+  }
+  window.location.reload();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // Check for demo mode on mount
+  useEffect(() => {
+    if (isDemoModeEnabled()) {
+      setIsDemoMode(true);
+      setUser(DEMO_USER);
+      setSession({ user: { id: DEMO_USER.id, email: DEMO_USER.email } } as Session);
+      setIsLoading(false);
+    }
+  }, []);
 
   // Load user data from backend
   const loadUserData = async (supabaseUser: SupabaseUser) => {
@@ -145,6 +192,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Skip real auth if demo mode is active
+    if (isDemoMode) return;
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
@@ -183,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [isDemoMode]);
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -239,6 +289,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // Handle demo mode logout
+    if (isDemoMode) {
+      toggleDemoMode(false);
+      return;
+    }
+    
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Logout error:', error);
@@ -293,7 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
-        isAuthenticated: !!session,
+        isAuthenticated: !!session || isDemoMode,
         isLoading,
         login,
         signup,

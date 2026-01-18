@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
 
 export default function PlannerBooking() {
   const [searchParams] = useSearchParams();
@@ -137,12 +138,14 @@ export default function PlannerBooking() {
       <section className="py-10 min-h-screen bg-background">
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            {/* Hero */}
+            {/* Hero - using destination-specific image */}
             <div className="relative mb-12 rounded-3xl overflow-hidden h-64 md:h-80">
-              <img
-                src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80"
-                alt={state.basics.destination}
-                className="w-full h-full object-cover"
+              <DynamicDestinationPhotos 
+                destination={state.basics.destination || ''} 
+                startDate={state.basics.startDate || ''} 
+                endDate={state.basics.endDate || ''} 
+                travelers={travelers}
+                variant="hero"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-8 text-foreground">
