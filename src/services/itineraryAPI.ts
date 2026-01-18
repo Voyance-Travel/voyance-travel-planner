@@ -1,19 +1,13 @@
 /**
  * Enhanced Itinerary API Service
  * 
- * Comprehensive itinerary generation and management with:
- * - Weather data for each day
- * - Photos for activities
- * - Walking distances and transport between activities
- * - Progressive generation with status polling
- * 
- * Matches backend: itinerary.ts
+ * Uses Cloud edge functions for itinerary generation:
+ * - generate-itinerary: AI-powered day generation
+ * - Stores itineraries in trips.itinerary_data
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // TYPES
@@ -23,8 +17,8 @@ export interface ItineraryPreferences {
   pace?: 'slow' | 'moderate' | 'fast';
   interests?: string[];
   budget?: 'budget' | 'moderate' | 'premium';
-  arrivalTime?: string; // HH:MM
-  departureTime?: string; // HH:MM
+  arrivalTime?: string;
+  departureTime?: string;
 }
 
 export interface GenerateItineraryInput {
@@ -47,7 +41,7 @@ export interface ActivityVenue {
 
 export interface ActivityTransport {
   mode: string;
-  duration: number; // minutes
+  duration: number;
   cost: number;
   details?: string;
 }
@@ -69,11 +63,10 @@ export interface ItineraryActivity {
   estimatedCost: { amount: number; currency: string };
   bookingRequired: boolean;
   tips?: string;
-  // Enhanced fields
   coordinates?: ActivityCoordinates;
   photos?: string[];
-  walkingDistance?: number; // meters from previous activity
-  walkingTime?: number; // minutes to walk
+  walkingDistance?: number;
+  walkingTime?: number;
   transport?: ActivityTransport;
   venue?: ActivityVenue;
   weather?: {
@@ -122,7 +115,6 @@ export interface ItineraryDay {
   activities: ItineraryActivity[];
   meals?: DayMeals;
   regeneratedAt?: string;
-  // Enhanced fields
   weather?: DayWeather;
   transportation?: DayTransportation;
   totalWalkingDistance?: number;
@@ -164,60 +156,151 @@ export interface RegenerateDayInput {
   reason?: string;
 }
 
-export interface JobStatusResponse {
-  id: string;
-  state: string;
-  progress: number;
-  data?: Record<string, unknown>;
-  attemptsMade: number;
-  finishedOn?: number;
-  failedReason?: string;
-}
-
 // ============================================================================
-// API HELPERS
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` };
-  }
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
-// ============================================================================
-// API FUNCTIONS
+// API FUNCTIONS - Now using Cloud Edge Functions
 // ============================================================================
 
 /**
- * Generate a new itinerary for a trip
+ * Get trip details from database
+ */
+async function getTripDetails(tripId: string) {
+  const { data: trip, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .single();
+
+  if (error || !trip) {
+    throw new Error('Trip not found');
+  }
+
+  return trip;
+}
+
+/**
+ * Calculate number of days between dates
+ */
+function calculateDays(startDate: string, endDate: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+/**
+ * Get itinerary status/content for a trip
+ */
+export async function getItinerary(tripId: string): Promise<ItineraryStatusResponse> {
+  const trip = await getTripDetails(tripId);
+  
+  const itineraryData = trip.itinerary_data as unknown as Itinerary | null;
+  const status = (trip.itinerary_status || 'not_started') as ItineraryStatus;
+  
+  if (itineraryData && itineraryData.days?.length > 0) {
+    return {
+      status: 'ready',
+      itinerary: itineraryData,
+      hasItinerary: true,
+    };
+  }
+  
+  return {
+    status,
+    hasItinerary: false,
+  };
+}
+
+/**
+ * Generate a new itinerary for a trip using Cloud edge function
  */
 export async function generateItinerary(
   tripId: string,
   input?: GenerateItineraryInput
 ): Promise<ItineraryStatusResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/itinerary/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: JSON.stringify(input || {}),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to generate itinerary' }));
-    throw new Error(error.error || error.message || 'Failed to generate itinerary');
+  const trip = await getTripDetails(tripId);
+  const totalDays = calculateDays(trip.start_date, trip.end_date);
+  
+  // Update trip status to generating
+  await supabase
+    .from('trips')
+    .update({ itinerary_status: 'generating' })
+    .eq('id', tripId);
+  
+  const days: ItineraryDay[] = [];
+  const previousActivities: string[] = [];
+  
+  // Generate each day progressively
+  for (let dayNumber = 1; dayNumber <= totalDays; dayNumber++) {
+    const dayDate = new Date(trip.start_date);
+    dayDate.setDate(dayDate.getDate() + dayNumber - 1);
+    
+    console.log(`[ItineraryAPI] Generating day ${dayNumber}/${totalDays}`);
+    
+    const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+      body: {
+        action: 'generate-day',
+        tripId,
+        dayNumber,
+        totalDays,
+        destination: trip.destination,
+        destinationCountry: trip.destination_country,
+        date: dayDate.toISOString().split('T')[0],
+        travelers: trip.travelers || 1,
+        tripType: trip.trip_type,
+        budgetTier: trip.budget_tier,
+        preferences: input?.preferences,
+        previousDayActivities: previousActivities,
+      },
+    });
+    
+    if (error) {
+      console.error(`[ItineraryAPI] Day ${dayNumber} generation failed:`, error);
+      await supabase
+        .from('trips')
+        .update({ itinerary_status: 'failed' })
+        .eq('id', tripId);
+      throw new Error(`Failed to generate day ${dayNumber}: ${error.message}`);
+    }
+    
+    if (data?.day) {
+      days.push(data.day);
+      // Track activities for next day to avoid repetition
+      data.day.activities?.forEach((a: ItineraryActivity) => {
+        previousActivities.push(a.name);
+      });
+    }
   }
-
-  return response.json();
+  
+  // Build complete itinerary
+  const itinerary: Itinerary = {
+    title: `${trip.destination} Adventure`,
+    destination: trip.destination,
+    days,
+    generatedAt: new Date().toISOString(),
+    preferences: input?.preferences as Record<string, unknown> | undefined,
+  };
+  
+  // Save to database - cast to any to satisfy Supabase Json type
+  const { error: saveError } = await supabase
+    .from('trips')
+    .update({
+      itinerary_data: JSON.parse(JSON.stringify(itinerary)),
+      itinerary_status: 'ready',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', tripId);
+  
+  if (saveError) {
+    console.error('[ItineraryAPI] Failed to save itinerary:', saveError);
+    throw new Error('Failed to save itinerary');
+  }
+  
+  console.log(`[ItineraryAPI] Itinerary complete: ${days.length} days generated`);
+  
+  return {
+    status: 'ready',
+    itinerary,
+    hasItinerary: true,
+  };
 }
 
 /**
@@ -227,67 +310,14 @@ export async function generateNewItinerary(
   tripId: string,
   input?: GenerateItineraryInput
 ): Promise<ItineraryStatusResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/itinerary/generate-new`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: JSON.stringify({ ...input, regenerate: true }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to generate itinerary' }));
-    throw new Error(error.error || error.message || 'Failed to generate itinerary');
-  }
-
-  return response.json();
+  return generateItinerary(tripId, { ...input, regenerate: true });
 }
 
 /**
- * Generate itinerary immediately (simpler endpoint)
+ * Generate itinerary immediately (alias)
  */
 export async function generateItineraryNow(tripId: string): Promise<ItineraryStatusResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/itinerary/generate-now`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to generate itinerary' }));
-    throw new Error(error.error || error.message || 'Failed to generate itinerary');
-  }
-
-  return response.json();
-}
-
-/**
- * Get itinerary status/content for a trip
- */
-export async function getItinerary(tripId: string): Promise<ItineraryStatusResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/itinerary`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to get itinerary' }));
-    throw new Error(error.error || error.message || 'Failed to get itinerary');
-  }
-
-  return response.json();
+  return generateItinerary(tripId);
 }
 
 /**
@@ -297,23 +327,28 @@ export async function saveItinerary(
   tripId: string,
   itinerary: Partial<Itinerary>
 ): Promise<{ success: boolean; itinerary: Itinerary }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/itinerary`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: JSON.stringify(itinerary),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to save itinerary' }));
-    throw new Error(error.error || error.message || 'Failed to save itinerary');
+  const trip = await getTripDetails(tripId);
+  const existingItinerary = (trip.itinerary_data as unknown as Itinerary) || { days: [] };
+  
+  const mergedItinerary: Itinerary = {
+    ...existingItinerary,
+    ...itinerary,
+    lastModified: new Date().toISOString(),
+  };
+  
+  const { error } = await supabase
+    .from('trips')
+    .update({
+      itinerary_data: JSON.parse(JSON.stringify(mergedItinerary)),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', tripId);
+  
+  if (error) {
+    throw new Error('Failed to save itinerary');
   }
-
-  return response.json();
+  
+  return { success: true, itinerary: mergedItinerary };
 }
 
 /**
@@ -324,48 +359,61 @@ export async function regenerateDay(
   dayNumber: number,
   input?: RegenerateDayInput
 ): Promise<{ success: boolean; day: ItineraryDay }> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(
-    `${API_BASE_URL}/api/v1/trips/${tripId}/itinerary/days/${dayNumber}/regenerate`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers,
-      },
-      body: JSON.stringify(input || {}),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to regenerate day' }));
-    throw new Error(error.error || error.message || 'Failed to regenerate day');
-  }
-
-  return response.json();
-}
-
-/**
- * Get job status for background generation
- */
-export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
-  const headers = await getAuthHeader();
-
-  const response = await fetch(`${API_BASE_URL}/api/v1/jobs/${jobId}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
+  const trip = await getTripDetails(tripId);
+  const totalDays = calculateDays(trip.start_date, trip.end_date);
+  
+  const dayDate = new Date(trip.start_date);
+  dayDate.setDate(dayDate.getDate() + dayNumber - 1);
+  
+  // Get existing itinerary for context
+  const existingItinerary = (trip.itinerary_data as unknown as Itinerary) || { days: [] };
+  const previousActivities = existingItinerary.days
+    .filter(d => d.dayNumber < dayNumber)
+    .flatMap(d => d.activities?.map(a => a.name) || []);
+  
+  const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'generate-day',
+      tripId,
+      dayNumber,
+      totalDays,
+      destination: trip.destination,
+      destinationCountry: trip.destination_country,
+      date: dayDate.toISOString().split('T')[0],
+      travelers: trip.travelers || 1,
+      tripType: trip.trip_type,
+      budgetTier: trip.budget_tier,
+      preferences: input?.preferences,
+      previousDayActivities: previousActivities,
     },
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Job not found' }));
-    throw new Error(error.error || error.message || 'Failed to get job status');
+  
+  if (error || !data?.day) {
+    throw new Error('Failed to regenerate day');
   }
-
-  return response.json();
+  
+  // Update the day in the itinerary
+  const updatedDays = [...existingItinerary.days];
+  const dayIndex = updatedDays.findIndex(d => d.dayNumber === dayNumber);
+  
+  if (dayIndex >= 0) {
+    updatedDays[dayIndex] = { ...data.day, regeneratedAt: new Date().toISOString() };
+  } else {
+    updatedDays.push({ ...data.day, regeneratedAt: new Date().toISOString() });
+  }
+  
+  updatedDays.sort((a, b) => a.dayNumber - b.dayNumber);
+  
+  const updatedItinerary = { ...existingItinerary, days: updatedDays };
+  await supabase
+    .from('trips')
+    .update({
+      itinerary_data: JSON.parse(JSON.stringify(updatedItinerary)),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', tripId);
+  
+  return { success: true, day: data.day };
 }
 
 // ============================================================================
@@ -373,36 +421,30 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
 // ============================================================================
 
 export function useItinerary(tripId: string | null, options?: { refetchInterval?: number }) {
-  // Track consecutive errors for exponential backoff
   const errorCountRef = { current: 0 };
-  const baseInterval = options?.refetchInterval || 5000; // Start at 5 seconds (was 3)
+  const baseInterval = options?.refetchInterval || 5000;
   
   return useQuery({
     queryKey: ['itinerary', tripId],
     queryFn: () => getItinerary(tripId!),
     enabled: !!tripId,
     refetchInterval: (query) => {
-      // Poll while generating with exponential backoff on errors
       const status = query.state.data?.status;
       
-      // Handle errors with exponential backoff
       if (query.state.error) {
         errorCountRef.current++;
         const backoffInterval = Math.min(baseInterval * Math.pow(2, errorCountRef.current), 60000);
-        console.log(`[Itinerary] Error backoff: ${backoffInterval}ms (attempt ${errorCountRef.current})`);
         return backoffInterval;
       }
       
-      // Reset error count on success
       errorCountRef.current = 0;
       
       if (status === 'generating' || status === 'running' || status === 'queued') {
-        return baseInterval; // 5 seconds
+        return baseInterval;
       }
       return false;
     },
-    staleTime: 30 * 1000, // 30 seconds
-    // Stop retrying after 5 minutes of polling
+    staleTime: 30 * 1000,
     retry: (failureCount) => failureCount < 60,
   });
 }
@@ -458,32 +500,6 @@ export function useRegenerateDay() {
     }) => regenerateDay(tripId, dayNumber, input),
     onSuccess: (_, { tripId }) => {
       queryClient.invalidateQueries({ queryKey: ['itinerary', tripId] });
-    },
-  });
-}
-
-export function useJobStatus(jobId: string | null) {
-  const errorCountRef = { current: 0 };
-  
-  return useQuery({
-    queryKey: ['job-status', jobId],
-    queryFn: () => getJobStatus(jobId!),
-    enabled: !!jobId,
-    refetchInterval: (query) => {
-      const state = query.state.data?.state;
-      
-      // Exponential backoff on errors
-      if (query.state.error) {
-        errorCountRef.current++;
-        return Math.min(5000 * Math.pow(2, errorCountRef.current), 60000);
-      }
-      
-      errorCountRef.current = 0;
-      
-      if (state === 'waiting' || state === 'active') {
-        return 5000; // Poll every 5 seconds while running (was 2)
-      }
-      return false;
     },
   });
 }
@@ -580,7 +596,6 @@ const itineraryAPI = {
   getItinerary,
   saveItinerary,
   regenerateDay,
-  getJobStatus,
 };
 
 export default itineraryAPI;

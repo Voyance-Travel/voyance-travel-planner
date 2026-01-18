@@ -638,24 +638,37 @@ export {
   useRegisteredRoutes,
 } from './systemHealthAPI';
 
-// Stripe API (test endpoints)
+// Stripe API
 export { default as stripeAPI } from './stripeAPI';
 export {
   // Types
   type StripeCustomerInfo,
-  type StripeTestCustomerResponse,
-  type StripeProduct,
-  type StripePrice,
-  type StripeTestProductsResponse,
+  type CheckoutSessionInput as StripeCheckoutInput,
+  type CheckoutSessionResponse as StripeCheckoutResponse,
+  type SubscriptionStatus,
+  type CustomerPortalResponse,
+  type BookingCheckoutInput,
   
   // API functions
-  testStripeCustomer,
-  getStripeProducts,
+  createCheckoutSession as createStripeCheckout,
+  createBookingCheckout,
+  checkSubscription,
+  openCustomerPortal,
+  redirectToCheckout as redirectToStripeCheckout,
+  redirectToPortal,
   
   // React Query hooks
-  useStripeCustomer,
-  useStripeProducts,
-  useTestStripeCustomer,
+  useSubscriptionStatus,
+  useCreateCheckoutSession as useStripeCheckout,
+  useCreateBookingCheckout,
+  useRedirectToCheckout as useStripeRedirect,
+  useOpenCustomerPortal,
+  useRedirectToPortal,
+  useRefreshSubscription,
+  
+  // Helpers
+  formatCurrency,
+  getPaymentStatusColor,
 } from './stripeAPI';
 
 // Quiz API - Additional exports for debug/restore
@@ -1568,8 +1581,6 @@ export {
   type ItineraryStatus,
   type ItineraryStatusResponse,
   type RegenerateDayInput,
-  type JobStatusResponse,
-  
   // API functions
   generateItinerary,
   generateNewItinerary,
@@ -1577,7 +1588,6 @@ export {
   getItinerary,
   saveItinerary,
   regenerateDay,
-  getJobStatus,
   
   // React Query hooks
   useItinerary,
@@ -1585,7 +1595,6 @@ export {
   useGenerateNewItinerary,
   useSaveItinerary,
   useRegenerateDay,
-  useJobStatus,
   
   // Helper functions
   isItineraryReady,

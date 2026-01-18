@@ -1,22 +1,15 @@
 /**
  * Voyance Stripe API Service
  * 
- * Integrates with Railway backend Stripe endpoints:
- * - POST /stripe/create-checkout-session - Create payment session
- * - GET /stripe/session/:sessionId - Get session status
- * - POST /stripe/admin/refund - Admin refund (admin only)
- * - POST /stripe/admin/payment-link - Create payment link (admin only)
- * - POST /stripe/refund/:bookingId - Refund booking (admin only)
- * - GET /stripe/health - Health check
- * - GET /stripe/test-customer - Test/verify customer creation
- * - GET /stripe/test-products - List available products/prices
+ * Uses Cloud edge functions for payments:
+ * - create-checkout: Create subscription checkout session
+ * - check-subscription: Verify subscription status
+ * - customer-portal: Manage subscription
+ * - create-booking-checkout: One-time trip booking payment
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
 
 // ============================================================================
 // Types
@@ -30,268 +23,134 @@ export interface StripeCustomerInfo {
   metadata: Record<string, string>;
 }
 
-export interface StripeTestCustomerResponse {
-  success: boolean;
-  customerId?: string;
-  customer?: StripeCustomerInfo;
-  error?: string;
-  message?: string;
-}
-
-export interface StripeProduct {
-  id: string;
-  name: string;
-  description: string | null;
-  active: boolean;
-  prices: StripePrice[];
-}
-
-export interface StripePrice {
-  id: string;
-  currency: string;
-  unit_amount: number | null;
-  recurring: {
-    interval: string;
-    interval_count: number;
-  } | null;
-  type: string;
-}
-
-export interface StripeTestProductsResponse {
-  success: boolean;
-  products?: StripeProduct[];
-  count?: number;
-  error?: string;
-  message?: string;
-}
-
-export interface CheckoutSessionMetadata {
-  tripId?: string;
-  destinationId?: string;
-  description?: string;
-}
-
-export interface CreateCheckoutSessionInput {
+export interface CheckoutSessionInput {
   priceId: string;
-  successUrl: string;
-  cancelUrl: string;
-  metadata?: CheckoutSessionMetadata;
-}
-
-export interface CheckoutSessionResponse {
-  sessionId: string;
-  url: string;
-  expiresAt: string;
-}
-
-export interface SessionStatusResponse {
-  status: string;
-  paymentStatus: string;
-  customerEmail?: string;
-  amountTotal?: number;
-  currency?: string;
-}
-
-export interface CreatePaymentLinkInput {
-  priceId: string;
-  quantity?: number;
+  mode?: 'subscription' | 'payment';
+  successUrl?: string;
+  cancelUrl?: string;
   metadata?: Record<string, string>;
 }
 
-export interface PaymentLinkResponse {
+export interface CheckoutSessionResponse {
   url: string;
-  id: string;
-  expiresAt?: string;
+  error?: string;
 }
 
-export interface RefundInput {
-  paymentIntentId: string;
-  amount?: number;
-  reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer';
+export interface SubscriptionStatus {
+  subscribed: boolean;
+  product_id?: string | null;
+  subscription_end?: string | null;
+  error?: string;
 }
 
-export interface RefundResponse {
-  refundId: string;
-  amount: number;
-  status: string;
+export interface CustomerPortalResponse {
+  url: string;
+  error?: string;
 }
 
-export interface BookingRefundInput {
-  bookingId: string;
-  reason?: string;
-  amount?: number;
-}
-
-export interface BookingRefundResponse {
-  success: boolean;
-  refundId: string;
-  amount: number;
-  status: string;
-}
-
-export interface StripeHealthResponse {
-  status: 'ok' | 'disabled';
-  stripe: 'configured' | 'disabled';
-  webhookEndpoint: string;
-  timestamp: string;
+export interface BookingCheckoutInput {
+  tripId: string;
+  priceId: string;
+  description?: string;
 }
 
 // ============================================================================
-// API Helpers
-// ============================================================================
-
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
-  return { 'Content-Type': 'application/json' };
-}
-
-async function stripeApiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = await getAuthHeader();
-  
-  const response = await fetch(`${BACKEND_URL}/api/stripe${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData._error || errorData.error || errorData.message || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
-}
-
-// ============================================================================
-// Stripe Test API
+// API Functions - Now using Cloud Edge Functions
 // ============================================================================
 
 /**
- * Test and verify Stripe customer creation
- */
-export async function testStripeCustomer(): Promise<StripeTestCustomerResponse> {
-  try {
-    const response = await stripeApiRequest<StripeTestCustomerResponse>('/test-customer', {
-      method: 'GET',
-    });
-    return response;
-  } catch (error) {
-    console.error('[StripeAPI] Test customer error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to test Stripe customer',
-    };
-  }
-}
-
-/**
- * List available Stripe products and prices
- */
-export async function getStripeProducts(): Promise<StripeTestProductsResponse> {
-  try {
-    const response = await stripeApiRequest<StripeTestProductsResponse>('/test-products', {
-      method: 'GET',
-    });
-    return response;
-  } catch (error) {
-    console.error('[StripeAPI] Get products error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get Stripe products',
-    };
-  }
-}
-
-// ============================================================================
-// Stripe Payment API
-// ============================================================================
-
-/**
- * Create a checkout session for payment
+ * Create a checkout session (subscription or one-time)
  */
 export async function createCheckoutSession(
-  input: CreateCheckoutSessionInput
+  input: CheckoutSessionInput
 ): Promise<CheckoutSessionResponse> {
-  return stripeApiRequest<CheckoutSessionResponse>('/create-checkout-session', {
-    method: 'POST',
-    body: JSON.stringify(input),
+  const { data, error } = await supabase.functions.invoke('create-checkout', {
+    body: {
+      priceId: input.priceId,
+      mode: input.mode || 'subscription',
+    },
   });
+
+  if (error) {
+    console.error('[StripeAPI] Create checkout error:', error);
+    return { url: '', error: error.message };
+  }
+
+  return data as CheckoutSessionResponse;
 }
 
 /**
- * Get checkout session status
+ * Create a booking checkout (one-time payment for trip)
  */
-export async function getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
-  return stripeApiRequest<SessionStatusResponse>(`/session/${sessionId}`);
-}
-
-/**
- * Create a payment link (admin only)
- */
-export async function createPaymentLink(
-  input: CreatePaymentLinkInput
-): Promise<PaymentLinkResponse> {
-  return stripeApiRequest<PaymentLinkResponse>('/admin/payment-link', {
-    method: 'POST',
-    body: JSON.stringify(input),
+export async function createBookingCheckout(
+  input: BookingCheckoutInput
+): Promise<CheckoutSessionResponse> {
+  const { data, error } = await supabase.functions.invoke('create-booking-checkout', {
+    body: {
+      tripId: input.tripId,
+      priceId: input.priceId,
+      description: input.description,
+    },
   });
+
+  if (error) {
+    console.error('[StripeAPI] Create booking checkout error:', error);
+    return { url: '', error: error.message };
+  }
+
+  return data as CheckoutSessionResponse;
 }
 
 /**
- * Create a refund (admin only)
+ * Check subscription status
  */
-export async function createRefund(input: RefundInput): Promise<RefundResponse> {
-  return stripeApiRequest<RefundResponse>('/admin/refund', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+export async function checkSubscription(): Promise<SubscriptionStatus> {
+  const { data, error } = await supabase.functions.invoke('check-subscription');
+
+  if (error) {
+    console.error('[StripeAPI] Check subscription error:', error);
+    return { subscribed: false, error: error.message };
+  }
+
+  return data as SubscriptionStatus;
 }
 
 /**
- * Refund a booking (admin only)
+ * Open customer portal for subscription management
  */
-export async function refundBooking(input: BookingRefundInput): Promise<BookingRefundResponse> {
-  const { bookingId, ...body } = input;
-  return stripeApiRequest<BookingRefundResponse>(`/refund/${bookingId}`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
+export async function openCustomerPortal(): Promise<CustomerPortalResponse> {
+  const { data, error } = await supabase.functions.invoke('customer-portal');
 
-/**
- * Check Stripe health status
- */
-export async function getStripeHealth(): Promise<StripeHealthResponse> {
-  return stripeApiRequest<StripeHealthResponse>('/health');
+  if (error) {
+    console.error('[StripeAPI] Customer portal error:', error);
+    return { url: '', error: error.message };
+  }
+
+  return data as CustomerPortalResponse;
 }
 
 /**
  * Redirect to Stripe checkout
  */
-export async function redirectToCheckout(input: CreateCheckoutSessionInput): Promise<void> {
+export async function redirectToCheckout(input: CheckoutSessionInput): Promise<void> {
   const session = await createCheckoutSession(input);
-  window.location.href = session.url;
+  if (session.url) {
+    window.open(session.url, '_blank');
+  } else {
+    throw new Error(session.error || 'Failed to create checkout session');
+  }
+}
+
+/**
+ * Redirect to customer portal
+ */
+export async function redirectToPortal(): Promise<void> {
+  const portal = await openCustomerPortal();
+  if (portal.url) {
+    window.open(portal.url, '_blank');
+  } else {
+    throw new Error(portal.error || 'Failed to open customer portal');
+  }
 }
 
 // ============================================================================
@@ -338,64 +197,16 @@ export function getPaymentStatusColor(status: string): string {
 
 const stripeKeys = {
   all: ['stripe'] as const,
-  customer: () => [...stripeKeys.all, 'customer'] as const,
-  products: () => [...stripeKeys.all, 'products'] as const,
-  session: (sessionId: string) => [...stripeKeys.all, 'session', sessionId] as const,
-  health: () => [...stripeKeys.all, 'health'] as const,
+  subscription: () => [...stripeKeys.all, 'subscription'] as const,
 };
 
-export function useStripeCustomer() {
+export function useSubscriptionStatus() {
   return useQuery({
-    queryKey: stripeKeys.customer(),
-    queryFn: testStripeCustomer,
-    staleTime: 5 * 60_000,
+    queryKey: stripeKeys.subscription(),
+    queryFn: checkSubscription,
+    staleTime: 60_000, // 1 minute
+    refetchInterval: 60_000, // Refresh every minute
     retry: 1,
-  });
-}
-
-export function useStripeProducts() {
-  return useQuery({
-    queryKey: stripeKeys.products(),
-    queryFn: getStripeProducts,
-    staleTime: 10 * 60_000,
-    retry: 1,
-  });
-}
-
-export function useTestStripeCustomer() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: testStripeCustomer,
-    onSuccess: (data) => {
-      if (data.success) {
-        queryClient.setQueryData(stripeKeys.customer(), data);
-      }
-    },
-  });
-}
-
-export function useSessionStatus(sessionId: string | null) {
-  return useQuery({
-    queryKey: stripeKeys.session(sessionId || ''),
-    queryFn: () => sessionId ? getSessionStatus(sessionId) : Promise.reject('No session ID'),
-    enabled: !!sessionId,
-    staleTime: 10_000,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (data && data.paymentStatus === 'unpaid') {
-        return 5000;
-      }
-      return false;
-    },
-  });
-}
-
-export function useStripeHealth() {
-  return useQuery({
-    queryKey: stripeKeys.health(),
-    queryFn: getStripeHealth,
-    staleTime: 5 * 60_000,
   });
 }
 
@@ -405,36 +216,38 @@ export function useCreateCheckoutSession() {
   });
 }
 
+export function useCreateBookingCheckout() {
+  return useMutation({
+    mutationFn: createBookingCheckout,
+  });
+}
+
 export function useRedirectToCheckout() {
   return useMutation({
     mutationFn: redirectToCheckout,
   });
 }
 
-export function useCreatePaymentLink() {
+export function useOpenCustomerPortal() {
   return useMutation({
-    mutationFn: createPaymentLink,
+    mutationFn: openCustomerPortal,
   });
 }
 
-export function useCreateRefund() {
-  const queryClient = useQueryClient();
-  
+export function useRedirectToPortal() {
   return useMutation({
-    mutationFn: createRefund,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: stripeKeys.all });
-    },
+    mutationFn: redirectToPortal,
   });
 }
 
-export function useRefundBooking() {
+// Refresh subscription status after checkout
+export function useRefreshSubscription() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: refundBooking,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: stripeKeys.all });
+    mutationFn: checkSubscription,
+    onSuccess: (data) => {
+      queryClient.setQueryData(stripeKeys.subscription(), data);
     },
   });
 }
@@ -444,15 +257,12 @@ export function useRefundBooking() {
 // ============================================================================
 
 const stripeAPI = {
-  testStripeCustomer,
-  getStripeProducts,
   createCheckoutSession,
-  getSessionStatus,
-  createPaymentLink,
-  createRefund,
-  refundBooking,
-  getStripeHealth,
+  createBookingCheckout,
+  checkSubscription,
+  openCustomerPortal,
   redirectToCheckout,
+  redirectToPortal,
   formatCurrency,
   getPaymentStatusColor,
 };
