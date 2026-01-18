@@ -182,12 +182,41 @@ export default function PlannerHotelEnhanced() {
   // Calculate actual price range from hotels to set dynamic filter bounds
   const priceStats = useMemo(() => {
     if (!hotels?.length) return { min: 0, max: 10000 };
-    const prices = hotels.map(h => h.pricePerNight);
+    const prices = hotels.map((h) => h.pricePerNight);
     return {
       min: Math.floor(Math.min(...prices)),
       max: Math.ceil(Math.max(...prices) * 1.1), // 10% buffer
     };
   }, [hotels]);
+
+  // Ensure our local price filter range always matches the destination/currency.
+  // This prevents "no results" when the API returns prices in JPY/MAD/etc.
+  useEffect(() => {
+    if (!hotels?.length) return;
+
+    setFilters((prev) => {
+      const nextMin = priceStats.min;
+      const nextMax = priceStats.max;
+
+      const isGenericDefault = prev.priceRange[0] === 0 && prev.priceRange[1] === 10000;
+      const outOfBounds = prev.priceRange[0] < nextMin || prev.priceRange[1] > nextMax;
+
+      if (isGenericDefault || outOfBounds || prev.priceRange[0] > prev.priceRange[1]) {
+        return { ...prev, priceRange: [nextMin, nextMax] };
+      }
+
+      const clamped: [number, number] = [
+        Math.max(nextMin, prev.priceRange[0]),
+        Math.min(nextMax, prev.priceRange[1]),
+      ];
+
+      if (clamped[0] !== prev.priceRange[0] || clamped[1] !== prev.priceRange[1]) {
+        return { ...prev, priceRange: clamped };
+      }
+
+      return prev;
+    });
+  }, [hotels, priceStats.min, priceStats.max]);
 
   useEffect(() => {
     if (!isLoading) setShowInterlude(false);
@@ -202,12 +231,10 @@ export default function PlannerHotelEnhanced() {
       result = result.filter((h) => filters.starRating.includes(h.stars));
     }
 
-    // Only apply price filter if user has explicitly adjusted it (not default max)
-    if (filters.priceRange[1] < priceStats.max) {
-      result = result.filter(
-        (h) => h.pricePerNight >= filters.priceRange[0] && h.pricePerNight <= filters.priceRange[1]
-      );
-    }
+    // Always apply price filter (range is initialized to the destination's real bounds)
+    result = result.filter(
+      (h) => h.pricePerNight >= filters.priceRange[0] && h.pricePerNight <= filters.priceRange[1]
+    );
 
     if (filters.guestRating > 0) {
       result = result.filter((h) => h.rating >= filters.guestRating);
@@ -327,7 +354,7 @@ export default function PlannerHotelEnhanced() {
                 </p>
               </motion.div>
 
-              <HotelFilters filters={filters} onFiltersChange={setFilters} priceRange={[0, 1000]} />
+              <HotelFilters filters={filters} onFiltersChange={setFilters} priceRange={[priceStats.min, priceStats.max]} />
 
               <div className="space-y-4">
                 <AnimatePresence mode="wait">
