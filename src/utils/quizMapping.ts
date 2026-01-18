@@ -80,13 +80,19 @@ export interface UserPreferencesPayload {
 
 export interface TravelDNAPayload {
   primary_archetype_name?: string;
+  primary_archetype_display?: string;
+  primary_archetype_category?: string;
+  primary_archetype_tagline?: string;
   secondary_archetype_name?: string;
+  secondary_archetype_display?: string;
   dna_confidence_score?: number;
   dna_rarity?: string;
   trait_scores?: Record<string, number>;
   tone_tags?: string[];
   emotional_drivers?: string[];
+  perfect_trip_preview?: string;
   summary?: string;
+  calculated_at?: string;
 }
 
 // ============================================================================
@@ -347,43 +353,85 @@ export async function saveUserPreferences(
 // ============================================================================
 
 /**
- * Calculates Travel DNA based on quiz answers
+ * Calculates Travel DNA via backend edge function
+ * Uses sophisticated trait calculation and AI-powered Perfect Trip generation
+ */
+export async function calculateTravelDNAAdvanced(
+  answers: Record<string, string | string[]>,
+  userId?: string
+): Promise<TravelDNAPayload> {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/calculate-travel-dna`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ answers, userId }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Edge function error:', response.status);
+      // Fall back to simple calculation
+      return calculateTravelDNA(answers);
+    }
+
+    const data = await response.json();
+    return data as TravelDNAPayload;
+  } catch (error) {
+    console.error('Failed to calculate Travel DNA via backend:', error);
+    // Fall back to simple calculation
+    return calculateTravelDNA(answers);
+  }
+}
+
+/**
+ * Calculates Travel DNA based on quiz answers (fallback/offline)
  * This is a simplified frontend calculation - the full calculation happens on backend
  */
 export function calculateTravelDNA(
   answers: Record<string, string | string[]>
 ): TravelDNAPayload {
-  const style = answers.style as string;
+  const style = answers.traveler_type as string || answers.style as string;
   const interests = answers.interests as string[] || [];
   const pace = answers.pace as string;
   const budget = answers.budget as string;
+  const vibes = answers.travel_vibes as string[] || [];
 
   // Determine primary archetype from style
-  const primaryArchetype = STYLE_TO_ARCHETYPE[style] || 'Explorer';
+  const primaryArchetype = STYLE_TO_ARCHETYPE[style] || 'explorer';
 
-  // Calculate trait scores based on answers
+  // Calculate trait scores based on answers (-10 to +10 scale)
   const traitScores: Record<string, number> = {
-    adventure: style === 'adventure' ? 85 : interests.includes('nature') ? 60 : 30,
-    culture: style === 'cultural' ? 85 : interests.includes('art') ? 60 : 30,
-    relaxation: style === 'relaxation' ? 85 : pace === 'slow' ? 60 : 30,
-    luxury: style === 'luxury' || budget === 'luxury' ? 85 : budget === 'premium' ? 60 : 30,
-    social: interests.includes('nightlife') ? 70 : 40,
-    culinary: interests.includes('food') ? 80 : 40,
-    wellness: interests.includes('wellness') ? 80 : 30,
+    planning: answers.planning_style === 'detailed' ? 7 : answers.planning_style === 'spontaneous' ? -5 : 0,
+    social: (answers.travel_companions as string[])?.includes('solo') ? -3 : interests.includes('nightlife') ? 5 : 2,
+    comfort: budget === 'luxury' ? 6 : budget === 'premium' ? 4 : budget === 'budget' ? -2 : 2,
+    pace: pace === 'active' ? 6 : pace === 'relaxed' ? -6 : 0,
+    authenticity: interests.includes('culture') || interests.includes('food') ? 5 : 2,
+    adventure: interests.includes('adventure') || vibes.includes('bold') ? 6 : 2,
+    budget: budget === 'luxury' ? 7 : budget === 'premium' ? 4 : budget === 'budget' ? -3 : 0,
+    transformation: vibes.includes('spiritual') || interests.includes('wellness') ? 5 : 2,
   };
 
-  // Derive tone tags from high-scoring traits
-  const toneTags = Object.entries(traitScores)
-    .filter(([, score]) => score >= 60)
-    .map(([trait]) => trait);
+  // Derive tone tags from trait scores
+  const toneTags: string[] = [];
+  if (traitScores.adventure >= 5) toneTags.push('adventurous');
+  if (traitScores.comfort >= 5) toneTags.push('comfort-seeking');
+  if (traitScores.authenticity >= 5) toneTags.push('authentic');
+  if (traitScores.pace <= -3) toneTags.push('slow-paced');
+  if (traitScores.pace >= 3) toneTags.push('active');
+  if (traitScores.transformation >= 5) toneTags.push('transformative');
 
   // Calculate confidence based on number of questions answered
   const answeredCount = Object.keys(answers).length;
-  const confidence = Math.min(100, Math.round((answeredCount / 5) * 100));
+  const confidence = Math.min(100, Math.round((answeredCount / 10) * 100 + 30));
 
   // Determine rarity
   let rarity = 'Common';
-  if (toneTags.length >= 4) rarity = 'Unique';
+  if (toneTags.length >= 4) rarity = 'Rare';
   else if (toneTags.length >= 3) rarity = 'Uncommon';
 
   // Generate summary
@@ -391,12 +439,87 @@ export function calculateTravelDNA(
 
   return {
     primary_archetype_name: primaryArchetype,
+    primary_archetype_display: STYLE_TO_ARCHETYPE[style] ? getArchetypeDisplayName(primaryArchetype) : 'The Explorer',
+    primary_archetype_category: getArchetypeCategory(primaryArchetype),
+    primary_archetype_tagline: getArchetypeTagline(primaryArchetype),
     dna_confidence_score: confidence,
     dna_rarity: rarity,
     trait_scores: traitScores,
     tone_tags: toneTags,
+    emotional_drivers: extractEmotionalDrivers(answers),
     summary,
   };
+}
+
+function getArchetypeDisplayName(id: string): string {
+  const names: Record<string, string> = {
+    explorer: 'The Explorer',
+    escape_artist: 'The Escape Artist',
+    curated_luxe: 'Curated Luxe',
+    story_seeker: 'The Story Seeker',
+    cultural_anthropologist: 'The Cultural Anthropologist',
+    zen_seeker: 'The Zen Seeker',
+    slow_traveler: 'The Slow Traveler',
+    adrenaline_architect: 'The Adrenaline Architect',
+    luxury_luminary: 'The Luxury Luminary',
+    culinary_cartographer: 'The Culinary Cartographer',
+  };
+  return names[id] || 'The Explorer';
+}
+
+function getArchetypeCategory(id: string): string {
+  const categories: Record<string, string> = {
+    explorer: 'EXPLORER',
+    escape_artist: 'RESTORER',
+    curated_luxe: 'CURATOR',
+    story_seeker: 'CONNECTOR',
+    cultural_anthropologist: 'EXPLORER',
+    zen_seeker: 'RESTORER',
+    slow_traveler: 'RESTORER',
+    adrenaline_architect: 'ACHIEVER',
+    luxury_luminary: 'CURATOR',
+    culinary_cartographer: 'CURATOR',
+  };
+  return categories[id] || 'EXPLORER';
+}
+
+function getArchetypeTagline(id: string): string {
+  const taglines: Record<string, string> = {
+    explorer: 'The world is your playground.',
+    escape_artist: 'Sometimes you need to leave to find yourself.',
+    curated_luxe: "You don't travel—you orchestrate experiences.",
+    story_seeker: "Every person is a book you haven't read yet.",
+    cultural_anthropologist: "You don't just visit places, you become them.",
+    zen_seeker: 'Breathe in experience, exhale expectation.',
+    slow_traveler: 'Stay long enough to have a favorite café.',
+    adrenaline_architect: 'Normal is just a setting on the washing machine.',
+    luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
+    culinary_cartographer: 'Your passport is basically a menu.',
+  };
+  return taglines[id] || 'The world awaits your discovery.';
+}
+
+function extractEmotionalDrivers(answers: Record<string, string | string[]>): string[] {
+  const drivers: string[] = [];
+  const style = answers.traveler_type as string || answers.style as string;
+  
+  const driverMap: Record<string, string[]> = {
+    explorer: ['discovery', 'curiosity', 'growth'],
+    escape_artist: ['freedom', 'peace', 'renewal'],
+    curated_luxe: ['comfort', 'excellence', 'indulgence'],
+    story_seeker: ['connection', 'meaning', 'understanding'],
+  };
+  
+  if (style && driverMap[style]) {
+    drivers.push(...driverMap[style]);
+  }
+  
+  const interests = answers.interests as string[] || [];
+  if (interests.includes('wellness')) drivers.push('restoration');
+  if (interests.includes('adventure')) drivers.push('thrill');
+  if (interests.includes('culture')) drivers.push('learning');
+  
+  return [...new Set(drivers)].slice(0, 5);
 }
 
 /**
@@ -407,10 +530,11 @@ function generateDNASummary(
   traits: string[],
   pace: string
 ): string {
-  const paceDescriptor = pace === 'slow' ? 'leisurely' : pace === 'fast' ? 'action-packed' : 'balanced';
+  const displayName = getArchetypeDisplayName(archetype);
+  const paceDescriptor = pace === 'relaxed' ? 'leisurely' : pace === 'active' ? 'action-packed' : 'balanced';
   const traitList = traits.slice(0, 3).join(', ');
   
-  return `As a ${archetype}, you prefer ${paceDescriptor} travel experiences${
+  return `As ${displayName}, you prefer ${paceDescriptor} travel experiences${
     traitList ? ` with a focus on ${traitList}` : ''
   }. Your travel personality reflects someone who values authentic experiences tailored to your unique preferences.`;
 }
@@ -487,8 +611,14 @@ export async function submitQuizComplete(
     // 1. Map answers to preferences
     const preferences = mapQuizAnswersToPreferences(answers);
     
-    // 2. Calculate Travel DNA
-    const dna = calculateTravelDNA(answers);
+    // 2. Calculate Travel DNA via backend (with AI-powered Perfect Trip)
+    let dna: TravelDNAPayload;
+    try {
+      dna = await calculateTravelDNAAdvanced(answers, userId);
+    } catch {
+      // Fallback to simple calculation if backend fails
+      dna = calculateTravelDNA(answers);
+    }
     
     // 3. Add traveler type to preferences from DNA
     preferences.traveler_type = dna.primary_archetype_name;
