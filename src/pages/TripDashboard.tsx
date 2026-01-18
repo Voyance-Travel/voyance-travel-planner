@@ -407,6 +407,7 @@ export default function TripDashboard() {
             <AnimatePresence mode="wait">
               {isLoading ? (
                 <motion.div 
+                  key="loading"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -425,6 +426,7 @@ export default function TripDashboard() {
                 </motion.div>
               ) : error ? (
                 <motion.div 
+                  key="error"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="text-center py-16"
@@ -437,8 +439,12 @@ export default function TripDashboard() {
                     Try Again
                   </Button>
                 </motion.div>
+              ) : trips.length === 0 ? (
+                <motion.div key="empty-all">
+                  <EmptyState tab="all" />
+                </motion.div>
               ) : (
-                <TabsContent value={activeTab} className="mt-0">
+                <TabsContent key={activeTab} value={activeTab} className="mt-0">
                   {filteredTrips.length > 0 ? (
                     <motion.div 
                       initial={{ opacity: 0 }}
