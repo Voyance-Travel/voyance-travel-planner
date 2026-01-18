@@ -6,7 +6,6 @@ import {
   Calendar, 
   Globe, 
   Settings, 
-  Camera,
   ChevronRight,
   Plus,
   Compass,
@@ -29,6 +28,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 import { toast } from 'sonner';
+import AvatarUpload from '@/components/profile/AvatarUpload';
+import TravelDNAReveal from '@/components/profile/TravelDNAReveal';
+import TravelMap from '@/components/profile/TravelMap';
+import SurpriseTripCard from '@/components/profile/SurpriseTripCard';
 
 type TabType = 'overview' | 'trips' | 'preferences' | 'subscription';
 
@@ -291,20 +294,12 @@ export default function Profile() {
         <div className="max-w-5xl mx-auto px-4 -mt-20 relative z-10">
           <div className="flex flex-col md:flex-row md:items-end gap-6">
             {/* Avatar */}
-            <div className="relative">
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background bg-muted flex items-center justify-center overflow-hidden">
-                {user?.avatar ? (
-                  <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-4xl md:text-5xl font-display font-medium text-muted-foreground">
-                    {user?.name?.charAt(0) || user?.email?.charAt(0) || 'V'}
-                  </span>
-                )}
-              </div>
-              <button className="absolute bottom-2 right-2 p-2 bg-background border border-border rounded-full shadow-sm hover:bg-muted transition-colors">
-                <Camera className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </div>
+            <AvatarUpload
+              currentAvatar={user?.avatar}
+              userName={user?.name || user?.email}
+              userId={user?.id || ''}
+              size="lg"
+            />
 
             {/* Name & Handle */}
             <div className="flex-1 pb-2">
@@ -384,48 +379,14 @@ export default function Profile() {
               ))}
             </div>
 
-            {/* Travel DNA */}
-            {travelDNA && (
-              <div>
-                <h2 className="text-lg font-semibold text-foreground mb-4">Your Travel DNA</h2>
-                <div className="p-6 bg-muted/30 rounded-lg">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Compass className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground">{travelDNA.archetype}</h3>
-                      <p className="text-sm text-muted-foreground">Your travel personality</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {travelDNA.traits.map((trait) => (
-                      <span key={trait} className="px-3 py-1 bg-background rounded-full text-sm text-muted-foreground">
-                        {formatEnumDisplay(trait)}
-                      </span>
-                    ))}
-                  </div>
-                  {travelDNA.interests.length > 0 && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Interests</p>
-                      <div className="flex flex-wrap gap-2">
-                        {travelDNA.interests.map((interest) => (
-                          <span key={interest} className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm">
-                            {formatEnumDisplay(interest)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <Button variant="ghost" size="sm" className="mt-4" asChild>
-                    <Link to={ROUTES.QUIZ}>
-                      Retake Quiz
-                      <ChevronRight className="h-4 w-4 ml-1" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/* Travel DNA Reveal */}
+            <TravelDNAReveal userId={user?.id || ''} />
+
+            {/* Travel Map */}
+            <TravelMap userId={user?.id || ''} />
+
+            {/* Surprise Trip Card */}
+            <SurpriseTripCard isPremium={!!subscription?.subscribed} />
 
             {/* Upcoming Trips */}
             {upcomingTrips.length > 0 && (
