@@ -19,12 +19,17 @@ import {
   Users,
   Bed,
   Image as ImageIcon,
-  MessageSquare
+  MessageSquare,
+  Crown,
+  Gem,
+  Home,
+  Building,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface RoomOption {
   id: string;
@@ -90,13 +95,26 @@ const amenityIcons: Record<string, typeof Wifi> = {
   'Parking': Car,
 };
 
-// Room type icons
-const roomIcons: Record<string, string> = {
-  'Standard': '🛏️',
-  'Deluxe': '✨',
-  'Suite': '👑',
-  'Junior Suite': '💎',
+// Room type icons - using Lucide icons instead of emojis
+const roomIconMap: Record<string, typeof Bed> = {
+  'standard': Bed,
+  'deluxe': Sparkles,
+  'suite': Crown,
+  'junior suite': Gem,
+  'premium': Star,
+  'superior': Building,
+  'classic': Home,
 };
+
+function getRoomIcon(roomName: string) {
+  const lowerName = roomName.toLowerCase();
+  for (const [key, Icon] of Object.entries(roomIconMap)) {
+    if (lowerName.includes(key)) {
+      return Icon;
+    }
+  }
+  return Bed;
+}
 
 export default function EnhancedHotelCard({
   hotel,
@@ -138,13 +156,10 @@ export default function EnhancedHotelCard({
     if (!isExpanded) setIsExpanded(true);
   };
 
-  const getRoomIcon = (roomName: string): string => {
-    for (const [key, icon] of Object.entries(roomIcons)) {
-      if (roomName.toLowerCase().includes(key.toLowerCase())) {
-        return icon;
-      }
-    }
-    return '🛏️';
+  // Get room icon component based on room name
+  const RoomIcon = (roomName: string) => {
+    const Icon = getRoomIcon(roomName);
+    return <Icon className="h-4 w-4 text-primary" />;
   };
 
   return (
@@ -376,7 +391,7 @@ export default function EnhancedHotelCard({
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{getRoomIcon(room.name)}</span>
+                            {RoomIcon(room.name)}
                             <h5 className="font-medium">{room.name}</h5>
                             {selectedRoomId === room.id && (
                               <Check className="h-4 w-4 text-primary" />
@@ -451,7 +466,7 @@ export default function EnhancedHotelCard({
                       variant="ghost" 
                       size="sm" 
                       className="w-full"
-                      onClick={() => toast.info('More reviews coming soon!')}
+                      onClick={() => setShowReviews(false)}
                     >
                       View all {hotel.reviewCount} reviews
                     </Button>
