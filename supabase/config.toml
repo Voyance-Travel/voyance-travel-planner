@@ -1,8 +1,5 @@
 project_id = "jsxplunjjvxuejeouwob"
 
-[functions.neon-db]
-verify_jwt = false
-
 [functions.bulk-import]
 verify_jwt = false
 

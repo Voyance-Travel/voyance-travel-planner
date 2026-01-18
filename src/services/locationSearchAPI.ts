@@ -1,9 +1,9 @@
 /**
- * Location Search API - Connects to Neon DB for airports and destinations
+ * Location Search API - Uses Supabase for airports and destinations
  * Supports metro area groupings for major cities
  */
 
-const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/neon-db`;
+import { supabase } from '@/integrations/supabase/client';
 
 export interface Airport {
   id: string;
@@ -32,11 +32,6 @@ export interface Destination {
   featured?: boolean;
   cost_tier?: string;
   best_time_to_visit?: string;
-}
-
-interface ApiResponse<T> {
-  data: T[] | null;
-  error: string | null;
 }
 
 // Metro area definitions for common multi-airport cities
@@ -80,30 +75,6 @@ const METRO_AREAS: Record<string, { name: string; codes: string[] }> = {
   'toronto': { name: 'Toronto', codes: ['YYZ', 'YTZ'] },
 };
 
-async function fetchFromNeon<T>(path: string, params: Record<string, string> = {}): Promise<ApiResponse<T>> {
-  const queryString = new URLSearchParams(params).toString();
-  const url = `${FUNCTION_URL}${path}${queryString ? `?${queryString}` : ''}`;
-  
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('[locationSearchAPI] Error:', error);
-    return { data: null, error: (error as Error).message };
-  }
-}
-
 /**
  * Check if query matches a metro area and return grouped results
  */
@@ -127,52 +98,131 @@ export async function searchAirports(query: string, limit = 20): Promise<Airport
   const metroArea = findMetroArea(query);
   
   if (metroArea) {
-    // Search for all airports in this metro area
-    const results: Airport[] = [];
+    // Search for all airports in this metro area by codes
+    const { data, error } = await supabase
+      .from('airports')
+      .select('*')
+      .in('code', metroArea.codes);
     
-    for (const code of metroArea.codes) {
-      const result = await fetchFromNeon<Airport>('/airports', { q: code, limit: '5' });
-      if (result.data) {
-        results.push(...result.data.filter(a => a.code === code));
-      }
+    if (error) {
+      console.error('[locationSearchAPI] Error:', error);
+      return [];
     }
     
-    // Dedupe by code
-    const seen = new Set<string>();
-    return results.filter(a => {
-      if (seen.has(a.code)) return false;
-      seen.add(a.code);
-      return true;
-    });
+    return (data || []).map(a => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      city: a.city || '',
+      country: a.country || '',
+      latitude: a.latitude ? Number(a.latitude) : undefined,
+      longitude: a.longitude ? Number(a.longitude) : undefined,
+      type: a.type || undefined,
+    }));
   }
   
   // Otherwise, regular search
-  const result = await fetchFromNeon<Airport>('/airports', { q: query, limit: String(limit) });
-  return result.data || [];
+  const { data, error } = await supabase
+    .from('airports')
+    .select('*')
+    .or(`code.ilike.%${query}%,name.ilike.%${query}%,city.ilike.%${query}%`)
+    .limit(limit);
+
+  if (error) {
+    console.error('[locationSearchAPI] Error:', error);
+    return [];
+  }
+
+  return (data || []).map(a => ({
+    id: a.id,
+    code: a.code,
+    name: a.name,
+    city: a.city || '',
+    country: a.country || '',
+    latitude: a.latitude ? Number(a.latitude) : undefined,
+    longitude: a.longitude ? Number(a.longitude) : undefined,
+    type: a.type || undefined,
+  }));
 }
 
 /**
  * Search destinations by city, country, or region
  */
 export async function searchDestinations(query: string, limit = 20): Promise<Destination[]> {
-  const result = await fetchFromNeon<Destination>('/destinations', { q: query, limit: String(limit) });
-  return result.data || [];
+  const { data, error } = await supabase
+    .from('destinations')
+    .select('*')
+    .or(`city.ilike.%${query}%,country.ilike.%${query}%,region.ilike.%${query}%`)
+    .limit(limit);
+
+  if (error) {
+    console.error('[locationSearchAPI] Error:', error);
+    return [];
+  }
+
+  return (data || []).map(d => ({
+    id: d.id,
+    city: d.city,
+    country: d.country,
+    region: d.region || undefined,
+    description: d.description || undefined,
+    airport_codes: d.airport_codes ? (d.airport_codes as string[]) : undefined,
+    featured: d.featured || undefined,
+    cost_tier: d.cost_tier || undefined,
+    best_time_to_visit: d.best_time_to_visit || undefined,
+  }));
 }
 
 /**
  * Get featured destinations
  */
 export async function getFeaturedDestinations(limit = 10): Promise<Destination[]> {
-  const result = await fetchFromNeon<Destination>('/destinations', { featured: 'true', limit: String(limit) });
-  return result.data || [];
+  const { data, error } = await supabase
+    .from('destinations')
+    .select('*')
+    .eq('featured', true)
+    .limit(limit);
+
+  if (error) {
+    console.error('[locationSearchAPI] Error:', error);
+    return [];
+  }
+
+  return (data || []).map(d => ({
+    id: d.id,
+    city: d.city,
+    country: d.country,
+    region: d.region || undefined,
+    description: d.description || undefined,
+    featured: d.featured || undefined,
+  }));
 }
 
 /**
  * Get major hub airports (for initial display)
  */
 export async function getMajorAirports(limit = 30): Promise<Airport[]> {
-  const result = await fetchFromNeon<Airport>('/airports', { limit: String(limit) });
-  return result.data || [];
+  const { data, error } = await supabase
+    .from('airports')
+    .select('*')
+    .eq('type', 'international')
+    .limit(limit);
+
+  if (error) {
+    console.error('[locationSearchAPI] Error:', error);
+    return [];
+  }
+
+  return (data || []).map(a => ({
+    id: a.id,
+    code: a.code,
+    name: a.name,
+    city: a.city || '',
+    country: a.country || '',
+    latitude: a.latitude ? Number(a.latitude) : undefined,
+    longitude: a.longitude ? Number(a.longitude) : undefined,
+    type: a.type || undefined,
+  }));
 }
 
 /**

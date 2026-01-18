@@ -197,31 +197,23 @@ export default function Planner() {
           return data.id;
         }
       } else {
-        // Anonymous save to Neon
-        const response = await fetch(`${supabaseUrl}/functions/v1/neon-db/trips/anonymous`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseKey,
-          },
-          body: JSON.stringify({
-            sessionId,
-            origin: formData.departureCity,
-            destination: formData.destination,
-            startDate: formData.startDate,
-            endDate: formData.endDate,
-            travelers: formData.travelers,
-            budget: formData.budget,
-            tripType: formData.tripType,
-            companions: formData.companions,
-          }),
-        });
-
-        const result = await response.json();
-        if (result.error) throw new Error(result.error);
+        // Anonymous users - save trip to localStorage only
+        const tripData = {
+          sessionId,
+          origin: formData.departureCity,
+          destination: formData.destination,
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          travelers: formData.travelers,
+          budget: formData.budget,
+          tripType: formData.tripType,
+          companions: formData.companions,
+        };
         
-        console.log('[Planner] Saved to Neon:', result.sessionId);
-        return result.sessionId;
+        // Store in localStorage for anonymous users
+        localStorage.setItem(`trip_${sessionId}`, JSON.stringify(tripData));
+        console.log('[Planner] Saved to localStorage:', sessionId);
+        return sessionId;
       }
     } catch (err) {
       console.error('Failed to save trip:', err);

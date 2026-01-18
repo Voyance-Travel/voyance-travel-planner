@@ -25,9 +25,8 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
-import { tripsApi, Trip } from '@/services/neonDb';
-import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 import { toast } from 'sonner';
 
@@ -106,7 +105,7 @@ function getDestinationImage(destination: string): string {
 }
 
 // Transform API trip to display format
-function transformTrip(trip: Trip): DisplayTrip {
+function transformTrip(trip: any): DisplayTrip {
   const startDate = trip.start_date ? new Date(trip.start_date) : null;
   const endDate = trip.end_date ? new Date(trip.end_date) : null;
   
@@ -147,16 +146,22 @@ export default function Profile() {
     }
   }, [isAuthenticated, navigate]);
 
-  // Load trips from Neon
+  // Load trips from Supabase
   useEffect(() => {
     async function loadTrips() {
       if (!user?.id) return;
       
       setIsLoadingTrips(true);
       try {
-        const result = await tripsApi.list(user.id);
-        if (result.data) {
-          setTrips(result.data.map(transformTrip));
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        if (data) {
+          setTrips(data.map(transformTrip));
         }
       } catch (error) {
         console.error('Failed to load trips:', error);
