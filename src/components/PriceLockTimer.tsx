@@ -1,20 +1,30 @@
 import { motion } from 'framer-motion';
-import { Lock, AlertCircle } from 'lucide-react';
+import { Lock, AlertCircle, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 interface PriceLockTimerProps {
+  /**
+   * Initial time in seconds. Default is 15 minutes (900 seconds).
+   * Amadeus flight offers are typically valid for 15-30 minutes.
+   * Set to match your backend's actual price hold duration.
+   */
   initialTime?: number;
   expiresAt?: number | string;
   onExpire?: () => void;
   className?: string;
+  variant?: 'default' | 'compact';
 }
 
+// Amadeus API typically holds prices for 15-30 minutes
+const DEFAULT_PRICE_LOCK_SECONDS = 15 * 60; // 15 minutes
+
 export default function PriceLockTimer({
-  initialTime = 900,
+  initialTime = DEFAULT_PRICE_LOCK_SECONDS,
   expiresAt,
   onExpire,
-  className
+  className,
+  variant = 'default'
 }: PriceLockTimerProps) {
   const [timeRemaining, setTimeRemaining] = useState(initialTime);
   const [isExpired, setIsExpired] = useState(false);
@@ -96,6 +106,21 @@ export default function PriceLockTimer({
           <p className="font-medium">Price Lock Expired</p>
           <p className="text-sm opacity-80">Prices may have changed. Please refresh to see current rates.</p>
         </div>
+      </motion.div>
+    );
+  }
+
+  // Compact variant for sidebars
+  if (variant === 'compact') {
+    return (
+      <motion.div
+        className={cn('flex items-center gap-2 px-3 py-2 rounded-lg border text-sm', getColorScheme(), className)}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
+        <Clock className="w-4 h-4 flex-shrink-0" />
+        <span className="font-medium">{formatTime(timeRemaining)}</span>
+        <span className="opacity-80">price hold</span>
       </motion.div>
     );
   }
