@@ -327,6 +327,15 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     const offersData = await offersResponse.json();
     console.log('[Hotels] Got offers for', offersData.data?.length || 0, 'hotels');
 
+    // If Amadeus returns empty offers (common in test mode), use fallback with real hotel names
+    if (!offersData.data?.length) {
+      console.log('[Hotels] No offers returned from Amadeus test API, using enhanced fallback');
+      // Use the hotel names from Step 1 to create realistic fallback data
+      return hotelsData.data.slice(0, 10).map((hotel: any) => 
+        normalizeHotelData(hotel, null, params)
+      );
+    }
+
     // Transform with full normalization
     return (offersData.data || []).map((hotelOffer: any) => 
       normalizeHotelData(hotelOffer, hotelOffer.offers?.[0], params)
