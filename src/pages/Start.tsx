@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Sparkles, Plane, ArrowRightLeft } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, ArrowRight, Plane, ChevronDown } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -20,64 +20,49 @@ const searchableLocations = destinations.map(d => ({
   city: d.city,
   country: d.country,
   display: `${d.city}, ${d.country}`,
-  type: 'destination' as const,
+  image: d.imageUrl,
 }));
 
-// Add some common origin cities/airports
+// Common origin cities
 const originCities = [
-  { id: 'atlanta', city: 'Atlanta', country: 'United States', display: 'Atlanta, GA (ATL)', type: 'origin' as const },
-  { id: 'los-angeles', city: 'Los Angeles', country: 'United States', display: 'Los Angeles, CA (LAX)', type: 'origin' as const },
-  { id: 'new-york-jfk', city: 'New York', country: 'United States', display: 'New York, NY (JFK)', type: 'origin' as const },
-  { id: 'chicago', city: 'Chicago', country: 'United States', display: 'Chicago, IL (ORD)', type: 'origin' as const },
-  { id: 'miami', city: 'Miami', country: 'United States', display: 'Miami, FL (MIA)', type: 'origin' as const },
-  { id: 'san-francisco', city: 'San Francisco', country: 'United States', display: 'San Francisco, CA (SFO)', type: 'origin' as const },
-  { id: 'seattle', city: 'Seattle', country: 'United States', display: 'Seattle, WA (SEA)', type: 'origin' as const },
-  { id: 'boston', city: 'Boston', country: 'United States', display: 'Boston, MA (BOS)', type: 'origin' as const },
-  { id: 'denver', city: 'Denver', country: 'United States', display: 'Denver, CO (DEN)', type: 'origin' as const },
-  { id: 'dallas', city: 'Dallas', country: 'United States', display: 'Dallas, TX (DFW)', type: 'origin' as const },
-  { id: 'phoenix', city: 'Phoenix', country: 'United States', display: 'Phoenix, AZ (PHX)', type: 'origin' as const },
-  { id: 'london', city: 'London', country: 'United Kingdom', display: 'London, UK (LHR)', type: 'origin' as const },
-  { id: 'toronto', city: 'Toronto', country: 'Canada', display: 'Toronto, ON (YYZ)', type: 'origin' as const },
-  ...searchableLocations.map(l => ({ ...l, type: 'origin' as const, display: l.display })),
+  { id: 'atlanta', city: 'Atlanta', country: 'USA', display: 'Atlanta (ATL)' },
+  { id: 'los-angeles', city: 'Los Angeles', country: 'USA', display: 'Los Angeles (LAX)' },
+  { id: 'new-york-jfk', city: 'New York', country: 'USA', display: 'New York (JFK)' },
+  { id: 'chicago', city: 'Chicago', country: 'USA', display: 'Chicago (ORD)' },
+  { id: 'miami', city: 'Miami', country: 'USA', display: 'Miami (MIA)' },
+  { id: 'san-francisco', city: 'San Francisco', country: 'USA', display: 'San Francisco (SFO)' },
+  { id: 'london', city: 'London', country: 'UK', display: 'London (LHR)' },
+  { id: 'toronto', city: 'Toronto', country: 'Canada', display: 'Toronto (YYZ)' },
 ];
-
-interface LocationSuggestion {
-  id: string;
-  city: string;
-  country: string;
-  display: string;
-  type: 'origin' | 'destination';
-}
 
 function LocationAutocomplete({
   value,
   onChange,
   placeholder,
   locations,
-  icon: Icon,
+  showImages = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
-  locations: LocationSuggestion[];
-  icon: typeof MapPin;
+  locations: typeof searchableLocations | typeof originCities;
+  showImages?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value);
 
   const filteredLocations = useMemo(() => {
-    if (!inputValue.trim()) return locations.slice(0, 8);
+    if (!inputValue.trim()) return locations.slice(0, 6);
     const search = inputValue.toLowerCase();
     return locations
       .filter(l => 
         l.city.toLowerCase().includes(search) || 
-        l.country.toLowerCase().includes(search) ||
-        l.display.toLowerCase().includes(search)
+        l.country.toLowerCase().includes(search)
       )
-      .slice(0, 8);
+      .slice(0, 6);
   }, [inputValue, locations]);
 
-  const handleSelect = (location: LocationSuggestion) => {
+  const handleSelect = (location: typeof locations[0]) => {
     setInputValue(location.display);
     onChange(location.display);
     setIsOpen(false);
@@ -85,7 +70,6 @@ function LocationAutocomplete({
 
   return (
     <div className="relative">
-      <Icon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
       <Input
         placeholder={placeholder}
         value={inputValue}
@@ -96,29 +80,45 @@ function LocationAutocomplete({
         }}
         onFocus={() => setIsOpen(true)}
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className="pl-11 h-12 text-base"
+        className="h-14 text-lg bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40"
       />
       {isOpen && filteredLocations.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 max-h-64 overflow-auto">
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden"
+        >
           {filteredLocations.map((location) => (
             <button
-              key={`${location.type}-${location.id}`}
+              key={location.id}
               type="button"
-              className="w-full px-4 py-3 text-left hover:bg-muted flex items-center gap-3 transition-colors"
+              className="w-full px-4 py-3 text-left hover:bg-primary/5 flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
               onMouseDown={() => handleSelect(location)}
             >
-              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+              {showImages && 'image' in location && location.image && (
+                <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">
+                  <img src={location.image as string} alt="" className="w-full h-full object-cover" />
+                </div>
+              )}
               <div>
-                <p className="font-medium text-sm">{location.city}</p>
-                <p className="text-xs text-muted-foreground">{location.country}</p>
+                <p className="font-medium">{location.city}</p>
+                <p className="text-sm text-muted-foreground">{location.country}</p>
               </div>
             </button>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );
 }
+
+// Inspiration destinations
+const inspirationDestinations = [
+  { name: 'Santorini', country: 'Greece', image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400' },
+  { name: 'Kyoto', country: 'Japan', image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400' },
+  { name: 'Marrakech', country: 'Morocco', image: 'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=400' },
+  { name: 'Bali', country: 'Indonesia', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400' },
+];
 
 export default function Start() {
   const { setBasics } = useTripPlanner();
@@ -146,6 +146,10 @@ export default function Start() {
     navigate(ROUTES.PLANNER.ROOT);
   };
 
+  const selectInspiration = (dest: typeof inspirationDestinations[0]) => {
+    setDestination(`${dest.name}, ${dest.country}`);
+  };
+
   const isFormValid = destination && startDate && endDate;
 
   return (
@@ -155,226 +159,279 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* Hero */}
-      <section className="pt-32 pb-12 bg-gradient-to-br from-primary/10 via-background to-accent/10">
-        <div className="max-w-3xl mx-auto px-4 text-center">
+      {/* Hero with background */}
+      <section className="relative min-h-[100vh] flex items-center justify-center overflow-hidden">
+        {/* Background Image */}
+        <div className="absolute inset-0">
+          <img 
+            src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80"
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70" />
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-32">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-12"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full text-primary text-sm font-medium mb-6">
-              <Sparkles className="h-4 w-4" />
-              AI-Powered Planning
-            </div>
-            
-            <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
-              Where To Next?
+            <h1 className="font-display text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+              Your Next Adventure
+              <br />
+              <span className="text-primary">Starts Here</span>
             </h1>
-            
-            <p className="text-lg text-muted-foreground max-w-xl mx-auto">
-              Tell us about your dream trip and we'll create a personalized itinerary just for you.
+            <p className="text-xl text-white/80 max-w-2xl mx-auto">
+              Tell us where you dream of going. We'll craft an itinerary as unique as you are.
             </p>
           </motion.div>
-        </div>
-      </section>
-      
-      {/* Form */}
-      <section className="py-12">
-        <div className="max-w-2xl mx-auto px-4">
+
+          {/* Planning Form */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-card border border-border rounded-2xl p-6 md:p-8 shadow-sm"
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="bg-white/10 backdrop-blur-xl rounded-3xl p-6 md:p-8 border border-white/20"
           >
-            <div className="space-y-6">
-              {/* Origin & Destination */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-                  <Plane className="h-4 w-4" />
-                  Flight Route
-                </div>
-                
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      From
-                    </label>
-                    <LocationAutocomplete
-                      value={origin}
-                      onChange={setOrigin}
-                      placeholder="Departure city"
-                      locations={originCities}
-                      icon={Plane}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      To
-                    </label>
-                    <LocationAutocomplete
-                      value={destination}
-                      onChange={setDestination}
-                      placeholder="Where do you want to go?"
-                      locations={searchableLocations}
-                      icon={MapPin}
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Dates */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-                  <CalendarIcon className="h-4 w-4" />
-                  Travel Dates
-                </div>
-                
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Departure
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full h-12 justify-start text-left font-normal",
-                            !startDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {startDate ? format(startDate, "MMM d, yyyy") : "Select date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={startDate}
-                          onSelect={(date) => {
-                            setStartDate(date);
-                            // Auto-set end date if not set or if it's before new start date
-                            if (date && (!endDate || isBefore(endDate, date))) {
-                              setEndDate(addDays(date, 7));
-                            }
-                          }}
-                          disabled={(date) => isBefore(date, today)}
-                          initialFocus
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Return
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full h-12 justify-start text-left font-normal",
-                            !endDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {endDate ? format(endDate, "MMM d, yyyy") : "Select date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={endDate}
-                          onSelect={setEndDate}
-                          disabled={(date) => 
-                            isBefore(date, today) || 
-                            (startDate ? isBefore(date, startDate) : false)
-                          }
-                          initialFocus
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Travelers */}
+            <div className="grid md:grid-cols-2 gap-4 mb-4">
+              {/* Origin */}
               <div>
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-                  <Users className="h-4 w-4" />
-                  Travelers
-                </div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Number of travelers
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  <Plane className="inline h-4 w-4 mr-1" />
+                  Flying from
                 </label>
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setTravelers(Math.max(1, travelers - 1))}
-                    disabled={travelers <= 1}
-                  >
-                    -
-                  </Button>
-                  <span className="w-12 text-center font-semibold text-lg">{travelers}</span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setTravelers(Math.min(20, travelers + 1))}
-                    disabled={travelers >= 20}
-                  >
-                    +
-                  </Button>
-                  <span className="text-sm text-muted-foreground ml-2">
-                    {travelers === 1 ? 'traveler' : 'travelers'}
-                  </span>
-                </div>
+                <LocationAutocomplete
+                  value={origin}
+                  onChange={setOrigin}
+                  placeholder="Your departure city"
+                  locations={originCities}
+                />
               </div>
               
-              {/* Submit */}
-              <Button
-                onClick={handleStart}
-                size="lg"
-                className="w-full gap-2 h-14 text-base"
-                disabled={!isFormValid}
-              >
-                Start Planning My Trip
-                <ArrowRight className="h-5 w-5" />
-              </Button>
-              
-              <p className="text-center text-xs text-muted-foreground">
-                No account required. Create an account later to save your trip.
-              </p>
+              {/* Destination */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  <MapPin className="inline h-4 w-4 mr-1" />
+                  Flying to
+                </label>
+                <LocationAutocomplete
+                  value={destination}
+                  onChange={setDestination}
+                  placeholder="Where do you want to explore?"
+                  locations={searchableLocations}
+                  showImages
+                />
+              </div>
             </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {/* Start Date */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Departure
+                </label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full h-14 justify-between text-left font-normal bg-white/10 border-white/20 text-white hover:bg-white/20",
+                        !startDate && "text-white/60"
+                      )}
+                    >
+                      {startDate ? format(startDate, "MMM d") : "When?"}
+                      <CalendarIcon className="h-4 w-4 opacity-60" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={startDate}
+                      onSelect={(date) => {
+                        setStartDate(date);
+                        if (date && (!endDate || isBefore(endDate, date))) {
+                          setEndDate(addDays(date, 7));
+                        }
+                      }}
+                      disabled={(date) => isBefore(date, today)}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              {/* End Date */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Return
+                </label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full h-14 justify-between text-left font-normal bg-white/10 border-white/20 text-white hover:bg-white/20",
+                        !endDate && "text-white/60"
+                      )}
+                    >
+                      {endDate ? format(endDate, "MMM d") : "When?"}
+                      <CalendarIcon className="h-4 w-4 opacity-60" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={endDate}
+                      onSelect={setEndDate}
+                      disabled={(date) => 
+                        isBefore(date, today) || 
+                        (startDate ? isBefore(date, startDate) : false)
+                      }
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Travelers */}
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Travelers
+                </label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full h-14 justify-between text-left font-normal bg-white/10 border-white/20 text-white hover:bg-white/20"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        {travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}
+                      </span>
+                      <ChevronDown className="h-4 w-4 opacity-60" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48" align="start">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Travelers</span>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8"
+                          onClick={() => setTravelers(Math.max(1, travelers - 1))}
+                        >
+                          -
+                        </Button>
+                        <span className="w-6 text-center font-semibold">{travelers}</span>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8"
+                          onClick={() => setTravelers(Math.min(12, travelers + 1))}
+                        >
+                          +
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Submit */}
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-sm font-medium text-white/80 mb-2 opacity-0">
+                  Action
+                </label>
+                <Button
+                  onClick={handleStart}
+                  size="lg"
+                  className="w-full h-14 text-base font-semibold gap-2"
+                  disabled={!isFormValid}
+                >
+                  Let's Go
+                  <ArrowRight className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+
+            <p className="text-center text-white/50 text-sm">
+              No account needed. Save your trip anytime.
+            </p>
           </motion.div>
-          
-          {/* Quick suggestions */}
+
+          {/* Inspiration */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="mt-8 text-center"
+            transition={{ delay: 0.6 }}
+            className="mt-12"
           >
-            <p className="text-sm text-muted-foreground mb-4">Popular destinations</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {['Paris, France', 'Tokyo, Japan', 'Bali, Indonesia', 'Santorini, Greece'].map((dest) => (
+            <p className="text-center text-white/60 text-sm mb-4">Need inspiration?</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              {inspirationDestinations.map((dest) => (
                 <button
-                  key={dest}
-                  onClick={() => setDestination(dest)}
-                  className="px-4 py-2 text-sm bg-muted hover:bg-muted/80 rounded-full transition-colors"
+                  key={dest.name}
+                  onClick={() => selectInspiration(dest)}
+                  className="group relative overflow-hidden rounded-full bg-white/10 hover:bg-white/20 transition-all border border-white/20 hover:border-white/40"
                 >
-                  {dest}
+                  <div className="flex items-center gap-2 px-4 py-2">
+                    <div className="w-6 h-6 rounded-full overflow-hidden">
+                      <img src={dest.image} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <span className="text-white text-sm font-medium">{dest.name}</span>
+                  </div>
                 </button>
               ))}
             </div>
           </motion.div>
+        </div>
+
+        {/* Scroll indicator */}
+        <motion.div 
+          className="absolute bottom-8 left-1/2 -translate-x-1/2"
+          animate={{ y: [0, 8, 0] }}
+          transition={{ repeat: Infinity, duration: 2 }}
+        >
+          <ChevronDown className="h-6 w-6 text-white/40" />
+        </motion.div>
+      </section>
+
+      {/* Why Voyance - Quick value props */}
+      <section className="py-20 bg-background">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="grid md:grid-cols-3 gap-8 text-center">
+            {[
+              { 
+                title: 'Personalized', 
+                desc: 'AI that learns your style and builds trips around your preferences.' 
+              },
+              { 
+                title: 'Effortless', 
+                desc: 'From flights to activities, everything curated in one place.' 
+              },
+              { 
+                title: 'Flexible', 
+                desc: 'Adjust anything, anytime. Your trip, your way.' 
+              },
+            ].map((item, i) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+              >
+                <h3 className="text-xl font-display font-semibold mb-2">{item.title}</h3>
+                <p className="text-muted-foreground">{item.desc}</p>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
     </MainLayout>
