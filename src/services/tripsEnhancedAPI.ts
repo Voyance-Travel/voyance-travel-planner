@@ -165,7 +165,14 @@ export const tripsKeys = {
   shared: (token: string) => [...tripsKeys.all, 'shared', token] as const,
 };
 
-export function useTrips(params: ListTripsParams = {}) { return useQuery({ queryKey: tripsKeys.list(params), queryFn: () => getTrips(params), staleTime: 2 * 60 * 1000 }); }
+export function useTrips(params: ListTripsParams = {}, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: tripsKeys.list(params),
+    queryFn: () => getTrips(params),
+    enabled: options.enabled ?? true,
+    staleTime: 2 * 60 * 1000,
+  });
+}
 export function useTripDetail(tripId: string | null) { return useQuery({ queryKey: tripsKeys.detail(tripId || ''), queryFn: () => getTrip(tripId!), enabled: !!tripId, staleTime: 60 * 1000 }); }
 export function useSharedTrip(shareToken: string | null) { return useQuery({ queryKey: tripsKeys.shared(shareToken || ''), queryFn: () => getSharedTrip(shareToken!), enabled: !!shareToken }); }
 

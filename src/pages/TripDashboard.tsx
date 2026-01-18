@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
+import { useAuth, isDemoModeEnabled } from '@/contexts/AuthContext';
 import { 
   useTrips, 
   type Trip, 
@@ -306,9 +307,16 @@ function EmptyState({ tab }: { tab: TabValue }) {
 export default function TripDashboard() {
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const navigate = useNavigate();
-  const { data: tripsData, isLoading, error } = useTrips({ limit: 50, sortBy: 'updatedAt', sortOrder: 'desc' });
-  const trips = tripsData?.data || [];
+  const { isAuthenticated } = useAuth();
+  const demoActive = isDemoModeEnabled();
+  const queryEnabled = isAuthenticated && !demoActive;
 
+  const { data: tripsData, isLoading, error } = useTrips(
+    { limit: 50, sortBy: 'updatedAt', sortOrder: 'desc' },
+    { enabled: queryEnabled }
+  );
+
+  const trips = queryEnabled ? (tripsData?.data || []) : [];
   const filterTrips = (tab: TabValue): Trip[] => {
     const now = new Date();
     switch (tab) {
@@ -429,15 +437,10 @@ export default function TripDashboard() {
                   key="error"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="text-center py-16"
+                  className="py-2"
                 >
-                  <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-                    <Globe className="h-8 w-8 text-destructive" />
-                  </div>
-                  <p className="text-muted-foreground mb-4">Unable to load your trips</p>
-                  <Button variant="outline" onClick={() => window.location.reload()}>
-                    Try Again
-                  </Button>
+                  {/* If trips fail to load (often because user isn't signed in), still show an enticing empty state */}
+                  <EmptyState tab="all" />
                 </motion.div>
               ) : trips.length === 0 ? (
                 <motion.div key="empty-all">
