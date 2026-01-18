@@ -2,13 +2,13 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Clock, Calendar, User, Tag, Share2, Check, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+import DOMPurify from 'dompurify';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { guides, getGuideBySlug, getRelatedGuides } from '@/data/guides';
 import { toast } from 'sonner';
-
 // Parse markdown-style content into structured JSX
 function parseContent(content: string) {
   // Remove the main title (# Title) as it's displayed in the hero
@@ -164,10 +164,17 @@ function parseContent(content: string) {
 }
 
 // Format inline styles like **bold** and *italic*
+// SECURITY: Uses DOMPurify to sanitize HTML and prevent XSS attacks
 function formatInlineStyles(text: string): string {
-  return text
+  const html = text
     .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-foreground font-semibold">$1</strong>')
     .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  
+  // Sanitize with strict allowlist - only permit formatting tags
+  return DOMPurify.sanitize(html, { 
+    ALLOWED_TAGS: ['strong', 'em'],
+    ALLOWED_ATTR: ['class']
+  });
 }
 
 export default function GuideDetail() {
