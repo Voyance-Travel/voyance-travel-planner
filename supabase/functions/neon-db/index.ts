@@ -1,4 +1,5 @@
 import { Pool } from "https://deno.land/x/postgres@v0.17.0/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,6 +49,33 @@ async function ensureProfilesTable() {
   `);
 }
 
+// Authenticate user from request
+async function authenticateUser(req: Request): Promise<{ user: { id: string } | null; error: string | null }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader) {
+    return { user: null, error: 'No authorization header' };
+  }
+
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    }
+  );
+
+  const { data: { user }, error } = await supabaseClient.auth.getUser();
+  
+  if (error || !user) {
+    return { user: null, error: error?.message || 'Invalid token' };
+  }
+
+  return { user: { id: user.id }, error: null };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -59,6 +87,32 @@ Deno.serve(async (req) => {
     const path = url.pathname.replace('/neon-db', '');
     
     console.log(`[neon-db] ${req.method} ${path}`);
+
+    // Health check is public
+    if (path === '/health' && req.method === 'GET') {
+      await ensureProfilesTable();
+      const result = await query('SELECT NOW() as time');
+      return new Response(
+        JSON.stringify({ 
+          status: 'healthy', 
+          database: result.error ? 'disconnected' : 'connected',
+          time: (result.data?.[0] as Record<string, unknown>)?.time 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // All other endpoints require authentication
+    const { user, error: authError } = await authenticateUser(req);
+    if (!user) {
+      console.log('[neon-db] Authentication failed:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized', details: authError }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[neon-db] Authenticated user: ${user.id}`);
 
     // Parse request body for POST/PUT/DELETE
     let body: Record<string, unknown> | null = null;
@@ -72,27 +126,15 @@ Deno.serve(async (req) => {
 
     // Route handlers
     switch (true) {
-      // Health check
-      case path === '/health' && req.method === 'GET': {
-        await ensureProfilesTable();
-        const result = await query('SELECT NOW() as time');
-        return new Response(
-          JSON.stringify({ 
-            status: 'healthy', 
-            database: result.error ? 'disconnected' : 'connected',
-            time: (result.data?.[0] as Record<string, unknown>)?.time 
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Get user profile
+      // Get user profile - only own profile
       case path === '/profiles' && req.method === 'GET': {
         const userId = url.searchParams.get('userId');
-        if (!userId) {
+        
+        // Users can only access their own profile
+        if (userId !== user.id) {
           return new Response(
-            JSON.stringify({ error: 'userId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error: 'Forbidden: Cannot access other users profiles' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         
@@ -108,7 +150,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Create or update user profile
+      // Create or update user profile - only own profile
       case path === '/profiles' && req.method === 'PUT': {
         const { userId, name, avatarUrl, homeAirport } = (body || {}) as { 
           userId?: string; 
@@ -116,10 +158,12 @@ Deno.serve(async (req) => {
           avatarUrl?: string;
           homeAirport?: string;
         };
-        if (!userId) {
+        
+        // Users can only update their own profile
+        if (userId !== user.id) {
           return new Response(
-            JSON.stringify({ error: 'userId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error: 'Forbidden: Cannot modify other users profiles' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         
@@ -143,13 +187,14 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get user preferences
+      // Get user preferences - only own preferences
       case path === '/preferences' && req.method === 'GET': {
         const userId = url.searchParams.get('userId');
-        if (!userId) {
+        
+        if (userId !== user.id) {
           return new Response(
-            JSON.stringify({ error: 'userId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error: 'Forbidden: Cannot access other users preferences' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         
@@ -164,12 +209,20 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Update user preferences
+      // Update user preferences - only own preferences
       case path === '/preferences' && req.method === 'PUT': {
         const { userId, preferences } = (body || {}) as { userId?: string; preferences?: Record<string, unknown> };
-        if (!userId || !preferences) {
+        
+        if (userId !== user.id) {
           return new Response(
-            JSON.stringify({ error: 'userId and preferences are required' }),
+            JSON.stringify({ error: 'Forbidden: Cannot modify other users preferences' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        if (!preferences) {
+          return new Response(
+            JSON.stringify({ error: 'preferences are required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -202,13 +255,14 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get user trips
+      // Get user trips - only own trips
       case path === '/trips' && req.method === 'GET': {
         const userId = url.searchParams.get('userId');
-        if (!userId) {
+        
+        if (userId !== user.id) {
           return new Response(
-            JSON.stringify({ error: 'userId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error: 'Forbidden: Cannot access other users trips' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         
@@ -223,13 +277,20 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get single trip
+      // Get single trip - verify ownership
       case path.startsWith('/trips/') && req.method === 'GET': {
         const tripId = path.replace('/trips/', '');
         const result = await query(
-          'SELECT * FROM trips WHERE id = $1',
-          [tripId]
+          'SELECT * FROM trips WHERE id = $1 AND user_id = $2',
+          [tripId, user.id]
         );
+        
+        if (!result.data || result.data.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Trip not found or access denied' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         
         return new Response(
           JSON.stringify(result),
@@ -237,22 +298,16 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Create trip
+      // Create trip - automatically set to current user
       case path === '/trips' && req.method === 'POST': {
-        const { userId, ...tripData } = (body || {}) as { userId?: string; [key: string]: unknown };
-        if (!userId) {
-          return new Response(
-            JSON.stringify({ error: 'userId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
+        const tripData = (body || {}) as Record<string, unknown>;
         
         const result = await query(
           `INSERT INTO trips (user_id, destination, start_date, end_date, travelers, status, data, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
            RETURNING *`,
           [
-            userId,
+            user.id, // Always use authenticated user's ID
             tripData.destination || null,
             tripData.startDate || null,
             tripData.endDate || null,
@@ -268,10 +323,31 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Update trip
+      // Update trip - verify ownership first
       case path.startsWith('/trips/') && req.method === 'PUT': {
         const tripId = path.replace('/trips/', '');
         const tripData = (body || {}) as Record<string, unknown>;
+        
+        // Verify ownership
+        const ownerCheck = await query(
+          'SELECT user_id FROM trips WHERE id = $1',
+          [tripId]
+        );
+        
+        if (!ownerCheck.data || ownerCheck.data.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Trip not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const tripOwner = (ownerCheck.data[0] as { user_id: string }).user_id;
+        if (tripOwner !== user.id) {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: Cannot modify other users trips' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         
         const result = await query(
           `UPDATE trips SET 
@@ -282,7 +358,7 @@ Deno.serve(async (req) => {
              status = COALESCE($6, status),
              data = COALESCE($7, data),
              updated_at = NOW()
-           WHERE id = $1
+           WHERE id = $1 AND user_id = $8
            RETURNING *`,
           [
             tripId,
@@ -291,7 +367,8 @@ Deno.serve(async (req) => {
             tripData.endDate,
             tripData.travelers,
             tripData.status,
-            tripData.data ? JSON.stringify(tripData.data) : null
+            tripData.data ? JSON.stringify(tripData.data) : null,
+            user.id
           ]
         );
         
@@ -301,65 +378,30 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Delete trip
+      // Delete trip - verify ownership
       case path.startsWith('/trips/') && req.method === 'DELETE': {
         const tripId = path.replace('/trips/', '');
         
         const result = await query(
-          'DELETE FROM trips WHERE id = $1 RETURNING id',
-          [tripId]
+          'DELETE FROM trips WHERE id = $1 AND user_id = $2 RETURNING id',
+          [tripId, user.id]
         );
         
-        return new Response(
-          JSON.stringify(result),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Generic query endpoint (be careful with this in production!)
-      case path === '/query' && req.method === 'POST': {
-        const { table, operation, filters } = (body || {}) as { 
-          table?: string; 
-          operation?: string; 
-          filters?: Record<string, unknown>; 
-        };
-        
-        if (!table || !operation) {
+        if (!result.data || result.data.length === 0) {
           return new Response(
-            JSON.stringify({ error: 'table and operation are required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error: 'Trip not found or access denied' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
-        let result;
-        switch (operation) {
-          case 'select': {
-            let sql = `SELECT * FROM ${table}`;
-            const params: unknown[] = [];
-            
-            if (filters && Object.keys(filters).length > 0) {
-              const conditions = Object.entries(filters).map(([key], i) => {
-                params.push(filters[key]);
-                return `${key} = $${i + 1}`;
-              });
-              sql += ` WHERE ${conditions.join(' AND ')}`;
-            }
-            
-            result = await query(sql, params);
-            break;
-          }
-          default:
-            return new Response(
-              JSON.stringify({ error: `Operation ${operation} not supported` }),
-              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
         
         return new Response(
           JSON.stringify(result),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      // NOTE: /query endpoint has been REMOVED for security reasons
+      // It allowed arbitrary SQL execution which is a critical vulnerability
 
       default:
         return new Response(

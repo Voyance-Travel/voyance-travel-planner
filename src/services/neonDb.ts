@@ -172,22 +172,13 @@ export const healthCheck = async () => {
   return callNeonDbDirect<{ status: string; database: string; time: string }>('/health');
 };
 
-// Generic query (use with caution)
-export const queryTable = async (
-  table: string,
-  operation: 'select',
-  filters?: Record<string, unknown>
-) => {
-  return callNeonDbDirect('/query', {
-    method: 'POST',
-    body: { table, operation, filters },
-  });
-};
+// NOTE: queryTable has been removed for security reasons
+// The /query endpoint allowed arbitrary SQL execution and was a critical vulnerability
+// Use the specific API methods (profilesApi, tripsApi, preferencesApi) instead
 
 export default {
   profiles: profilesApi,
   preferences: preferencesApi,
   trips: tripsApi,
   health: healthCheck,
-  query: queryTable,
 };
