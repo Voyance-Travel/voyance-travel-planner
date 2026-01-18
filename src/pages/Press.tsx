@@ -1,70 +1,245 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Mail, Download, ExternalLink } from 'lucide-react';
+import { Mail, Download, Building2, Users, Globe, Award, FileText, Palette, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { CONTACT_CONFIG } from '@/config/contact';
+import { 
+  generatePressKitPDF, 
+  companyInfo, 
+  keyStats, 
+  leadership, 
+  pressHighlights 
+} from '@/utils/pressKitGenerator';
 
 export default function Press() {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleDownloadPressKit = async () => {
+    setIsGenerating(true);
+    try {
+      await generatePressKitPDF();
+      toast.success('Press kit downloaded successfully!');
+    } catch (error) {
+      console.error('Error generating press kit:', error);
+      toast.error('Failed to generate press kit. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <MainLayout>
       <Head
         title="Press | Voyance"
-        description="Press inquiries and media resources for Voyance."
+        description="Press inquiries, media resources, and company information for Voyance."
       />
       
-      <section className="pt-24 pb-20">
-        <div className="max-w-3xl mx-auto px-4">
+      {/* Hero */}
+      <section className="pt-32 pb-16 bg-gradient-to-br from-primary/10 via-background to-accent/10">
+        <div className="max-w-4xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-12"
           >
+            <FileText className="w-16 h-16 mx-auto mb-6 text-primary" />
             <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
               Press & Media
             </h1>
-            <p className="text-lg text-muted-foreground">
-              Resources and contact information for press inquiries.
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Resources, brand assets, and contact information for media inquiries
             </p>
           </motion.div>
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="space-y-8"
-          >
-            {/* Contact */}
-            <div className="p-6 bg-card border border-border rounded-xl">
-              <h2 className="text-xl font-semibold text-foreground mb-4">Media Contact</h2>
-              <p className="text-muted-foreground mb-4">
-                For press inquiries, interviews, or media resources, please reach out to our communications team.
+        </div>
+      </section>
+
+      {/* Company Overview */}
+      <section className="py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="grid lg:grid-cols-2 gap-12">
+            {/* About */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-6"
+            >
+              <div>
+                <h2 className="text-2xl font-semibold mb-4">About Voyance</h2>
+                <p className="text-muted-foreground leading-relaxed">
+                  {companyInfo.mission}
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-card border border-border rounded-xl">
+                  <Building2 className="h-5 w-5 text-primary mb-2" />
+                  <p className="text-sm text-muted-foreground">Founded</p>
+                  <p className="font-semibold">{companyInfo.founded}</p>
+                </div>
+                <div className="p-4 bg-card border border-border rounded-xl">
+                  <Globe className="h-5 w-5 text-primary mb-2" />
+                  <p className="text-sm text-muted-foreground">Headquarters</p>
+                  <p className="font-semibold">{companyInfo.headquarters}</p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Key Stats */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <h2 className="text-2xl font-semibold mb-4">By the Numbers</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {keyStats.map((stat, index) => (
+                  <div 
+                    key={stat.label}
+                    className="p-4 bg-gradient-to-br from-primary/5 to-accent/5 border border-border rounded-xl"
+                  >
+                    <p className="text-2xl font-bold text-primary">{stat.value}</p>
+                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Leadership */}
+      <section className="py-16 bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-2xl font-semibold mb-8 text-center">Leadership Team</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {leadership.map((person, index) => (
+              <motion.div
+                key={person.name}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="p-6 bg-card border border-border rounded-xl"
+              >
+                <div className="w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mb-4">
+                  <Users className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-semibold text-lg">{person.name}</h3>
+                <p className="text-primary text-sm mb-3">{person.title}</p>
+                <p className="text-sm text-muted-foreground">{person.bio}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Press Highlights */}
+      <section className="py-16">
+        <div className="max-w-4xl mx-auto px-4">
+          <h2 className="text-2xl font-semibold mb-8 text-center">Press Highlights</h2>
+          <div className="space-y-4">
+            {pressHighlights.map((highlight, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="flex items-center gap-4 p-4 bg-card border border-border rounded-xl"
+              >
+                <Award className="h-6 w-6 text-primary shrink-0" />
+                <p className="font-medium">{highlight}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Download & Contact */}
+      <section className="py-16 bg-gradient-to-br from-primary/10 to-accent/10">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Press Kit Download */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-8 bg-card border border-border rounded-2xl text-center"
+            >
+              <Palette className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Press Kit</h3>
+              <p className="text-muted-foreground mb-6">
+                Download our complete press kit including logos, brand guidelines, company facts, and leadership bios.
               </p>
-              <Button className="gap-2">
-                <Mail className="h-4 w-4" />
-                press@voyance.ai
+              <Button 
+                size="lg" 
+                onClick={handleDownloadPressKit}
+                disabled={isGenerating}
+                className="gap-2"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Download Press Kit (PDF)
+                  </>
+                )}
               </Button>
-            </div>
-            
-            {/* Brand Assets */}
-            <div className="p-6 bg-card border border-border rounded-xl">
-              <h2 className="text-xl font-semibold text-foreground mb-4">Brand Assets</h2>
-              <p className="text-muted-foreground mb-4">
-                Download our logo, brand guidelines, and approved imagery for media use.
+            </motion.div>
+
+            {/* Media Contact */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="p-8 bg-card border border-border rounded-2xl text-center"
+            >
+              <Mail className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Media Contact</h3>
+              <p className="text-muted-foreground mb-6">
+                For press inquiries, interviews, speaking opportunities, or additional materials.
               </p>
-              <Button variant="outline" className="gap-2">
-                <Download className="h-4 w-4" />
-                Download Press Kit
+              <Button size="lg" variant="outline" asChild className="gap-2">
+                <a href="mailto:press@voyance.travel">
+                  <Mail className="h-4 w-4" />
+                  press@voyance.travel
+                </a>
               </Button>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Usage Guidelines */}
+      <section className="py-16">
+        <div className="max-w-3xl mx-auto px-4 text-center">
+          <h2 className="text-2xl font-semibold mb-4">Usage Guidelines</h2>
+          <p className="text-muted-foreground mb-8">
+            When using Voyance brand assets, please adhere to our brand guidelines. For any questions about usage or to request custom assets, please contact our press team.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4 text-left">
+            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+              <p className="font-medium text-green-600 dark:text-green-400 mb-2">✓ Do</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Use official logos from the press kit</li>
+                <li>• Maintain logo proportions</li>
+                <li>• Use brand colors consistently</li>
+                <li>• Credit Voyance when referencing data</li>
+              </ul>
             </div>
-            
-            {/* Recent Coverage */}
-            <div className="p-6 bg-card border border-border rounded-xl">
-              <h2 className="text-xl font-semibold text-foreground mb-4">Recent Coverage</h2>
-              <p className="text-muted-foreground">
-                Press coverage coming soon. Check back for updates.
-              </p>
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <p className="font-medium text-red-600 dark:text-red-400 mb-2">✗ Don't</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Alter logo colors or proportions</li>
+                <li>• Use outdated brand assets</li>
+                <li>• Imply endorsement without permission</li>
+                <li>• Use assets for commercial purposes</li>
+              </ul>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
     </MainLayout>
