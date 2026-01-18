@@ -170,75 +170,75 @@ export default function EnhancedFlightCard({
         </div>
       )}
 
-      <div className="p-4 md:p-5">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
-          <div className="flex items-center gap-3 lg:w-48 shrink-0">
-            <AirlineLogo code={airlineCode} name={airlineDisplayName} size="lg" />
+      <div className="p-3 md:p-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4">
+          <div className="flex items-center gap-2.5 lg:w-40 shrink-0">
+            <AirlineLogo code={airlineCode} name={airlineDisplayName} size="md" />
             <div className="min-w-0">
-              <p className="font-semibold text-foreground text-sm truncate">{airlineDisplayName}</p>
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="font-medium text-foreground text-sm truncate">{airlineDisplayName}</p>
+              <p className="text-[11px] text-muted-foreground truncate">
                 {flight.segments.map((s) => s.flightNumber).join(' · ')}
               </p>
             </div>
           </div>
 
-          <div className="flex-1 flex items-center gap-4 md:gap-6">
+          <div className="flex-1 flex items-center gap-3 md:gap-4">
             <div className="text-center shrink-0">
-              <p className="text-lg md:text-xl font-bold text-foreground">{formatTime(primarySegment.departure)}</p>
-              <p className="text-xs text-muted-foreground font-medium">{primarySegment.departureAirport}</p>
+              <p className="text-base md:text-lg font-bold text-foreground leading-tight">{formatTime(primarySegment.departure)}</p>
+              <p className="text-[11px] text-muted-foreground">{primarySegment.departureAirport}</p>
             </div>
 
-            <div className="flex-1 flex flex-col items-center px-2 min-w-[90px]">
-              <p className="text-xs text-muted-foreground mb-1.5 font-medium">{formatDuration(flight.totalDuration)}</p>
-              <div className="relative w-full max-w-[180px]">
+            <div className="flex-1 flex flex-col items-center px-1 min-w-[70px]">
+              <p className="text-[10px] text-muted-foreground mb-1">{formatDuration(flight.totalDuration)}</p>
+              <div className="relative w-full max-w-[140px]">
                 <div className="h-px bg-border w-full" />
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-1">
-                  <Plane className="h-3.5 w-3.5 text-primary rotate-90" />
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-0.5">
+                  <Plane className="h-3 w-3 text-primary rotate-90" />
                 </div>
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-muted-foreground rounded-full" />
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-muted-foreground rounded-full" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-1 bg-muted-foreground rounded-full" />
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-1 bg-muted-foreground rounded-full" />
               </div>
-              <div className={cn('text-[11px] mt-1.5 font-medium text-center', flight.stops === 0 ? 'text-primary' : 'text-muted-foreground')}>
+              <div className={cn('text-[10px] mt-1 font-medium text-center leading-tight', flight.stops === 0 ? 'text-primary' : 'text-muted-foreground')}>
                 {stopSummary}
               </div>
             </div>
 
             <div className="text-center shrink-0">
-              <p className="text-lg md:text-xl font-bold text-foreground">{formatTime(lastSegment.arrival)}</p>
-              <p className="text-xs text-muted-foreground font-medium">{lastSegment.arrivalAirport}</p>
+              <p className="text-base md:text-lg font-bold text-foreground leading-tight">{formatTime(lastSegment.arrival)}</p>
+              <p className="text-[11px] text-muted-foreground">{lastSegment.arrivalAirport}</p>
             </div>
           </div>
 
-          <div className="text-right lg:w-28 shrink-0 lg:border-l lg:border-border lg:pl-4">
-            <p className="text-xs text-muted-foreground">From</p>
-            <p className="text-xl md:text-2xl font-bold text-foreground">${lowestPrice}</p>
-            <p className="text-[10px] text-muted-foreground">per person</p>
+          <div className="text-right lg:w-24 shrink-0 lg:border-l lg:border-border lg:pl-3">
+            <p className="text-[10px] text-muted-foreground">From</p>
+            <p className="text-lg md:text-xl font-bold text-foreground leading-tight">${lowestPrice}</p>
+            <p className="text-[9px] text-muted-foreground">per person</p>
           </div>
         </div>
 
-        {/* Selection row (less boxy / less vertical bulk) */}
-        <div className="mt-4 pt-3 border-t border-border flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        {/* Selection row - more compact */}
+        <div className="mt-3 pt-2.5 border-t border-border flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2.5">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-muted-foreground mb-2 uppercase tracking-wide">Cabin</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Cabin</p>
+            <div className="flex flex-wrap gap-1.5">
               {flight.cabinOptions.map((option, index) => (
                 <button
                   key={option.cabin}
                   type="button"
                   onClick={() => handleCabinSelect(index)}
                   className={cn(
-                    'min-w-[92px] max-w-[128px] p-2 rounded-lg border transition-all text-left',
+                    'min-w-[80px] max-w-[110px] p-1.5 rounded-lg border transition-all text-left',
                     activeCabin === index ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
                   )}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-xs">{formatCabinClass(option.cabin)}</span>
-                    {activeCabin === index && <Check className="h-3.5 w-3.5 text-primary" />}
+                    <span className="font-medium text-[11px]">{formatCabinClass(option.cabin)}</span>
+                    {activeCabin === index && <Check className="h-3 w-3 text-primary" />}
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-base font-bold">${option.price}</span>
+                    <span className="text-sm font-bold">${option.price}</span>
                     {option.seatsRemaining && option.seatsRemaining < 5 && (
-                      <span className="text-[9px] text-destructive font-medium">{option.seatsRemaining} left</span>
+                      <span className="text-[8px] text-destructive font-medium">{option.seatsRemaining} left</span>
                     )}
                   </div>
                 </button>

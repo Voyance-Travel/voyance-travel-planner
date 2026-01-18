@@ -247,8 +247,25 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
   /**
    * Save trip to BOTH Supabase (primary) and Railway backend
    * Only works for authenticated users
+   * DEMO MODE: Skip Supabase save entirely - demo user ID is not a valid UUID
    */
   const saveTrip = useCallback(async (): Promise<string | null> => {
+    // Check if demo mode is enabled (demo user ID is not a valid UUID)
+    const isDemoMode = user?.id === 'demo-user-001' || localStorage.getItem('voyance_demo_mode') === 'true';
+    
+    // Demo mode: skip persistence entirely - just update local state
+    if (isDemoMode) {
+      console.log('[TripPlanner] Demo mode - skipping database save');
+      const demoTripId = state.tripId || `demo-trip-${Date.now()}`;
+      setState(prev => ({ 
+        ...prev, 
+        tripId: demoTripId,
+        isSaving: false,
+        lastSaved: new Date()
+      }));
+      return demoTripId;
+    }
+    
     // If not authenticated, save to Neon instead
     if (!isAuthenticated || !user) {
       console.log('[TripPlanner] Not authenticated, saving to Neon');
