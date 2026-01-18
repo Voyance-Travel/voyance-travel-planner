@@ -65,6 +65,9 @@ import SampleItinerary from "./pages/SampleItinerary";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 
+// Admin
+import BulkImport from "./pages/admin/BulkImport";
+
 // 404
 import NotFound from "./pages/NotFound";
 
@@ -132,6 +135,9 @@ const App = () => (
                 {/* Legal Routes */}
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
+                
+                {/* Admin Routes */}
+                <Route path="/admin/bulk-import" element={<BulkImport />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
