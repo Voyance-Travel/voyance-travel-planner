@@ -11,7 +11,7 @@ export const companyInfo = {
   tagline: 'AI-Powered Travel Planning',
   founded: '2024',
   headquarters: 'Atlanta, GA',
-  website: 'https://voyance.travel',
+  website: 'https://travelwithvoyance.com',
   mission: 'To revolutionize travel planning by combining artificial intelligence with deep personalization, helping every traveler discover experiences that resonate with who they are.',
   vision: 'A world where every journey is perfectly tailored to the individual, making travel more accessible, meaningful, and memorable for everyone.',
 };
@@ -158,8 +158,8 @@ export async function generatePressKitPDF(): Promise<void> {
   addSection('Media Contact');
   addText('For press inquiries, interviews, or additional materials:', 11);
   y += 2;
-  addText('Email: press@voyance.travel', 11, 'bold');
-  addText('Website: voyance.travel/press', 11);
+  addText('Email: contact@travelwithvoyance.com', 11, 'bold');
+  addText('Website: travelwithvoyance.com/press', 11);
 
   // Footer
   y = 280;

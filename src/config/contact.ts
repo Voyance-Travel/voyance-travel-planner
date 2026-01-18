@@ -5,13 +5,13 @@
 
 export const CONTACT_CONFIG = {
   // Primary support email for general inquiries and help
-  SUPPORT_EMAIL: 'hello@voyance.travel',
+  SUPPORT_EMAIL: 'contact@travelwithvoyance.com',
   
   // Careers email for job applications
-  CAREERS_EMAIL: 'careers@voyance.travel',
+  CAREERS_EMAIL: 'contact@travelwithvoyance.com',
   
   // Email for booking-related inquiries
-  BOOKINGS_EMAIL: 'bookings@voyance.travel',
+  BOOKINGS_EMAIL: 'contact@travelwithvoyance.com',
   
   // Social media links
   SOCIAL: {

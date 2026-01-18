@@ -186,9 +186,9 @@ export default function Press() {
                 For press inquiries, interviews, speaking opportunities, or additional materials.
               </p>
               <Button size="lg" variant="outline" asChild className="gap-2">
-                <a href="mailto:press@voyance.travel">
+                <a href="mailto:contact@travelwithvoyance.com">
                   <Mail className="h-4 w-4" />
-                  press@voyance.travel
+                  contact@travelwithvoyance.com
                 </a>
               </Button>
             </motion.div>
