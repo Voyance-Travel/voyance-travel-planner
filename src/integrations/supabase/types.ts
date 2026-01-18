@@ -296,6 +296,129 @@ export type Database = {
         }
         Relationships: []
       }
+      destinations: {
+        Row: {
+          airport_codes: Json | null
+          airport_lookup_codes: string | null
+          alternative_names: Json | null
+          best_time_to_visit: string | null
+          city: string
+          coordinates: Json | null
+          cost_tier: string | null
+          country: string
+          created_at: string
+          currency_code: string | null
+          currency_data: Json | null
+          default_transport_modes: Json | null
+          description: string | null
+          dynamic_currency_conversion: Json | null
+          dynamic_weather: Json | null
+          enrichment_priority: number | null
+          enrichment_status: Json | null
+          featured: boolean | null
+          google_place_id: string | null
+          id: string
+          known_for: Json | null
+          last_content_update: string | null
+          last_currency_update: string | null
+          last_enriched: string | null
+          last_weather_update: string | null
+          points_of_interest: Json | null
+          population: number | null
+          region: string | null
+          safe_search_keywords: Json | null
+          seasonal_events: Json | null
+          seasonality: string | null
+          stock_image_url: string | null
+          tags: Json | null
+          temperature_range: string | null
+          tier: number | null
+          timezone: string | null
+          updated_at: string
+          weather_data: Json | null
+        }
+        Insert: {
+          airport_codes?: Json | null
+          airport_lookup_codes?: string | null
+          alternative_names?: Json | null
+          best_time_to_visit?: string | null
+          city: string
+          coordinates?: Json | null
+          cost_tier?: string | null
+          country: string
+          created_at?: string
+          currency_code?: string | null
+          currency_data?: Json | null
+          default_transport_modes?: Json | null
+          description?: string | null
+          dynamic_currency_conversion?: Json | null
+          dynamic_weather?: Json | null
+          enrichment_priority?: number | null
+          enrichment_status?: Json | null
+          featured?: boolean | null
+          google_place_id?: string | null
+          id?: string
+          known_for?: Json | null
+          last_content_update?: string | null
+          last_currency_update?: string | null
+          last_enriched?: string | null
+          last_weather_update?: string | null
+          points_of_interest?: Json | null
+          population?: number | null
+          region?: string | null
+          safe_search_keywords?: Json | null
+          seasonal_events?: Json | null
+          seasonality?: string | null
+          stock_image_url?: string | null
+          tags?: Json | null
+          temperature_range?: string | null
+          tier?: number | null
+          timezone?: string | null
+          updated_at?: string
+          weather_data?: Json | null
+        }
+        Update: {
+          airport_codes?: Json | null
+          airport_lookup_codes?: string | null
+          alternative_names?: Json | null
+          best_time_to_visit?: string | null
+          city?: string
+          coordinates?: Json | null
+          cost_tier?: string | null
+          country?: string
+          created_at?: string
+          currency_code?: string | null
+          currency_data?: Json | null
+          default_transport_modes?: Json | null
+          description?: string | null
+          dynamic_currency_conversion?: Json | null
+          dynamic_weather?: Json | null
+          enrichment_priority?: number | null
+          enrichment_status?: Json | null
+          featured?: boolean | null
+          google_place_id?: string | null
+          id?: string
+          known_for?: Json | null
+          last_content_update?: string | null
+          last_currency_update?: string | null
+          last_enriched?: string | null
+          last_weather_update?: string | null
+          points_of_interest?: Json | null
+          population?: number | null
+          region?: string | null
+          safe_search_keywords?: Json | null
+          seasonal_events?: Json | null
+          seasonality?: string | null
+          stock_image_url?: string | null
+          tags?: Json | null
+          temperature_range?: string | null
+          tier?: number | null
+          timezone?: string | null
+          updated_at?: string
+          weather_data?: Json | null
+        }
+        Relationships: []
+      }
       feature_flags: {
         Row: {
           category: string
@@ -364,6 +487,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      guides: {
+        Row: {
+          author: string | null
+          category: string | null
+          content: Json | null
+          created_at: string
+          destination_city: string | null
+          destination_country: string | null
+          excerpt: string | null
+          featured: boolean | null
+          id: string
+          image_url: string | null
+          published: boolean | null
+          reading_time: number | null
+          slug: string
+          subtitle: string | null
+          tags: Json | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author?: string | null
+          category?: string | null
+          content?: Json | null
+          created_at?: string
+          destination_city?: string | null
+          destination_country?: string | null
+          excerpt?: string | null
+          featured?: boolean | null
+          id?: string
+          image_url?: string | null
+          published?: boolean | null
+          reading_time?: number | null
+          slug: string
+          subtitle?: string | null
+          tags?: Json | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author?: string | null
+          category?: string | null
+          content?: Json | null
+          created_at?: string
+          destination_city?: string | null
+          destination_country?: string | null
+          excerpt?: string | null
+          featured?: boolean | null
+          id?: string
+          image_url?: string | null
+          published?: boolean | null
+          reading_time?: number | null
+          slug?: string
+          subtitle?: string | null
+          tags?: Json | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       plan_entitlements: {
         Row: {
@@ -715,6 +898,122 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "quiz_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_activities: {
+        Row: {
+          added_by_user: boolean | null
+          address: string | null
+          block_order: number | null
+          booking_required: boolean | null
+          booking_status: string | null
+          cost: number | null
+          created_at: string
+          currency: string | null
+          description: string | null
+          end_time: string | null
+          id: string
+          itinerary_day_id: string | null
+          latitude: number | null
+          location: string | null
+          locked: boolean | null
+          longitude: number | null
+          metadata: Json | null
+          operating_hours: Json | null
+          photos: Json | null
+          place_id: string | null
+          rating_count: number | null
+          rating_value: number | null
+          recommendation_score: number | null
+          start_time: string | null
+          tags: Json | null
+          title: string
+          transportation: Json | null
+          trip_id: string | null
+          type: string
+          updated_at: string
+          venue_id: string | null
+          verification_confidence: number | null
+          verified: boolean | null
+        }
+        Insert: {
+          added_by_user?: boolean | null
+          address?: string | null
+          block_order?: number | null
+          booking_required?: boolean | null
+          booking_status?: string | null
+          cost?: number | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          itinerary_day_id?: string | null
+          latitude?: number | null
+          location?: string | null
+          locked?: boolean | null
+          longitude?: number | null
+          metadata?: Json | null
+          operating_hours?: Json | null
+          photos?: Json | null
+          place_id?: string | null
+          rating_count?: number | null
+          rating_value?: number | null
+          recommendation_score?: number | null
+          start_time?: string | null
+          tags?: Json | null
+          title: string
+          transportation?: Json | null
+          trip_id?: string | null
+          type?: string
+          updated_at?: string
+          venue_id?: string | null
+          verification_confidence?: number | null
+          verified?: boolean | null
+        }
+        Update: {
+          added_by_user?: boolean | null
+          address?: string | null
+          block_order?: number | null
+          booking_required?: boolean | null
+          booking_status?: string | null
+          cost?: number | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          itinerary_day_id?: string | null
+          latitude?: number | null
+          location?: string | null
+          locked?: boolean | null
+          longitude?: number | null
+          metadata?: Json | null
+          operating_hours?: Json | null
+          photos?: Json | null
+          place_id?: string | null
+          rating_count?: number | null
+          rating_value?: number | null
+          recommendation_score?: number | null
+          start_time?: string | null
+          tags?: Json | null
+          title?: string
+          transportation?: Json | null
+          trip_id?: string | null
+          type?: string
+          updated_at?: string
+          venue_id?: string | null
+          verification_confidence?: number | null
+          verified?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_activities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
             referencedColumns: ["id"]
           },
         ]
