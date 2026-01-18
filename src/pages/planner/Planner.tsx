@@ -10,6 +10,8 @@ import FlightSelection from '@/components/planner/steps/FlightSelection';
 import HotelSelection from '@/components/planner/steps/HotelSelection';
 import ItineraryPreview from '@/components/planner/steps/ItineraryPreview';
 import { scrollToTop } from '@/utils/scrollUtils';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 type PlannerStep = 'setup' | 'flights' | 'hotels' | 'itinerary';
 
@@ -23,6 +25,7 @@ interface PlannerFormData {
   selectedDepartureFlight: string | null;
   selectedReturnFlight: string | null;
   selectedHotel: string | null;
+  tripId: string | null;
 }
 
 const initialFormData: PlannerFormData = {
@@ -35,6 +38,7 @@ const initialFormData: PlannerFormData = {
   selectedDepartureFlight: null,
   selectedReturnFlight: null,
   selectedHotel: null,
+  tripId: null,
 };
 
 const STEPS = [
@@ -47,6 +51,7 @@ const STEPS = [
 export default function Planner() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user, isAuthenticated } = useAuth();
   const [currentStep, setCurrentStep] = useState<PlannerStep>('setup');
   const [formData, setFormData] = useState<PlannerFormData>(initialFormData);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,6 +59,7 @@ export default function Planner() {
   // Initialize from URL params or localStorage
   useEffect(() => {
     const destination = searchParams.get('destination');
+    const tripId = searchParams.get('tripId');
     const savedTrip = localStorage.getItem('voyance-current-trip');
 
     let initialData = { ...initialFormData };
@@ -70,9 +76,44 @@ export default function Planner() {
     if (destination) {
       initialData.destination = destination;
     }
-
-    setFormData(initialData);
+    
+    if (tripId) {
+      initialData.tripId = tripId;
+      // Load trip from Supabase
+      loadTripFromDB(tripId, initialData);
+    } else {
+      setFormData(initialData);
+    }
   }, [searchParams]);
+
+  // Load existing trip from database
+  const loadTripFromDB = async (tripId: string, fallbackData: PlannerFormData) => {
+    try {
+      const { data, error } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', tripId)
+        .single();
+
+      if (data && !error) {
+        setFormData({
+          ...fallbackData,
+          tripId: data.id,
+          destination: data.destination,
+          name: data.name,
+          startDate: data.start_date,
+          endDate: data.end_date,
+          travelers: data.travelers || 2,
+          departureCity: data.origin_city || '',
+        });
+      } else {
+        setFormData(fallbackData);
+      }
+    } catch (err) {
+      console.error('Failed to load trip:', err);
+      setFormData(fallbackData);
+    }
+  };
 
   // Save form data to localStorage
   useEffect(() => {
@@ -90,12 +131,64 @@ export default function Planner() {
     return steps.indexOf(step);
   };
 
-  const handleStepComplete = (step: PlannerStep) => {
+  // Save trip to Supabase and get tripId
+  const saveTrip = async (): Promise<string | null> => {
+    if (!isAuthenticated || !user) {
+      toast.error('Please sign in to continue');
+      navigate('/signin');
+      return null;
+    }
+
+    try {
+      const tripData = {
+        user_id: user.id,
+        name: formData.name || `Trip to ${formData.destination}`,
+        destination: formData.destination,
+        start_date: formData.startDate,
+        end_date: formData.endDate,
+        travelers: formData.travelers,
+        origin_city: formData.departureCity,
+        status: 'planning' as const,
+      };
+
+      if (formData.tripId) {
+        // Update existing
+        const { error } = await supabase
+          .from('trips')
+          .update({ ...tripData, updated_at: new Date().toISOString() })
+          .eq('id', formData.tripId);
+        
+        if (error) throw error;
+        return formData.tripId;
+      } else {
+        // Create new
+        const { data, error } = await supabase
+          .from('trips')
+          .insert([tripData])
+          .select('id')
+          .single();
+
+        if (error) throw error;
+        updateFormData({ tripId: data.id });
+        return data.id;
+      }
+    } catch (err) {
+      console.error('Failed to save trip:', err);
+      toast.error('Failed to save trip');
+      return null;
+    }
+  };
+
+  const handleStepComplete = async (step: PlannerStep) => {
     scrollToTop();
 
     switch (step) {
       case 'setup':
-        setCurrentStep('flights');
+        // Save trip when leaving setup
+        const tripId = await saveTrip();
+        if (tripId) {
+          setCurrentStep('flights');
+        }
         break;
       case 'flights':
         setCurrentStep('hotels');
@@ -126,23 +219,30 @@ export default function Planner() {
   };
 
   const handleTripSubmission = async () => {
+    if (!formData.tripId) {
+      toast.error('Trip not saved yet');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Update trip status to booked
+      const { error } = await supabase
+        .from('trips')
+        .update({ status: 'booked', updated_at: new Date().toISOString() })
+        .eq('id', formData.tripId);
+
+      if (error) throw error;
 
       // Clear saved trip data
       localStorage.removeItem('voyance-current-trip');
 
-      // Create a mock trip ID
-      const tripId = crypto.randomUUID();
-
-      toast.success('Trip created successfully!');
-      navigate(`/trip/${tripId}`);
+      toast.success('Trip booked successfully!');
+      navigate(`/trip/${formData.tripId}`);
     } catch (error) {
-      console.error('Failed to create trip:', error);
-      toast.error('Failed to create trip. Please try again.');
+      console.error('Failed to book trip:', error);
+      toast.error('Failed to book trip. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -196,7 +296,15 @@ export default function Planner() {
 
         {currentStep === 'itinerary' && (
           <ItineraryPreview
-            tripDetails={formData}
+            tripId={formData.tripId || undefined}
+            tripDetails={{
+              name: formData.name,
+              destination: formData.destination,
+              departureCity: formData.departureCity,
+              startDate: formData.startDate,
+              endDate: formData.endDate,
+              travelers: formData.travelers,
+            }}
             onComplete={() => handleStepComplete('itinerary')}
             onBack={handleBack}
             isLoading={isLoading}
