@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileText, CheckCircle, XCircle, Loader2, Users } from "lucide-react";
+import { Upload, FileText, CheckCircle, XCircle, Loader2, Users, Trash2 } from "lucide-react";
 import { readCSVFile, bulkImportCSV } from "@/utils/csvBulkImport";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,9 +20,11 @@ export default function BulkImport() {
   const [table, setTable] = useState<string>("activities");
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [status, setStatus] = useState<ImportStatus | null>(null);
   const [result, setResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
   const [userImportResult, setUserImportResult] = useState<any>(null);
+  const [deleteResult, setDeleteResult] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,6 +34,35 @@ export default function BulkImport() {
       setResult(null);
       setStatus(null);
       setUserImportResult(null);
+      setDeleteResult(null);
+    }
+  };
+
+  const handleDeleteUsers = async () => {
+    if (!confirm("Are you sure you want to delete ALL users? This cannot be undone!")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-users', {
+        body: {}
+      });
+
+      if (error) {
+        toast.error(`Delete failed: ${error.message}`);
+        setDeleteResult({ error: error.message });
+      } else {
+        setDeleteResult(data);
+        toast.success(`Deleted ${data.deleted} users. You can now re-import.`);
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Delete failed";
+      toast.error(errorMsg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -45,6 +76,7 @@ export default function BulkImport() {
     setResult(null);
     setStatus(null);
     setUserImportResult(null);
+    setDeleteResult(null);
 
     try {
       toast.info(`Reading ${file.name}...`);
@@ -170,23 +202,42 @@ export default function BulkImport() {
               </div>
             </div>
 
-            <Button 
-              onClick={handleImport} 
-              disabled={!file || isImporting}
-              className="w-full"
-            >
-              {isImporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Start Import
-                </>
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleImport} 
+                disabled={!file || isImporting || isDeleting}
+                className="flex-1"
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Start Import
+                  </>
+                )}
+              </Button>
+              
+              {table === "users" && (
+                <Button 
+                  onClick={handleDeleteUsers} 
+                  disabled={isImporting || isDeleting}
+                  variant="destructive"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete All Users
+                    </>
+                  )}
+                </Button>
               )}
-            </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -291,6 +342,31 @@ export default function BulkImport() {
                           )}
                         </ul>
                       </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {deleteResult && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5" />
+                Users Deleted
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {deleteResult.error ? (
+                  <p className="text-red-600">✗ Error: {deleteResult.error}</p>
+                ) : (
+                  <>
+                    <p className="text-green-600">✓ {deleteResult.deleted} users deleted</p>
+                    {deleteResult.failed > 0 && (
+                      <p className="text-red-600">✗ {deleteResult.failed} failed to delete</p>
                     )}
                   </>
                 )}
