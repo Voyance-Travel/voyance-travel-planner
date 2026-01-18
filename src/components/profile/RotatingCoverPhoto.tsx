@@ -95,18 +95,6 @@ export default function RotatingCoverPhoto({
       {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
       
-      {/* Location badge (only for rotating photos) */}
-      {!customCoverUrl && (
-        <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-4 left-4 px-3 py-1.5 bg-black/40 backdrop-blur-sm rounded-full"
-        >
-          <span className="text-white text-sm font-medium">
-            📍 {currentPhoto.city}, {currentPhoto.country}
-          </span>
-        </motion.div>
-      )}
       
       {/* Navigation controls (only show on hover for rotating photos) */}
       {!customCoverUrl && (
