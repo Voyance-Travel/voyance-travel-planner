@@ -185,6 +185,23 @@ Deno.serve(async (req) => {
         updated_at: row.updated_at || new Date().toISOString(),
       }))
     } else if (table === 'trips') {
+      // First, fetch all user_id_mappings to translate legacy user IDs
+      const { data: mappings, error: mappingsError } = await supabase
+        .from('user_id_mappings')
+        .select('legacy_user_id, user_id')
+
+      if (mappingsError) {
+        console.error('Failed to fetch user ID mappings:', mappingsError)
+      }
+
+      const userIdMap = new Map<string, string>()
+      if (mappings) {
+        for (const m of mappings) {
+          userIdMap.set(m.legacy_user_id, m.user_id)
+        }
+      }
+      console.log(`Loaded ${userIdMap.size} user ID mappings`)
+
       processedRows = rows.map((row) => {
         const parseJsonField = (field: unknown) => {
           if (!field || field === '') return null
@@ -232,9 +249,16 @@ Deno.serve(async (req) => {
           return 'not_started'
         }
 
+        // Translate legacy user_id to new auth user_id
+        const legacyUserId = row.user_id
+        const resolvedUserId = userIdMap.get(legacyUserId) || legacyUserId
+        if (legacyUserId && userIdMap.has(legacyUserId)) {
+          console.log(`Mapped user_id: ${legacyUserId} → ${resolvedUserId}`)
+        }
+
         return {
           id: row.id || crypto.randomUUID(),
-          user_id: row.user_id,
+          user_id: resolvedUserId,
           name: row.name || `Trip to ${row.destination}`,
           destination: row.destination,
           destination_country: row.destination_country || null,
