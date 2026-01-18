@@ -60,32 +60,9 @@ const benefits = [
   },
 ];
 
-const testimonials = [
-  {
-    quote: "Voyance understood exactly what I wanted before I even knew it myself. Best trip of my life!",
-    author: "Sarah M.",
-    location: "Tokyo, Japan",
-    image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&q=80',
-  },
-  {
-    quote: "Finally, a travel planner that gets that I want adventure AND relaxation in the same trip.",
-    author: "Marcus T.",
-    location: "Bali, Indonesia",
-    image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&q=80',
-  },
-  {
-    quote: "The personalization is unreal. Every restaurant, every activity—perfectly matched to our family.",
-    author: "Jennifer & David L.",
-    location: "Barcelona, Spain",
-    image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&q=80',
-  },
-];
-
 const stats = [
-  { value: '50K+', label: 'Trips Planned' },
-  { value: '4.9', label: 'Average Rating' },
-  { value: '15hrs', label: 'Saved Per Trip' },
-  { value: '190+', label: 'Countries' },
+  { value: '15+', label: 'Hours Saved Per Trip', icon: Clock },
+  { value: '190+', label: 'Countries Covered', icon: MapPin },
 ];
 
 export default function HowItWorks() {
@@ -145,9 +122,9 @@ export default function HowItWorks() {
       </section>
 
       {/* Stats Bar */}
-      <section className="py-8 bg-card border-y border-border">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+      <section className="py-12 bg-gradient-to-r from-primary/5 via-card to-primary/5 border-y border-border">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="grid grid-cols-2 gap-12">
             {stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
@@ -156,8 +133,13 @@ export default function HowItWorks() {
                 transition={{ delay: 0.1 * index }}
                 className="text-center"
               >
-                <p className="text-3xl font-bold text-primary">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <stat.icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <p className="text-4xl font-bold text-primary">{stat.value}</p>
+                </div>
+                <p className="text-muted-foreground">{stat.label}</p>
               </motion.div>
             ))}
           </div>
@@ -253,9 +235,10 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="py-24">
-        <div className="max-w-6xl mx-auto px-4">
+      {/* Promise Section - Replace testimonials */}
+      <section className="py-24 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
+        <div className="max-w-5xl mx-auto px-4 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -263,36 +246,44 @@ export default function HowItWorks() {
             className="text-center mb-16"
           >
             <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-              Real Travelers, Real Experiences
+              Our Promise to You
             </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              We're building Voyance on a foundation of honesty and transparency
+            </p>
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
+            {[
+              {
+                icon: Shield,
+                title: 'No Hidden Fees',
+                description: 'What you see is what you pay. We never add surprise charges or markups.',
+              },
+              {
+                icon: Heart,
+                title: 'Honest Recommendations',
+                description: 'Every suggestion is based on your preferences—not paid partnerships or sponsorships.',
+              },
+              {
+                icon: Sparkles,
+                title: 'Genuinely Personalized',
+                description: 'Your itinerary is crafted for you, not recycled from a template.',
+              },
+            ].map((promise, index) => (
               <motion.div
-                key={testimonial.author}
+                key={promise.title}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card p-8 rounded-2xl border border-border relative"
+                className="bg-card/50 backdrop-blur p-8 rounded-2xl border border-border text-center hover:border-primary/30 transition-colors"
               >
-                <div className="absolute -top-3 left-8 text-5xl text-primary/30 font-serif">"</div>
-                <p className="text-foreground mb-6 pt-4 italic">"{testimonial.quote}"</p>
-                <div className="flex items-center gap-3">
-                  <img
-                    src={testimonial.image}
-                    alt={testimonial.author}
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
-                  <div>
-                    <p className="font-semibold text-foreground">{testimonial.author}</p>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <MapPin className="h-3 w-3" />
-                      {testimonial.location}
-                    </div>
-                  </div>
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <promise.icon className="h-7 w-7 text-primary" />
                 </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">{promise.title}</h3>
+                <p className="text-muted-foreground text-sm">{promise.description}</p>
               </motion.div>
             ))}
           </div>
@@ -311,8 +302,7 @@ export default function HowItWorks() {
               Ready to Plan Your Next Adventure?
             </h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-              Join thousands of travelers who've discovered their perfect trips with Voyance. 
-              Start with our free quiz—no credit card required.
+              Start with our free quiz to discover your Travel DNA—no credit card required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="text-lg px-8">
