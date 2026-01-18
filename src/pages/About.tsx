@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import Head from '@/components/common/Head';
 
-// Visual mockup of chaos (before)
+// Visual mockup of chaos (before) - Real website style
 function ChaosMockup() {
   return (
     <motion.div 
@@ -16,98 +16,149 @@ function ChaosMockup() {
       className="relative"
     >
       {/* Browser window frame */}
-      <div className="bg-muted/50 rounded-xl border border-border overflow-hidden shadow-2xl">
-        {/* Browser header */}
-        <div className="bg-muted px-4 py-3 border-b border-border flex items-center gap-2">
+      <div className="bg-[#f8f9fa] rounded-xl border border-[#dee2e6] overflow-hidden shadow-2xl">
+        {/* Browser header - Chrome style */}
+        <div className="bg-[#e8eaed] px-3 py-2 border-b border-[#d3d3d3] flex items-center gap-2">
           <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-400" />
-            <div className="w-3 h-3 rounded-full bg-yellow-400" />
-            <div className="w-3 h-3 rounded-full bg-green-400" />
+            <div className="w-3 h-3 rounded-full bg-[#ed6a5e]" />
+            <div className="w-3 h-3 rounded-full bg-[#f4bf4f]" />
+            <div className="w-3 h-3 rounded-full bg-[#61c554]" />
           </div>
           {/* Multiple tabs - chaos! */}
-          <div className="flex-1 flex gap-1 ml-4 overflow-hidden">
-            {['Flights', 'Hotels', 'Reviews', 'Maps', 'Blog', 'Insta', 'Reddit', '+12'].map((tab, i) => (
+          <div className="flex-1 flex gap-0.5 ml-3 overflow-hidden">
+            {[
+              { name: 'Google Flights', color: 'bg-white', active: true },
+              { name: 'Booking.com', color: 'bg-[#003580]/10' },
+              { name: 'TripAdvisor', color: 'bg-[#34e0a1]/10' },
+              { name: 'Yelp', color: 'bg-[#d32323]/10' },
+              { name: 'Reddit', color: 'bg-[#ff4500]/10' },
+              { name: '+8', color: 'bg-gray-200' },
+            ].map((tab, i) => (
               <div 
-                key={tab} 
-                className={`px-3 py-1.5 text-xs rounded-t-md flex-shrink-0 ${
-                  i === 0 ? 'bg-background text-foreground' : 'bg-muted-foreground/20 text-muted-foreground'
+                key={tab.name} 
+                className={`px-2 py-1 text-[10px] rounded-t-lg flex-shrink-0 border-t border-x border-[#d3d3d3] ${
+                  tab.active ? 'bg-white text-[#202124] font-medium' : `${tab.color} text-[#5f6368]`
                 }`}
               >
-                {tab}
+                {tab.name}
               </div>
             ))}
           </div>
         </div>
         
-        {/* Content area - messy notes */}
-        <div className="p-6 bg-background/50 min-h-[280px]">
-          {/* Scattered notes and screenshots */}
-          <div className="relative">
-            {/* Sticky notes */}
-            <motion.div 
-              className="absolute top-0 left-0 w-28 h-24 bg-yellow-100 dark:bg-yellow-900/30 rounded shadow-md p-2 text-xs text-yellow-900 dark:text-yellow-100 rotate-[-3deg]"
-              animate={{ rotate: [-3, -2, -3] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <div className="font-medium mb-1">Flight Options</div>
-              <div className="text-[10px] opacity-70">• 7am - $342</div>
-              <div className="text-[10px] opacity-70">• 11am - $489</div>
-              <div className="text-[10px] opacity-70">• 3pm - ???</div>
-            </motion.div>
-            
-            <motion.div 
-              className="absolute top-2 left-32 w-24 h-20 bg-pink-100 dark:bg-pink-900/30 rounded shadow-md p-2 text-xs text-pink-900 dark:text-pink-100 rotate-[2deg]"
-              animate={{ rotate: [2, 3, 2] }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-            >
-              <div className="font-medium mb-1">Hotels??</div>
-              <div className="text-[10px] opacity-70">Check reviews!</div>
-              <div className="text-[10px] opacity-70">Sarah likes pool</div>
-            </motion.div>
-            
-            <motion.div 
-              className="absolute top-20 left-12 w-32 h-20 bg-blue-100 dark:bg-blue-900/30 rounded shadow-md p-2 text-xs text-blue-900 dark:text-blue-100 rotate-[-1deg]"
-              animate={{ rotate: [-1, 0, -1] }}
-              transition={{ duration: 3, repeat: Infinity }}
-            >
-              <div className="font-medium mb-1">Group Chat</div>
-              <div className="text-[10px] opacity-70">"I can't do May 15"</div>
-              <div className="text-[10px] opacity-70">"Budget???"</div>
-              <div className="text-[10px] opacity-70">"Anyone booked yet?"</div>
-            </motion.div>
-            
-            <motion.div 
-              className="absolute top-8 right-8 w-28 h-28 bg-muted rounded-lg shadow-md overflow-hidden rotate-[3deg]"
-              animate={{ rotate: [3, 4, 3] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <div className="h-full w-full bg-gradient-to-br from-orange-200 to-amber-300 flex items-center justify-center">
-                <Map className="w-8 h-8 text-orange-600/60" />
+        {/* URL bar */}
+        <div className="bg-white px-4 py-2 border-b border-[#e5e5e5]">
+          <div className="flex items-center gap-3">
+            <div className="flex gap-2">
+              <div className="w-5 h-5 rounded-full bg-[#dadce0] flex items-center justify-center">
+                <span className="text-[8px] text-[#5f6368]">←</span>
               </div>
-            </motion.div>
-            
-            <motion.div 
-              className="absolute bottom-0 right-20 w-24 h-16 bg-green-100 dark:bg-green-900/30 rounded shadow-md p-2 text-xs text-green-900 dark:text-green-100 rotate-[-2deg]"
-              animate={{ rotate: [-2, -1, -2] }}
-              transition={{ duration: 2.2, repeat: Infinity }}
-            >
-              <div className="font-medium mb-1">Restaurants</div>
-              <div className="text-[10px] opacity-70">• TripAdvisor list</div>
-              <div className="text-[10px] opacity-70">• Need reservations</div>
-            </motion.div>
-            
-            {/* Stress indicator */}
-            <div className="absolute bottom-2 left-0 flex items-center gap-2 text-red-500 text-xs">
-              <Clock className="w-3 h-3" />
-              <span>6+ hours spent...</span>
+              <div className="w-5 h-5 rounded-full bg-[#dadce0] flex items-center justify-center">
+                <span className="text-[8px] text-[#5f6368]">→</span>
+              </div>
             </div>
+            <div className="flex-1 bg-[#f1f3f4] rounded-full px-4 py-1.5 text-[10px] text-[#5f6368]">
+              google.com/travel/flights?dest=PAR...
+            </div>
+          </div>
+        </div>
+        
+        {/* Content area - real website feel */}
+        <div className="bg-white min-h-[300px] relative overflow-hidden">
+          {/* Google Flights mockup */}
+          <div className="p-4">
+            {/* Search bar */}
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1 border border-[#dadce0] rounded-lg p-2 text-[10px] text-[#5f6368]">
+                <span className="text-[#202124]">NYC</span> → <span className="text-[#202124]">Paris</span>
+              </div>
+              <div className="border border-[#dadce0] rounded-lg p-2 text-[10px] text-[#5f6368]">
+                May 15-20
+              </div>
+              <div className="bg-[#1a73e8] text-white rounded-lg px-4 py-2 text-[10px]">
+                Search
+              </div>
+            </div>
+            
+            {/* Flight results */}
+            <div className="space-y-2">
+              {[
+                { airline: 'Delta', time: '7:00 AM - 9:15 PM', stops: '1 stop', price: '$842' },
+                { airline: 'Air France', time: '10:30 AM - 11:45 PM', stops: 'Nonstop', price: '$1,247' },
+                { airline: 'United', time: '3:15 PM - 6:30 AM+1', stops: '1 stop', price: '$789' },
+              ].map((flight, i) => (
+                <motion.div 
+                  key={i}
+                  className="border border-[#dadce0] rounded-lg p-2 flex items-center justify-between text-[10px]"
+                  animate={{ opacity: [0.7, 1, 0.7] }}
+                  transition={{ duration: 2, delay: i * 0.3, repeat: Infinity }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-[#f1f3f4] rounded-full" />
+                    <div>
+                      <div className="font-medium text-[#202124]">{flight.time}</div>
+                      <div className="text-[#5f6368]">{flight.airline} • {flight.stops}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-[#202124]">{flight.price}</div>
+                    <div className="text-[8px] text-[#5f6368]">round trip</div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Overlapping browser windows */}
+          <motion.div 
+            className="absolute top-4 right-2 w-48 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[3deg] opacity-95"
+            animate={{ rotate: [3, 4, 3] }}
+            transition={{ duration: 3, repeat: Infinity }}
+          >
+            <div className="bg-[#003580] text-white px-2 py-1 text-[8px] font-bold">Booking.com</div>
+            <div className="p-2 text-[8px]">
+              <div className="text-[#003580] font-bold mb-1">Paris Hotels</div>
+              <div className="text-[#5f6368]">1,247 properties</div>
+              <div className="text-[#008234] font-medium mt-1">From $89/night</div>
+            </div>
+          </motion.div>
+          
+          <motion.div 
+            className="absolute bottom-8 right-8 w-44 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95"
+            animate={{ rotate: [-2, -3, -2] }}
+            transition={{ duration: 2.5, repeat: Infinity }}
+          >
+            <div className="bg-[#34e0a1] px-2 py-1 text-[8px] font-bold text-[#1a202c]">TripAdvisor</div>
+            <div className="p-2 text-[8px]">
+              <div className="font-bold mb-1">Things to Do</div>
+              <div className="text-[#5f6368]">Eiffel Tower ★★★★★</div>
+              <div className="text-[#5f6368]">Louvre Museum ★★★★★</div>
+            </div>
+          </motion.div>
+          
+          {/* Sticky notes overlaid */}
+          <motion.div 
+            className="absolute bottom-16 left-4 w-24 h-20 bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg]"
+            animate={{ rotate: [-4, -3, -4] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            <div className="font-bold mb-1">TODO:</div>
+            <div>• Compare hotels</div>
+            <div>• Check reviews</div>
+            <div>• Ask Sarah dates</div>
+          </motion.div>
+          
+          {/* Stress indicator */}
+          <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-[#fce8e6] text-[#c5221f] text-[10px] px-3 py-1.5 rounded-full">
+            <Clock className="w-3 h-3" />
+            <span className="font-medium">6+ hours researching...</span>
           </div>
         </div>
       </div>
       
       {/* Label */}
-      <div className="mt-4 text-center">
-        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-sm font-medium">
+      <div className="mt-6 text-center">
+        <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-destructive/10 text-destructive text-sm font-semibold">
           <X className="w-4 h-4" />
           The Old Way
         </span>
@@ -116,7 +167,7 @@ function ChaosMockup() {
   );
 }
 
-// Visual mockup of Voyance (after)
+// Visual mockup of Voyance (after) - Polished app style
 function VoyanceMockup() {
   return (
     <motion.div 
@@ -127,83 +178,103 @@ function VoyanceMockup() {
       className="relative"
     >
       {/* Browser window frame */}
-      <div className="bg-background rounded-xl border border-border overflow-hidden shadow-2xl ring-2 ring-primary/20">
-        {/* Browser header */}
-        <div className="bg-muted px-4 py-3 border-b border-border flex items-center gap-2">
+      <div className="rounded-xl border-2 border-primary/30 overflow-hidden shadow-2xl shadow-primary/10 bg-gradient-to-br from-background via-background to-primary/5">
+        {/* Browser header - Modern style */}
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-3 border-b border-primary/20 flex items-center gap-2">
           <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-400" />
-            <div className="w-3 h-3 rounded-full bg-yellow-400" />
-            <div className="w-3 h-3 rounded-full bg-green-400" />
+            <div className="w-3 h-3 rounded-full bg-primary/40" />
+            <div className="w-3 h-3 rounded-full bg-primary/30" />
+            <div className="w-3 h-3 rounded-full bg-primary/20" />
           </div>
           {/* Single Voyance tab */}
-          <div className="flex-1 ml-4">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 text-xs rounded-t-md bg-background text-foreground">
-              <Compass className="w-3 h-3 text-primary" />
-              Voyance — Paris Trip
+          <div className="flex-1 ml-4 flex items-center justify-between">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 text-xs rounded-full bg-primary/10 text-primary font-medium">
+              <Compass className="w-3 h-3" />
+              voyance.travel/trip/paris-adventure
+            </div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Synced
             </div>
           </div>
         </div>
         
         {/* Clean Voyance interface */}
-        <div className="p-6 bg-background min-h-[280px]">
+        <div className="p-6 bg-background min-h-[320px] relative">
+          {/* Decorative gradient */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-full" />
+          
           {/* Trip header */}
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex items-start justify-between mb-5 relative z-10">
             <div>
-              <div className="text-xs text-primary font-medium uppercase tracking-wider mb-1">Your Itinerary</div>
-              <h3 className="text-xl font-serif font-bold">5 Days in Paris</h3>
-              <p className="text-xs text-muted-foreground mt-1">May 15-20 • 2 travelers • Premium</p>
-            </div>
-            <div className="flex items-center gap-1 text-xs text-primary bg-primary/10 px-3 py-1.5 rounded-full">
-              <Sparkles className="w-3 h-3" />
-              Personalized
-            </div>
-          </div>
-          
-          {/* Quick summary cards */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-muted/50 rounded-lg p-3 text-center">
-              <div className="text-lg font-bold text-foreground">$2,840</div>
-              <div className="text-[10px] text-muted-foreground">Total estimate</div>
-            </div>
-            <div className="bg-muted/50 rounded-lg p-3 text-center">
-              <div className="text-lg font-bold text-foreground">12</div>
-              <div className="text-[10px] text-muted-foreground">Activities</div>
-            </div>
-            <div className="bg-muted/50 rounded-lg p-3 text-center">
-              <div className="text-lg font-bold text-foreground">4★</div>
-              <div className="text-[10px] text-muted-foreground">Hotel</div>
-            </div>
-          </div>
-          
-          {/* Day preview */}
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground mb-2">Day 1 Preview</div>
-            {[
-              { time: '10:00 AM', activity: 'Louvre Museum', icon: <Globe className="w-3 h-3" /> },
-              { time: '1:00 PM', activity: 'Café de Flore', icon: <Star className="w-3 h-3" /> },
-              { time: '3:30 PM', activity: 'Seine River Walk', icon: <Map className="w-3 h-3" /> },
-            ].map((item, i) => (
-              <div key={i} className="flex items-center gap-3 text-xs">
-                <span className="text-muted-foreground w-16">{item.time}</span>
-                <div className="flex items-center gap-2 text-foreground">
-                  <span className="text-primary">{item.icon}</span>
-                  {item.activity}
-                </div>
+              <div className="inline-flex items-center gap-2 text-xs text-primary font-medium uppercase tracking-wider mb-2 bg-primary/10 px-3 py-1 rounded-full">
+                <Sparkles className="w-3 h-3" />
+                Your Curated Itinerary
               </div>
+              <h3 className="text-2xl font-serif font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">5 Days in Paris</h3>
+              <p className="text-xs text-muted-foreground mt-1">May 15-20, 2025 • 2 travelers • Premium Experience</p>
+            </div>
+          </div>
+          
+          {/* Quick summary cards - Premium style */}
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-3 text-center border border-primary/20">
+              <div className="text-lg font-bold text-foreground">$2,840</div>
+              <div className="text-[10px] text-muted-foreground">All-inclusive</div>
+            </div>
+            <div className="bg-gradient-to-br from-accent/50 to-accent/30 rounded-xl p-3 text-center border border-accent/30">
+              <div className="text-lg font-bold text-foreground">12</div>
+              <div className="text-[10px] text-muted-foreground">Hand-picked activities</div>
+            </div>
+            <div className="bg-gradient-to-br from-secondary to-secondary/50 rounded-xl p-3 text-center border border-secondary/30">
+              <div className="flex items-center justify-center gap-0.5 text-lg font-bold text-foreground">
+                <Star className="w-3 h-3 fill-primary text-primary" />
+                4.8
+              </div>
+              <div className="text-[10px] text-muted-foreground">Boutique Hotel</div>
+            </div>
+          </div>
+          
+          {/* Day preview - Timeline style */}
+          <div className="relative pl-4 border-l-2 border-primary/30 space-y-3">
+            <div className="text-xs font-semibold text-foreground mb-3 -ml-4 pl-4">Day 1 — Arrival & Culture</div>
+            {[
+              { time: '10:00 AM', activity: 'Louvre Museum', desc: 'Skip-the-line tickets', icon: <Globe className="w-3 h-3" /> },
+              { time: '1:00 PM', activity: 'Café de Flore', desc: 'Lunch reservation', icon: <Star className="w-3 h-3" /> },
+              { time: '3:30 PM', activity: 'Seine River Walk', desc: 'Golden hour stroll', icon: <Map className="w-3 h-3" /> },
+            ].map((item, i) => (
+              <motion.div 
+                key={i} 
+                className="flex items-start gap-3 text-xs relative"
+                initial={{ opacity: 0, x: -10 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 + i * 0.1 }}
+              >
+                {/* Timeline dot */}
+                <div className="absolute -left-[1.15rem] top-1 w-2 h-2 rounded-full bg-primary ring-2 ring-background" />
+                <span className="text-muted-foreground w-16 flex-shrink-0">{item.time}</span>
+                <div className="flex-1 bg-muted/50 rounded-lg p-2 border border-border/50">
+                  <div className="flex items-center gap-2 text-foreground font-medium">
+                    <span className="text-primary">{item.icon}</span>
+                    {item.activity}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{item.desc}</div>
+                </div>
+              </motion.div>
             ))}
           </div>
           
           {/* Time saved indicator */}
-          <div className="absolute bottom-6 right-6 flex items-center gap-2 text-primary text-xs">
+          <div className="absolute bottom-4 right-4 flex items-center gap-2 text-primary text-xs bg-primary/10 px-3 py-2 rounded-full border border-primary/20">
             <Zap className="w-3 h-3" />
-            <span>Ready in 5 minutes</span>
+            <span className="font-medium">Built in 5 minutes</span>
           </div>
         </div>
       </div>
       
       {/* Label */}
-      <div className="mt-4 text-center">
-        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
+      <div className="mt-6 text-center">
+        <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary/15 text-primary text-sm font-semibold border border-primary/20">
           <Check className="w-4 h-4" />
           With Voyance
         </span>
@@ -294,8 +365,12 @@ export default function About() {
       </section>
 
       {/* Before/After Visual Comparison */}
-      <section className="py-24 bg-muted/30">
-        <div className="container mx-auto px-6">
+      <section className="py-24 bg-gradient-to-b from-muted/50 to-muted/20 relative overflow-hidden">
+        {/* Background decorations */}
+        <div className="absolute top-0 left-0 w-64 h-64 bg-destructive/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
+        
+        <div className="container mx-auto px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -312,30 +387,35 @@ export default function About() {
             </p>
           </motion.div>
 
-          {/* Visual Before/After */}
-          <div className="grid lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
+          {/* Visual Before/After with VS indicator */}
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 max-w-6xl mx-auto relative">
             <ChaosMockup />
+            
+            {/* VS indicator between mockups */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 }}
+              className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20"
+            >
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-background to-muted border-2 border-primary/50 flex items-center justify-center shadow-xl">
+                <span className="text-primary font-bold text-sm">VS</span>
+              </div>
+            </motion.div>
+            
             <VoyanceMockup />
           </div>
-          
-          {/* Arrow or VS indicator */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.4 }}
-            className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-          >
-            <div className="w-16 h-16 rounded-full bg-background border-2 border-primary flex items-center justify-center shadow-xl">
-              <ArrowRight className="w-6 h-6 text-primary" />
-            </div>
-          </motion.div>
         </div>
       </section>
 
       {/* Core Principles */}
-      <section className="py-24 bg-background">
-        <div className="container mx-auto px-6">
+      <section className="py-24 bg-background relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-20 left-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl" />
+        <div className="absolute bottom-20 right-10 w-48 h-48 bg-accent/10 rounded-full blur-3xl" />
+        
+        <div className="container mx-auto px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -358,13 +438,18 @@ export default function About() {
                 transition={{ delay: idx * 0.15 }}
                 className="relative group"
               >
-                {/* Card */}
-                <div className="bg-card rounded-2xl border border-border p-8 h-full transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary/20 transition-colors">
-                    <div className="text-primary">{principle.icon}</div>
+                {/* Card with enhanced styling */}
+                <div className="bg-gradient-to-br from-card to-card/80 rounded-2xl border border-border p-8 h-full transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-1">
+                  {/* Gradient overlay on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  <div className="relative z-10">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center mb-6 group-hover:from-primary/30 group-hover:to-primary/15 transition-colors shadow-lg shadow-primary/10">
+                      <div className="text-primary">{principle.icon}</div>
+                    </div>
+                    <h3 className="font-serif text-xl font-bold mb-3">{principle.title}</h3>
+                    <p className="text-muted-foreground leading-relaxed">{principle.description}</p>
                   </div>
-                  <h3 className="font-serif text-xl font-bold mb-3">{principle.title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">{principle.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -373,8 +458,11 @@ export default function About() {
       </section>
 
       {/* How It Works - Visual */}
-      <section className="py-24 bg-muted/30">
-        <div className="container mx-auto px-6">
+      <section className="py-24 bg-gradient-to-b from-muted/40 via-muted/20 to-background relative overflow-hidden">
+        {/* Decorative vertical line */}
+        <div className="absolute left-1/2 top-48 bottom-20 w-px bg-gradient-to-b from-primary/20 via-primary/10 to-transparent hidden lg:block" />
+        
+        <div className="container mx-auto px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -420,16 +508,16 @@ export default function About() {
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.1 }}
-                className="flex gap-6 mb-12 last:mb-0"
+                className="flex gap-6 mb-12 last:mb-0 group"
               >
                 <div className="flex-shrink-0">
-                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/10 group-hover:from-primary/30 group-hover:to-primary/15 transition-all group-hover:scale-105">
                     {item.icon}
                   </div>
                 </div>
-                <div className="flex-1 pt-2">
+                <div className="flex-1 pt-2 bg-gradient-to-r from-card/50 to-transparent rounded-xl p-4 -ml-2 border-l-2 border-primary/20 group-hover:border-primary/40 transition-colors">
                   <div className="flex items-baseline gap-3 mb-2">
-                    <span className="text-xs font-medium text-primary tracking-wider">{item.step}</span>
+                    <span className="text-xs font-bold text-primary tracking-wider bg-primary/10 px-2 py-0.5 rounded">{item.step}</span>
                     <h3 className="font-serif text-xl font-bold">{item.title}</h3>
                   </div>
                   <p className="text-muted-foreground">{item.description}</p>
@@ -441,24 +529,31 @@ export default function About() {
       </section>
 
       {/* Who We Serve */}
-      <section className="py-24 bg-background">
-        <div className="container mx-auto px-6">
+      <section className="py-24 bg-gradient-to-br from-background via-background to-accent/5 relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute top-1/2 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -translate-y-1/2" />
+        
+        <div className="container mx-auto px-6 relative z-10">
           <div className="grid lg:grid-cols-2 gap-16 items-center max-w-6xl mx-auto">
             <motion.div
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Built For You</span>
-              <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4 mb-8">
-                Thoughtful travelers deserve better tools
+              <span className="inline-flex items-center gap-2 text-primary text-sm font-medium uppercase tracking-[0.2em] mb-4 bg-primary/10 px-4 py-2 rounded-full">
+                <Users className="w-4 h-4" />
+                Built For You
+              </span>
+              <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4 mb-8 leading-tight">
+                Thoughtful travelers deserve{' '}
+                <span className="text-primary">better tools</span>
               </h2>
               <p className="text-lg text-muted-foreground mb-8">
                 We built Voyance for people who value their time as much as their experiences. 
                 For those who want meaningful trips, not just destinations.
               </p>
               <Link to="/quiz">
-                <Button size="lg" className="gap-2">
+                <Button size="lg" className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
                   Discover Your Travel DNA
                   <ArrowRight className="w-4 h-4" />
                 </Button>
@@ -476,16 +571,19 @@ export default function About() {
                   title: 'Experience Seekers',
                   desc: 'Those who travel for moments, not just photos. You want authentic experiences that stay with you.',
                   icon: <Sparkles className="w-5 h-5" />,
+                  gradient: 'from-primary/20 to-primary/5',
                 },
                 {
                   title: 'Busy Professionals',
                   desc: 'Time is your scarcest resource. You want amazing trips without the research rabbit holes.',
                   icon: <Clock className="w-5 h-5" />,
+                  gradient: 'from-accent/30 to-accent/10',
                 },
                 {
                   title: 'Group Travelers',
                   desc: 'Coordinating friends and family is hard. You need tools that make everyone happy.',
                   icon: <Users className="w-5 h-5" />,
+                  gradient: 'from-secondary to-secondary/50',
                 },
               ].map((persona, idx) => (
                 <motion.div 
@@ -494,15 +592,17 @@ export default function About() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: idx * 0.1 }}
-                  className="bg-card rounded-xl border border-border p-6 hover:border-primary/30 transition-colors"
+                  className="group"
                 >
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <div className="text-primary">{persona.icon}</div>
-                    </div>
-                    <div>
-                      <h4 className="font-serif text-lg font-bold mb-1">{persona.title}</h4>
-                      <p className="text-sm text-muted-foreground">{persona.desc}</p>
+                  <div className={`bg-gradient-to-br ${persona.gradient} rounded-2xl border border-border/50 p-6 hover:border-primary/30 transition-all hover:shadow-lg hover:-translate-y-0.5`}>
+                    <div className="flex gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-background/80 backdrop-blur flex items-center justify-center shrink-0 shadow-sm group-hover:shadow-md transition-shadow">
+                        <div className="text-primary">{persona.icon}</div>
+                      </div>
+                      <div>
+                        <h4 className="font-serif text-lg font-bold mb-1">{persona.title}</h4>
+                        <p className="text-sm text-muted-foreground">{persona.desc}</p>
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -513,31 +613,43 @@ export default function About() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 bg-gradient-to-b from-primary/5 to-background">
-        <div className="container mx-auto px-6 text-center">
+      <section className="py-32 relative overflow-hidden">
+        {/* Rich gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-accent/10" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl" />
+        
+        <div className="container mx-auto px-6 text-center relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="max-w-2xl mx-auto"
           >
-            <Compass className="w-12 h-12 text-primary mx-auto mb-6" />
-            <h2 className="font-serif text-4xl md:text-5xl font-bold mb-6">
-              Ready to plan differently?
+            <motion.div
+              animate={{ rotate: [0, 5, -5, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              className="inline-block"
+            >
+              <Compass className="w-16 h-16 text-primary mx-auto mb-6" />
+            </motion.div>
+            <h2 className="font-serif text-4xl md:text-6xl font-bold mb-6 leading-tight">
+              Ready to plan{' '}
+              <span className="text-primary italic">differently?</span>
             </h2>
-            <p className="text-lg text-muted-foreground mb-8">
+            <p className="text-xl text-muted-foreground mb-10">
               Discover your Travel DNA and let Voyance craft your perfect trip. 
               It takes 5 minutes and changes everything.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/quiz">
-                <Button size="lg" className="gap-2 w-full sm:w-auto">
+                <Button size="lg" className="gap-2 w-full sm:w-auto text-lg px-8 py-6 shadow-xl shadow-primary/25 hover:shadow-primary/35 transition-shadow">
                   Take the Quiz
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-5 w-5" />
                 </Button>
               </Link>
               <Link to="/explore">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg px-8 py-6 border-2">
                   Explore Destinations
                 </Button>
               </Link>
