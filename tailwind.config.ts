@@ -16,6 +16,7 @@ export default {
       fontFamily: {
         sans: ['DM Sans', 'system-ui', 'sans-serif'],
         serif: ['Playfair Display', 'Georgia', 'serif'],
+        display: ['Playfair Display', 'Georgia', 'serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -47,13 +48,13 @@ export default {
           DEFAULT: "hsl(var(--gold))",
           foreground: "hsl(var(--gold-foreground))",
         },
-        emerald: {
-          DEFAULT: "hsl(var(--emerald))",
-          foreground: "hsl(var(--emerald-foreground))",
+        slate: {
+          DEFAULT: "hsl(var(--slate))",
+          foreground: "hsl(var(--slate-foreground))",
         },
-        ocean: {
-          DEFAULT: "hsl(var(--ocean))",
-          foreground: "hsl(var(--ocean-foreground))",
+        sage: {
+          DEFAULT: "hsl(var(--sage))",
+          foreground: "hsl(var(--sage-foreground))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -84,13 +85,11 @@ export default {
         'medium': 'var(--shadow-medium)',
         'elevated': 'var(--shadow-elevated)',
         'glow': 'var(--shadow-glow)',
-        'accent': 'var(--shadow-accent)',
       },
       backgroundImage: {
         'gradient-accent': 'var(--gradient-accent)',
         'gradient-primary': 'var(--gradient-primary)',
-        'gradient-sunset': 'var(--gradient-sunset)',
-        'gradient-ocean': 'var(--gradient-ocean)',
+        'gradient-editorial': 'var(--gradient-editorial)',
         'gradient-warm': 'var(--gradient-warm)',
       },
       keyframes: {

@@ -2,28 +2,50 @@ import { motion } from 'framer-motion';
 
 export default function TravelQuote() {
   return (
-    <section className="py-32 bg-gradient-to-br from-secondary/40 via-background to-primary/5 relative overflow-hidden">
-      {/* Decorative accents */}
-      <div className="absolute top-1/4 left-10 w-32 h-32 bg-gold/10 rounded-full blur-2xl" />
-      <div className="absolute bottom-1/4 right-10 w-40 h-40 bg-accent/10 rounded-full blur-2xl" />
-      
-      <div className="max-w-4xl mx-auto px-4 text-center relative z-10">
+    <section className="py-32 bg-background relative overflow-hidden">
+      {/* Editorial Lines */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute left-1/4 top-0 bottom-0 w-px bg-border/50" />
+        <div className="absolute right-1/4 top-0 bottom-0 w-px bg-border/50" />
+      </div>
+
+      <div className="max-w-5xl mx-auto px-8 md:px-16 text-center relative">
+        {/* Quote Mark */}
         <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          className="mb-8"
+        >
+          <span className="text-8xl font-serif text-primary/20 leading-none">"</span>
+        </motion.div>
+
+        {/* Quote */}
+        <motion.blockquote
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
+          className="mb-12"
         >
-          <div className="w-12 h-[2px] bg-gradient-to-r from-primary/40 via-accent/60 to-gold/40 mx-auto mb-12" />
-          
-          <blockquote className="text-2xl md:text-4xl font-display font-light text-foreground mb-8 leading-relaxed italic">
-            "The world is a book, and those who do not travel read only one page."
-          </blockquote>
-          
-          <p className="text-sm tracking-widest uppercase text-accent font-medium">
-            Saint Augustine
+          <p className="text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground leading-snug italic">
+            The real voyage of discovery consists not in seeking new landscapes, 
+            but in having new eyes.
           </p>
-          
-          <div className="w-12 h-[2px] bg-gradient-to-r from-gold/40 via-accent/60 to-primary/40 mx-auto mt-12" />
+        </motion.blockquote>
+
+        {/* Attribution */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.2 }}
+          className="flex items-center justify-center gap-4"
+        >
+          <div className="w-12 h-px bg-primary/40" />
+          <span className="text-sm tracking-[0.2em] uppercase text-muted-foreground font-sans">
+            Marcel Proust
+          </span>
+          <div className="w-12 h-px bg-primary/40" />
         </motion.div>
       </div>
     </section>
