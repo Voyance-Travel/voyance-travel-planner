@@ -11,6 +11,7 @@ interface DynamicDestinationPhotosProps {
   travelers?: number;
   variant?: 'hero' | 'compact' | 'banner';
   className?: string;
+  hideOverlayText?: boolean;
 }
 
 interface DestinationImage {
@@ -28,6 +29,7 @@ export default function DynamicDestinationPhotos({
   travelers,
   variant = 'hero',
   className = '',
+  hideOverlayText = false,
 }: DynamicDestinationPhotosProps) {
   const [images, setImages] = useState<DestinationImage[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -370,39 +372,41 @@ export default function DynamicDestinationPhotos({
         </div>
       )}
       
-      {/* Content Overlay */}
-      <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-white mb-2">
-              <MapPin className="w-5 h-5" />
-              <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
+      {/* Content Overlay - only show if not hidden */}
+      {!hideOverlayText && (
+        <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
+          <div className="flex items-end justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-white mb-2">
+                <MapPin className="w-5 h-5" />
+                <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
+              </div>
+              <div className="flex items-center gap-4 text-white/80 text-sm">
+                {formatDateRange() && (
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4" />
+                    {formatDateRange()}
+                  </span>
+                )}
+                {travelers && (
+                  <span className="flex items-center gap-1.5">
+                    <Users className="w-4 h-4" />
+                    {travelers} traveler{travelers > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-white/80 text-sm">
-              {formatDateRange() && (
-                <span className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4" />
-                  {formatDateRange()}
-                </span>
-              )}
-              {travelers && (
-                <span className="flex items-center gap-1.5">
-                  <Users className="w-4 h-4" />
-                  {travelers} traveler{travelers > 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
+            
+            {/* Image source indicator */}
+            {currentImage.source && currentImage.source !== 'fallback' && (
+              <div className="text-white/50 text-xs">
+                {currentImage.source === 'lovable_ai' && '✨ AI Generated'}
+                {currentImage.source === 'google_places' && '📍 Google Places'}
+              </div>
+            )}
           </div>
-          
-          {/* Image source indicator */}
-          {currentImage.source && currentImage.source !== 'fallback' && (
-            <div className="text-white/50 text-xs">
-              {currentImage.source === 'lovable_ai' && '✨ AI Generated'}
-              {currentImage.source === 'google_places' && '📍 Google Places'}
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
