@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plane, 
   Clock, 
-  ArrowRight, 
   Check, 
   Star,
   Loader2,
@@ -14,8 +13,7 @@ import {
   Briefcase,
   UtensilsCrossed,
   Monitor,
-  Info,
-  MapPin
+  Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -74,12 +72,11 @@ interface EnhancedFlightCardProps {
 
 const cabinLabels: Record<string, string> = {
   economy: 'Economy',
-  premium_economy: 'Premium Econ',
+  premium_economy: 'Premium',
   business: 'Business',
-  first: 'First Class',
+  first: 'First',
 };
 
-// Format cabin class for display
 const formatCabinClass = (cabin: string): string => {
   return cabinLabels[cabin] || cabin.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
@@ -99,7 +96,7 @@ function formatDuration(minutes: number): string {
 
 function formatTime(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 export default function EnhancedFlightCard({
@@ -126,68 +123,65 @@ export default function EnhancedFlightCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'relative bg-card rounded-xl border transition-all duration-200 overflow-hidden',
+        'relative bg-card rounded-2xl border transition-all duration-200 overflow-hidden',
         isSelected 
           ? 'border-primary shadow-lg ring-2 ring-primary/20' 
-          : 'border-border hover:border-primary/50 hover:shadow-md'
+          : 'border-border hover:border-primary/40 hover:shadow-md'
       )}
     >
       {/* Recommended Badge */}
       {flight.isRecommended && (
-        <div className="absolute top-0 left-0 right-0 bg-primary text-primary-foreground text-xs font-medium py-1.5 px-4 flex items-center justify-center gap-1.5">
+        <div className="absolute top-0 left-0 right-0 bg-primary text-primary-foreground text-xs font-medium py-2 px-4 flex items-center justify-center gap-1.5">
           <Star className="h-3.5 w-3.5 fill-current" />
           Best match for your preferences
         </div>
       )}
       
-      <div className={cn('p-6', flight.isRecommended && 'pt-12')}>
-        {/* Main Flight Info */}
-        <div className="flex flex-col lg:flex-row lg:items-center gap-5">
+      <div className={cn('p-5 md:p-6', flight.isRecommended && 'pt-12')}>
+        {/* Main Flight Info Row */}
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6">
           {/* Airline Logo & Info */}
-          <div className="flex items-center gap-4 lg:w-44 shrink-0">
-            <AirlineLogo code={primarySegment.airline} size="md" />
+          <div className="flex items-center gap-4 lg:w-48 shrink-0">
+            <AirlineLogo code={primarySegment.airline} size="lg" />
             <div>
-              <p className="font-semibold text-foreground">{primarySegment.airline}</p>
+              <p className="font-semibold text-foreground text-base">{primarySegment.airline}</p>
               <p className="text-sm text-muted-foreground">
-                {flight.segments.map(s => s.flightNumber).join(' → ')}
+                {flight.segments.map(s => s.flightNumber).join(' · ')}
               </p>
             </div>
           </div>
           
-          {/* Flight Times - More spacious */}
-          <div className="flex-1 flex items-center gap-8">
-            <div className="text-center min-w-[80px]">
-              <p className="text-2xl font-bold text-foreground tracking-tight">
+          {/* Flight Times */}
+          <div className="flex-1 flex items-center gap-6 lg:gap-8">
+            {/* Departure */}
+            <div className="text-center min-w-[70px]">
+              <p className="text-xl md:text-2xl font-bold text-foreground">
                 {formatTime(primarySegment.departure)}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">{primarySegment.departureAirport}</p>
+              <p className="text-sm text-muted-foreground font-medium">{primarySegment.departureAirport}</p>
             </div>
             
-            <div className="flex-1 flex flex-col items-center px-2 min-w-0">
-              <p className="text-xs text-muted-foreground mb-2">
+            {/* Flight Path Visualization */}
+            <div className="flex-1 flex flex-col items-center px-2 min-w-[100px]">
+              <p className="text-xs text-muted-foreground mb-2 font-medium">
                 {formatDuration(flight.totalDuration)}
               </p>
-              <div className="relative w-full max-w-[180px]">
+              <div className="relative w-full max-w-[200px]">
                 {/* Flight path line */}
-                <div className="h-px bg-border w-full" />
+                <div className="h-0.5 bg-muted w-full rounded-full" />
+                {/* Plane icon in the middle */}
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-1">
+                  <Plane className="h-4 w-4 text-primary rotate-90" />
+                </div>
                 {/* Origin dot */}
-                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
+                <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
                 {/* Destination dot */}
-                <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
-                {/* Stop indicators */}
-                {flight.stops > 0 && (
-                  <>
-                    {[...Array(Math.min(flight.stops, 2))].map((_, i) => (
-                      <div 
-                        key={i}
-                        className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-muted-foreground rounded-full"
-                        style={{ left: `${((i + 1) / (flight.stops + 1)) * 100}%` }}
-                      />
-                    ))}
-                  </>
-                )}
+                <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
               </div>
-              <p className={`text-xs mt-2 ${flight.stops === 0 ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+              <p className={cn(
+                "text-xs mt-2 font-medium",
+                flight.stops === 0 ? 'text-primary' : 'text-muted-foreground'
+              )}>
                 {flight.stops === 0 ? 'Nonstop' : (
                   <span>
                     {flight.stops} stop{flight.stops > 1 ? 's' : ''}
@@ -197,34 +191,36 @@ export default function EnhancedFlightCard({
               </p>
             </div>
             
-            <div className="text-center min-w-[80px]">
-              <p className="text-2xl font-bold text-foreground tracking-tight">
+            {/* Arrival */}
+            <div className="text-center min-w-[70px]">
+              <p className="text-xl md:text-2xl font-bold text-foreground">
                 {formatTime(lastSegment.arrival)}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">{lastSegment.arrivalAirport}</p>
+              <p className="text-sm text-muted-foreground font-medium">{lastSegment.arrivalAirport}</p>
             </div>
           </div>
           
-          {/* Price - More prominent */}
-          <div className="text-right lg:w-36 shrink-0 lg:border-l lg:border-border lg:pl-5">
-            <p className="text-sm text-muted-foreground mb-1">From</p>
-            <p className="text-3xl font-bold text-foreground">${lowestPrice}</p>
-            <p className="text-xs text-muted-foreground mt-1">per person</p>
+          {/* Price */}
+          <div className="text-right lg:w-36 shrink-0 lg:border-l lg:border-border lg:pl-6">
+            <p className="text-xs text-muted-foreground mb-0.5">From</p>
+            <p className="text-2xl md:text-3xl font-bold text-foreground">${lowestPrice}</p>
+            <p className="text-xs text-muted-foreground">per person</p>
           </div>
         </div>
 
-        <div className="mt-5 pt-5 border-t border-border">
-          <p className="text-xs font-medium text-muted-foreground mb-3">Select cabin class:</p>
-          <div className="flex flex-wrap gap-3">
+        {/* Cabin Selection */}
+        <div className="mt-6 pt-5 border-t border-border">
+          <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Select cabin class</p>
+          <div className="flex flex-wrap gap-2">
             {flight.cabinOptions.map((option, index) => (
               <button
                 key={option.cabin}
                 onClick={() => handleCabinSelect(index)}
                 className={cn(
-                  'flex-1 min-w-[110px] max-w-[150px] p-3 rounded-lg border transition-all text-left',
+                  'flex-1 min-w-[100px] max-w-[140px] p-3 rounded-xl border transition-all text-left',
                   selectedCabinIndex === index
                     ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-muted-foreground/40'
+                    : 'border-border hover:border-primary/40'
                 )}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -234,9 +230,9 @@ export default function EnhancedFlightCard({
                   )}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-lg font-semibold">${option.price}</span>
+                  <span className="text-lg font-bold">${option.price}</span>
                   {option.seatsRemaining && option.seatsRemaining < 5 && (
-                    <span className="text-[10px] text-destructive">
+                    <span className="text-[10px] text-destructive font-medium">
                       {option.seatsRemaining} left
                     </span>
                   )}
@@ -349,9 +345,9 @@ export default function EnhancedFlightCard({
 
                 {/* Why Recommended */}
                 {flight.rationale && flight.rationale.length > 0 && (
-                  <div className="bg-muted/50 rounded-lg p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Why we recommend this flight:</p>
-                    <ul className="space-y-1">
+                  <div className="bg-muted/50 rounded-xl p-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Why we recommend this flight</p>
+                    <ul className="space-y-1.5">
                       {flight.rationale.map((reason, i) => (
                         <li key={i} className="flex items-center gap-2 text-sm">
                           <Check className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -367,19 +363,20 @@ export default function EnhancedFlightCard({
         </AnimatePresence>
 
         {/* Select Button */}
-        <div className="mt-4 pt-4 border-t border-border flex justify-end">
+        <div className="mt-5 pt-4 border-t border-border flex justify-end">
           <Button
             onClick={() => onSelect(flight.cabinOptions[selectedCabinIndex].cabin)}
             disabled={isLoading}
             variant={isSelected ? "default" : "outline"}
             size="lg"
+            className="min-w-[160px]"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : isSelected ? (
               <Check className="h-4 w-4 mr-2" />
             ) : null}
-            {isSelected ? 'Selected' : `Select for $${flight.cabinOptions[selectedCabinIndex].price}`}
+            {isSelected ? 'Selected' : `Select · $${flight.cabinOptions[selectedCabinIndex].price}`}
           </Button>
         </div>
       </div>
