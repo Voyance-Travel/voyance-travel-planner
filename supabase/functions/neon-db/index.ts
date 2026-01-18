@@ -102,6 +102,88 @@ Deno.serve(async (req) => {
       );
     }
 
+    // PUBLIC: Search airports (no auth required)
+    if (path === '/airports' && req.method === 'GET') {
+      const searchQuery = url.searchParams.get('q') || '';
+      const limit = parseInt(url.searchParams.get('limit') || '20');
+      
+      let result;
+      if (searchQuery.length >= 2) {
+        // Search by code, city, or name
+        result = await query(
+          `SELECT id, code, name, city, country, latitude, longitude, type
+           FROM airports 
+           WHERE code ILIKE $1 OR city ILIKE $2 OR name ILIKE $2
+           ORDER BY 
+             CASE WHEN code ILIKE $1 THEN 0 ELSE 1 END,
+             city ASC
+           LIMIT $3`,
+          [`${searchQuery}%`, `%${searchQuery}%`, limit]
+        );
+      } else {
+        // Return major international airports
+        result = await query(
+          `SELECT id, code, name, city, country, latitude, longitude, type
+           FROM airports 
+           WHERE type = 'large_airport' OR type = 'international'
+           ORDER BY city ASC
+           LIMIT $1`,
+          [limit]
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ data: result.data, error: result.error }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // PUBLIC: Search destinations (no auth required)
+    if (path === '/destinations' && req.method === 'GET') {
+      const searchQuery = url.searchParams.get('q') || '';
+      const limit = parseInt(url.searchParams.get('limit') || '20');
+      const featured = url.searchParams.get('featured') === 'true';
+      
+      let result;
+      if (searchQuery.length >= 2) {
+        // Search by city, country, or region
+        result = await query(
+          `SELECT id, city, country, region, description, airport_codes, featured, cost_tier, best_time_to_visit
+           FROM destinations 
+           WHERE city ILIKE $1 OR country ILIKE $1 OR region ILIKE $1
+           ORDER BY 
+             CASE WHEN featured THEN 0 ELSE 1 END,
+             city ASC
+           LIMIT $2`,
+          [`%${searchQuery}%`, limit]
+        );
+      } else if (featured) {
+        // Return featured destinations
+        result = await query(
+          `SELECT id, city, country, region, description, airport_codes, featured, cost_tier, best_time_to_visit
+           FROM destinations 
+           WHERE featured = true
+           ORDER BY city ASC
+           LIMIT $1`,
+          [limit]
+        );
+      } else {
+        // Return popular destinations
+        result = await query(
+          `SELECT id, city, country, region, description, airport_codes, featured, cost_tier, best_time_to_visit
+           FROM destinations 
+           ORDER BY featured DESC, city ASC
+           LIMIT $1`,
+          [limit]
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ data: result.data, error: result.error }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // All other endpoints require authentication
     const { user, error: authError } = await authenticateUser(req);
     if (!user) {
