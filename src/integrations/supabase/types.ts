@@ -1089,6 +1089,57 @@ export type Database = {
         }
         Relationships: []
       }
+      search_cache: {
+        Row: {
+          adults: number | null
+          cabin_class: string | null
+          created_at: string
+          depart_date: string | null
+          destination: string
+          expires_at: string
+          id: string
+          origin: string | null
+          result_count: number | null
+          results: Json
+          return_date: string | null
+          search_key: string
+          search_type: string
+          source: string | null
+        }
+        Insert: {
+          adults?: number | null
+          cabin_class?: string | null
+          created_at?: string
+          depart_date?: string | null
+          destination: string
+          expires_at?: string
+          id?: string
+          origin?: string | null
+          result_count?: number | null
+          results?: Json
+          return_date?: string | null
+          search_key: string
+          search_type: string
+          source?: string | null
+        }
+        Update: {
+          adults?: number | null
+          cabin_class?: string | null
+          created_at?: string
+          depart_date?: string | null
+          destination?: string
+          expires_at?: string
+          id?: string
+          origin?: string | null
+          result_count?: number | null
+          results?: Json
+          return_date?: string | null
+          search_key?: string
+          search_type?: string
+          source?: string | null
+        }
+        Relationships: []
+      }
       travel_dna_history: {
         Row: {
           created_at: string | null
@@ -2295,6 +2346,7 @@ export type Database = {
       }
     }
     Functions: {
+      cleanup_expired_search_cache: { Args: never; Returns: number }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
