@@ -35,9 +35,12 @@ async function getAmadeusToken(): Promise<string> {
     throw new Error('Amadeus credentials not configured');
   }
 
-  console.log('[Hotels] Fetching new Amadeus access token (TEST MODE)');
+  // Support production mode via environment variable
+  const isProduction = Deno.env.get('AMADEUS_MODE') === 'production';
+  const baseUrl = isProduction ? 'https://api.amadeus.com' : 'https://test.api.amadeus.com';
+  console.log(`[Hotels] Fetching new Amadeus access token (${isProduction ? 'PRODUCTION' : 'TEST'} MODE)`);
   
-  const response = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
+  const response = await fetch(`${baseUrl}/v1/security/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `grant_type=client_credentials&client_id=${apiKey}&client_secret=${apiSecret}`,
@@ -289,7 +292,9 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     console.log('[Hotels] Searching city code:', cityCode, 'from input:', params.destination);
 
     // Step 1: Get hotels by city
-    const hotelsUrl = `https://test.api.amadeus.com/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=50&radiusUnit=KM&hotelSource=ALL`;
+    const isProduction = Deno.env.get('AMADEUS_MODE') === 'production';
+    const baseUrl = isProduction ? 'https://api.amadeus.com' : 'https://test.api.amadeus.com';
+    const hotelsUrl = `${baseUrl}/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=50&radiusUnit=KM&hotelSource=ALL`;
     console.log('[Hotels] Step 1 - Fetching hotel list');
     
     const hotelsResponse = await fetch(hotelsUrl, {
@@ -323,7 +328,7 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     });
 
     const offersResponse = await fetch(
-      `https://test.api.amadeus.com/v3/shopping/hotel-offers?${offersParams}`,
+      `${baseUrl}/v3/shopping/hotel-offers?${offersParams}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
@@ -374,7 +379,7 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
       });
 
       const relaxedResp = await fetch(
-        `https://test.api.amadeus.com/v3/shopping/hotel-offers?${relaxedOffersParams}`,
+        `${baseUrl}/v3/shopping/hotel-offers?${relaxedOffersParams}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 

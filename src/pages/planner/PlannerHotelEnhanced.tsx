@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, ArrowRight } from 'lucide-react';
+import { Building2, ArrowRight, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 import MainLayout from '@/components/layout/MainLayout';
@@ -9,6 +9,9 @@ import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 import {
   useHotelSearch,
@@ -26,6 +29,13 @@ import EditorialProgressTracker from '@/components/planner/shared/EditorialProgr
 import LoadingInterlude from '@/components/planner/shared/LoadingInterlude';
 import HotelFilters, { type HotelFiltersState } from '@/components/planner/hotel/HotelFilters';
 import EnhancedHotelCard, { type EnhancedHotelOption } from '@/components/planner/hotel/EnhancedHotelCard';
+
+// User hotel preferences type
+interface UserHotelPreferences {
+  accommodation_style?: string | null;
+  hotel_style?: string | null;
+  hotel_vs_flight?: string | null;
+}
 
 function HotelSkeleton() {
   return (
@@ -120,13 +130,19 @@ function toEnhancedHotel(hotel: HotelOption, nights: number): EnhancedHotelOptio
 export default function PlannerHotelEnhanced() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const { state: plannerState, setBasics, setHotel, saveTrip } = useTripPlanner();
 
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(plannerState.hotel?.id || null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [holdingHotelId, setHoldingHotelId] = useState<string | null>(null);
+  
+  // User preferences state
+  const [userPreferences, setUserPreferences] = useState<UserHotelPreferences | null>(null);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const hasAppliedPreferences = useRef(false);
 
-  // “Cute buffer” overlay — only on initial load for a given destination/dates
+  // "Cute buffer" overlay — only on initial load for a given destination/dates
   const [showInterlude, setShowInterlude] = useState(true);
 
   const createHold = useCreateHotelHold();
@@ -143,6 +159,35 @@ export default function PlannerHotelEnhanced() {
   const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 2);
   const origin = searchParams.get('origin') || plannerState.basics.originCity || 'JFK';
 
+  // Load user preferences for personalization
+  useEffect(() => {
+    async function loadPreferences() {
+      if (!user?.id) {
+        setPreferencesLoaded(true);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('user_preferences')
+          .select('accommodation_style, hotel_style, hotel_vs_flight')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (!error && data) {
+          setUserPreferences(data);
+          console.log('[PlannerHotel] Loaded user hotel preferences:', data);
+        }
+      } catch (err) {
+        console.warn('[PlannerHotel] Failed to load preferences:', err);
+      } finally {
+        setPreferencesLoaded(true);
+      }
+    }
+    
+    loadPreferences();
+  }, [user?.id]);
+
   useEffect(() => {
     if (!plannerState.basics.destination || plannerState.basics.destination !== destination) {
       setBasics({ destination, startDate, endDate, travelers, originCity: origin });
@@ -156,6 +201,42 @@ export default function PlannerHotelEnhanced() {
 
   const nights = calculateNights(startDate, endDate);
 
+  // Map user preferences to default filter values
+  const getDefaultStarRating = useCallback((style: string | null | undefined): number[] => {
+    if (!style) return [];
+    switch (style.toLowerCase()) {
+      case 'luxury':
+        return [5];
+      case 'upscale':
+      case 'premium':
+        return [4, 5];
+      case 'boutique':
+        return [4, 5];
+      case 'mid-range':
+      case 'moderate':
+        return [3, 4];
+      case 'budget':
+      case 'hostel':
+        return [2, 3];
+      default:
+        return [];
+    }
+  }, []);
+
+  const getDefaultAmenities = useCallback((style: string | null | undefined): string[] => {
+    if (!style) return [];
+    switch (style.toLowerCase()) {
+      case 'luxury':
+        return ['Spa', 'Pool', 'Gym'];
+      case 'business':
+        return ['WiFi', 'Business Center'];
+      case 'family':
+        return ['Pool', 'Kids Club'];
+      default:
+        return [];
+    }
+  }, []);
+
   const [filters, setFilters] = useState<HotelFiltersState>({
     priceRange: [0, 10000], // High default to accommodate all currencies
     starRating: [],
@@ -166,6 +247,31 @@ export default function PlannerHotelEnhanced() {
     freeCancellation: false,
     breakfastIncluded: false,
   });
+
+  // Apply user preferences as initial filters (once)
+  useEffect(() => {
+    if (!preferencesLoaded || hasAppliedPreferences.current) return;
+    if (!userPreferences) return;
+    
+    const preferredStars = getDefaultStarRating(userPreferences.accommodation_style);
+    const preferredAmenities = getDefaultAmenities(userPreferences.hotel_style);
+    
+    if (preferredStars.length > 0 || preferredAmenities.length > 0) {
+      setFilters(prev => ({
+        ...prev,
+        starRating: preferredStars,
+        amenities: preferredAmenities,
+      }));
+      console.log('[PlannerHotel] Applied user preferences to filters:', { preferredStars, preferredAmenities });
+    }
+    
+    hasAppliedPreferences.current = true;
+  }, [preferencesLoaded, userPreferences, getDefaultStarRating, getDefaultAmenities]);
+
+  // Check if user has personalized preferences
+  const hasPersonalizedPreferences = useMemo(() => {
+    return !!(userPreferences?.accommodation_style || userPreferences?.hotel_style);
+  }, [userPreferences]);
 
   const hotelParams: HotelSearchParams = useMemo(
     () => ({
@@ -326,6 +432,16 @@ export default function PlannerHotelEnhanced() {
     // Persist to TripPlannerContext for summary/booking
     setHotel(hotelSelection);
 
+    // Immediately save to database (incremental persistence)
+    try {
+      const tripId = await saveTrip();
+      if (tripId) {
+        console.log('[PlannerHotel] Hotel selection saved to database:', tripId);
+      }
+    } catch (err) {
+      console.warn('[PlannerHotel] Incremental save failed:', err);
+    }
+
     try {
       const tripId = searchParams.get('tripId') || plannerState.tripId || 'temp-trip';
       await createHold.mutateAsync({
@@ -394,7 +510,15 @@ export default function PlannerHotelEnhanced() {
           <div className="grid lg:grid-cols-[1fr_320px] gap-6">
             <div>
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-                <h1 className="font-serif text-2xl sm:text-3xl font-bold text-foreground mb-2">Select Your Hotel</h1>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="font-serif text-2xl sm:text-3xl font-bold text-foreground">Select Your Hotel</h1>
+                  {hasPersonalizedPreferences && (
+                    <Badge variant="secondary" className="gap-1 bg-accent/10 text-accent border-accent/20">
+                      <Sparkles className="h-3 w-3" />
+                      Personalized for you
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-muted-foreground">
                   {destination} · {nights} night{nights > 1 ? 's' : ''} · {travelers} guest{travelers > 1 ? 's' : ''}
                 </p>
