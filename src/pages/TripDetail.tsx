@@ -222,31 +222,62 @@ export default function TripDetail() {
 
   const loadLocalTrip = (id: string): Trip | null => {
     try {
-      // Preferred demo/local storage format (TripPlannerContext)
+      // Primary storage: voyance_local_trips (TripPlannerContext)
+      const localTripsRaw = localStorage.getItem('voyance_local_trips');
+      if (localTripsRaw) {
+        const localTrips = JSON.parse(localTripsRaw);
+        if (localTrips?.[id]) {
+          const parsed = localTrips[id];
+          return {
+            id,
+            user_id: parsed.user_id || 'local',
+            name: parsed.name || `Trip to ${parsed.destination}`,
+            destination: parsed.destination,
+            destination_country: parsed.destination_country || null,
+            start_date: parsed.start_date || parsed.startDate,
+            end_date: parsed.end_date || parsed.endDate,
+            status: parsed.status || 'draft',
+            trip_type: parsed.trip_type || parsed.tripType || null,
+            travelers: parsed.travelers || 1,
+            origin_city: parsed.origin_city || parsed.originCity || null,
+            budget_tier: parsed.budget_tier || parsed.budgetTier || null,
+            flight_selection: parsed.flight_selection || null,
+            hotel_selection: parsed.hotel_selection || null,
+            itinerary_data: parsed.itinerary_data || null,
+            itinerary_status: parsed.itinerary_status || null,
+            metadata: parsed.metadata || null,
+            price_lock_expires_at: null,
+            created_at: parsed.created_at || new Date().toISOString(),
+            updated_at: parsed.updated_at || new Date().toISOString(),
+          } as unknown as Trip;
+        }
+      }
+
+      // Fallback: voyance_demo_trips (legacy)
       const demoTripsRaw = localStorage.getItem('voyance_demo_trips');
       if (demoTripsRaw) {
         const demoTrips = JSON.parse(demoTripsRaw);
         if (demoTrips?.[id]) return demoTrips[id] as Trip;
       }
 
-      // Legacy anonymous format used in some planner flows
+      // Legacy anonymous format: trip_${id}
       const legacyRaw = localStorage.getItem(`trip_${id}`);
       if (legacyRaw) {
         const parsed = JSON.parse(legacyRaw);
-        if (parsed?.destination && parsed?.startDate && parsed?.endDate) {
+        if (parsed?.destination && (parsed?.startDate || parsed?.start_date) && (parsed?.endDate || parsed?.end_date)) {
           return {
             id,
             user_id: 'local',
             name: parsed.name || `Trip to ${parsed.destination}`,
             destination: parsed.destination,
             destination_country: parsed.destination_country || null,
-            start_date: parsed.startDate,
-            end_date: parsed.endDate,
+            start_date: parsed.start_date || parsed.startDate,
+            end_date: parsed.end_date || parsed.endDate,
             status: parsed.status || 'draft',
-            trip_type: parsed.tripType || null,
+            trip_type: parsed.trip_type || parsed.tripType || null,
             travelers: parsed.travelers || 1,
-            origin_city: parsed.originCity || null,
-            budget_tier: parsed.budgetTier || null,
+            origin_city: parsed.origin_city || parsed.originCity || null,
+            budget_tier: parsed.budget_tier || parsed.budgetTier || null,
             flight_selection: parsed.flight_selection || parsed.flights || null,
             hotel_selection: parsed.hotel_selection || parsed.hotel || null,
             itinerary_data: parsed.itinerary_data || (parsed.itinerary ? { days: parsed.itinerary } : null),
@@ -258,8 +289,8 @@ export default function TripDetail() {
           } as unknown as Trip;
         }
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[TripDetail] Error loading local trip:', err);
     }
 
     return null;

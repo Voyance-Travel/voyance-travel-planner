@@ -29,7 +29,7 @@ import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestina
 export default function PlannerBooking() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { state, loadTrip } = useTripPlanner();
+  const { state, loadTrip, saveTrip } = useTripPlanner();
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,16 +81,20 @@ export default function PlannerBooking() {
       return;
     }
     
-    // Check if user is authenticated - for demo/anonymous users, save to localStorage and show preview
+    // Check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
     const isAnonymous = !session;
     
-    // For anonymous users, show a demo confirmation instead of real checkout
+    // For anonymous users, ensure trip is saved to localStorage before navigating
     if (isAnonymous) {
+      // Save trip to localStorage to ensure it persists
+      const savedTripId = await saveTrip();
+      console.log('[PlannerBooking] Saved trip before checkout:', savedTripId);
+      
       toast.success('Demo confirmation shown — sign in to run a real payment test.');
-      navigate(`/trips/${tripId}/confirmation`, {
+      navigate(`/trips/${savedTripId || tripId}/confirmation`, {
         state: {
-          tripId,
+          tripId: savedTripId || tripId,
           destination: state.basics.destination,
           startDate: state.basics.startDate,
           endDate: state.basics.endDate,

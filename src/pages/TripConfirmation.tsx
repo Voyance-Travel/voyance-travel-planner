@@ -55,20 +55,59 @@ type DemoConfirmationState = {
 function getAnonymousTripFromStorage(tripId: string | undefined): TripData | null {
   if (!tripId) return null;
   try {
+    // Primary storage: voyance_local_trips (TripPlannerContext)
+    const localTripsRaw = localStorage.getItem('voyance_local_trips');
+    if (localTripsRaw) {
+      const localTrips = JSON.parse(localTripsRaw);
+      if (localTrips?.[tripId]) {
+        const parsed = localTrips[tripId];
+        return {
+          id: tripId,
+          destination: parsed.destination,
+          start_date: parsed.start_date || parsed.startDate,
+          end_date: parsed.end_date || parsed.endDate,
+          travelers: parsed.travelers || 1,
+          status: 'booked',
+          flight_selection: parsed.flight_selection || null,
+          hotel_selection: parsed.hotel_selection || null,
+        };
+      }
+    }
+
+    // Fallback: voyance_demo_trips (legacy)
+    const demoTripsRaw = localStorage.getItem('voyance_demo_trips');
+    if (demoTripsRaw) {
+      const demoTrips = JSON.parse(demoTripsRaw);
+      if (demoTrips?.[tripId]) {
+        const parsed = demoTrips[tripId];
+        return {
+          id: tripId,
+          destination: parsed.destination,
+          start_date: parsed.start_date || parsed.startDate,
+          end_date: parsed.end_date || parsed.endDate,
+          travelers: parsed.travelers || 1,
+          status: 'booked',
+          flight_selection: parsed.flight_selection || null,
+          hotel_selection: parsed.hotel_selection || null,
+        };
+      }
+    }
+
+    // Legacy format: trip_${tripId}
     const raw = localStorage.getItem(`trip_${tripId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed?.destination || !parsed?.startDate || !parsed?.endDate) return null;
+    if (!parsed?.destination || (!parsed?.startDate && !parsed?.start_date) || (!parsed?.endDate && !parsed?.end_date)) return null;
 
     return {
       id: tripId,
       destination: parsed.destination,
-      start_date: parsed.startDate,
-      end_date: parsed.endDate,
+      start_date: parsed.start_date || parsed.startDate,
+      end_date: parsed.end_date || parsed.endDate,
       travelers: parsed.travelers || 1,
       status: 'booked',
-      flight_selection: null,
-      hotel_selection: null,
+      flight_selection: parsed.flight_selection || null,
+      hotel_selection: parsed.hotel_selection || null,
     };
   } catch {
     return null;
