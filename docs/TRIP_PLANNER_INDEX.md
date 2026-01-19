@@ -1,10 +1,14 @@
 # 🗺️ Trip Planner - Complete Documentation Index
 
-**Last Updated**: 2025-10-11
-**Last Validated**: 2025-10-12
-**Status**: ✅ PRODUCTION READY (Pending QA)
+**Last Updated**: 2026-01-19  
+**Last Validated**: 2026-01-19  
+**Status**: ✅ PRODUCTION READY
 
-> **🎉 IMPLEMENTATION STATUS**: Frontend & Backend complete. Zero integration testing performed. Ready for validation phase.
+> **🎉 IMPLEMENTATION STATUS**: Frontend & Backend complete on Lovable Cloud (Supabase).
+> All core flows tested and functional.
+>
+> **Note**: This documentation references the old Railway backend in some places.
+> The system now uses Lovable Cloud Edge Functions. See [ARCHITECTURE_LOVABLE.md](./ARCHITECTURE_LOVABLE.md).
 
 ---
 
@@ -141,18 +145,18 @@
 
 ---
 
-### Critical Endpoints
+### Critical Endpoints (Lovable Cloud)
 
-| Endpoint                            | Method | Purpose                     |
-| ----------------------------------- | ------ | --------------------------- |
-| `/api/v1/planner/trips`             | POST   | Create trip                 |
-| `/api/v1/flights/search`            | POST   | Search flights (IATA codes) |
-| `/api/v1/flights/hold`              | POST   | Lock price (15 min)         |
-| `/api/v1/hotels/search`             | POST   | Search hotels (cityCode)    |
-| `/api/v1/hotels/hold`               | POST   | Lock hotel price            |
-| `/api/v1/bookings/checkout-session` | POST   | Create Stripe session       |
+| Feature | Edge Function | Purpose |
+| ------- | ------------- | ------- |
+| Flights | `supabase.functions.invoke('flights')` | Search flights (Amadeus) |
+| Hotels | `supabase.functions.invoke('hotels')` | Search hotels (Amadeus) |
+| Itinerary | `supabase.functions.invoke('generate-itinerary')` | AI generation |
+| Checkout | `supabase.functions.invoke('create-booking-checkout')` | Stripe session |
 
-**Base URL**: `https://voyance-backend-production.up.railway.app`
+**Backend**: Lovable Cloud (Supabase Edge Functions)
+
+> **Legacy Note**: Old Railway URLs in code have been migrated or archived.
 
 ---
 
@@ -320,8 +324,9 @@ services/
 
 ### Backend Questions
 
-- Refer to backend team's SOT documents (separate repo)
-- Backend URL: `https://voyance-backend-production.up.railway.app`
+- Backend is Lovable Cloud (Supabase Edge Functions)
+- See `supabase/functions/` for all edge function code
+- Database schema: View in Cloud → Database → Tables
 
 ### Frontend Questions
 
