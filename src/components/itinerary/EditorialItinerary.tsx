@@ -38,7 +38,7 @@ import type { ActivityType, WeatherCondition } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { WeatherForecast } from './WeatherForecast';
-import { BookingButton } from '@/components/booking/BookingButton';
+import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { PaymentsTab } from './PaymentsTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useEntitlements } from '@/hooks/useEntitlements';
@@ -78,6 +78,7 @@ export interface EditorialActivity {
   timeBlockType?: string;
   isLocked?: boolean;
   website?: string;
+  bookingUrl?: string; // External booking URL for affiliate links
 }
 
 export interface EditorialDay {
@@ -1092,16 +1093,15 @@ export function EditorialItinerary({
                         <span className="font-serif text-lg">${flightCost.toLocaleString()}</span>
                       </div>
                       {flightCost > 0 && (
-                        <BookingButton
-                          tripId={tripId}
-                          itemType="flight"
-                          itemId="flight-selection"
-                          itemName={`${flightSelection.outbound?.airline || 'Flight'} to ${destination}`}
-                          amountCents={flightCost * 100}
-                          existingPayment={getPaymentForItem('flight', 'flight-selection')}
-                          onSuccess={refreshPayments}
+                        <VendorBookingLink
+                          activityName={`${flightSelection.outbound?.airline || 'Flight'} to ${destination}`}
+                          destination={destination}
+                          estimatedPrice={flightCost}
+                          preferredVendor="viator"
                           className="w-full"
-                        />
+                        >
+                          Search Flights
+                        </VendorBookingLink>
                       )}
                     </div>
                   </div>
@@ -1309,16 +1309,15 @@ export function EditorialItinerary({
                         <span className="font-serif text-2xl font-semibold text-primary">${hotelCost.toLocaleString()}</span>
                       </div>
                       {hotelCost > 0 && (
-                        <BookingButton
-                          tripId={tripId}
-                          itemType="hotel"
-                          itemId="hotel-selection"
-                          itemName={hotelSelection.name || 'Hotel'}
-                          amountCents={hotelCost * 100}
-                          existingPayment={getPaymentForItem('hotel', 'hotel-selection')}
-                          onSuccess={refreshPayments}
+                        <VendorBookingLink
+                          activityName={hotelSelection.name || 'Hotel'}
+                          destination={destination}
+                          estimatedPrice={hotelCost}
+                          preferredVendor="tripadvisor"
                           className="w-full"
-                        />
+                        >
+                          Search Hotels
+                        </VendorBookingLink>
                       )}
                     </div>
                     
@@ -2498,16 +2497,14 @@ function ActivityRow({
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
             <span className="font-medium">{formatCurrency(cost)}</span>
-            {/* Booking button for activities that require booking */}
+            {/* External booking link for activities that require booking */}
             {activity.bookingRequired && cost > 0 && (
-              <BookingButton
-                tripId={tripId}
-                itemType="activity"
-                itemId={activity.id}
-                itemName={activity.title}
-                amountCents={cost * 100}
-                existingPayment={existingPayment}
-                onSuccess={onPaymentSuccess}
+              <VendorBookingLink
+                activityName={activity.title}
+                destination={destination}
+                externalBookingUrl={activity.bookingUrl}
+                estimatedPrice={cost}
+                preferredVendor="viator"
                 size="sm"
               />
             )}
