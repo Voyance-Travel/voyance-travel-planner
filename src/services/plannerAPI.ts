@@ -66,6 +66,10 @@ export async function createPlannerTrip(input: TripCreateInput): Promise<CreateT
   const primaryDestination = input.destinations[0];
   const sessionId = crypto.randomUUID();
   
+  // Get user's current plan tier for ownership tracking
+  const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
+  const ownerPlanTier = entitlements?.plans?.[0] || 'free';
+
   const insertData = {
     user_id: user.id,
     name: `Trip to ${primaryDestination.city}`,
@@ -77,6 +81,7 @@ export async function createPlannerTrip(input: TripCreateInput): Promise<CreateT
     trip_type: input.tripType,
     travelers: input.travelers,
     budget_tier: input.budgetTier || 'moderate',
+    owner_plan_tier: ownerPlanTier,
     status: 'draft' as const,
     metadata: JSON.parse(JSON.stringify({
       sessionId,

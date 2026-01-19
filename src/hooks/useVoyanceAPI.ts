@@ -148,6 +148,10 @@ export function useCreateTrip() {
     mutationFn: async (input: CreateTripRequest) => {
       if (!user) throw new Error('Not authenticated');
       
+      // Get user's current plan tier for ownership tracking
+      const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
+      const ownerPlanTier = entitlements?.plans?.[0] || 'free';
+      
       const { data, error } = await supabase
         .from('trips')
         .insert({
@@ -160,6 +164,7 @@ export function useCreateTrip() {
           travelers: input.travelers,
           origin_city: input.originCity,
           budget_tier: input.budgetTier,
+          owner_plan_tier: ownerPlanTier,
           status: 'draft',
         })
         .select()
