@@ -33,7 +33,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
 import type { ActivityType, WeatherCondition } from '@/types/itinerary';
-import { getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 
 // =============================================================================
@@ -720,6 +720,7 @@ export function EditorialItinerary({
                 dayIndex={dayIndex}
                 travelers={travelers}
                 budgetTier={budgetTier}
+                destination={destination}
                 isExpanded={expandedDays.includes(day.dayNumber)}
                 isRegenerating={regeneratingDay === day.dayNumber}
                 isEditable={isEditable}
@@ -1048,10 +1049,20 @@ interface DestinationCarouselProps {
   destinationCountry?: string;
 }
 
+// Helper to normalize destination strings (remove IATA codes like "(FCO)")
+function normalizeDestination(dest: string): string {
+  return (dest || '')
+    .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+    .trim();
+}
+
 function DestinationCarousel({ destination, destinationCountry }: DestinationCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [images, setImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Normalize destination (remove airport codes like "Rome (FCO)" -> "Rome")
+  const cleanDestination = normalizeDestination(destination);
   
   // Fetch real destination images from the backend
   useEffect(() => {
@@ -1061,7 +1072,7 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
         const { supabase } = await import('@/integrations/supabase/client');
         const { data, error } = await supabase.functions.invoke('destination-images', {
           body: {
-            destination,
+            destination: cleanDestination, // Use normalized destination
             imageType: 'gallery',
             limit: 6,
           },
@@ -1091,10 +1102,10 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
       }
     }
     
-    if (destination) {
+    if (cleanDestination) {
       fetchImages();
     }
-  }, [destination]);
+  }, [cleanDestination]);
 
   const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % Math.max(1, images.length));
   const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + Math.max(1, images.length)) % Math.max(1, images.length));
@@ -1104,7 +1115,7 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
       <div className="relative overflow-hidden rounded-xl mb-6">
         <div className="relative h-48 md:h-64 bg-gradient-to-br from-primary/20 to-accent/20 animate-pulse flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-2xl md:text-3xl font-serif text-foreground">{destination}</h2>
+            <h2 className="text-2xl md:text-3xl font-serif text-foreground">{cleanDestination}</h2>
             {destinationCountry && (
               <p className="text-muted-foreground text-sm">{destinationCountry}</p>
             )}
@@ -1446,6 +1457,7 @@ interface DayCardProps {
   dayIndex: number;
   travelers: number;
   budgetTier?: string;
+  destination: string; // For real photo lookup
   isExpanded: boolean;
   isRegenerating: boolean;
   isEditable: boolean;
@@ -1463,6 +1475,7 @@ function DayCard({
   dayIndex,
   travelers,
   budgetTier,
+  destination,
   isExpanded,
   isRegenerating,
   isEditable,
@@ -1476,6 +1489,9 @@ function DayCard({
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
+  
+  // Normalize destination for image lookups
+  const cleanDestination = normalizeDestination(destination);
 
   return (
     <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
@@ -1570,6 +1586,7 @@ function DayCard({
                 <ActivityRow
                   key={activity.id}
                   activity={activity}
+                  destination={cleanDestination}
                   dayIndex={dayIndex}
                   activityIndex={activityIndex}
                   totalActivities={day.activities.length}
@@ -1627,6 +1644,7 @@ function DayCard({
 
 interface ActivityRowProps {
   activity: EditorialActivity;
+  destination: string; // Add destination for real photo lookup
   dayIndex: number;
   activityIndex: number;
   totalActivities: number;
@@ -1641,6 +1659,7 @@ interface ActivityRowProps {
 
 function ActivityRow({
   activity,
+  destination,
   dayIndex,
   activityIndex,
   totalActivities,
@@ -1673,19 +1692,18 @@ function ActivityRow({
   const isRatingEligible = ratingEligibleTypes.includes(activityType) && !isDowntime && !isTransport && !isCheckIn && !isAirport && !isAccommodation;
   const rating = isRatingEligible ? rawRating : null;
   
-  // Get thumbnail: existing photo or category-based placeholder
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(existingPhoto);
-  const [thumbnailError, setThumbnailError] = useState(false);
+  // Use useActivityImage hook for real place photos with deduplication
+  // This fetches from Google Places / TripAdvisor with caching
+  const shouldFetchRealPhoto = showThumbnail && !isCheckIn && !isAirport && !isAccommodation;
+  const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
+    activity.title,
+    activityType,
+    existingPhoto,
+    shouldFetchRealPhoto ? destination : undefined // Only pass destination if we want real photos
+  );
   
-  useEffect(() => {
-    if (existingPhoto) {
-      setThumbnailUrl(existingPhoto);
-      setThumbnailError(false);
-    } else if (showThumbnail) {
-      // Use Unsplash source for instant category-based placeholder
-      setThumbnailUrl(getActivityPlaceholder(activityType));
-    }
-  }, [existingPhoto, activityType, showThumbnail]);
+  const thumbnailUrl = fetchedImageUrl;
+  const [thumbnailError, setThumbnailError] = useState(false);
 
   return (
     <div className={cn(
