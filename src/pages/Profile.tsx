@@ -25,6 +25,7 @@ import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { STRIPE_PRODUCTS, PLAN_FEATURES } from '@/config/pricing';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -40,53 +41,42 @@ import EditorialPreferencesView from '@/components/profile/EditorialPreferencesV
 
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences';
 
-// One-time purchase config
-const ONE_TIME_PURCHASE = {
-  aiTrip: {
-    name: 'AI Trip Enhancement',
-    description: 'Unlock AI for a single trip',
-    price: 9.99,
-    priceId: 'price_1Sr3bCFYxIg9jcJUBqSZb4jZ',
-    productId: 'prod_TogzVmlCPr5Qio',
-    features: [
-      'AI-powered itinerary generation',
-      'Smart activity recommendations',
-      'Personalized day-by-day planning',
-      'Weather-aware scheduling',
-    ],
+// Use the centralized pricing config from src/config/pricing.ts
+// STRIPE_PRODUCTS contains:
+// - TRIP_PASS: $12.99 one-time (price_1SrKykFYxIg9jcJUblEmckuq)
+// - MONTHLY: $15.99/mo (price_1SrKz2FYxIg9jcJUVbrbOfFl)
+// - YEARLY: $129/year (price_1SrKz4FYxIg9jcJU8kMbZDSk)
+
+// Legacy mappings for backwards compatibility with UI
+const SUBSCRIPTION_TIERS = {
+  monthly: {
+    name: PLAN_FEATURES.MONTHLY.name,
+    description: PLAN_FEATURES.MONTHLY.subheadline,
+    price: STRIPE_PRODUCTS.MONTHLY.price,
+    interval: 'month',
+    priceId: STRIPE_PRODUCTS.MONTHLY.priceId,
+    productId: STRIPE_PRODUCTS.MONTHLY.productId,
+    features: PLAN_FEATURES.MONTHLY.features.slice(0, 4),
+  },
+  yearly: {
+    name: PLAN_FEATURES.YEARLY.name,
+    description: PLAN_FEATURES.YEARLY.subheadline,
+    price: STRIPE_PRODUCTS.YEARLY.price,
+    interval: 'year',
+    priceId: STRIPE_PRODUCTS.YEARLY.priceId,
+    productId: STRIPE_PRODUCTS.YEARLY.productId,
+    features: PLAN_FEATURES.YEARLY.features,
   },
 };
 
-// Subscription tiers config
-const SUBSCRIPTION_TIERS = {
-  voyage: {
-    name: 'Voyage',
-    description: 'For travelers who plan regularly',
-    price: 15.99,
-    interval: 'month',
-    priceId: 'price_1RpYVWFYxIg9jcJU4t3JVCy0',
-    productId: 'prod_Sl4euoo6l8HCIE',
-    features: [
-      'Unlimited trip planning',
-      'AI-powered itineraries',
-      'Flight & hotel recommendations',
-      'Email support',
-    ],
-  },
-  wanderlust: {
-    name: 'Wanderlust',
-    description: 'For digital nomads & frequent travelers',
-    price: 119.99,
-    interval: 'month',
-    priceId: 'price_1RpYWpFYxIg9jcJUPrSLmFsu',
-    productId: 'prod_Sl4gxTsm0MDnN6',
-    features: [
-      'Everything in Voyage',
-      'Priority support',
-      'Advanced customization',
-      'Exclusive deals',
-      'Offline access',
-    ],
+const ONE_TIME_PURCHASE = {
+  tripPass: {
+    name: PLAN_FEATURES.TRIP_PASS.name,
+    description: PLAN_FEATURES.TRIP_PASS.subheadline,
+    price: STRIPE_PRODUCTS.TRIP_PASS.price,
+    priceId: STRIPE_PRODUCTS.TRIP_PASS.priceId,
+    productId: STRIPE_PRODUCTS.TRIP_PASS.productId,
+    features: PLAN_FEATURES.TRIP_PASS.features.slice(0, 4),
   },
 };
 
@@ -742,16 +732,16 @@ export default function Profile() {
                           </div>
                           <div>
                             <h4 className="text-xl font-serif font-medium text-foreground">
-                              {ONE_TIME_PURCHASE.aiTrip.name}
+                              {ONE_TIME_PURCHASE.tripPass.name}
                             </h4>
                             <p className="text-sm text-muted-foreground">
-                              {ONE_TIME_PURCHASE.aiTrip.description}
+                              {ONE_TIME_PURCHASE.tripPass.description}
                             </p>
                           </div>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-2 mt-4">
-                          {ONE_TIME_PURCHASE.aiTrip.features.map((feature) => (
+                          {ONE_TIME_PURCHASE.tripPass.features.map((feature) => (
                             <span key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                               {feature}
@@ -763,21 +753,21 @@ export default function Profile() {
                       <div className="flex flex-col items-center md:items-end gap-3 shrink-0">
                         <div className="text-center md:text-right">
                           <span className="text-3xl font-serif font-medium text-foreground">
-                            ${ONE_TIME_PURCHASE.aiTrip.price}
+                            ${ONE_TIME_PURCHASE.tripPass.price}
                           </span>
                           <p className="text-xs text-muted-foreground mt-0.5">one-time</p>
                         </div>
                         <Button 
-                          onClick={() => handleCheckout(ONE_TIME_PURCHASE.aiTrip.priceId, 'payment')}
-                          disabled={isCheckingOut === ONE_TIME_PURCHASE.aiTrip.priceId}
+                          onClick={() => handleCheckout(ONE_TIME_PURCHASE.tripPass.priceId, 'payment')}
+                          disabled={isCheckingOut === ONE_TIME_PURCHASE.tripPass.priceId}
                           className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
                         >
-                          {isCheckingOut === ONE_TIME_PURCHASE.aiTrip.priceId ? (
+                          {isCheckingOut === ONE_TIME_PURCHASE.tripPass.priceId ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4 mr-2" />
-                              Unlock AI
+                              Unlock Trip
                             </>
                           )}
                         </Button>
@@ -809,7 +799,7 @@ export default function Profile() {
               <div className="grid md:grid-cols-2 gap-6">
                 {Object.entries(SUBSCRIPTION_TIERS).map(([key, tier]) => {
                   const isCurrentPlan = subscription?.product_id === tier.productId;
-                  const isPremium = key === 'wanderlust';
+                  const isPremium = key === 'yearly';
                   
                   return (
                     <motion.div
