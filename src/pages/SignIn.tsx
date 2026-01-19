@@ -73,7 +73,7 @@ export default function SignIn() {
                 <p className="text-3xl lg:text-4xl font-display font-light text-white leading-snug mb-4">
                   "Travel isn't always pretty. It isn't always comfortable. But that's okay. The journey changes you."
                 </p>
-                <footer className="text-white/70 text-sm font-medium">— Anthony Bourdain</footer>
+                <footer className="text-white/70 text-sm font-medium">- Anthony Bourdain</footer>
               </motion.blockquote>
               
               <motion.div

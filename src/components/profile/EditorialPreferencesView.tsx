@@ -747,7 +747,7 @@ function BudgetSection({ preferences, onUpdate, isSaving }: SectionProps) {
               />
             </div>
           </div>
-          <span className="text-muted-foreground mt-6">—</span>
+          <span className="text-muted-foreground mt-6">to</span>
           <div className="flex-1">
             <Label className="text-xs text-muted-foreground">Maximum</Label>
             <div className="relative">

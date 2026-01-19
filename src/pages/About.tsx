@@ -237,7 +237,7 @@ function VoyanceMockup() {
           
           {/* Day preview - Timeline style */}
           <div className="relative pl-4 border-l-2 border-primary/30 space-y-3">
-            <div className="text-xs font-semibold text-foreground mb-3 -ml-4 pl-4">Day 1 — Arrival & Culture</div>
+            <div className="text-xs font-semibold text-foreground mb-3 -ml-4 pl-4">Day 1 · Arrival & Culture</div>
             {[
               { time: '10:00 AM', activity: 'Louvre Museum', desc: 'Skip-the-line tickets', icon: <Globe className="w-3 h-3" /> },
               { time: '1:00 PM', activity: 'Café de Flore', desc: 'Lunch reservation', icon: <Star className="w-3 h-3" /> },

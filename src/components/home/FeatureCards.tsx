@@ -45,7 +45,7 @@ const FEATURE_CARDS = [
   },
   {
     title: "Stress-Free Booking",
-    description: "Lock in flights, hotels, and plans — without starting over.",
+    description: "Lock in flights, hotels, and plans without starting over.",
     icon: <CalendarIcon />
   },
   {
