@@ -91,16 +91,17 @@ const activityIcons: Record<string, React.ReactNode> = {
   shopping: <ShoppingBag className="h-4 w-4" />,
 };
 
+// Editorial muted color palette - sophisticated, not garish
 const activityColors: Record<string, string> = {
-  transport: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800',
-  transportation: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800',
-  accommodation: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800',
-  dining: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
-  cultural: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800',
-  sightseeing: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
-  activity: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800',
-  relaxation: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800',
-  shopping: 'bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950 dark:text-pink-300 dark:border-pink-800',
+  transport: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700',
+  transportation: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700',
+  accommodation: 'bg-stone-50 text-stone-700 border-stone-200 dark:bg-stone-900 dark:text-stone-300 dark:border-stone-700',
+  dining: 'bg-amber-50/60 text-amber-800 border-amber-200/60 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800',
+  cultural: 'bg-rose-50/50 text-rose-800 border-rose-200/50 dark:bg-rose-950 dark:text-rose-200 dark:border-rose-800',
+  sightseeing: 'bg-sky-50/60 text-sky-800 border-sky-200/60 dark:bg-sky-950 dark:text-sky-200 dark:border-sky-800',
+  activity: 'bg-indigo-50/50 text-indigo-800 border-indigo-200/50 dark:bg-indigo-950 dark:text-indigo-200 dark:border-indigo-800',
+  relaxation: 'bg-violet-50/50 text-violet-800 border-violet-200/50 dark:bg-violet-950 dark:text-violet-200 dark:border-violet-800',
+  shopping: 'bg-fuchsia-50/50 text-fuchsia-800 border-fuchsia-200/50 dark:bg-fuchsia-950 dark:text-fuchsia-200 dark:border-fuchsia-800',
 };
 
 const weatherIcons: Record<WeatherCondition, React.ReactNode> = {
@@ -115,12 +116,29 @@ const weatherIcons: Record<WeatherCondition, React.ReactNode> = {
 // HELPERS
 // =============================================================================
 
-function formatTime12h(time: string): string {
-  if (!time) return '';
-  const [hours, minutes] = time.split(':').map(Number);
+function formatTime12h(time: string | undefined | null): string {
+  if (!time || typeof time !== 'string') return '';
+  
+  // Handle various time formats
+  const cleanTime = time.trim();
+  
+  // If already in 12h format (contains AM/PM), return as-is
+  if (/\d{1,2}:\d{2}\s*(AM|PM)/i.test(cleanTime)) {
+    return cleanTime;
+  }
+  
+  // Parse HH:MM or H:MM format
+  const match = cleanTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return cleanTime; // Return original if can't parse
+  
+  const hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  
+  if (isNaN(hours)) return cleanTime;
+  
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
-  return `${displayHours}:${minutes?.toString().padStart(2, '0') || '00'} ${period}`;
+  return `${displayHours}:${minutes} ${period}`;
 }
 
 function formatCurrency(amount: number): string {
@@ -135,12 +153,14 @@ function getActivityName(activity: GeneratedActivity): string {
   return activity.title || (activity as { name?: string }).name || 'Activity';
 }
 
-function getActivityCost(activity: GeneratedActivity): number {
-  if (activity.cost?.amount !== undefined) return activity.cost.amount;
+function getActivityCost(activity: GeneratedActivity): number | null {
+  if (activity.cost?.amount !== undefined && activity.cost.amount > 0) return activity.cost.amount;
   if ((activity as { estimatedCost?: { amount: number } }).estimatedCost?.amount !== undefined) {
-    return (activity as { estimatedCost: { amount: number } }).estimatedCost.amount;
+    const cost = (activity as { estimatedCost: { amount: number } }).estimatedCost.amount;
+    if (cost > 0) return cost;
   }
-  return 0;
+  // Return null for truly free activities so we can display "Free" instead of $0
+  return null;
 }
 
 function getActivityLocation(activity: GeneratedActivity): { name?: string; address?: string } {
@@ -178,9 +198,12 @@ export function ItineraryEditor({
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityId: string } | null>(null);
 
-  // Calculate totals
+  // Calculate totals - handle null costs from free activities
   const totalActivityCost = days.reduce((sum, day) => 
-    sum + day.activities.reduce((daySum, act) => daySum + getActivityCost(act), 0), 0
+    sum + day.activities.reduce((daySum, act) => {
+      const cost = getActivityCost(act);
+      return daySum + (cost ?? 0);
+    }, 0), 0
   );
   const flightCost = (flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0);
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
@@ -621,7 +644,11 @@ function DayCard({
   onDayRegenerate,
   onAddActivity,
 }: DayCardProps) {
-  const totalCost = day.activities.reduce((sum, act) => sum + getActivityCost(act), 0);
+  // Calculate total cost, filtering out null values (free activities)
+  const totalCost = day.activities.reduce((sum, act) => {
+    const cost = getActivityCost(act);
+    return sum + (cost ?? 0);
+  }, 0);
   const lockedCount = day.activities.filter(a => (a as { isLocked?: boolean }).isLocked).length;
 
   return (
@@ -654,7 +681,9 @@ function DayCard({
           <p className="font-medium">{day.title || day.theme}</p>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium">{formatCurrency(totalCost)}</span>
+          <span className="text-sm font-medium">
+            {totalCost > 0 ? formatCurrency(totalCost) : 'Free'}
+          </span>
           {isExpanded ? (
             <ChevronUp className="h-5 w-5 text-muted-foreground" />
           ) : (
@@ -674,16 +703,31 @@ function DayCard({
           >
             <div className="px-6 pb-6 space-y-3">
               {day.activities.map((activity, activityIndex) => (
-                <ActivityCard
-                  key={activity.id}
-                  activity={activity}
-                  dayIndex={dayIndex}
-                  activityIndex={activityIndex}
-                  totalActivities={day.activities.length}
-                  onLock={onActivityLock}
-                  onMove={onActivityMove}
-                  onRemove={onActivityRemove}
-                />
+                <div key={activity.id}>
+                  <ActivityCard
+                    activity={activity}
+                    dayIndex={dayIndex}
+                    activityIndex={activityIndex}
+                    totalActivities={day.activities.length}
+                    onLock={onActivityLock}
+                    onMove={onActivityMove}
+                    onRemove={onActivityRemove}
+                  />
+                  {/* Transportation indicator between activities */}
+                  {activityIndex < day.activities.length - 1 && activity.transportation && (
+                    <div className="flex items-center gap-2 py-2 px-4 text-xs text-muted-foreground">
+                      <div className="flex-1 border-t border-dashed border-border"></div>
+                      <div className="flex items-center gap-1.5 bg-secondary/50 px-2 py-1 rounded-full">
+                        <Car className="h-3 w-3" />
+                        <span className="capitalize">{activity.transportation.method}</span>
+                        {activity.transportation.duration && (
+                          <span>• {activity.transportation.duration}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 border-t border-dashed border-border"></div>
+                    </div>
+                  )}
+                </div>
               ))}
               
               {/* Day Footer */}
@@ -837,7 +881,12 @@ function ActivityCard({
               )}
             </div>
             <div className="text-right shrink-0">
-              <span className="font-medium">{formatCurrency(getActivityCost(activity))}</span>
+              {/* Cost Display - Show "Free" for null, otherwise show amount */}
+              {getActivityCost(activity) !== null ? (
+                <span className="font-medium">{formatCurrency(getActivityCost(activity)!)}</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">Free</span>
+              )}
               
               {/* Expand Button */}
               <CollapsibleTrigger asChild>
