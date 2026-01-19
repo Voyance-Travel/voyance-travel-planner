@@ -226,6 +226,263 @@ const STRICT_ITINERARY_TOOL = {
 // HELPER FUNCTIONS
 // =============================================================================
 
+// =============================================================================
+// GROUP PREFERENCE BLENDING - For multi-traveler trips with linked friends
+// =============================================================================
+
+interface TravelDNAProfile {
+  user_id: string;
+  trait_scores?: Record<string, number>;
+}
+
+interface PreferenceProfile {
+  user_id: string;
+  interests?: string[];
+  travel_pace?: string;
+  budget_tier?: string;
+  dining_style?: string;
+  activity_level?: string;
+  dietary_restrictions?: string[];
+  accessibility_needs?: string[];
+  mobility_needs?: string;
+  mobility_level?: string;
+  climate_preferences?: string[];
+  eco_friendly?: boolean;
+}
+
+/**
+ * Blend preferences for group trips using weighted averaging
+ * The trip organizer can optionally have higher weight
+ */
+function blendGroupPreferences(
+  profiles: PreferenceProfile[],
+  organizerId?: string
+): PreferenceProfile | null {
+  if (profiles.length === 0) return null;
+  if (profiles.length === 1) return profiles[0];
+
+  console.log(`[GroupBlend] Blending preferences for ${profiles.length} travelers`);
+
+  // Assign weights - organizer gets 1.5x weight
+  const weights = profiles.map(p => p.user_id === organizerId ? 1.5 : 1);
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  const normalizedWeights = weights.map(w => w / totalWeight);
+
+  // Blend interests - take union with frequency-based ordering
+  const interestCounts: Record<string, number> = {};
+  profiles.forEach((p, idx) => {
+    (p.interests || []).forEach(interest => {
+      interestCounts[interest] = (interestCounts[interest] || 0) + normalizedWeights[idx];
+    });
+  });
+  const blendedInterests = Object.entries(interestCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([interest]) => interest);
+
+  // Blend pace - weighted voting
+  const paceCounts: Record<string, number> = {};
+  profiles.forEach((p, idx) => {
+    if (p.travel_pace) {
+      paceCounts[p.travel_pace] = (paceCounts[p.travel_pace] || 0) + normalizedWeights[idx];
+    }
+  });
+  const blendedPace = Object.entries(paceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'moderate';
+
+  // Blend activity level - weighted voting
+  const activityCounts: Record<string, number> = {};
+  profiles.forEach((p, idx) => {
+    if (p.activity_level) {
+      activityCounts[p.activity_level] = (activityCounts[p.activity_level] || 0) + normalizedWeights[idx];
+    }
+  });
+  const blendedActivity = Object.entries(activityCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  // Blend dining style - weighted voting
+  const diningCounts: Record<string, number> = {};
+  profiles.forEach((p, idx) => {
+    if (p.dining_style) {
+      diningCounts[p.dining_style] = (diningCounts[p.dining_style] || 0) + normalizedWeights[idx];
+    }
+  });
+  const blendedDining = Object.entries(diningCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  // CRITICAL: Merge all dietary restrictions (union - don't leave anyone out!)
+  const allDietary = new Set<string>();
+  profiles.forEach(p => {
+    (p.dietary_restrictions || []).forEach(d => allDietary.add(d));
+  });
+
+  // CRITICAL: Merge all accessibility needs (union)
+  const allAccessibility = new Set<string>();
+  profiles.forEach(p => {
+    (p.accessibility_needs || []).forEach(a => allAccessibility.add(a));
+  });
+
+  // Mobility - take most restrictive
+  const mobilityLevels = ['limited', 'moderate', 'active', 'very_active'];
+  let mostRestrictiveMobility = 'active';
+  profiles.forEach(p => {
+    if (p.mobility_level) {
+      const currentIdx = mobilityLevels.indexOf(mostRestrictiveMobility);
+      const newIdx = mobilityLevels.indexOf(p.mobility_level);
+      if (newIdx < currentIdx) mostRestrictiveMobility = p.mobility_level;
+    }
+  });
+
+  // Eco-friendly - if any member cares, respect it
+  const anyEcoFriendly = profiles.some(p => p.eco_friendly);
+
+  // Climate preferences - intersection preferred, union if empty
+  const climateSets = profiles.map(p => new Set(p.climate_preferences || []));
+  let blendedClimate: string[] = [];
+  if (climateSets.every(s => s.size > 0)) {
+    // Find intersection
+    const first = climateSets[0];
+    const intersection = [...first].filter(c => climateSets.every(s => s.has(c)));
+    if (intersection.length > 0) {
+      blendedClimate = intersection;
+    } else {
+      // Fallback to union
+      const union = new Set<string>();
+      climateSets.forEach(s => s.forEach(c => union.add(c)));
+      blendedClimate = [...union];
+    }
+  }
+
+  console.log(`[GroupBlend] Result: ${blendedInterests.length} interests, pace=${blendedPace}, ${allDietary.size} dietary restrictions`);
+
+  return {
+    user_id: 'blended',
+    interests: blendedInterests,
+    travel_pace: blendedPace,
+    activity_level: blendedActivity,
+    dining_style: blendedDining,
+    dietary_restrictions: [...allDietary],
+    accessibility_needs: [...allAccessibility],
+    mobility_level: mostRestrictiveMobility,
+    climate_preferences: blendedClimate,
+    eco_friendly: anyEcoFriendly,
+  };
+}
+
+/**
+ * Fetch collaborator preferences for a trip
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getCollaboratorPreferences(supabase: any, tripId: string): Promise<PreferenceProfile[]> {
+  try {
+    // Get collaborators linked to this trip
+    const { data: collaborators, error: collabError } = await supabase
+      .from('trip_collaborators')
+      .select('user_id')
+      .eq('trip_id', tripId);
+
+    if (collabError || !collaborators?.length) {
+      return [];
+    }
+
+    const userIds = collaborators.map((c: { user_id: string }) => c.user_id);
+    
+    // Fetch their preferences
+    const { data: preferences, error: prefError } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .in('user_id', userIds);
+
+    if (prefError) {
+      console.error('[GroupBlend] Error fetching collaborator preferences:', prefError);
+      return [];
+    }
+
+    return (preferences || []) as PreferenceProfile[];
+  } catch (e) {
+    console.error('[GroupBlend] Error:', e);
+    return [];
+  }
+}
+
+/**
+ * Get flight and hotel context for AI prompt
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getFlightHotelContext(supabase: any, tripId: string): Promise<string> {
+  try {
+    const { data: trip, error } = await supabase
+      .from('trips')
+      .select('flight_selection, hotel_selection')
+      .eq('id', tripId)
+      .maybeSingle();
+
+    if (error || !trip) return '';
+
+    const sections: string[] = [];
+
+    // Parse flight information
+    const flight = trip.flight_selection as {
+      airline?: string;
+      departureTime?: string;
+      arrivalTime?: string;
+      departureAirport?: string;
+      arrivalAirport?: string;
+      returnDepartureTime?: string;
+      returnArrivalTime?: string;
+    } | null;
+    
+    if (flight) {
+      const flightInfo: string[] = [];
+      if (flight.departureAirport && flight.arrivalAirport) {
+        flightInfo.push(`✈️ Outbound: ${flight.departureAirport} → ${flight.arrivalAirport}`);
+      }
+      if (flight.departureTime) {
+        const dept = new Date(flight.departureTime);
+        flightInfo.push(`  Departure: ${dept.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+      }
+      if (flight.arrivalTime) {
+        const arr = new Date(flight.arrivalTime);
+        flightInfo.push(`  Arrival: ${arr.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+      }
+      if (flight.returnDepartureTime) {
+        const retDept = new Date(flight.returnDepartureTime);
+        flightInfo.push(`✈️ Return: ${retDept.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+      }
+      if (flightInfo.length > 0) {
+        sections.push(`\n${'='.repeat(40)}\n✈️ FLIGHT SCHEDULE (Plan around these times!)\n${'='.repeat(40)}\n${flightInfo.join('\n')}`);
+      }
+    }
+
+    // Parse hotel information  
+    const hotel = trip.hotel_selection as {
+      name?: string;
+      address?: string;
+      neighborhood?: string;
+      checkIn?: string;
+      checkOut?: string;
+    } | null;
+    
+    if (hotel) {
+      const hotelInfo: string[] = [];
+      if (hotel.name) {
+        hotelInfo.push(`🏨 Hotel: ${hotel.name}`);
+      }
+      if (hotel.address) {
+        hotelInfo.push(`   Address: ${hotel.address}`);
+      }
+      if (hotel.neighborhood) {
+        hotelInfo.push(`   Neighborhood: ${hotel.neighborhood}`);
+      }
+      if (hotelInfo.length > 0) {
+        sections.push(`\n${'='.repeat(40)}\n🏨 ACCOMMODATION (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the hotel area and end nearby for easy return.`);
+      }
+    }
+
+    return sections.join('\n');
+  } catch (e) {
+    console.error('[FlightHotel] Error:', e);
+    return '';
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getLearnedPreferences(supabase: any, userId: string) {
   try {
@@ -1389,7 +1646,39 @@ serve(async (req) => {
 
       // Get user preferences for personalization
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
-      const prefs = userId ? await getUserPreferences(supabase, userId) : null;
+      let prefs = userId ? await getUserPreferences(supabase, userId) : null;
+      
+      // =======================================================================
+      // GROUP PREFERENCE BLENDING - For multi-traveler trips with linked friends
+      // =======================================================================
+      console.log("[Stage 1.2] Checking for trip collaborators...");
+      const collaboratorPrefs = await getCollaboratorPreferences(supabase, tripId);
+      
+      if (collaboratorPrefs.length > 0) {
+        console.log(`[Stage 1.2] Found ${collaboratorPrefs.length} collaborators - blending preferences`);
+        
+        // Include primary user's preferences in the blend
+        const allProfiles: PreferenceProfile[] = prefs 
+          ? [{ user_id: userId || 'primary', ...prefs }, ...collaboratorPrefs]
+          : collaboratorPrefs;
+        
+        // Blend all preferences with organizer (primary user) having higher weight
+        const blendedPrefs = blendGroupPreferences(allProfiles, userId);
+        
+        if (blendedPrefs) {
+          console.log(`[Stage 1.2] Blended group preferences successfully`);
+          prefs = blendedPrefs;
+        }
+      }
+      
+      // =======================================================================
+      // FLIGHT & HOTEL CONTEXT - Use booked flight/hotel in itinerary planning
+      // =======================================================================
+      console.log("[Stage 1.3] Fetching flight and hotel context...");
+      const flightHotelContext = await getFlightHotelContext(supabase, tripId);
+      if (flightHotelContext) {
+        console.log("[Stage 1.3] Flight/hotel context added to AI prompt");
+      }
       
       // Build raw preference context (structured data)
       const rawPreferenceContext = buildPreferenceContext(insights, prefs);
@@ -1407,8 +1696,8 @@ serve(async (req) => {
         }
       }
       
-      // Combine raw and enriched context for maximum personalization
-      const preferenceContext = rawPreferenceContext + enrichedPreferenceContext;
+      // Combine all context for maximum personalization
+      const preferenceContext = rawPreferenceContext + enrichedPreferenceContext + flightHotelContext;
 
       // STAGE 2: AI Generation
       let aiResult;
