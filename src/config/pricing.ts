@@ -93,6 +93,7 @@ export const PLAN_FEATURES = {
     priceDetail: 'per month',
     features: [
       'Save up to 5 draft trips at once',
+      'Mystery Trips (save up to 5 favorites)',
       'Flight + hotel optimization ("Voyance Picks")',
       'Trip versions (up to 4 per trip)',
       'Unlimited day builds & rebuilds',
@@ -103,11 +104,13 @@ export const PLAN_FEATURES = {
     limits: {
       fullBuilds: -1, // Unlimited
       draftTrips: 5,
+      mysteryTripDrafts: 5, // Can save 5 Mystery Trip favorites
       tripVersions: 4,
       dayRebuilds: -1,
       flightHotelOptimization: true,
       groupBudgeting: true,
       coEditCollaboration: true,
+      mysteryTrips: true,
     },
     cta: 'Go Monthly',
   },
@@ -121,6 +124,7 @@ export const PLAN_FEATURES = {
     features: [
       'Everything in Monthly',
       'Unlimited draft trips ("Trip Vault")',
+      'Unlimited Mystery Trip favorites ("Mystery Vault")',
       'Unlimited trip versions',
       'Preference learning over time',
       'Saved presets & reusable templates',
@@ -129,12 +133,14 @@ export const PLAN_FEATURES = {
     limits: {
       fullBuilds: -1,
       draftTrips: -1, // Unlimited
+      mysteryTripDrafts: -1, // Unlimited Mystery Trip favorites
       tripVersions: -1,
       dayRebuilds: -1,
       flightHotelOptimization: true,
       groupBudgeting: true,
       coEditCollaboration: true,
       preferenceLearning: true,
+      mysteryTrips: true,
     },
     cta: 'Go Yearly — Save 48%',
   },
