@@ -59,6 +59,7 @@ export default function Settings() {
   const [marketingEmails, setMarketingEmails] = useState(false);
   const [tripReminders, setTripReminders] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
+  const [budgetAlerts, setBudgetAlerts] = useState(true);
   
   // Phone number
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -88,7 +89,7 @@ export default function Settings() {
       try {
         const { data, error } = await supabase
           .from('user_preferences')
-          .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, phone_number')
+          .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, budget_alerts, phone_number')
           .eq('user_id', user.id)
           .maybeSingle();
         
@@ -100,6 +101,7 @@ export default function Settings() {
           setMarketingEmails(data.marketing_emails ?? false);
           setTripReminders(data.trip_reminders ?? true);
           setPriceAlerts(data.price_alerts ?? true);
+          setBudgetAlerts(data.budget_alerts ?? true);
           setPhoneNumber(data.phone_number ?? '');
         }
       } catch (err) {
@@ -453,6 +455,28 @@ export default function Settings() {
                       id="price-alerts"
                       checked={priceAlerts}
                       onCheckedChange={handlePriceAlerts}
+                      disabled={saving}
+                    />
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="budget-alerts" className="text-sm font-medium">
+                        Budget guidance
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Show helpful indicators when selections exceed your budget
+                      </p>
+                    </div>
+                    <Switch
+                      id="budget-alerts"
+                      checked={budgetAlerts}
+                      onCheckedChange={(checked) => {
+                        setBudgetAlerts(checked);
+                        savePreference('budget_alerts', checked);
+                      }}
                       disabled={saving}
                     />
                   </div>

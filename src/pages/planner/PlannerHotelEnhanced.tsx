@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBudgetAlerts } from '@/hooks/useBudgetAlerts';
 
 import {
   useHotelSearch,
@@ -133,6 +134,7 @@ export default function PlannerHotelEnhanced() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { state: plannerState, setBasics, setHotel, saveTrip } = useTripPlanner();
+  const { budgetAlertsEnabled } = useBudgetAlerts();
 
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(plannerState.hotel?.id || null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
@@ -613,6 +615,8 @@ export default function PlannerHotelEnhanced() {
                           onSelect={(roomId) => handleSelectHotel(hotel.id, roomId)}
                           isLoading={holdingHotelId === hotel.id}
                           nights={nights}
+                          budgetPerNight={hotelBudget && nights > 0 ? Math.round(hotelBudget / nights) : undefined}
+                          showBudgetWarnings={budgetAlertsEnabled}
                         />
                       ))}
                     </motion.div>

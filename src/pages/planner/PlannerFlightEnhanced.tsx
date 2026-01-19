@@ -23,6 +23,7 @@ import {
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useBudgetAlerts } from '@/hooks/useBudgetAlerts';
 
 // Enhanced components
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
@@ -220,6 +221,7 @@ export default function PlannerFlightEnhanced() {
   const [searchParams] = useSearchParams();
   const { state: plannerState, setBasics, setFlights, saveTrip } = useTripPlanner();
   const { user } = useAuth();
+  const { budgetAlertsEnabled } = useBudgetAlerts();
 
   const [selectedOutboundId, setSelectedOutboundId] = useState<string | null>(plannerState.flights?.id ? null : null);
   const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
@@ -657,6 +659,8 @@ export default function PlannerFlightEnhanced() {
                               selectedCabin={selectedOutboundCabin}
                               onSelect={(cabin) => handleSelect('outbound', flight.id, cabin)}
                               isLoading={holdingFlightId === flight.id}
+                              budgetAmount={flightBudget}
+                              showBudgetWarnings={budgetAlertsEnabled}
                             />
                           ))}
                         </motion.div>
@@ -705,6 +709,8 @@ export default function PlannerFlightEnhanced() {
                               selectedCabin={selectedReturnCabin}
                               onSelect={(cabin) => handleSelect('return', flight.id, cabin)}
                               isLoading={holdingFlightId === flight.id}
+                              budgetAmount={flightBudget}
+                              showBudgetWarnings={budgetAlertsEnabled}
                             />
                           ))}
                         </motion.div>

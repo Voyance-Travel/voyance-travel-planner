@@ -1528,6 +1528,7 @@ export type Database = {
           activity_level: string | null
           activity_weights: Json | null
           airport_radius_miles: number | null
+          budget_alerts: boolean | null
           budget_range: Json | null
           budget_tier: string | null
           climate_preferences: string[] | null
@@ -1597,6 +1598,7 @@ export type Database = {
           activity_level?: string | null
           activity_weights?: Json | null
           airport_radius_miles?: number | null
+          budget_alerts?: boolean | null
           budget_range?: Json | null
           budget_tier?: string | null
           climate_preferences?: string[] | null
@@ -1666,6 +1668,7 @@ export type Database = {
           activity_level?: string | null
           activity_weights?: Json | null
           airport_radius_miles?: number | null
+          budget_alerts?: boolean | null
           budget_range?: Json | null
           budget_tier?: string | null
           climate_preferences?: string[] | null
