@@ -30,6 +30,14 @@ const styleToDestinations: Record<string, string[]> = {
   romantic: ['santorini', 'paris', 'florence', 'cartagena', 'porto'],
 };
 
+// Seasonal destination mapping with curated picks (using existing destination IDs)
+const seasonToDestinations: Record<string, string[]> = {
+  spring: ['kyoto', 'paris', 'seoul', 'lisbon', 'florence', 'hanoi'],
+  summer: ['santorini', 'barcelona', 'reykjavik', 'vancouver', 'cape-town', 'porto'],
+  autumn: ['new-york', 'kyoto', 'vienna', 'new-orleans', 'mexico-city', 'marrakech'],
+  winter: ['reykjavik', 'singapore', 'bali', 'buenos-aires', 'melbourne', 'bangkok'],
+};
+
 // Style labels for display
 const styleLabels: Record<string, string> = {
   luxury: 'Luxury',
@@ -40,12 +48,21 @@ const styleLabels: Record<string, string> = {
   romantic: 'Romantic',
 };
 
+// Season labels for display
+const seasonLabels: Record<string, { title: string; description: string }> = {
+  spring: { title: 'Spring Destinations', description: 'Cherry blossoms, tulip fields & renewal' },
+  summer: { title: 'Summer Escapes', description: 'Coastal retreats & sun-drenched adventures' },
+  autumn: { title: 'Autumn Journeys', description: 'Golden foliage & harvest festivals' },
+  winter: { title: 'Winter Wonderlands', description: 'Alpine retreats & northern lights' },
+};
+
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const activeStyle = searchParams.get('style');
+  const activeSeason = searchParams.get('season');
   const [filters, setFilters] = useState({ 
     region: searchParams.get('region') as string | null, 
     budget: null as string | null, 
@@ -54,7 +71,7 @@ export default function Explore() {
   const destinationGridRef = useRef<HTMLDivElement>(null);
   const searchResultsRef = useRef<HTMLDivElement>(null);
 
-  // Filter destinations based on search, style, and filters
+  // Filter destinations based on search, style, season, and filters
   const filteredDestinations = useMemo(() => {
     let results = allDestinations;
     
@@ -62,6 +79,12 @@ export default function Explore() {
     if (activeStyle && styleToDestinations[activeStyle]) {
       const styleDestIds = styleToDestinations[activeStyle];
       results = results.filter(d => styleDestIds.includes(d.id));
+    }
+    
+    // Filter by season
+    if (activeSeason && seasonToDestinations[activeSeason]) {
+      const seasonDestIds = seasonToDestinations[activeSeason];
+      results = results.filter(d => seasonDestIds.includes(d.id));
     }
     
     if (searchQuery) {
@@ -81,9 +104,9 @@ export default function Explore() {
     }
     
     return results;
-  }, [searchQuery, filters.region, activeStyle]);
+  }, [searchQuery, filters.region, activeStyle, activeSeason]);
 
-  const isSearching = searchQuery || filters.region || filters.budget || filters.vibe || activeStyle;
+  const isSearching = searchQuery || filters.region || filters.budget || filters.vibe || activeStyle || activeSeason;
 
   useEffect(() => {
     scrollToTop();
@@ -194,9 +217,24 @@ export default function Explore() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                  {activeStyle && styleLabels[activeStyle] ? `${styleLabels[activeStyle]} Destinations` : `${filteredDestinations.length} Destination${filteredDestinations.length !== 1 ? 's' : ''} Found`}
+                  {activeSeason && seasonLabels[activeSeason] 
+                    ? seasonLabels[activeSeason].title 
+                    : activeStyle && styleLabels[activeStyle] 
+                      ? `${styleLabels[activeStyle]} Destinations` 
+                      : `${filteredDestinations.length} Destination${filteredDestinations.length !== 1 ? 's' : ''} Found`}
                 </h2>
+                {activeSeason && seasonLabels[activeSeason] && (
+                  <p className="text-muted-foreground mb-3">{seasonLabels[activeSeason].description}</p>
+                )}
                 <div className="flex flex-wrap gap-2">
+                  {activeSeason && seasonLabels[activeSeason] && (
+                    <Badge variant="default" className="gap-1 bg-primary">
+                      {seasonLabels[activeSeason].title.replace(' Destinations', '').replace(' Escapes', '').replace(' Journeys', '').replace(' Wonderlands', '')}
+                      <button onClick={() => setSearchParams({})} className="ml-1 hover:text-primary-foreground/80">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
                   {activeStyle && styleLabels[activeStyle] && (
                     <Badge variant="default" className="gap-1 bg-primary">
                       {styleLabels[activeStyle]}
