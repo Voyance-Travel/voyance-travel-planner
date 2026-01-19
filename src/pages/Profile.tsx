@@ -207,8 +207,23 @@ export default function Profile() {
       return;
     }
     
+    // Skip subscription check in demo mode - no valid session token
+    if (isDemo) {
+      console.log('[Subscription] Skipping check in demo mode');
+      setSubscription({ subscribed: false, product_id: null, price_id: null, subscription_end: null });
+      return;
+    }
+    
     setIsLoadingSubscription(true);
     try {
+      // Ensure we have a valid session before making the call
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session?.access_token) {
+        console.log('[Subscription] No valid session token, skipping check');
+        setSubscription({ subscribed: false, product_id: null, price_id: null, subscription_end: null });
+        return;
+      }
+      
       const { data, error } = await supabase.functions.invoke('check-subscription');
       if (error) {
         console.error('Subscription check error:', error);
