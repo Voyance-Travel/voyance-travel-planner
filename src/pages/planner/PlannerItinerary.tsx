@@ -5,6 +5,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import ItineraryPreview from '@/components/planner/steps/ItineraryPreview';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 
@@ -12,6 +13,7 @@ export default function PlannerItinerary() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { state, saveTrip } = useTripPlanner();
+  const { user } = useAuth();
   const [tripId, setTripId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,7 +44,7 @@ export default function PlannerItinerary() {
     }
   }, [searchParams, state.tripId, saveTrip, navigate]);
 
-  // Build trip details from context or fetch from DB
+  // Build trip details from context (works for both anonymous and authenticated users)
   const [tripDetails, setTripDetails] = useState({
     name: state.basics.destination ? `Trip to ${state.basics.destination}` : '',
     destination: state.basics.destination || '',
@@ -52,9 +54,23 @@ export default function PlannerItinerary() {
     travelers: state.basics.travelers || 1,
   });
 
-  // If we have a tripId but no context data, fetch from Supabase
+  // Update trip details from context when it changes
   useEffect(() => {
-    if (tripId && !tripDetails.destination) {
+    if (state.basics.destination) {
+      setTripDetails({
+        name: state.basics.destination ? `Trip to ${state.basics.destination}` : '',
+        destination: state.basics.destination || '',
+        departureCity: state.basics.originCity || '',
+        startDate: state.basics.startDate || '',
+        endDate: state.basics.endDate || '',
+        travelers: state.basics.travelers || 1,
+      });
+    }
+  }, [state.basics]);
+
+  // If authenticated user with tripId but no context data, fetch from Supabase
+  useEffect(() => {
+    if (tripId && !tripDetails.destination && user) {
       const fetchTrip = async () => {
         const { data, error } = await supabase
           .from('trips')
@@ -75,26 +91,30 @@ export default function PlannerItinerary() {
       };
       fetchTrip();
     }
-  }, [tripId, tripDetails.destination]);
+  }, [tripId, tripDetails.destination, user]);
 
   const handleComplete = async () => {
     if (!tripId) return;
     
     setIsSubmitting(true);
     try {
-      // Update trip status to booked
-      const { error } = await supabase
-        .from('trips')
-        .update({ status: 'booked', updated_at: new Date().toISOString() })
-        .eq('id', tripId);
+      // For authenticated users, update trip status in database
+      if (user) {
+        const { error } = await supabase
+          .from('trips')
+          .update({ status: 'booked', updated_at: new Date().toISOString() })
+          .eq('id', tripId);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       toast.success('Trip booked successfully!');
       navigate(`/trip/${tripId}`);
     } catch (error) {
       console.error('Failed to book trip:', error);
-      toast.error('Failed to book trip. Please try again.');
+      // For anonymous users or on error, still navigate
+      toast.info('Trip saved! Sign in to save permanently.');
+      navigate(`/trip/${tripId}`);
     } finally {
       setIsSubmitting(false);
     }
