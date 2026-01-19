@@ -118,9 +118,12 @@ export interface HotelSelection {
   checkIn?: string;
   checkOut?: string;
   imageUrl?: string;
+  images?: string[];
   amenities?: string[];
   type?: string;
   reviewCount?: number;
+  neighborhood?: string;
+  description?: string;
 }
 
 export interface EditorialItineraryProps {
@@ -587,43 +590,43 @@ export function EditorialItinerary({
 
   return (
     <div className="space-y-6">
-      {/* Trip Summary Bar */}
-      <div className="py-6 border-b border-border">
+      {/* Trip Summary Bar - Editorial Style */}
+      <div className="py-6 px-6 -mx-4 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 border-b border-border rounded-t-xl">
         <div className="flex flex-wrap items-center gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
+            <Calendar className="h-4 w-4 text-primary" />
             <span className="text-muted-foreground">Duration:</span>
-            <span className="font-medium">{days.length} Days</span>
+            <span className="font-semibold text-foreground">{days.length} Days</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
+            <Users className="h-4 w-4 text-accent" />
             <span className="text-muted-foreground">Travelers:</span>
-            <span className="font-medium">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
+            <span className="font-semibold text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
           </div>
           {style && (
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
+              <MapPin className="h-4 w-4 text-primary" />
               <span className="text-muted-foreground">Style:</span>
-              <span className="font-medium capitalize">{style}</span>
+              <span className="font-semibold text-foreground capitalize">{style}</span>
             </div>
           )}
           {pace && (
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
+              <Clock className="h-4 w-4 text-accent" />
               <span className="text-muted-foreground">Pace:</span>
-              <span className="font-medium capitalize">{pace}</span>
+              <span className="font-semibold text-foreground capitalize">{pace}</span>
             </div>
           )}
           <div className="ml-auto flex items-center gap-4">
             {isEditable && hasChanges && (
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950">
+              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse">
                 <AlertCircle className="h-3 w-3 mr-1" />
-                Unsaved
+                Unsaved Changes
               </Badge>
             )}
-            <div>
-              <span className="text-muted-foreground">Estimated Total:</span>
-              <span className="text-2xl font-serif ml-2">${totalCost.toLocaleString()}</span>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20">
+              <span className="text-sm text-muted-foreground">Estimated Total:</span>
+              <span className="text-2xl font-serif font-semibold text-primary">${totalCost.toLocaleString()}</span>
             </div>
             {isEditable && (
               <>
@@ -631,14 +634,14 @@ export function EditorialItinerary({
                   variant="outline" 
                   onClick={handleOptimize} 
                   disabled={isOptimizing || days.length === 0} 
-                  className="gap-2"
+                  className="gap-2 border-accent/50 hover:bg-accent/10 hover:border-accent"
                 >
-                  {isOptimizing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
-                  {isOptimizing ? 'Optimizing...' : 'Optimize Routes & Prices'}
+                  {isOptimizing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4 text-accent" />}
+                  {isOptimizing ? 'Optimizing...' : 'Optimize'}
                 </Button>
-                <Button onClick={handleSave} disabled={isSaving || !hasChanges} className="gap-2">
+                <Button onClick={handleSave} disabled={isSaving || !hasChanges} className="gap-2 bg-primary hover:bg-primary/90 shadow-md">
                   {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSaving ? 'Saving...' : 'Save'}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
               </>
             )}
@@ -844,7 +847,7 @@ export function EditorialItinerary({
             {/* Hotel Info */}
             <Card className="bg-card border border-border overflow-hidden">
               {/* Hotel Image - use provided or placeholder */}
-              <div className="relative overflow-hidden h-40 bg-muted/30">
+              <div className="relative overflow-hidden h-48 bg-muted/30">
                 {hotelSelection?.imageUrl ? (
                   <img
                     src={hotelSelection.imageUrl}
@@ -868,30 +871,107 @@ export function EditorialItinerary({
                     <Hotel className="h-12 w-12 text-muted-foreground/30" />
                   </div>
                 )}
+                {/* Gradient overlay for better text readability */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                {/* Hotel name overlay */}
+                {hotelSelection?.name && (
+                  <div className="absolute bottom-3 left-4 right-4">
+                    <h3 className="font-serif text-xl text-white drop-shadow-lg">{hotelSelection.name}</h3>
+                    {hotelSelection.type && (
+                      <p className="text-white/80 text-sm">{hotelSelection.type}</p>
+                    )}
+                  </div>
+                )}
               </div>
               <CardContent className="p-6">
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-4">
                   <Hotel className="h-4 w-4 text-primary" />
-                  <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground">Accommodation</span>
+                  <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground font-medium">Accommodation</span>
                 </div>
                 {hotelSelection?.name ? (
-                  <div className="space-y-3 text-sm">
-                    <h3 className="font-serif text-lg">{hotelSelection.name}</h3>
-                    {hotelSelection.type && (
-                      <p className="text-muted-foreground">{hotelSelection.type}</p>
-                    )}
+                  <div className="space-y-4 text-sm">
+                    {/* Rating & Reviews */}
                     {hotelSelection.rating && (
-                      <div className="flex items-center gap-2">
-                        <Star className="h-4 w-4 text-amber-500 fill-current" />
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star 
+                              key={star} 
+                              className={cn(
+                                "h-4 w-4",
+                                star <= Math.floor(hotelSelection.rating || 0) 
+                                  ? "text-amber-500 fill-amber-500" 
+                                  : "text-muted"
+                              )} 
+                            />
+                          ))}
+                        </div>
                         <span className="font-medium">{hotelSelection.rating}</span>
                         {hotelSelection.reviewCount && (
-                          <span className="text-muted-foreground">({hotelSelection.reviewCount} reviews)</span>
+                          <span className="text-muted-foreground">({hotelSelection.reviewCount.toLocaleString()} reviews)</span>
                         )}
                       </div>
                     )}
-                    <div className="pt-3 border-t border-border flex justify-between">
-                      <span className="font-medium">{hotelSelection.nights || days.length} nights</span>
-                      <span className="font-serif text-lg">${hotelCost.toLocaleString()}</span>
+                    
+                    {/* Address */}
+                    {hotelSelection.address && (
+                      <div className="flex items-start gap-2 p-3 bg-secondary/30 rounded-lg">
+                        <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Address</p>
+                          <p className="text-foreground">{hotelSelection.address}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Amenities */}
+                    {hotelSelection.amenities && hotelSelection.amenities.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Amenities</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {hotelSelection.amenities.slice(0, 6).map((amenity, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs font-normal">
+                              {amenity}
+                            </Badge>
+                          ))}
+                          {hotelSelection.amenities.length > 6 && (
+                            <Badge variant="outline" className="text-xs font-normal">
+                              +{hotelSelection.amenities.length - 6} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Check-in/Check-out */}
+                    {(hotelSelection.checkIn || hotelSelection.checkOut) && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {hotelSelection.checkIn && (
+                          <div className="p-2 bg-secondary/20 rounded-lg text-center">
+                            <p className="text-xs text-muted-foreground">Check-in</p>
+                            <p className="font-medium">{hotelSelection.checkIn}</p>
+                          </div>
+                        )}
+                        {hotelSelection.checkOut && (
+                          <div className="p-2 bg-secondary/20 rounded-lg text-center">
+                            <p className="text-xs text-muted-foreground">Check-out</p>
+                            <p className="font-medium">{hotelSelection.checkOut}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Price Summary */}
+                    <div className="pt-4 border-t border-border">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-muted-foreground">{hotelSelection.nights || days.length} nights</p>
+                          {hotelSelection.pricePerNight && (
+                            <p className="text-xs text-muted-foreground">${hotelSelection.pricePerNight}/night</p>
+                          )}
+                        </div>
+                        <span className="font-serif text-2xl font-semibold text-primary">${hotelCost.toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -1063,11 +1143,13 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
         {/* Landing Info */}
         {arrivalTime && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <MapPin className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="font-medium text-sm">Land at {arrivalTime} ({arrivalAirport})</p>
+              <p className="font-medium text-sm">
+                Land at {arrivalTime}{arrivalAirport ? ` (${arrivalAirport})` : ''}
+              </p>
               <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
             </div>
           </div>
@@ -1151,38 +1233,46 @@ function DayCard({
   const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
 
   return (
-    <div className="border border-border bg-card overflow-hidden">
-      {/* Day Header - Editorial Style */}
-      <div className="p-6">
+    <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
+      {/* Day Header - Editorial Style with Color Accent */}
+      <div className="relative p-6 bg-gradient-to-r from-primary/5 via-transparent to-accent/5">
+        {/* Decorative accent bar */}
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-accent to-primary/50" />
+        
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <span className="text-4xl font-serif text-muted-foreground/30">
-              {String(day.dayNumber).padStart(2, '0')}
-            </span>
+            <div className="relative">
+              <span className="text-5xl font-serif font-light text-primary/40">
+                {String(day.dayNumber).padStart(2, '0')}
+              </span>
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+            </div>
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <h3 className="font-serif text-xl">{day.title || day.theme || `Day ${day.dayNumber}`}</h3>
+                <h3 className="font-serif text-xl font-medium text-foreground">{day.title || day.theme || `Day ${day.dayNumber}`}</h3>
                 {day.date && (
-                  <span className="text-sm text-muted-foreground">
+                  <Badge variant="secondary" className="text-xs font-normal bg-secondary/50">
                     {format(parseISO(day.date), 'EEEE, MMM d')}
-                  </span>
+                  </Badge>
                 )}
               </div>
               {day.description && (
-                <p className="text-sm text-muted-foreground">{day.description}</p>
+                <p className="text-sm text-muted-foreground italic">{day.description}</p>
               )}
             </div>
           </div>
 
           {/* Day Actions */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {totalCost > 0 && (
-              <span className="text-sm font-medium mr-3">${totalCost.toLocaleString()}</span>
+              <Badge variant="outline" className="text-sm font-semibold border-primary/30 bg-primary/5 text-primary">
+                ${totalCost.toLocaleString()}
+              </Badge>
             )}
             {day.weather && (
-              <div className="flex items-center gap-1 mr-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-secondary/50 text-sm">
                 {weatherIcons[day.weather.condition?.toLowerCase() || 'sunny']}
-                {day.weather.high && <span>{day.weather.high}°</span>}
+                {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
               </div>
             )}
             {isEditable && (
@@ -1191,20 +1281,20 @@ function DayCard({
                   variant="ghost"
                   size="icon"
                   onClick={() => onDayLock(dayIndex)}
-                  className="h-8 w-8"
+                  className="h-8 w-8 hover:bg-primary/10"
                   title={allLocked ? 'Unlock Day' : 'Lock Day'}
                 >
-                  {allLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                  {allLocked ? <Lock className="h-4 w-4 text-primary" /> : <Unlock className="h-4 w-4" />}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={onDayRegenerate}
                   disabled={isRegenerating}
-                  className="h-8 w-8"
+                  className="h-8 w-8 hover:bg-accent/10"
                   title="Regenerate Day"
                 >
-                  <RefreshCw className={cn("h-4 w-4", isRegenerating && "animate-spin")} />
+                  <RefreshCw className={cn("h-4 w-4", isRegenerating && "animate-spin text-accent")} />
                 </Button>
               </>
             )}
@@ -1250,20 +1340,30 @@ function DayCard({
             </div>
 
             {/* Day Footer */}
-            <div className="px-6 py-4 bg-secondary/20 border-t border-border">
+            <div className="px-6 py-4 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 border-t border-border">
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-6 text-muted-foreground">
-                  {day.estimatedWalkingTime && <span>Walking: {day.estimatedWalkingTime}</span>}
-                  {day.estimatedDistance && <span>Distance: {day.estimatedDistance}</span>}
+                  {day.estimatedWalkingTime && (
+                    <span className="flex items-center gap-1.5">
+                      <Route className="h-4 w-4" />
+                      Walking: {day.estimatedWalkingTime}
+                    </span>
+                  )}
+                  {day.estimatedDistance && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="h-4 w-4" />
+                      Distance: {day.estimatedDistance}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-4">
                   {isEditable && (
-                    <Button variant="outline" size="sm" onClick={onAddActivity} className="gap-1">
+                    <Button variant="outline" size="sm" onClick={onAddActivity} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
                       <Plus className="h-4 w-4" />
                       Add Activity
                     </Button>
                   )}
-                  <span className="font-medium text-foreground">
+                  <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
                     Day Total: {totalCost > 0 ? `$${totalCost.toLocaleString()}` : 'Free'}
                   </span>
                 </div>
@@ -1334,41 +1434,48 @@ function ActivityRow({
   }, [existingPhoto, activityType, showThumbnail]);
 
   return (
-    <div className={cn("flex items-stretch", !isLast && "border-b border-border")}>
+    <div className={cn(
+      "flex items-stretch group/activity hover:bg-secondary/10 transition-colors",
+      !isLast && "border-b border-border",
+      activity.isLocked && "bg-primary/5"
+    )}>
       {/* Time Column - Clickable for editing */}
       <div 
         className={cn(
-          "w-24 shrink-0 p-4 border-r border-border bg-secondary/10",
-          isEditable && "cursor-pointer hover:bg-secondary/20 transition-colors group"
+          "w-24 shrink-0 p-4 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5",
+          isEditable && "cursor-pointer hover:from-primary/10 hover:to-primary/5 transition-colors group"
         )}
         onClick={() => isEditable && toast.info('Time editing coming soon!')}
         title={isEditable ? "Click to edit time" : undefined}
       >
         <div className="flex items-center gap-1">
-          <span className="text-sm font-sans">{formatTime(time)}</span>
-          {isEditable && <Edit3 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+          <span className="text-sm font-medium text-foreground">{formatTime(time)}</span>
+          {isEditable && <Edit3 className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />}
         </div>
         {activity.endTime && (
           <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
         )}
         {activity.duration && (
-          <p className="text-xs text-muted-foreground mt-0.5">{activity.duration}</p>
+          <p className="text-xs text-primary/70 mt-0.5 font-medium">{activity.duration}</p>
         )}
       </div>
 
       {/* Thumbnail Column - Always show for non-transport, non-downtime activities */}
       {showThumbnail && (
-        <div className="w-20 h-20 shrink-0 border-r border-border bg-muted/30 overflow-hidden">
+        <div className="w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
           {thumbnailUrl && !thumbnailError ? (
-            <img
-              src={thumbnailUrl}
-              alt={activity.title}
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onError={() => setThumbnailError(true)}
-            />
+            <>
+              <img
+                src={thumbnailUrl}
+                alt={activity.title}
+                className="w-full h-full object-cover transition-transform group-hover/activity:scale-105"
+                loading="lazy"
+                onError={() => setThumbnailError(true)}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/activity:opacity-100 transition-opacity" />
+            </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/50 to-secondary/20 text-primary/50">
               {style.icon}
             </div>
           )}
@@ -1379,24 +1486,29 @@ function ActivityRow({
       <div className="flex-1 p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-muted-foreground">{style.icon}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wide">{style.label}</span>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
+              <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
               {rating && (
-                <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                <Badge variant="secondary" className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none">
+                  <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
                   {rating.toFixed(1)}
-                </span>
+                </Badge>
+              )}
+              {activity.bookingRequired && (
+                <Badge variant="outline" className="text-xs border-accent/50 text-accent">
+                  Booking Required
+                </Badge>
               )}
             </div>
-            <h4 className="font-medium text-foreground">{activity.title}</h4>
+            <h4 className="font-serif text-lg font-medium text-foreground">{activity.title}</h4>
             {activity.description && (
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{activity.description}</p>
+              <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
             )}
             {activity.location?.name && (
-              <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                <MapPin className="h-3 w-3" />
-                {activity.location.name}
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                <MapPin className="h-3.5 w-3.5 text-primary/60" />
+                <span>{activity.location.name}</span>
                 {activity.location.address && activity.location.address !== activity.location.name && (
                   <span className="text-muted-foreground/70 truncate max-w-[200px]">
                     , {activity.location.address}
