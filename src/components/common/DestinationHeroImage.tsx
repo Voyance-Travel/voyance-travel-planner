@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import { useHeroImage } from '@/services/destinationImagesAPI';
-import { getDestinationImage, hasCuratedImages } from '@/utils/destinationImages';
 
 interface DestinationHeroImageProps {
   destinationId?: string;
@@ -34,20 +33,21 @@ function generateGradientDataUrl(label: string): string {
     <text x="50%" y="50%" font-family="system-ui" font-size="52" fill="white" fill-opacity="0.28" text-anchor="middle" dy=".35em">${label}</text>
   </svg>`;
 
-  // btoa is available in the browser
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
 /**
- * Extract city name from destination string (e.g., "Paris, France" -> "paris")
+ * DestinationHeroImage
+ * 
+ * Uses React Query with long staleTime (1 hour) to avoid refetching.
+ * The backend caches Google Places images in curated_images table for 90 days.
+ * 
+ * Flow:
+ * 1. Check React Query cache (in-memory, instant)
+ * 2. If miss, call backend which checks curated_images DB table (cached Google Places)
+ * 3. If DB miss, backend fetches from Google Places and caches for 90 days
+ * 4. Gradient fallback if all else fails
  */
-function extractCityKey(destinationName: string): string {
-  // Handle "City, Country" format
-  const city = destinationName.split(',')[0].trim().toLowerCase();
-  // Handle slug format (e.g., "new-york")
-  return city.replace(/\s+/g, '-');
-}
-
 export default function DestinationHeroImage({
   destinationId,
   destinationName,
@@ -55,30 +55,14 @@ export default function DestinationHeroImage({
   className,
   overlayGradient = '',
 }: DestinationHeroImageProps) {
-  // First check if we have curated images - these are instant, no API call needed
-  const cityKey = extractCityKey(destinationName);
-  const hasCurated = hasCuratedImages(cityKey);
-  
-  // Only call the API if we don't have curated images
-  const { data } = useHeroImage(
-    hasCurated ? undefined : destinationId, 
-    hasCurated ? undefined : destinationName
-  );
+  // useHeroImage has staleTime of 1 hour - won't refetch on every render
+  // Backend checks curated_images table first (90-day cache of Google Places images)
+  const { data, isLoading } = useHeroImage(destinationId, destinationName);
 
-  const src = useMemo(() => {
-    // Priority 1: Curated static images (instant, no API call)
-    if (hasCurated) {
-      return getDestinationImage(cityKey);
-    }
-    
-    // Priority 2: API-fetched image
-    if (data?.url) {
-      return data.url;
-    }
-    
-    // Priority 3: Gradient fallback
-    return generateGradientDataUrl(destinationName);
-  }, [hasCurated, cityKey, data?.url, destinationName]);
+  const fallback = useMemo(() => generateGradientDataUrl(destinationName), [destinationName]);
+  
+  // Use cached/fetched image, or gradient fallback
+  const src = data?.url || fallback;
 
   return (
     <HeroImageWithFallback
