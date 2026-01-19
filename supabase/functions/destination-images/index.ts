@@ -466,6 +466,89 @@ async function cacheImage(
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+// Clean activity title to extract searchable venue name
+function extractVenueName(activityTitle: string): { cleanName: string; shouldSkip: boolean } {
+  const title = activityTitle.trim();
+  
+  // Activities that should use category fallback instead of search
+  const skipPatterns = [
+    /^(afternoon|morning|evening)\s+(siesta|rest|recharge|relaxation|break)/i,
+    /^(free\s+time|leisure|downtime|rest\s+day)/i,
+    /^(hotel\s+check[\-\s]?(in|out)|check[\-\s]?(in|out)\s+at)/i,
+    /^(arrival|departure|transfer|airport)/i,
+    /^(pack|unpack|settle\s+in)/i,
+    /^(breakfast|lunch|dinner)\s+(break|time)$/i, // Just "Lunch break" not "Lunch at Café X"
+  ];
+  
+  for (const pattern of skipPatterns) {
+    if (pattern.test(title)) {
+      return { cleanName: title, shouldSkip: true };
+    }
+  }
+  
+  // Extract venue from patterns like "Dinner at X", "Visit X", "Tour of X", etc.
+  const extractPatterns = [
+    /^(?:dinner|lunch|breakfast|brunch|meal)\s+(?:at|@)\s+(.+)/i,
+    /^(?:check[\-\s]?in|stay)\s+(?:at|@)\s+(.+)/i,
+    /^(?:visit|explore|tour|see|experience)\s+(?:the\s+)?(.+)/i,
+    /^(?:shopping|browse)\s+(?:at|@)\s+(.+)/i,
+    /^(.+?)\s+(?:exploration|experience|tour|visit)$/i,
+    /^(.+?)\s+(?:for\s+(?:dinner|lunch|breakfast))$/i,
+  ];
+  
+  for (const pattern of extractPatterns) {
+    const match = title.match(pattern);
+    if (match && match[1]) {
+      const extracted = match[1].trim();
+      // Only use if it looks like a venue name (not generic)
+      if (extracted.length > 3 && !/^(the|a|an|some|good)$/i.test(extracted)) {
+        return { cleanName: extracted, shouldSkip: false };
+      }
+    }
+  }
+  
+  return { cleanName: title, shouldSkip: false };
+}
+
+// High-quality category fallback images (curated Unsplash photos)
+const CATEGORY_FALLBACKS: Record<string, string> = {
+  dining: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80", // Elegant restaurant
+  restaurant: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80",
+  food: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", // Food plate
+  sightseeing: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80", // Scenic view
+  cultural: "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=1200&q=80", // Museum interior
+  museum: "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=1200&q=80",
+  shopping: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&q=80", // Shopping street
+  relaxation: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=1200&q=80", // Spa/wellness
+  spa: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=1200&q=80",
+  accommodation: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80", // Hotel room
+  hotel: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80",
+  transport: "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=1200&q=80", // Travel transport
+  activity: "https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1200&q=80", // Adventure activity
+  beach: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80", // Beach sunset
+  nature: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80", // Nature landscape
+  nightlife: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1200&q=80", // Night scene
+  entertainment: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&q=80", // Concert/show
+  default: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&q=80", // Travel general
+};
+
+function getCategoryFallbackImage(category: string, venueName: string): DestinationImage {
+  const normalizedCategory = (category || 'default').toLowerCase();
+  const fallbackUrl = CATEGORY_FALLBACKS[normalizedCategory] || CATEGORY_FALLBACKS.default;
+  
+  return {
+    id: `fallback-${normalizedCategory}-${Date.now()}`,
+    url: fallbackUrl,
+    alt: `${venueName} - ${category} photo`,
+    type: "activity",
+    source: "fallback",
+    width: 1200,
+    height: 800,
+    attribution: "Unsplash",
+  };
+}
+
 async function getDestinationName(supabase: any, destinationId: string): Promise<string | null> {
   try {
     const { data } = await supabase
@@ -523,16 +606,27 @@ async function fetchImageTiered(
   venueName: string,
   destination: string,
   entityType: string,
+  category?: string,
   googleApiKey?: string,
   tripAdvisorApiKey?: string,
   lovableApiKey?: string,
   skipCache?: boolean
 ): Promise<DestinationImage> {
+  // Step 1: Clean the venue name and check if we should skip API search
+  const { cleanName, shouldSkip } = extractVenueName(venueName);
+  
+  if (shouldSkip) {
+    console.log(`[Images] Skipping API search for generic activity: "${venueName}", using category fallback`);
+    return getCategoryFallbackImage(category || 'activity', venueName);
+  }
+  
+  console.log(`[Images] Searching for: "${cleanName}" (original: "${venueName}")`);
+  
   const candidates: DestinationImage[] = [];
 
   // TIER 1: Check cache first (unless skipCache is true)
   if (!skipCache) {
-    const cached = await checkCuratedCache(supabase, entityType, venueName, destination);
+    const cached = await checkCuratedCache(supabase, entityType, cleanName, destination);
     if (cached) {
       return cached;
     }
@@ -540,7 +634,7 @@ async function fetchImageTiered(
 
   // TIER 2: Google Places (best for real venue photos)
   if (googleApiKey) {
-    const googleImage = await getGooglePlacesPhoto(venueName, destination, googleApiKey);
+    const googleImage = await getGooglePlacesPhoto(cleanName, destination, googleApiKey);
     if (googleImage) {
       candidates.push(googleImage);
     }
@@ -548,7 +642,7 @@ async function fetchImageTiered(
 
   // TIER 3: TripAdvisor (good for attractions/restaurants)
   if (tripAdvisorApiKey && candidates.length === 0) {
-    const tripAdvisorImage = await getTripAdvisorPhoto(venueName, destination, tripAdvisorApiKey);
+    const tripAdvisorImage = await getTripAdvisorPhoto(cleanName, destination, tripAdvisorApiKey);
     if (tripAdvisorImage) {
       candidates.push(tripAdvisorImage);
     }
@@ -556,7 +650,7 @@ async function fetchImageTiered(
 
   // TIER 4: Wikimedia (free, good for landmarks)
   if (candidates.length === 0) {
-    const wikimediaImage = await getWikimediaPhoto(venueName, destination);
+    const wikimediaImage = await getWikimediaPhoto(cleanName, destination);
     if (wikimediaImage) {
       candidates.push(wikimediaImage);
     }
@@ -568,21 +662,28 @@ async function fetchImageTiered(
     
     // If multiple candidates and AI available, rank them
     if (candidates.length > 1 && lovableApiKey) {
-      const ranked = await rankImageCandidates(candidates, venueName, lovableApiKey);
+      const ranked = await rankImageCandidates(candidates, cleanName, lovableApiKey);
       if (ranked) {
         bestImage = ranked;
       }
     }
 
-    // Cache the result
+    // Cache the result (use original venueName for cache key)
     await cacheImage(supabase, entityType, venueName, destination, bestImage, 0.9);
     
     return bestImage;
   }
 
-  // TIER 5: AI Generation (last resort)
+  // TIER 5: Category-specific fallback (high-quality curated images)
+  // Skip AI generation for most cases - curated fallbacks are faster and more reliable
+  if (category) {
+    console.log(`[Images] No API results, using category fallback for: "${venueName}" (category: ${category})`);
+    return getCategoryFallbackImage(category, venueName);
+  }
+
+  // TIER 6: AI Generation (only if no category fallback available)
   if (lovableApiKey) {
-    const aiImage = await generateAIImage(venueName, destination, lovableApiKey);
+    const aiImage = await generateAIImage(cleanName, destination, lovableApiKey);
     if (aiImage) {
       // Cache AI images with lower quality score
       await cacheImage(supabase, entityType, venueName, destination, aiImage, 0.5);
@@ -590,7 +691,7 @@ async function fetchImageTiered(
     }
   }
 
-  // TIER 6: Gradient fallback (absolute last resort)
+  // TIER 7: Gradient fallback (absolute last resort)
   console.log("[Images] Using gradient fallback for:", venueName);
   return generateFallbackGradient(venueName);
 }
@@ -681,6 +782,7 @@ serve(async (req) => {
       searchSubject,
       contextDestination,
       entityType,
+      params.category, // Pass category for fallback images
       googleApiKey,
       tripAdvisorApiKey,
       lovableApiKey,
