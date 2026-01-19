@@ -389,6 +389,7 @@ export function EditorialItinerary({
   };
 
   // Auto-save when there are changes (debounced)
+  // Supports both database trips and localStorage demo trips
   useEffect(() => {
     if (!hasChanges || !isEditable) return;
     
@@ -400,19 +401,60 @@ export function EditorialItinerary({
           savedAt: new Date().toISOString(),
         };
 
-        const { error } = await supabase
+        // Try database first
+        const { data: existingTrip, error: checkError } = await supabase
           .from('trips')
-          .update({
-            itinerary_data: itineraryData,
-            itinerary_status: 'ready',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', tripId);
+          .select('id')
+          .eq('id', tripId)
+          .maybeSingle();
 
-        if (!error) {
-          setHasChanges(false);
-          setLastSaved(new Date());
-          console.log('[EditorialItinerary] Auto-saved successfully');
+        if (existingTrip && !checkError) {
+          // Trip exists in database - save there
+          const { error } = await supabase
+            .from('trips')
+            .update({
+              itinerary_data: itineraryData,
+              itinerary_status: 'ready',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', tripId);
+
+          if (!error) {
+            setHasChanges(false);
+            setLastSaved(new Date());
+            console.log('[EditorialItinerary] Auto-saved to database');
+          } else {
+            console.error('[EditorialItinerary] Database save failed:', error);
+          }
+        } else {
+          // Trip is in localStorage - save there
+          const localStorageKey = 'voyance_demo_trips';
+          const demoTripsRaw = localStorage.getItem(localStorageKey);
+          const demoTrips = demoTripsRaw ? JSON.parse(demoTripsRaw) : {};
+          
+          if (demoTrips[tripId]) {
+            demoTrips[tripId].itinerary_data = itineraryData;
+            demoTrips[tripId].itinerary_status = 'ready';
+            demoTrips[tripId].updated_at = new Date().toISOString();
+            localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
+            setHasChanges(false);
+            setLastSaved(new Date());
+            console.log('[EditorialItinerary] Auto-saved to localStorage');
+          } else {
+            // Try legacy format
+            const legacyKey = `trip_${tripId}`;
+            const legacyRaw = localStorage.getItem(legacyKey);
+            if (legacyRaw) {
+              const legacyTrip = JSON.parse(legacyRaw);
+              legacyTrip.itinerary_data = itineraryData;
+              legacyTrip.itinerary_status = 'ready';
+              legacyTrip.updated_at = new Date().toISOString();
+              localStorage.setItem(legacyKey, JSON.stringify(legacyTrip));
+              setHasChanges(false);
+              setLastSaved(new Date());
+              console.log('[EditorialItinerary] Auto-saved to legacy localStorage');
+            }
+          }
         }
       } catch (err) {
         console.error('[EditorialItinerary] Auto-save failed:', err);
@@ -435,20 +477,61 @@ export function EditorialItinerary({
         savedAt: new Date().toISOString(),
       };
 
-      const { error } = await supabase
+      // Check if trip exists in database
+      const { data: existingTrip } = await supabase
         .from('trips')
-        .update({
-          itinerary_data: itineraryData,
-          itinerary_status: 'ready',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', tripId);
+        .select('id')
+        .eq('id', tripId)
+        .maybeSingle();
 
-      if (error) throw error;
-      if (onSave) await onSave(days);
-      
-      setHasChanges(false);
-      toast.success('Itinerary saved!');
+      let saved = false;
+
+      if (existingTrip) {
+        // Save to database
+        const { error } = await supabase
+          .from('trips')
+          .update({
+            itinerary_data: itineraryData,
+            itinerary_status: 'ready',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', tripId);
+
+        if (error) throw error;
+        saved = true;
+      } else {
+        // Save to localStorage
+        const localStorageKey = 'voyance_demo_trips';
+        const demoTripsRaw = localStorage.getItem(localStorageKey);
+        const demoTrips = demoTripsRaw ? JSON.parse(demoTripsRaw) : {};
+        
+        if (demoTrips[tripId]) {
+          demoTrips[tripId].itinerary_data = itineraryData;
+          demoTrips[tripId].itinerary_status = 'ready';
+          demoTrips[tripId].updated_at = new Date().toISOString();
+          localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
+          saved = true;
+        } else {
+          // Try legacy format
+          const legacyKey = `trip_${tripId}`;
+          const legacyRaw = localStorage.getItem(legacyKey);
+          if (legacyRaw) {
+            const legacyTrip = JSON.parse(legacyRaw);
+            legacyTrip.itinerary_data = itineraryData;
+            localStorage.setItem(legacyKey, JSON.stringify(legacyTrip));
+            saved = true;
+          }
+        }
+      }
+
+      if (saved) {
+        if (onSave) await onSave(days);
+        setHasChanges(false);
+        setLastSaved(new Date());
+        toast.success('Itinerary saved!');
+      } else {
+        toast.error('Could not find trip to save');
+      }
     } catch (err) {
       console.error('Save error:', err);
       toast.error('Failed to save');
@@ -2118,10 +2201,6 @@ function ActivityRow({
             <div className="flex items-center gap-2 mb-1.5">
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
-              {/* Show venue name prominently for dining */}
-              {venueNameForDining && (
-                <span className="text-sm font-medium text-foreground">@ {venueNameForDining}</span>
-              )}
               {rating && (
                 <Badge variant="secondary" className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none">
                   <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
@@ -2134,11 +2213,20 @@ function ActivityRow({
                 </Badge>
               )}
             </div>
-            <h4 className="font-serif text-lg font-medium text-foreground">{activity.title}</h4>
-            {activity.description && (
+            {/* For dining: Show restaurant name as the main title, activity title as subtitle */}
+            {venueNameForDining ? (
+              <>
+                <h4 className="font-serif text-lg font-medium text-foreground">{venueNameForDining}</h4>
+                <p className="text-sm text-muted-foreground mt-0.5 italic">{activity.title}</p>
+              </>
+            ) : (
+              <h4 className="font-serif text-lg font-medium text-foreground">{activity.title}</h4>
+            )}
+            {activity.description && !venueNameForDining && (
               <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
             )}
-            {activity.location?.name && (
+            {/* Show location for non-dining activities */}
+            {activity.location?.name && !venueNameForDining && (
               <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
                 <MapPin className="h-3.5 w-3.5 text-primary/60" />
                 <span>{activity.location.name}</span>
