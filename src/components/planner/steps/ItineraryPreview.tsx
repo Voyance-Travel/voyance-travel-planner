@@ -223,25 +223,18 @@ export default function ItineraryPreview({
 
   // Start generation after transport preferences are set
   const handleStartGeneration = () => {
-    if (!tripId || !canGenerate) return;
+    if (!tripId) return; // Removed canGenerate check - gate temporarily disabled
     
     setHasSetTransport(true);
     
-    // Consume quota before generating
-    consumeUsage.mutate(
-      { metricKey: 'ai.itinerary.generate', amount: 1 },
-      {
-        onSuccess: () => {
-          setHasConsumedQuota(true);
-          // Pass transport preferences to generation
-          generateItinerary({
-            transportationModes: transportPref.modes,
-            primaryTransport: transportPref.primaryMode,
-            hasRentalCar: !!rentalCar,
-          });
-        },
-      }
-    );
+    // Skip quota consumption for now - gate temporarily disabled
+    setHasConsumedQuota(true);
+    // Pass transport preferences to generation
+    generateItinerary({
+      transportationModes: transportPref.modes,
+      primaryTransport: transportPref.primaryMode,
+      hasRentalCar: !!rentalCar,
+    });
   };
 
   const isReady = currentStep === 'complete' && days.length > 0;
@@ -267,38 +260,8 @@ export default function ItineraryPreview({
     }
   };
 
-  // Check if user can generate (has quota)
-  if (!isLoadingEntitlements && !canGenerate && !isReady && !isGenerating) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-4xl mx-auto"
-      >
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-display font-medium text-foreground mb-2">
-            Your Trip Preview
-          </h1>
-          <p className="text-muted-foreground">
-            AI itinerary for {tripDetails.destination}
-          </p>
-        </div>
-        
-        <UpgradePrompt
-          feature="AI itinerary generations"
-          reason={remainingGenerations === 0 ? 'limit_reached' : 'disabled'}
-          remaining={remainingGenerations ?? undefined}
-          limit={entitlements?.['ai.itinerary.generate_quota_month']?.limit}
-        />
-        
-        <div className="flex justify-start mt-8">
-          <Button variant="outline" onClick={onBack} className="h-12 px-6">
-            Back
-          </Button>
-        </div>
-      </motion.div>
-    );
-  }
+  // TEMPORARILY DISABLED: Premium gate removed - will be re-enabled later
+  // Original check: if (!isLoadingEntitlements && !canGenerate && !isReady && !isGenerating) { ... }
 
   // Show error state
   if (error) {
@@ -427,7 +390,6 @@ export default function ItineraryPreview({
           </Button>
           <Button
             onClick={handleStartGeneration}
-            disabled={!canGenerate}
             className="h-12 px-8 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
           >
             <Sparkles className="w-4 h-4" />
