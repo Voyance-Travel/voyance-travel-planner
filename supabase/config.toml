@@ -77,3 +77,9 @@ verify_jwt = false
 
 [functions.optimize-itinerary]
 verify_jwt = false
+
+[functions.book-activity]
+verify_jwt = false
+
+[functions.verify-payment]
+verify_jwt = false

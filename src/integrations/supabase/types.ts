@@ -1031,6 +1031,8 @@ export type Database = {
           currency: string | null
           description: string | null
           end_time: string | null
+          external_booking_id: string | null
+          external_booking_url: string | null
           id: string
           itinerary_day_id: string | null
           latitude: number | null
@@ -1039,6 +1041,7 @@ export type Database = {
           longitude: number | null
           metadata: Json | null
           operating_hours: Json | null
+          payment_status: string | null
           photos: Json | null
           place_id: string | null
           rating_count: number | null
@@ -1066,6 +1069,8 @@ export type Database = {
           currency?: string | null
           description?: string | null
           end_time?: string | null
+          external_booking_id?: string | null
+          external_booking_url?: string | null
           id?: string
           itinerary_day_id?: string | null
           latitude?: number | null
@@ -1074,6 +1079,7 @@ export type Database = {
           longitude?: number | null
           metadata?: Json | null
           operating_hours?: Json | null
+          payment_status?: string | null
           photos?: Json | null
           place_id?: string | null
           rating_count?: number | null
@@ -1101,6 +1107,8 @@ export type Database = {
           currency?: string | null
           description?: string | null
           end_time?: string | null
+          external_booking_id?: string | null
+          external_booking_url?: string | null
           id?: string
           itinerary_day_id?: string | null
           latitude?: number | null
@@ -1109,6 +1117,7 @@ export type Database = {
           longitude?: number | null
           metadata?: Json | null
           operating_hours?: Json | null
+          payment_status?: string | null
           photos?: Json | null
           place_id?: string | null
           rating_count?: number | null
@@ -1166,6 +1175,77 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_payments: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          external_booking_id: string | null
+          external_booking_url: string | null
+          external_provider: string | null
+          id: string
+          item_id: string
+          item_name: string
+          item_type: string
+          paid_at: string | null
+          quantity: number
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          currency?: string
+          external_booking_id?: string | null
+          external_booking_url?: string | null
+          external_provider?: string | null
+          id?: string
+          item_id: string
+          item_name: string
+          item_type: string
+          paid_at?: string | null
+          quantity?: number
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          external_booking_id?: string | null
+          external_booking_url?: string | null
+          external_provider?: string | null
+          id?: string
+          item_id?: string
+          item_name?: string
+          item_type?: string
+          paid_at?: string | null
+          quantity?: number
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_payments_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
