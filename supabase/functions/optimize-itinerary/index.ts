@@ -73,6 +73,7 @@ interface OptimizeRequest {
   currency?: string;
   travelers?: number;
   nights?: number;
+  budgetTier?: string;
 }
 
 interface UserItineraryPreferences {
@@ -236,30 +237,56 @@ function fillGaps(activities: Activity[], minGapMinutes: number = DEFAULT_MIN_GA
 }
 
 // =============================================================================
-// ALGORITHM 4: TAG GENERATION
+// ALGORITHM 4: TAG GENERATION WITH CACHING
 // Generate comprehensive tags based on category, keywords, cost, time
+// Tags are cached by activity ID to avoid regenerating for the same content
 // =============================================================================
+
+// In-memory tag cache (persists for function lifetime)
+const tagCache = new Map<string, { tags: string[]; hash: string }>();
+
+function hashActivityContent(title: string, description: string | undefined, category: string | undefined): string {
+  return `${title}|${description || ''}|${category || ''}`.toLowerCase();
+}
 
 function generateTags(
   title: string,
   description: string | undefined,
   category: string | undefined,
   existingTags: string[] = [],
-  cost: number | null | undefined
+  cost: number | null | undefined,
+  activityId?: string
 ): string[] {
+  // Check cache first
+  const contentHash = hashActivityContent(title, description, category);
+  if (activityId) {
+    const cached = tagCache.get(activityId);
+    if (cached && cached.hash === contentHash && cached.tags.length >= 5) {
+      return cached.tags;
+    }
+  }
+  
+  // If AI already provided good tags (5+), use them and cache
+  if (existingTags.length >= 5) {
+    if (activityId) {
+      tagCache.set(activityId, { tags: existingTags, hash: contentHash });
+    }
+    return existingTags;
+  }
+  
   const tags = new Set<string>(existingTags);
   const combined = `${title} ${description || ''}`.toLowerCase();
 
   // Category-based tags
   const categoryTagMap: Record<string, string[]> = {
-    sightseeing: ['sightseeing', 'attraction', 'landmark'],
-    dining: ['food', 'restaurant', 'dining'],
-    cultural: ['culture', 'history', 'art'],
-    shopping: ['shopping', 'market', 'souvenirs'],
-    relaxation: ['relaxation', 'leisure', 'chill'],
-    transport: ['transport', 'travel'],
-    accommodation: ['accommodation', 'hotel'],
-    activity: ['activity', 'experience'],
+    sightseeing: ['sightseeing', 'attraction', 'landmark', 'must-see'],
+    dining: ['food', 'restaurant', 'dining', 'culinary'],
+    cultural: ['culture', 'history', 'art', 'educational'],
+    shopping: ['shopping', 'market', 'souvenirs', 'local-goods'],
+    relaxation: ['relaxation', 'leisure', 'chill', 'wellness'],
+    transport: ['transport', 'travel', 'logistics'],
+    accommodation: ['accommodation', 'hotel', 'lodging'],
+    activity: ['activity', 'experience', 'adventure'],
   };
 
   const catLower = (category || '').toLowerCase();
@@ -267,22 +294,36 @@ function generateTags(
     categoryTagMap[catLower].forEach(t => tags.add(t));
   }
 
-  // Keyword-based tags
+  // Keyword-based tags (expanded)
   const keywordMap: Record<string, string[]> = {
-    museum: ['museum', 'art', 'history'],
-    park: ['park', 'outdoor', 'nature'],
-    temple: ['temple', 'religious', 'spiritual'],
-    palace: ['palace', 'royal', 'historic'],
-    market: ['market', 'shopping', 'local'],
-    beach: ['beach', 'seaside', 'outdoor'],
-    tower: ['tower', 'views', 'landmark'],
-    restaurant: ['restaurant', 'food', 'dining'],
-    cafe: ['cafe', 'coffee', 'casual'],
-    bar: ['bar', 'drinks', 'nightlife'],
-    tour: ['tour', 'guided', 'group'],
-    walk: ['walking', 'outdoor', 'exploration'],
-    cruise: ['cruise', 'boat', 'water'],
-    show: ['show', 'entertainment', 'performance'],
+    museum: ['museum', 'art', 'history', 'educational', 'indoor'],
+    gallery: ['gallery', 'art', 'exhibition', 'indoor'],
+    park: ['park', 'outdoor', 'nature', 'scenic', 'photo-op'],
+    garden: ['garden', 'nature', 'peaceful', 'outdoor'],
+    temple: ['temple', 'religious', 'spiritual', 'historic'],
+    church: ['church', 'religious', 'architecture', 'historic'],
+    palace: ['palace', 'royal', 'historic', 'architecture', 'must-see'],
+    castle: ['castle', 'historic', 'medieval', 'landmark'],
+    market: ['market', 'shopping', 'local', 'authentic', 'food'],
+    beach: ['beach', 'seaside', 'outdoor', 'relaxation', 'scenic'],
+    tower: ['tower', 'views', 'landmark', 'photo-op', 'panoramic'],
+    viewpoint: ['viewpoint', 'scenic', 'panoramic', 'photo-op'],
+    restaurant: ['restaurant', 'food', 'dining', 'culinary'],
+    cafe: ['cafe', 'coffee', 'casual', 'cozy'],
+    bar: ['bar', 'drinks', 'nightlife', 'evening'],
+    pub: ['pub', 'drinks', 'local', 'casual'],
+    tour: ['tour', 'guided', 'group', 'educational'],
+    walk: ['walking', 'outdoor', 'exploration', 'exercise'],
+    cruise: ['cruise', 'boat', 'water', 'scenic', 'romantic'],
+    show: ['show', 'entertainment', 'performance', 'evening'],
+    theater: ['theater', 'performance', 'culture', 'evening'],
+    concert: ['concert', 'music', 'entertainment', 'evening'],
+    spa: ['spa', 'wellness', 'relaxation', 'luxury', 'pampering'],
+    sunset: ['sunset', 'romantic', 'scenic', 'evening', 'photo-op'],
+    sunrise: ['sunrise', 'morning', 'scenic', 'early-bird', 'photo-op'],
+    breakfast: ['breakfast', 'morning', 'food', 'start-of-day'],
+    lunch: ['lunch', 'afternoon', 'food', 'midday'],
+    dinner: ['dinner', 'evening', 'food', 'culinary'],
   };
 
   for (const [keyword, keywordTags] of Object.entries(keywordMap)) {
@@ -402,8 +443,9 @@ async function geocodeAddress(
 }
 
 // =============================================================================
-// ALGORITHM 7: VENUE VERIFICATION (Google Places API)
-// Verify AI-generated venues exist with confidence scoring
+// ALGORITHM 7: VENUE VERIFICATION (Lightweight Version)
+// Uses string similarity + coordinate validation instead of expensive API calls
+// Only falls back to Google Places if explicitly enabled and has coordinates mismatch
 // =============================================================================
 
 interface VerificationResult {
@@ -417,6 +459,20 @@ interface VerificationResult {
   formattedAddress?: string;
   openingHours?: string[];
 }
+
+// Known landmark coordinates for validation (expandable cache)
+const LANDMARK_CACHE: Record<string, { lat: number; lng: number; radius: number }> = {
+  // Paris
+  'eiffel tower': { lat: 48.8584, lng: 2.2945, radius: 0.01 },
+  'louvre': { lat: 48.8606, lng: 2.3376, radius: 0.01 },
+  'notre dame': { lat: 48.8530, lng: 2.3499, radius: 0.01 },
+  'arc de triomphe': { lat: 48.8738, lng: 2.2950, radius: 0.01 },
+  // London
+  'tower of london': { lat: 51.5081, lng: -0.0759, radius: 0.01 },
+  'big ben': { lat: 51.5007, lng: -0.1246, radius: 0.01 },
+  'british museum': { lat: 51.5194, lng: -0.1270, radius: 0.01 },
+  // More can be added dynamically
+};
 
 function calculateStringSimilarity(str1: string, str2: string): number {
   const s1 = str1.toLowerCase().replace(/[^a-z0-9\s]/g, '');
@@ -432,6 +488,44 @@ function calculateStringSimilarity(str1: string, str2: string): number {
   return totalWords > 0 ? matchingWords / totalWords : 0;
 }
 
+// Lightweight verification using known landmarks + coordinate validation
+function verifyVenueLightweight(
+  venueName: string,
+  location?: { lat?: number; lng?: number }
+): VerificationResult {
+  const nameLower = venueName.toLowerCase();
+  
+  // Check against known landmarks
+  for (const [landmark, coords] of Object.entries(LANDMARK_CACHE)) {
+    if (nameLower.includes(landmark) || calculateStringSimilarity(nameLower, landmark) > 0.7) {
+      // If we have coordinates, check if they're close to known location
+      if (location?.lat && location?.lng) {
+        const latDiff = Math.abs(location.lat - coords.lat);
+        const lngDiff = Math.abs(location.lng - coords.lng);
+        if (latDiff < coords.radius && lngDiff < coords.radius) {
+          return { isValid: true, confidence: 0.95, location: { lat: coords.lat, lng: coords.lng } };
+        }
+      }
+      // Trust the landmark name even without exact coordinate match
+      return { isValid: true, confidence: 0.85, location: { lat: coords.lat, lng: coords.lng } };
+    }
+  }
+  
+  // For non-landmarks, trust AI coordinates if provided
+  if (location?.lat && location?.lng) {
+    // Basic sanity check: lat should be -90 to 90, lng should be -180 to 180
+    const validLat = location.lat >= -90 && location.lat <= 90;
+    const validLng = location.lng >= -180 && location.lng <= 180;
+    if (validLat && validLng) {
+      return { isValid: true, confidence: 0.75, location: { lat: location.lat, lng: location.lng } };
+    }
+  }
+  
+  // Can't verify - mark as unverified but not invalid
+  return { isValid: false, confidence: 0.5 };
+}
+
+// Full verification (expensive - only use when explicitly enabled)
 async function verifyVenue(
   venueName: string,
   destination: string,
@@ -865,117 +959,132 @@ async function getOptimalTransport(
 }
 
 // =============================================================================
-// ALGORITHM 7: BATCHED ENRICHMENT
-// Process activities in batches to avoid connection pool exhaustion
+// ALGORITHM 7: LIGHT & QUICK COST ESTIMATION
+// AI should already provide costs - this is just a fallback using category estimates
+// No API calls needed - fast and lightweight
 // =============================================================================
 
-const BATCH_SIZE = 10;
+// Category-based cost estimates (per person, USD)
+const CATEGORY_COST_ESTIMATES: Record<string, number> = {
+  // Dining categories
+  dining: 45,
+  restaurant: 50,
+  cafe: 15,
+  food: 25,
+  breakfast: 20,
+  lunch: 30,
+  dinner: 60,
+  // Cultural & sightseeing
+  cultural: 20,
+  museum: 20,
+  sightseeing: 15,
+  attraction: 20,
+  landmark: 0, // Often free to view externally
+  // Activities
+  activity: 35,
+  tour: 65,
+  entertainment: 50,
+  show: 75,
+  // Shopping & relaxation
+  shopping: 0, // Variable, don't estimate
+  relaxation: 50,
+  spa: 100,
+  // Transport & accommodation
+  transport: 0,
+  accommodation: 0,
+};
 
-async function batchedCostLookup(
+// Keyword-based adjustments
+const KEYWORD_COST_MODIFIERS: Record<string, number> = {
+  free: 0,
+  'free admission': 0,
+  'free entry': 0,
+  'free tour': 0,
+  luxury: 1.8,
+  premium: 1.5,
+  upscale: 1.5,
+  'fine dining': 2.0,
+  budget: 0.6,
+  cheap: 0.5,
+  casual: 0.7,
+};
+
+function estimateCostFromCategory(
+  activity: Activity,
+  budgetTier?: string
+): { amount: number; currency: string } | null {
+  const category = (activity.category || activity.type || '').toLowerCase();
+  const titleLower = (activity.title || '').toLowerCase();
+  const descLower = (activity.description || '').toLowerCase();
+  const combined = `${titleLower} ${descLower}`;
+  
+  // Check for explicit free keywords first
+  for (const [keyword, modifier] of Object.entries(KEYWORD_COST_MODIFIERS)) {
+    if (combined.includes(keyword) && modifier === 0) {
+      return { amount: 0, currency: 'USD' };
+    }
+  }
+  
+  // Get base cost from category
+  let baseCost = CATEGORY_COST_ESTIMATES[category];
+  
+  // If no direct match, try to infer from keywords
+  if (baseCost === undefined) {
+    if (combined.includes('museum') || combined.includes('gallery')) baseCost = 20;
+    else if (combined.includes('restaurant') || combined.includes('dinner')) baseCost = 55;
+    else if (combined.includes('cafe') || combined.includes('coffee')) baseCost = 12;
+    else if (combined.includes('tour') || combined.includes('guided')) baseCost = 60;
+    else if (combined.includes('park') || combined.includes('garden')) baseCost = 5;
+    else if (combined.includes('market') || combined.includes('shopping')) baseCost = 0;
+    else baseCost = 25; // Default fallback
+  }
+  
+  // Apply keyword modifiers
+  for (const [keyword, modifier] of Object.entries(KEYWORD_COST_MODIFIERS)) {
+    if (combined.includes(keyword) && modifier !== 0) {
+      baseCost = Math.round(baseCost * modifier);
+      break;
+    }
+  }
+  
+  // Apply budget tier scaling
+  const tierMultipliers: Record<string, number> = {
+    budget: 0.6,
+    economy: 0.75,
+    standard: 1.0,
+    comfort: 1.3,
+    premium: 1.6,
+    luxury: 2.0,
+  };
+  
+  if (budgetTier && tierMultipliers[budgetTier]) {
+    baseCost = Math.round(baseCost * tierMultipliers[budgetTier]);
+  }
+  
+  return baseCost > 0 || combined.includes('free') 
+    ? { amount: baseCost, currency: 'USD' } 
+    : null;
+}
+
+function lightCostEstimation(
   activities: Activity[],
-  destination: string
-): Promise<Map<string, { amount: number; currency: string }>> {
+  budgetTier?: string
+): Map<string, { amount: number; currency: string }> {
   const results = new Map<string, { amount: number; currency: string }>();
-  const apiKey = Deno.env.get("FOURSQUARE_API_KEY");
-
-  if (!apiKey) {
-    console.warn("[optimize-itinerary] FOURSQUARE_API_KEY not set, using category estimates");
-    
-    // Fallback: category-based estimates
-    const categoryEstimates: Record<string, number> = {
-      dining: 40,
-      restaurant: 45,
-      cultural: 20,
-      museum: 18,
-      sightseeing: 15,
-      attraction: 20,
-      activity: 30,
-      shopping: 50,
-      relaxation: 60,
-      spa: 80,
-      tour: 65,
-      entertainment: 35,
-    };
-
-    for (const act of activities) {
-      if (act.cost?.amount === null || act.cost?.amount === undefined) {
-        const category = (act.category || act.type || '').toLowerCase();
-        if (categoryEstimates[category]) {
-          results.set(act.id, { amount: categoryEstimates[category], currency: 'USD' });
-        }
-      }
+  
+  for (const act of activities) {
+    // Skip if already has a valid cost from AI
+    if (act.cost?.amount !== null && act.cost?.amount !== undefined && act.cost?.amount > 0) {
+      continue;
     }
     
-    return results;
+    const estimated = estimateCostFromCategory(act, budgetTier);
+    if (estimated) {
+      results.set(act.id, estimated);
+    }
   }
-
-  // Filter activities that need cost lookup
-  const needsLookup = activities.filter(act => 
-    act.cost?.amount === null || 
-    act.cost?.amount === undefined ||
-    act.cost?.amount === 0
-  );
-
-  if (needsLookup.length === 0) return results;
-
-  const totalBatches = Math.ceil(needsLookup.length / BATCH_SIZE);
-  console.log(`[optimize-itinerary] Cost lookup: ${needsLookup.length} activities in ${totalBatches} batches`);
-
-  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-    const batchStart = batchIndex * BATCH_SIZE;
-    const batch = needsLookup.slice(batchStart, batchStart + BATCH_SIZE);
-
-    await Promise.all(
-      batch.map(async (activity) => {
-        try {
-          const category = (activity.category || activity.type || '').toLowerCase();
-          if (['transport', 'transportation', 'accommodation', 'relaxation', 'downtime'].includes(category)) {
-            return; // Skip these categories
-          }
-
-          const query = encodeURIComponent(activity.title);
-          const near = encodeURIComponent(destination);
-
-          const searchUrl = `https://api.foursquare.com/v3/places/search?query=${query}&near=${near}&limit=1`;
-          const searchRes = await fetch(searchUrl, {
-            headers: { 'Authorization': apiKey, 'Accept': 'application/json' },
-          });
-
-          if (!searchRes.ok) return;
-
-          const searchData = await searchRes.json();
-          const place = searchData.results?.[0];
-          if (!place) return;
-
-          // Get price level from place details
-          const detailsUrl = `https://api.foursquare.com/v3/places/${place.fsq_id}?fields=price`;
-          const detailsRes = await fetch(detailsUrl, {
-            headers: { 'Authorization': apiKey, 'Accept': 'application/json' },
-          });
-
-          if (!detailsRes.ok) return;
-
-          const details = await detailsRes.json();
-          const priceLevel = details.price;
-
-          // Map Foursquare price level (1-4) to estimated cost
-          const priceMappings: Record<number, number> = {
-            1: 15,  // $
-            2: 35,  // $$
-            3: 75,  // $$$
-            4: 150, // $$$$
-          };
-
-          if (priceLevel && priceMappings[priceLevel]) {
-            results.set(activity.id, { amount: priceMappings[priceLevel], currency: 'USD' });
-          }
-        } catch (error) {
-          console.warn(`[optimize-itinerary] Cost lookup failed for "${activity.title}":`, error);
-        }
-      })
-    );
-  }
-
+  
+  console.log(`[optimize-itinerary] Light cost estimation: filled ${results.size} missing costs (no API calls)`);
   return results;
 }
 
@@ -1093,14 +1202,15 @@ serve(async (req) => {
     let geocoded = 0;
     let venuesVerified = 0;
 
-    // Collect all activities for batched cost lookup
+    // Collect all activities for cost estimation
     const allActivities: Activity[] = days.flatMap(d => d.activities);
 
-    // Step 1: Batched cost lookup (if enabled)
+    // Step 1: Light cost estimation (no API calls - fast!)
     let costLookupResults = new Map<string, { amount: number; currency: string }>();
     if (enableCostLookup) {
-      costLookupResults = await batchedCostLookup(allActivities, destination);
-      console.log(`[optimize-itinerary] Cost lookup found ${costLookupResults.size} prices`);
+      // Use light estimation instead of API-heavy batch lookups
+      // AI should already provide costs, this just fills in any gaps
+      costLookupResults = lightCostEstimation(allActivities, body.budgetTier);
     }
 
     for (const day of days) {
@@ -1126,14 +1236,15 @@ serve(async (req) => {
           }
         }
 
-        // Tag generation
+        // Tag generation with caching
         if (enableTagGeneration) {
           const newTags = generateTags(
             act.title,
             act.description,
             act.category,
             act.tags || [],
-            updated.cost?.amount
+            updated.cost?.amount,
+            act.id // Pass activity ID for caching
           );
           if (newTags.length > (act.tags?.length || 0)) {
             tagsGenerated++;
