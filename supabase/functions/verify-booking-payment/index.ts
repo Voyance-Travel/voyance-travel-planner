@@ -65,14 +65,19 @@ serve(async (req) => {
     const tripId = session.metadata?.trip_id;
     if (!tripId) throw new Error("Trip ID not found in session metadata");
 
-    // Get trip details
+    // Get trip details - MUST verify user owns this trip for security
     const { data: trip, error: tripError } = await supabaseClient
       .from('trips')
       .select('*')
       .eq('id', tripId)
+      .eq('user_id', user.id) // Security: verify trip ownership
       .single();
 
-    if (tripError || !trip) throw new Error("Trip not found");
+    if (tripError || !trip) {
+      logStep("Trip ownership verification failed", { tripId, userId: user.id });
+      throw new Error("Trip not found or access denied");
+    }
+    logStep("Trip ownership verified", { tripId, userId: user.id });
 
     // Generate booking reference if not already present
     const existingMetadata = trip.metadata as Record<string, any> || {};
