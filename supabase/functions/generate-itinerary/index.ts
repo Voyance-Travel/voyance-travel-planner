@@ -860,54 +860,55 @@ async function earlySaveItinerary(supabase: any, tripId: string, days: StrictDay
 }
 
 // =============================================================================
-// STAGE 4: ENRICHMENT (Photos via Lovable AI, with Pexels fallback)
+// STAGE 4: ENRICHMENT (Photos via Pexels/Google - REAL images, not AI generated)
 // =============================================================================
 
-async function generateActivityImage(
-  activityTitle: string,
-  category: string,
-  destination: string,
-  lovableApiKey: string
+async function searchPexelsPhoto(
+  query: string,
+  pexelsApiKey: string
 ): Promise<string | null> {
   try {
-    const prompt = `A beautiful photograph of ${activityTitle} in ${destination}. ${
-      category === 'dining' ? 'Restaurant interior, appetizing food, ambient lighting.' :
-      category === 'cultural' ? 'Historic architecture, cultural landmark, travel photography.' :
-      category === 'sightseeing' ? 'Scenic view, landmark, tourist destination, golden hour.' :
-      category === 'adventure' ? 'Outdoor adventure, scenic nature, action shot.' :
-      category === 'shopping' ? 'Market, boutique, shopping district, colorful.' :
-      category === 'relaxation' ? 'Peaceful, spa, wellness, serene atmosphere.' :
-      'Travel photography, scenic view, professional quality.'
-    } No people, no text, ultra high resolution.`;
+    const response = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`,
+      { headers: { Authorization: pexelsApiKey } }
+    );
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [{ role: "user", content: prompt }],
-        modalities: ["image", "text"]
-      }),
-    });
-
-    if (!response.ok) {
-      console.log(`[Stage 4] AI image generation failed for ${activityTitle}:`, response.status);
-      return null;
-    }
+    if (!response.ok) return null;
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
-    if (imageUrl) {
-      console.log(`[Stage 4] ✅ Generated AI image for: ${activityTitle}`);
-      return imageUrl;
-    }
-    return null;
+    const photo = data.photos?.[0];
+    return photo?.src?.medium || photo?.src?.large || null;
   } catch (e) {
-    console.log(`[Stage 4] AI image generation error for ${activityTitle}:`, e);
+    console.log(`[Stage 4] Pexels search failed for "${query}":`, e);
+    return null;
+  }
+}
+
+async function searchGooglePlacesPhoto(
+  query: string,
+  googleApiKey: string
+): Promise<string | null> {
+  try {
+    // Use Text Search to find the place
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${googleApiKey}`;
+    const searchResponse = await fetch(searchUrl);
+    
+    if (!searchResponse.ok) return null;
+    
+    const searchData = await searchResponse.json();
+    if (searchData.status !== 'OK' || !searchData.results?.length) return null;
+
+    // Find first result with photos
+    const resultWithPhoto = searchData.results.find((r: { photos?: unknown[] }) => r.photos?.length);
+    if (!resultWithPhoto?.photos?.[0]) return null;
+
+    const photoRef = (resultWithPhoto.photos[0] as { photo_reference: string }).photo_reference;
+    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${googleApiKey}`;
+    
+    console.log(`[Stage 4] ✅ Found Google Places photo for: ${query}`);
+    return photoUrl;
+  } catch (e) {
+    console.log(`[Stage 4] Google Places search failed for "${query}":`, e);
     return null;
   }
 }
@@ -915,61 +916,61 @@ async function generateActivityImage(
 async function enrichActivity(
   activity: StrictActivity,
   destination: string,
-  lovableApiKey?: string,
+  googleApiKey?: string,
   pexelsApiKey?: string
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
-  // Skip image generation for transport/downtime activities
+  // Skip image fetching for transport/downtime activities
   const skipCategories = ['transport', 'transportation', 'downtime', 'free_time'];
   if (skipCategories.includes(activity.category?.toLowerCase() || '')) {
     enriched.verified = { isValid: true, confidence: 0.75 };
     return enriched;
   }
 
-  // Priority 1: Try Lovable AI for high-quality images
-  if (lovableApiKey && !enriched.photos?.length) {
-    const aiImageUrl = await generateActivityImage(
-      activity.title,
-      activity.category,
-      destination,
-      lovableApiKey
-    );
-    if (aiImageUrl) {
-      enriched.photos = [{
-        url: aiImageUrl,
-        alt: activity.title
-      }];
+  // Build search queries - specific first, then broader
+  const specificQuery = `${activity.title} ${destination}`;
+  const locationQuery = activity.location?.name ? `${activity.location.name} ${destination}` : null;
+  const categoryQuery = `${activity.category || 'landmark'} ${destination}`;
+
+  // Priority 1: Google Places (real venue photos - best quality)
+  if (googleApiKey && !enriched.photos?.length) {
+    // Try specific activity name first
+    let photoUrl = await searchGooglePlacesPhoto(specificQuery, googleApiKey);
+    
+    // Try location name if no result
+    if (!photoUrl && locationQuery) {
+      photoUrl = await searchGooglePlacesPhoto(locationQuery, googleApiKey);
+    }
+
+    if (photoUrl) {
+      enriched.photos = [{ url: photoUrl, alt: activity.title }];
     }
   }
 
-  // Priority 2: Fallback to Pexels if no AI image
+  // Priority 2: Pexels (real stock photos)
   if (!enriched.photos?.length && pexelsApiKey) {
-    try {
-      const query = encodeURIComponent(`${activity.title} ${destination}`);
-      const response = await fetch(`https://api.pexels.com/v1/search?query=${query}&per_page=2`, {
-        headers: { Authorization: pexelsApiKey }
-      });
+    // Try specific query first
+    let photoUrl = await searchPexelsPhoto(specificQuery, pexelsApiKey);
+    
+    // Try category-based query if no result
+    if (!photoUrl) {
+      photoUrl = await searchPexelsPhoto(categoryQuery, pexelsApiKey);
+    }
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.photos?.length > 0) {
-          enriched.photos = data.photos.slice(0, 2).map((photo: { src: { medium: string }; photographer: string; alt: string }) => ({
-            url: photo.src.medium,
-            photographer: photo.photographer,
-            alt: photo.alt || activity.title
-          }));
-        }
-      }
-    } catch (e) {
-      console.log(`[Stage 4] Pexels fallback failed for ${activity.title}:`, e);
+    if (photoUrl) {
+      enriched.photos = [{ 
+        url: photoUrl, 
+        alt: activity.title 
+      }];
+      console.log(`[Stage 4] ✅ Found Pexels photo for: ${activity.title}`);
     }
   }
 
   // Mark as verified with confidence
   enriched.verified = {
     isValid: true,
-    confidence: enriched.photos?.length ? 0.85 : 0.75
+    confidence: enriched.photos?.length ? 0.9 : 0.75
   };
 
   return enriched;
@@ -978,10 +979,10 @@ async function enrichActivity(
 async function enrichItinerary(
   days: StrictDay[],
   destination: string,
-  lovableApiKey?: string,
+  googleApiKey?: string,
   pexelsApiKey?: string
 ): Promise<StrictDay[]> {
-  console.log(`[Stage 4] Starting enrichment for ${days.length} days (AI images: ${!!lovableApiKey})`);
+  console.log(`[Stage 4] Starting enrichment for ${days.length} days (Google: ${!!googleApiKey}, Pexels: ${!!pexelsApiKey})`);
 
   const enrichedDays: StrictDay[] = [];
   let totalPhotos = 0;
@@ -989,19 +990,18 @@ async function enrichItinerary(
   for (const day of days) {
     const enrichedActivities: StrictActivity[] = [];
 
-    // Process activities in batches of 2 to respect rate limits for AI image gen
-    const batchSize = lovableApiKey ? 2 : 3;
-    for (let i = 0; i < day.activities.length; i += batchSize) {
-      const batch = day.activities.slice(i, i + batchSize);
+    // Process activities in batches of 3 with delays to respect API rate limits
+    for (let i = 0; i < day.activities.length; i += 3) {
+      const batch = day.activities.slice(i, i + 3);
       const enrichedBatch = await Promise.all(
-        batch.map(act => enrichActivity(act, destination, lovableApiKey, pexelsApiKey))
+        batch.map(act => enrichActivity(act, destination, googleApiKey, pexelsApiKey))
       );
       enrichedActivities.push(...enrichedBatch);
       totalPhotos += enrichedBatch.filter(a => a.photos?.length).length;
 
-      // Delay between batches (longer for AI image gen to respect rate limits)
-      if (i + batchSize < day.activities.length) {
-        await new Promise(r => setTimeout(r, lovableApiKey ? 500 : 200));
+      // Delay between batches to respect rate limits
+      if (i + 3 < day.activities.length) {
+        await new Promise(r => setTimeout(r, 300));
       }
     }
 
@@ -1158,6 +1158,7 @@ serve(async (req) => {
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const PEXELS_API_KEY = Deno.env.get("PEXELS_API_KEY");
+    const GOOGLE_MAPS_API_KEY = Deno.env.get("GOOGLE_MAPS_API_KEY");
 
     if (!LOVABLE_API_KEY) {
       console.error("LOVABLE_API_KEY not configured");
@@ -1249,10 +1250,10 @@ serve(async (req) => {
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
 
-      // STAGE 4: Enrichment (photos via Lovable AI, with Pexels fallback)
+      // STAGE 4: Enrichment (photos via Google Places & Pexels - real images)
       let enrichedDays: StrictDay[];
       try {
-        enrichedDays = await enrichItinerary(aiResult.days, context.destination, LOVABLE_API_KEY, PEXELS_API_KEY);
+        enrichedDays = await enrichItinerary(aiResult.days, context.destination, GOOGLE_MAPS_API_KEY, PEXELS_API_KEY);
       } catch (enrichError) {
         console.warn('[generate-itinerary] Enrichment failed, using base itinerary:', enrichError);
         enrichedDays = aiResult.days;
