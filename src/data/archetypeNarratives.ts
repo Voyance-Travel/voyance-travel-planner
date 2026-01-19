@@ -385,12 +385,34 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
 };
 
 export function getArchetypeNarrative(archetypeId: string): ArchetypeNarrative {
-  // Normalize the ID
+  // Normalize the ID - convert spaces/hyphens to underscores and lowercase
   const normalizedId = archetypeId.toLowerCase().replace(/[\s-]/g, '_');
   
   // Direct match
   if (ARCHETYPE_NARRATIVES[normalizedId]) {
     return ARCHETYPE_NARRATIVES[normalizedId];
+  }
+  
+  // Map display names to archetype IDs (from backend which uses "Cultural Explorer" format)
+  const displayNameMapping: Record<string, string> = {
+    'cultural_explorer': 'cultural_anthropologist',
+    'luxury_seeker': 'luxury_luminary',
+    'adventure_seeker': 'adrenaline_architect',
+    'relaxation_seeker': 'zen_seeker',
+    'wellness_seeker': 'zen_seeker',
+    'budget_traveler': 'explorer',
+    'family_traveler': 'family_architect',
+    'solo_explorer': 'urban_nomad',
+    'food_lover': 'culinary_cartographer',
+    'nature_lover': 'wilderness_pioneer',
+    'city_explorer': 'urban_nomad',
+    'beach_lover': 'escape_artist',
+    'slow_explorer': 'slow_traveler',
+    'story_collector': 'story_seeker',
+  };
+  
+  if (displayNameMapping[normalizedId]) {
+    return ARCHETYPE_NARRATIVES[displayNameMapping[normalizedId]];
   }
   
   // Map common style values to archetypes

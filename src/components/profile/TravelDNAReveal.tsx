@@ -141,6 +141,9 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
   }
 
   const narrative = getArchetypeNarrative(dnaData.primary_archetype_name);
+  const secondaryNarrative = dnaData.secondary_archetype_name 
+    ? getArchetypeNarrative(dnaData.secondary_archetype_name) 
+    : null;
   const colors = getCategoryColors(narrative.category);
   const confidence = dnaData.dna_confidence_score || 85;
   const rarity = dnaData.dna_rarity || 'Uncommon';
@@ -180,7 +183,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
           </motion.div>
 
           <div className="flex-1 space-y-3">
-            {/* Name */}
+            {/* Primary Archetype Name */}
             <motion.h2 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -189,6 +192,20 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
             >
               {narrative.name}
             </motion.h2>
+
+            {/* Secondary Archetype */}
+            {secondaryNarrative && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.45 }}
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                <span className="text-lg">{secondaryNarrative.emoji}</span>
+                <span>with hints of</span>
+                <span className="font-medium text-foreground">{secondaryNarrative.name}</span>
+              </motion.div>
+            )}
 
             {/* Hook Line */}
             <motion.p 
