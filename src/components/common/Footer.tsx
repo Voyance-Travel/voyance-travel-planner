@@ -6,6 +6,7 @@ const footerLinks = {
   company: [
     { label: 'About', href: ROUTES.ABOUT },
     { label: 'How It Works', href: ROUTES.HOW_IT_WORKS },
+    { label: 'Pricing', href: ROUTES.PRICING },
     { label: 'Careers', href: ROUTES.CAREERS },
     { label: 'Press', href: ROUTES.PRESS },
   ],

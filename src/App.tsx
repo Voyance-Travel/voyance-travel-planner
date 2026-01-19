@@ -65,6 +65,7 @@ import SampleItinerary from "./pages/SampleItinerary";
 // Pages - Legal
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
+import Pricing from "./pages/Pricing";
 
 // Admin
 import BulkImport from "./pages/admin/BulkImport";
@@ -143,6 +144,7 @@ const App = () => (
                 {/* Legal Routes */}
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
+                <Route path="/pricing" element={<Pricing />} />
                 
                 {/* Admin Routes - Protected */}
                 <Route path="/admin/bulk-import" element={
