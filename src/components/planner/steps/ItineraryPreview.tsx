@@ -160,6 +160,7 @@ export default function ItineraryPreview({
   const [showRentalCarModal, setShowRentalCarModal] = useState(false);
   const [hasSetTransport, setHasSetTransport] = useState(false);
   const [hasConsumedQuota, setHasConsumedQuota] = useState(false);
+  const [activeTab, setActiveTab] = useState('itinerary'); // Moved here to fix hooks order
   
   // Check if user has completed the quiz
   const hasCompletedQuiz = user?.quizCompleted || isQuizCompleted();
@@ -511,7 +512,7 @@ export default function ItineraryPreview({
   }
 
   // Show complete state with itinerary
-  const [activeTab, setActiveTab] = useState('itinerary');
+  // activeTab state moved to top of component to fix React hooks order
 
   return (
     <motion.div
