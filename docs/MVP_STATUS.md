@@ -40,7 +40,12 @@ tracks feature completion status and identifies post-MVP enhancements.
 | **Flight Booking** | UI complete, hold creation works | Actual ticketing is mocked | P2 (Phase 2) |
 | **Hotel Booking** | UI complete, hold creation works | Actual booking is mocked | P2 (Phase 2) |
 | **Price Locking** | Timer UI exists | Backend partially implemented | P2 (Phase 2) |
-| **Push Notifications** | Edge functions exist | Needs FCM/APNs setup | P3 (Phase 3) |
+
+### ✅ Recently Verified
+
+| Feature | Status |
+|---------|--------|
+| **In-App Notifications** | ✅ Complete - NotificationBell + trip-notifications edge function working |
 
 ### 📋 Post-MVP (Planned Features)
 
