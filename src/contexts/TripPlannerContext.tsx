@@ -31,6 +31,32 @@ function loadLocalTrip(tripId: string): Record<string, unknown> | null {
   return trips[tripId] || null;
 }
 
+export type TransportMode = 'rental_car' | 'public_transit' | 'rideshare' | 'walking';
+
+export interface TransportationPreference {
+  modes: TransportMode[];
+  primaryMode?: TransportMode;
+  notes?: string;
+}
+
+export interface RentalCarDetails {
+  rentalCompany?: string;
+  carType?: string;
+  pickupLocation?: string;
+  pickupDate?: string;
+  pickupTime?: string;
+  dropoffLocation?: string;
+  dropoffDate?: string;
+  dropoffTime?: string;
+  dailyRate?: number;
+  totalCost?: number;
+  currency?: string;
+  confirmationNumber?: string;
+  bookingUrl?: string;
+  insuranceIncluded?: boolean;
+  notes?: string;
+}
+
 export interface TripBasics {
   destination?: string;
   destinationId?: string;
@@ -41,6 +67,8 @@ export interface TripBasics {
   originCity?: string;
   budgetTier?: string;
   budgetAmount?: number; // Optional: actual dollar amount user wants to spend
+  transportationPreference?: TransportationPreference;
+  rentalCar?: RentalCarDetails;
 }
 
 export interface FlightSelection {
@@ -231,11 +259,13 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         flight_selection: state.flights ? JSON.parse(JSON.stringify(state.flights)) : null,
         hotel_selection: state.hotel ? JSON.parse(JSON.stringify(state.hotel)) : null,
         itinerary_data: state.itinerary.length > 0 ? JSON.parse(JSON.stringify({ days: state.itinerary })) : null,
+        transportation_preferences: state.basics.transportationPreference ? JSON.parse(JSON.stringify(state.basics.transportationPreference)) : null,
         metadata: JSON.parse(
           JSON.stringify({
             sessionId: state.sessionId,
             lastUpdated: new Date().toISOString(),
             anonymous: !user,
+            rentalCar: state.basics.rentalCar || null,
           })
         ),
       };

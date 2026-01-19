@@ -27,6 +27,9 @@ export interface GenerationPreferences {
   pace?: 'relaxed' | 'moderate' | 'packed';
   interests?: string[];
   budget?: 'budget' | 'moderate' | 'luxury';
+  transportationModes?: string[];
+  primaryTransport?: string;
+  hasRentalCar?: boolean;
 }
 
 export interface LovableItineraryState {
@@ -257,7 +260,10 @@ export function useLovableItinerary(tripId: string | null) {
             tripType: tripDetails.tripType,
             budgetTier: tripDetails.budgetTier,
             preferences,
-            previousDayActivities: previousActivities.slice(-10), // Last 10 activities
+            previousDayActivities: previousActivities.slice(-10),
+            transportationModes: preferences?.transportationModes,
+            primaryTransport: preferences?.primaryTransport,
+            hasRentalCar: preferences?.hasRentalCar,
           }
         });
 

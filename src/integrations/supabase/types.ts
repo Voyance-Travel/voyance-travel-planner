@@ -1591,6 +1591,83 @@ export type Database = {
           },
         ]
       }
+      trip_rental_cars: {
+        Row: {
+          booking_url: string | null
+          car_type: string | null
+          confirmation_number: string | null
+          created_at: string
+          currency: string | null
+          daily_rate: number | null
+          dropoff_date: string | null
+          dropoff_location: string | null
+          dropoff_time: string | null
+          id: string
+          insurance_included: boolean | null
+          notes: string | null
+          pickup_date: string | null
+          pickup_location: string | null
+          pickup_time: string | null
+          rental_company: string | null
+          total_cost: number | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_url?: string | null
+          car_type?: string | null
+          confirmation_number?: string | null
+          created_at?: string
+          currency?: string | null
+          daily_rate?: number | null
+          dropoff_date?: string | null
+          dropoff_location?: string | null
+          dropoff_time?: string | null
+          id?: string
+          insurance_included?: boolean | null
+          notes?: string | null
+          pickup_date?: string | null
+          pickup_location?: string | null
+          pickup_time?: string | null
+          rental_company?: string | null
+          total_cost?: number | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_url?: string | null
+          car_type?: string | null
+          confirmation_number?: string | null
+          created_at?: string
+          currency?: string | null
+          daily_rate?: number | null
+          dropoff_date?: string | null
+          dropoff_location?: string | null
+          dropoff_time?: string | null
+          id?: string
+          insurance_included?: boolean | null
+          notes?: string | null
+          pickup_date?: string | null
+          pickup_location?: string | null
+          pickup_time?: string | null
+          rental_company?: string | null
+          total_cost?: number | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_rental_cars_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_settlements: {
         Row: {
           amount: number
@@ -1690,6 +1767,7 @@ export type Database = {
           price_lock_expires_at: string | null
           start_date: string
           status: Database["public"]["Enums"]["trip_status"]
+          transportation_preferences: Json | null
           travelers: number | null
           trip_type: string | null
           updated_at: string
@@ -1715,6 +1793,7 @@ export type Database = {
           price_lock_expires_at?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["trip_status"]
+          transportation_preferences?: Json | null
           travelers?: number | null
           trip_type?: string | null
           updated_at?: string
@@ -1740,6 +1819,7 @@ export type Database = {
           price_lock_expires_at?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["trip_status"]
+          transportation_preferences?: Json | null
           travelers?: number | null
           trip_type?: string | null
           updated_at?: string
