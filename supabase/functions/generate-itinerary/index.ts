@@ -416,6 +416,75 @@ function buildPreferenceContext(insights: any, prefs: any): string {
   return `\n\n${'='.repeat(60)}\n🎯 PERSONALIZED TRAVELER PROFILE\n${'='.repeat(60)}\n${contextParts.join('\n\n')}`;
 }
 
+// =============================================================================
+// AI PREFERENCE ENRICHMENT ("FLUFFING")
+// Transforms raw preferences into rich, detailed context
+// =============================================================================
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function enrichPreferencesWithAI(prefs: any, destination: string, LOVABLE_API_KEY: string): Promise<string> {
+  if (!prefs || Object.keys(prefs).filter(k => prefs[k] !== null).length === 0) {
+    return "";
+  }
+
+  const prompt = `You are a travel personalization expert. Transform these raw user preferences into RICH, DETAILED guidance for an AI itinerary generator.
+
+RAW PREFERENCES:
+${JSON.stringify(prefs, null, 2)}
+
+DESTINATION: ${destination}
+
+Your task: Expand each preference into actionable, specific guidance. For example:
+- "vegetarian" → "This traveler is vegetarian - recommend restaurants with dedicated vegetarian menus, avoid steakhouses, highlight plant-based cuisine, suggest local vegetarian specialties of ${destination}"
+- "temperate climate" → "Prefers mild weather 60-75°F - schedule outdoor activities in morning/late afternoon, include shaded walking tours, have indoor alternatives for midday heat"
+- "accessibility_needs: wheelchair" → "Requires wheelchair access - verify elevator access at all venues, avoid cobblestone areas, recommend accessible transportation, ensure restaurant seating accommodates wheelchairs"
+
+Create a detailed traveler profile with:
+1. **TRAVELER PERSONA** (2-3 sentences capturing their travel style and what drives them)
+2. **MANDATORY CONSTRAINTS** (dietary, accessibility, allergies - these are non-negotiable)
+3. **CLIMATE GUIDANCE** (how weather preferences should shape the schedule)
+4. **ACTIVITY PRIORITIES** (what to emphasize based on interests)
+5. **SPECIAL INSTRUCTIONS** (3-5 specific "always" or "never" rules)
+
+Make it conversational and actionable, not a bullet list. The AI reading this should feel like they deeply understand this traveler.`;
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: "You are a travel personalization expert. Create rich, detailed traveler profiles that help AI itinerary generators deeply understand each traveler." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("[Preference Enrichment] AI call failed, using raw context");
+      return "";
+    }
+
+    const result = await response.json();
+    const enrichedProfile = result.choices?.[0]?.message?.content || "";
+    
+    if (enrichedProfile) {
+      console.log("[Preference Enrichment] Successfully enriched preferences");
+      return `\n\n${'='.repeat(60)}\n🌟 AI-ENRICHED TRAVELER PROFILE\n${'='.repeat(60)}\n${enrichedProfile}`;
+    }
+    
+    return "";
+  } catch (error) {
+    console.warn("[Preference Enrichment] Error:", error);
+    return "";
+  }
+}
+
 function calculateDays(startDate: string, endDate: string): number {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -947,7 +1016,25 @@ serve(async (req) => {
       // Get user preferences for personalization
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
       const prefs = userId ? await getUserPreferences(supabase, userId) : null;
-      const preferenceContext = buildPreferenceContext(insights, prefs);
+      
+      // Build raw preference context (structured data)
+      const rawPreferenceContext = buildPreferenceContext(insights, prefs);
+      
+      // STAGE 1.5: AI-Enrich preferences ("fluffing" layer)
+      // Transform raw preferences into rich, detailed AI guidance
+      console.log("[Stage 1.5] Enriching preferences with AI...");
+      let enrichedPreferenceContext = "";
+      if (prefs && Object.values(prefs).some(v => v !== null)) {
+        try {
+          enrichedPreferenceContext = await enrichPreferencesWithAI(prefs, context.destination, LOVABLE_API_KEY);
+          console.log("[Stage 1.5] Preference enrichment complete");
+        } catch (enrichError) {
+          console.warn("[Stage 1.5] Preference enrichment failed, using raw context:", enrichError);
+        }
+      }
+      
+      // Combine raw and enriched context for maximum personalization
+      const preferenceContext = rawPreferenceContext + enrichedPreferenceContext;
 
       // STAGE 2: AI Generation
       let aiResult;
