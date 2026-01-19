@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { format, parseISO, isAfter, isBefore } from 'date-fns';
-import { Loader2, Calendar, MapPin, ArrowLeft, Edit } from 'lucide-react';
+import { format, parseISO, isAfter, isBefore, differenceInDays } from 'date-fns';
+import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LiveItineraryView } from '@/components/itinerary/LiveItineraryView';
+import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
 import { supabase } from '@/integrations/supabase/client';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
+import type { GeneratedDay } from '@/hooks/useItineraryGeneration';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -49,7 +52,9 @@ export default function TripDetail() {
   const [activities, setActivities] = useState<TripActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showGenerator, setShowGenerator] = useState(false);
   const scheduleNotifications = useScheduleNotifications();
+  const { user } = useAuth();
 
   const loadLocalTrip = (id: string): Trip | null => {
     try {
@@ -285,6 +290,26 @@ export default function TripDetail() {
     return date.toISOString();
   };
 
+  // Check if itinerary has real content
+  const hasItinerary = (() => {
+    const days = transformToItineraryDays();
+    return days.some(d => d.activities.length > 0);
+  })();
+
+  // Handle itinerary generation complete
+  const handleGenerationComplete = useCallback((generatedDays: GeneratedDay[]) => {
+    // Update local trip state with the new itinerary
+    setTrip(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        itinerary_data: JSON.parse(JSON.stringify({ days: generatedDays })),
+        itinerary_status: 'ready' as const,
+      };
+    });
+    setShowGenerator(false);
+  }, []);
+
   const handleActivityComplete = async (activityId: string) => {
     // Update activity status in database
     await supabase
@@ -404,11 +429,26 @@ export default function TripDetail() {
               onActivityComplete={handleActivityComplete}
               onActivitySkip={handleActivitySkip}
             />
-          ) : (
-            // Static view for non-active trips
+          ) : showGenerator ? (
+            /* Itinerary Generator */
+            <ItineraryGenerator
+              tripId={trip.id}
+              destination={trip.destination}
+              destinationCountry={trip.destination_country || undefined}
+              startDate={trip.start_date}
+              endDate={trip.end_date}
+              travelers={trip.travelers || 1}
+              tripType={trip.trip_type || undefined}
+              budgetTier={trip.budget_tier || undefined}
+              userId={user?.id}
+              onComplete={handleGenerationComplete}
+              onCancel={() => setShowGenerator(false)}
+            />
+          ) : !hasItinerary ? (
+            /* Empty Itinerary - Show Generate CTA */
             <div className="space-y-6">
               <div>
-                <h1 className="text-3xl font-bold">{trip.name}</h1>
+                <h1 className="text-3xl font-serif font-bold">{trip.name}</h1>
                 <div className="flex items-center gap-2 text-muted-foreground mt-2">
                   <MapPin className="w-4 h-4" />
                   <span>{trip.destination}</span>
@@ -418,34 +458,122 @@ export default function TripDetail() {
                 </div>
               </div>
 
-              {/* Simple itinerary display for non-active trips */}
+              {/* Generate Itinerary CTA */}
+              <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/5 via-background to-accent/5 p-8 md:p-12">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-primary/10 to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                
+                <div className="relative max-w-lg">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
+                    <Sparkles className="h-4 w-4" />
+                    AI-Powered
+                  </div>
+                  
+                  <h2 className="text-2xl md:text-3xl font-serif font-bold mb-3">
+                    Ready to plan your adventure?
+                  </h2>
+                  
+                  <p className="text-muted-foreground mb-6">
+                    Let our AI create a personalized {differenceInDays(parseISO(trip.end_date), parseISO(trip.start_date)) + 1}-day itinerary 
+                    for {trip.destination} based on your preferences.
+                  </p>
+                  
+                  <Button size="lg" onClick={() => setShowGenerator(true)} className="gap-2 shadow-lg">
+                    <Sparkles className="h-5 w-5" />
+                    Generate Itinerary
+                  </Button>
+                </div>
+              </div>
+
+              {/* Empty Day Cards */}
+              <div className="space-y-3">
+                {itineraryDays.map((day) => (
+                  <div key={day.dayNumber} className="border border-dashed border-border rounded-xl p-4 opacity-60">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+                        {day.dayNumber}
+                      </div>
+                      <div>
+                        <p className="font-medium">{format(parseISO(day.date), 'EEEE, MMM d')}</p>
+                        <p className="text-sm text-muted-foreground">No activities planned yet</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Static view for non-active trips with itinerary */
+            <div className="space-y-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h1 className="text-3xl font-serif font-bold">{trip.name}</h1>
+                  <div className="flex items-center gap-2 text-muted-foreground mt-2">
+                    <MapPin className="w-4 h-4" />
+                    <span>{trip.destination}</span>
+                    {trip.destination_country && (
+                      <span className="text-muted-foreground/60">• {trip.destination_country}</span>
+                    )}
+                  </div>
+                </div>
+                
+                <Button variant="outline" size="sm" onClick={() => setShowGenerator(true)} className="gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Regenerate
+                </Button>
+              </div>
+
+              {/* Itinerary display */}
               <div className="space-y-4">
                 {itineraryDays.map((day) => (
-                  <div key={day.dayNumber} className="border rounded-xl p-4">
-                    <h3 className="font-semibold mb-3">
-                      Day {day.dayNumber} - {format(parseISO(day.date), 'EEEE, MMM d')}
-                      {day.theme && <span className="text-muted-foreground ml-2">• {day.theme}</span>}
-                    </h3>
+                  <div key={day.dayNumber} className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="px-5 py-4 bg-muted/30 border-b border-border">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary">Day {day.dayNumber}</Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {format(parseISO(day.date), 'EEEE, MMM d')}
+                        </span>
+                        {day.theme && (
+                          <span className="text-sm font-medium text-foreground ml-auto">
+                            {day.theme}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     
-                    {day.activities.length > 0 ? (
-                      <div className="space-y-2">
-                        {day.activities.map((activity, idx) => (
-                          <div key={activity.id || idx} className="flex items-start gap-3 p-2 bg-muted/30 rounded-lg">
-                            <div className="text-xs text-muted-foreground w-16 flex-shrink-0">
-                              {activity.startTime || '--:--'}
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">{activity.name}</p>
-                              {activity.location?.name && (
-                                <p className="text-xs text-muted-foreground">{activity.location.name}</p>
+                    <div className="p-4">
+                      {day.activities.length > 0 ? (
+                        <div className="space-y-3">
+                          {day.activities.map((activity, idx) => (
+                            <div key={activity.id || idx} className="flex items-start gap-4 p-3 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
+                              <div className="text-sm text-muted-foreground w-14 flex-shrink-0 font-mono">
+                                {activity.startTime || '--:--'}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium">{activity.name}</p>
+                                {activity.description && (
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {activity.description}
+                                  </p>
+                                )}
+                                {activity.location?.name && (
+                                  <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                                    <MapPin className="h-3 w-3" />
+                                    {activity.location.name}
+                                  </div>
+                                )}
+                              </div>
+                              {activity.category && (
+                                <Badge variant="outline" className="text-xs capitalize shrink-0">
+                                  {activity.category}
+                                </Badge>
                               )}
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No activities planned</p>
-                    )}
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No activities planned</p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
