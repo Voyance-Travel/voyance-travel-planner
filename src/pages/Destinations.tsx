@@ -115,7 +115,7 @@ const allDestinations = [
     id: 'florence',
     city: 'Florence',
     country: 'Italy',
-    image: 'https://images.unsplash.com/photo-1543429258-c5ca3c2c5c2e?w=600&q=80',
+    image: 'https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?w=600&q=80',
   },
   {
     id: 'reykjavik',
