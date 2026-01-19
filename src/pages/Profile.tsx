@@ -77,7 +77,7 @@ const SUBSCRIPTION_TIERS = {
     name: 'Wanderlust',
     description: 'For digital nomads & frequent travelers',
     price: 119.99,
-    interval: 'year',
+    interval: 'month',
     priceId: 'price_1RpYWpFYxIg9jcJUPrSLmFsu',
     productId: 'prod_Sl4gxTsm0MDnN6',
     features: [
@@ -244,21 +244,49 @@ export default function Profile() {
       return;
     }
     
+    // Check for demo mode - Stripe requires a real account
+    if (isDemoModeEnabled()) {
+      toast.error('Stripe checkout is not available in demo mode. Please sign in with a real account to subscribe.');
+      return;
+    }
+    
     setIsCheckingOut(priceId);
     try {
+      // Get fresh session to ensure we have a valid token
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session?.access_token) {
+        toast.error('Your session has expired. Please sign in again.');
+        navigate(ROUTES.SIGNIN);
+        return;
+      }
+      
+      console.log('[Checkout] Starting checkout for price:', priceId, 'mode:', mode);
+      
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { priceId, mode },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      
+      console.log('[Checkout] Response:', { data, error });
+      
+      if (error) {
+        console.error('[Checkout] Function error:', error);
+        throw error;
+      }
+      if (data?.error) {
+        console.error('[Checkout] Data error:', data.error);
+        throw new Error(data.error);
+      }
       if (data?.url) {
+        console.log('[Checkout] Opening Stripe checkout:', data.url);
+        // Use location.href for more reliable redirect, fallback to window.open
         window.open(data.url, '_blank');
       } else {
-        throw new Error('No checkout URL received');
+        throw new Error('No checkout URL received from Stripe');
       }
     } catch (error: any) {
-      console.error('Checkout error:', error);
-      toast.error(error.message || 'Failed to start checkout. Please try again.');
+      console.error('[Checkout] Error:', error);
+      const message = error.message || 'Failed to start checkout. Please try again.';
+      toast.error(message);
     } finally {
       setIsCheckingOut(null);
     }
@@ -266,7 +294,19 @@ export default function Profile() {
 
   // Handle manage subscription
   const handleManageSubscription = async () => {
+    if (isDemoModeEnabled()) {
+      toast.error('Billing portal is not available in demo mode.');
+      return;
+    }
+    
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session?.access_token) {
+        toast.error('Your session has expired. Please sign in again.');
+        navigate(ROUTES.SIGNIN);
+        return;
+      }
+      
       const { data, error } = await supabase.functions.invoke('customer-portal');
       if (error) throw error;
       if (data?.url) {
@@ -769,14 +809,14 @@ export default function Profile() {
               <div className="grid md:grid-cols-2 gap-6">
                 {Object.entries(SUBSCRIPTION_TIERS).map(([key, tier]) => {
                   const isCurrentPlan = subscription?.product_id === tier.productId;
-                  const isAnnual = key === 'wanderlust';
+                  const isPremium = key === 'wanderlust';
                   
                   return (
                     <motion.div
                       key={key}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: isAnnual ? 0.1 : 0 }}
+                      transition={{ delay: isPremium ? 0.1 : 0 }}
                       className={cn(
                         "group relative bg-card rounded-lg overflow-hidden transition-all duration-300",
                         isCurrentPlan 
@@ -789,7 +829,7 @@ export default function Profile() {
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-foreground via-foreground to-foreground/60" />
                       )}
                       
-                      {isAnnual && !isCurrentPlan && (
+                      {isPremium && !isCurrentPlan && (
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-accent to-primary/60" />
                       )}
                       
@@ -803,7 +843,7 @@ export default function Profile() {
                                   Active
                                 </span>
                               )}
-                              {isAnnual && !isCurrentPlan && (
+                              {isPremium && !isCurrentPlan && (
                                 <span className="text-[9px] uppercase tracking-wider text-primary font-semibold px-2 py-0.5 bg-primary/10 rounded">
                                   Best Value
                                 </span>
@@ -823,12 +863,12 @@ export default function Profile() {
                               ${tier.price}
                             </span>
                             <span className="text-sm text-muted-foreground">
-                              /{isAnnual ? 'year' : 'mo'}
+                              /{tier.interval}
                             </span>
                           </div>
-                          {isAnnual && (
+                          {isPremium && (
                             <p className="text-xs text-primary mt-2 font-medium">
-                              Save 37% compared to monthly billing
+                              Unlimited access for power travelers
                             </p>
                           )}
                         </div>
@@ -858,7 +898,7 @@ export default function Profile() {
                           <Button 
                             className={cn(
                               "w-full h-11 text-sm font-medium transition-all",
-                              isAnnual 
+                              isPremium 
                                 ? "bg-gradient-to-r from-slate to-slate/90 hover:from-slate/90 hover:to-slate text-slate-foreground" 
                                 : ""
                             )}
