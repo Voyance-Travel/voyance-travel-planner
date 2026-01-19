@@ -690,7 +690,15 @@ export async function saveTravelDNA(
   const payload = {
     user_id: userId,
     session_id: sessionId,
-    ...dna,
+    // Only persist DB-backed fields (avoid 400s from extra UI-only keys)
+    primary_archetype_name: dna.primary_archetype_name,
+    secondary_archetype_name: dna.secondary_archetype_name,
+    dna_confidence_score: dna.dna_confidence_score,
+    dna_rarity: dna.dna_rarity,
+    trait_scores: dna.trait_scores ? JSON.parse(JSON.stringify(dna.trait_scores)) : null,
+    tone_tags: dna.tone_tags ?? null,
+    emotional_drivers: dna.emotional_drivers ?? null,
+    summary: dna.summary,
     calculated_at: new Date().toISOString(),
   };
 

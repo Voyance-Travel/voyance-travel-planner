@@ -153,42 +153,45 @@ function toEnhancedFlight(flight: FlightOption): EnhancedFlightOption {
   };
 }
 
+function isHourInRange(hour: number, range: [number, number]): boolean {
+  const [start, end] = range;
+  // Normal range (e.g. 8 -> 18)
+  if (start <= end) return hour >= start && hour <= end;
+  // Wrap-around range (e.g. 22 -> 6)
+  return hour >= start || hour <= end;
+}
+
 function applyFilters(flights: FlightOption[], filters: FlightFiltersState): FlightOption[] {
   let result = [...flights];
 
+  // Only apply hard filters that the user explicitly chose
   if (filters.directOnly) result = result.filter((f) => f.stops === 0);
-
-  if (filters.airlines.length > 0) {
-    result = result.filter((f) => filters.airlines.includes(f.airline));
-  }
-
-  // NOTE: Budget should *guide* not block. We no longer filter by maxPrice here.
-  // Budget is used for sorting preference and visual warnings only.
-  // Users can see all options and make their own trade-offs.
 
   if (filters.bagsIncluded) {
     result = result.filter((f) => !!f.baggageIncluded?.checked);
   }
 
-  // Time windows
+  // Time windows (supports wrap-around ranges like 22→6 for red-eyes)
   result = result.filter((f) => {
     const depHour = getHour(f.departure);
     const arrHour = getHour(f.arrival);
-    return (
-      depHour >= filters.departureTimeRange[0] &&
-      depHour <= filters.departureTimeRange[1] &&
-      arrHour >= filters.arrivalTimeRange[0] &&
-      arrHour <= filters.arrivalTimeRange[1]
-    );
+    return isHourInRange(depHour, filters.departureTimeRange) && isHourInRange(arrHour, filters.arrivalTimeRange);
   });
 
   // Duration
   result = result.filter((f) => f.duration <= filters.maxDuration);
 
-  // Sort - budget influences sort order but doesn't exclude options
+  // Sort - "airlines" is treated as preference (rank), not a hard filter
+  const preferredAirlines = new Set(filters.airlines);
   result.sort((a, b) => {
     const priceA = typeof a.price === 'number' ? a.price : a.price.amount;
     const priceB = typeof b.price === 'number' ? b.price : b.price.amount;
+
+    if (preferredAirlines.size > 0) {
+      const prefA = preferredAirlines.has(a.airline) ? 0 : 1;
+      const prefB = preferredAirlines.has(b.airline) ? 0 : 1;
+      if (prefA !== prefB) return prefA - prefB;
+    }
 
     switch (filters.sortBy) {
       case 'price':
@@ -298,81 +301,39 @@ export default function PlannerFlightEnhanced() {
     }
   }, [destination]);
 
-  // Initialize filters with user preferences when loaded
-  // NOTE: Budget guides sorting preference but does NOT filter out options.
-  // Users should see all flights and make their own trade-off decisions.
+  // Initialize filters broadly.
+  // Preferences should *rank* results, not hide them.
   const getInitialFilters = (): FlightFiltersState => {
-    const timeRange = getTimeRangeFromPreference(userPrefs?.flightTimePreference);
     return {
-      directOnly: userPrefs?.directFlightsOnly ?? false,
-      airlines: userPrefs?.preferredAirlines ?? [],
+      directOnly: false,
+      airlines: [],
       maxPrice: 99999, // No price filtering - budget is for guidance only
-      departureTimeRange: timeRange,
+      departureTimeRange: [0, 24],
       arrivalTimeRange: [0, 24],
       maxDuration: 1440,
       bagsIncluded: false,
-      sortBy: flightBudget ? 'price' : 'recommended', // Sort by price if budget-conscious
+      sortBy: flightBudget ? 'price' : 'recommended',
     };
   };
 
-  function getTimeRangeFromPreference(pref: UserFlightPrefs['flightTimePreference']): [number, number] {
-    switch (pref) {
-      case 'morning': return [5, 12];
-      case 'afternoon': return [12, 18];
-      case 'evening': return [18, 22];
-      case 'red-eye': return [22, 6]; // Note: wraps around midnight
-      default: return [0, 24];
-    }
-  }
+  // NOTE: maxPrice set high - budget is for visual warnings/sorting, not filtering
+  const [outboundFilters, setOutboundFilters] = useState<FlightFiltersState>(() => getInitialFilters());
 
   // NOTE: maxPrice set high - budget is for visual warnings/sorting, not filtering
-  const [outboundFilters, setOutboundFilters] = useState<FlightFiltersState>({
-    directOnly: false,
-    airlines: [],
-    maxPrice: 99999, // No price filtering
-    departureTimeRange: [0, 24],
-    arrivalTimeRange: [0, 24],
-    maxDuration: 1440,
-    bagsIncluded: false,
-    sortBy: flightBudget ? 'price' : 'recommended',
-  });
+  const [returnFilters, setReturnFilters] = useState<FlightFiltersState>(() => getInitialFilters());
 
-  // Apply user preferences when loaded
-  useEffect(() => {
-    if (prefsLoaded && userPrefs) {
-      const initialFilters = getInitialFilters();
-      setOutboundFilters(initialFilters);
-      setReturnFilters(initialFilters);
-      console.log('[PlannerFlight] Applied user preferences to filters:', initialFilters);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefsLoaded, userPrefs]);
-
-  // NOTE: maxPrice set high - budget is for visual warnings/sorting, not filtering
-  const [returnFilters, setReturnFilters] = useState<FlightFiltersState>({
-    directOnly: false,
-    airlines: [],
-    maxPrice: 99999, // No price filtering
-    departureTimeRange: [0, 24],
-    arrivalTimeRange: [0, 24],
-    maxDuration: 1440,
-    bagsIncluded: false,
-    sortBy: flightBudget ? 'price' : 'recommended',
-  });
-
-  // Single roundtrip search - fetches both outbound and return in one call
+  // Single roundtrip search - fetches both outbound and return in one call.
+  // Keep the backend query broad; apply "tight" constraints client-side via filters.
   const roundtripParams: FlightSearchParams = useMemo(
     () => ({
       origin,
       destination,
       departureDate: startDate,
-      returnDate: endDate, // Include return date for roundtrip search
+      returnDate: endDate,
       passengers: travelers,
       class: 'economy',
-      directOnly: outboundFilters.directOnly || returnFilters.directOnly,
-      preferredAirlines: userPrefs?.preferredAirlines?.length ? userPrefs.preferredAirlines : undefined,
     }),
-    [origin, destination, startDate, endDate, travelers, outboundFilters.directOnly, returnFilters.directOnly, userPrefs?.preferredAirlines]
+    [origin, destination, startDate, endDate, travelers]
   );
 
   const {
