@@ -245,39 +245,27 @@ export default function PlannerHotelEnhanced() {
     }
   }, []);
 
-  // Calculate max price per night from hotel budget
-  const maxPricePerNight = hotelBudget && nights > 0 ? Math.round(hotelBudget / nights) : 10000;
+  // NOTE: Budget should *guide* not block. We keep budget for warnings/sorting,
+  // but default hotel results should not be hard-capped by budget.
+  const maxPricePerNight = 10000;
 
   const [filters, setFilters] = useState<HotelFiltersState>({
-    priceRange: [0, maxPricePerNight], // Apply budget if set
+    priceRange: [0, maxPricePerNight],
     starRating: [],
     amenities: [],
     propertyTypes: [],
     guestRating: 0,
-    sortBy: hotelBudget ? 'price' : 'recommended', // Sort by price if on budget
+    sortBy: hotelBudget ? 'price' : 'recommended', // guide toward budget-friendly options
     freeCancellation: false,
     breakfastIncluded: false,
   });
 
-  // Apply user preferences as initial filters (once)
+  // Apply user preferences gently: we avoid auto-filtering (which can lead to "No hotels found")
+  // and instead let preferences influence ranking/badges.
   useEffect(() => {
     if (!preferencesLoaded || hasAppliedPreferences.current) return;
-    if (!userPreferences) return;
-    
-    const preferredStars = getDefaultStarRating(userPreferences.accommodation_style);
-    const preferredAmenities = getDefaultAmenities(userPreferences.hotel_style);
-    
-    if (preferredStars.length > 0 || preferredAmenities.length > 0) {
-      setFilters(prev => ({
-        ...prev,
-        starRating: preferredStars,
-        amenities: preferredAmenities,
-      }));
-      console.log('[PlannerHotel] Applied user preferences to filters:', { preferredStars, preferredAmenities });
-    }
-    
     hasAppliedPreferences.current = true;
-  }, [preferencesLoaded, userPreferences, getDefaultStarRating, getDefaultAmenities]);
+  }, [preferencesLoaded]);
 
   // Check if user has personalized preferences
   const hasPersonalizedPreferences = useMemo(() => {
@@ -328,6 +316,11 @@ export default function PlannerHotelEnhanced() {
         Math.min(nextMax, prev.priceRange[1]),
       ];
 
+      // If the clamp produced an invalid range, reset to safe bounds.
+      if (clamped[0] > clamped[1]) {
+        return { ...prev, priceRange: [nextMin, nextMax] };
+      }
+
       if (clamped[0] !== prev.priceRange[0] || clamped[1] !== prev.priceRange[1]) {
         return { ...prev, priceRange: clamped };
       }
@@ -350,9 +343,10 @@ export default function PlannerHotelEnhanced() {
     }
 
     // Always apply price filter (range is initialized to the destination's real bounds)
-    result = result.filter(
-      (h) => h.pricePerNight >= filters.priceRange[0] && h.pricePerNight <= filters.priceRange[1]
-    );
+    const [minPrice, maxPrice] = filters.priceRange;
+    if (minPrice <= maxPrice) {
+      result = result.filter((h) => h.pricePerNight >= minPrice && h.pricePerNight <= maxPrice);
+    }
 
     if (filters.guestRating > 0) {
       result = result.filter((h) => h.rating >= filters.guestRating);
