@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   useHotelSearch,
   useCreateHotelHold,
+  enrichHotel,
   type HotelOption,
   type HotelSearchParams,
 } from '@/services/hotelAPI';
@@ -279,8 +280,10 @@ export default function PlannerHotelEnhanced() {
     const enhancedHotel = enhancedHotels.find((h) => h.id === hotelId);
     const room = enhancedHotel?.roomOptions.find((r) => r.id === roomId);
 
-    // Persist to TripPlannerContext for summary/booking
-    setHotel({
+    // Build initial hotel selection
+    const hotelPhotos = hotel.photos || hotel.images || (hotel.imageUrl ? [hotel.imageUrl] : []);
+    
+    let hotelSelection = {
       id: hotelId,
       name: hotel.name,
       location: hotel.neighborhood,
@@ -290,13 +293,38 @@ export default function PlannerHotelEnhanced() {
       pricePerNight: room?.pricePerNight || hotel.pricePerNight,
       roomType: room?.name || hotel.roomType || 'Room',
       amenities: hotel.amenities,
-      imageUrl: (enhancedHotel?.images?.[0] || hotel.imageUrl) ?? undefined,
-      images: enhancedHotel?.images || (hotel.imageUrl ? [hotel.imageUrl] : []),
+      imageUrl: hotelPhotos[0] ?? undefined,
+      images: hotelPhotos,
+      website: hotel.website || undefined,
+      googleMapsUrl: hotel.googleMapsUrl || undefined,
       reviewCount: hotel.reviewCount,
       description: hotel.description,
       checkIn: enhancedHotel?.policies?.checkIn || '15:00',
       checkOut: enhancedHotel?.policies?.checkOut || '11:00',
-    });
+      placeId: hotel.placeId || undefined,
+    };
+
+    // Enrich hotel with Google Places data (address, website, photos)
+    try {
+      const enrichment = await enrichHotel(hotel.name, destination);
+      if (enrichment) {
+        hotelSelection = {
+          ...hotelSelection,
+          address: enrichment.address || hotelSelection.address,
+          website: enrichment.website || hotelSelection.website,
+          googleMapsUrl: enrichment.googleMapsUrl || hotelSelection.googleMapsUrl,
+          images: enrichment.photos?.length ? enrichment.photos : hotelSelection.images,
+          imageUrl: enrichment.photos?.[0] || hotelSelection.imageUrl,
+          placeId: enrichment.placeId || hotelSelection.placeId,
+        };
+        console.log('[PlannerHotel] Hotel enriched with Google Places data');
+      }
+    } catch (err) {
+      console.warn('[PlannerHotel] Hotel enrichment failed:', err);
+    }
+
+    // Persist to TripPlannerContext for summary/booking
+    setHotel(hotelSelection);
 
     try {
       const tripId = searchParams.get('tripId') || plannerState.tripId || 'temp-trip';

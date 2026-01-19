@@ -203,6 +203,12 @@ function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): 
   
   const hotelData = hotel.hotel || hotel;
   
+  // Build photos array from various sources
+  const photos: string[] = [];
+  if (hotelData.media?.length) {
+    photos.push(...hotelData.media.map((m: any) => m.uri).filter(Boolean));
+  }
+  
   return {
     // Core identification
     id: hotelData.hotelId || hotelData.id || `hotel-${Date.now()}`,
@@ -210,7 +216,7 @@ function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): 
     
     // Name & location (with defaults)
     name: hotelData.name || 'Hotel',
-    address: hotelData.address?.lines?.join(', ') || '',
+    address: hotelData.address?.lines?.join(', ') || hotelData.address?.line1 || '',
     city: hotelData.address?.cityName || params.destination,
     location: hotelData.address?.cityName || params.destination,
     neighborhood: hotelData.address?.cityName || 'City Center',
@@ -223,6 +229,7 @@ function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): 
     // Pricing
     pricePerNight: Math.round(pricePerNight),
     totalPrice: totalPrice > 0 ? totalPrice : pricePerNight * nights,
+    price: totalPrice > 0 ? totalPrice : pricePerNight * nights,
     currency: offer?.price?.currency || 'USD',
     
     // Room info (with defaults)
@@ -230,9 +237,10 @@ function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): 
     bedType: offer?.room?.typeEstimated?.beds || 1,
     description: offer?.room?.description?.text || `Comfortable room in ${hotelData.name || 'the hotel'}`,
     
-    // Images (provide placeholder if missing)
-    imageUrl: hotelData.media?.[0]?.uri || null,
-    photos: hotelData.media?.map((m: any) => m.uri).filter(Boolean) || [],
+    // Images - now properly structured for frontend
+    imageUrl: photos[0] || null,
+    photos: photos,
+    images: photos, // Alias for frontend compatibility
     
     // Amenities (ensure array)
     amenities: Array.isArray(hotelData.amenities) ? hotelData.amenities : [],
@@ -252,6 +260,11 @@ function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): 
     // Reviews (provide defaults if missing)
     reviewScore: hotelData.rating ? hotelData.rating * 2 : 8.0,
     reviewCount: 0,
+    
+    // Website & Google Places enrichment placeholders
+    website: null,
+    googleMapsUrl: null,
+    placeId: null,
     
     // Source
     source: 'amadeus',
@@ -457,7 +470,7 @@ function generateFallbackHotels(params: HotelSearchParams, destination: string):
     id: `fallback-hotel-${index + 1}`,
     hotelId: `fallback-${index + 1}`,
     name: `${name} ${destination}`,
-    address: `${100 + index * 10} Main Street`,
+    address: `${100 + index * 10} Main Street, ${destination}`,
     city: destination,
     location: destination,
     neighborhood: 'City Center',
@@ -466,12 +479,14 @@ function generateFallbackHotels(params: HotelSearchParams, destination: string):
     stars: 3 + (index % 3),
     pricePerNight: 120 + (index * 25),
     totalPrice: (120 + (index * 25)) * nights,
+    price: (120 + (index * 25)) * nights,
     currency: 'USD',
     roomType: ['Standard Room', 'Deluxe Room', 'Suite'][index % 3],
     bedType: 1,
     description: `A comfortable stay in the heart of ${destination}`,
     imageUrl: null,
     photos: [],
+    images: [],
     amenities: ['WiFi', 'Air Conditioning', 'TV'],
     cancellationPolicy: 'Free cancellation up to 24 hours before check-in',
     checkIn: params.checkIn,
@@ -479,8 +494,76 @@ function generateFallbackHotels(params: HotelSearchParams, destination: string):
     nights,
     reviewScore: 7.5 + (index * 0.2),
     reviewCount: 50 + (index * 20),
+    website: null,
+    googleMapsUrl: null,
+    placeId: null,
     source: 'fallback',
   }));
+}
+
+// =============================================================================
+// GOOGLE PLACES HOTEL ENRICHMENT
+// =============================================================================
+async function enrichHotelWithPlaces(
+  hotelName: string,
+  destination: string,
+  apiKey: string
+): Promise<{ address?: string; website?: string; googleMapsUrl?: string; photos?: string[]; placeId?: string } | null> {
+  try {
+    const textQuery = `${hotelName} hotel ${destination}`;
+    console.log('[Hotels] Enriching hotel via Google Places:', textQuery);
+
+    const searchResponse = await fetch(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.websiteUri,places.googleMapsUri,places.photos",
+        },
+        body: JSON.stringify({
+          textQuery,
+          maxResultCount: 1,
+        }),
+      }
+    );
+
+    if (!searchResponse.ok) {
+      console.error('[Hotels] Google Places enrichment failed:', searchResponse.status);
+      return null;
+    }
+
+    const searchData = await searchResponse.json();
+    const place = searchData.places?.[0];
+
+    if (!place) {
+      console.log('[Hotels] No Google Places result for:', textQuery);
+      return null;
+    }
+
+    // Get photo URLs if available
+    const photos: string[] = [];
+    if (place.photos?.length && apiKey) {
+      for (const photo of place.photos.slice(0, 5)) {
+        const photoUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=800&key=${apiKey}`;
+        photos.push(photoUrl);
+      }
+    }
+
+    console.log('[Hotels] ✅ Enriched hotel:', place.displayName?.text, '- got', photos.length, 'photos');
+
+    return {
+      address: place.formattedAddress || undefined,
+      website: place.websiteUri || undefined,
+      googleMapsUrl: place.googleMapsUri || undefined,
+      photos: photos.length > 0 ? photos : undefined,
+      placeId: place.id || undefined,
+    };
+  } catch (error) {
+    console.error('[Hotels] Google Places enrichment error:', error);
+    return null;
+  }
 }
 
 // ============= HTTP HANDLER =============
@@ -494,6 +577,33 @@ serve(async (req) => {
       const body = await req.json();
       console.log('[Hotels] Request:', JSON.stringify(body));
       
+      // Check if this is an enrichment request
+      if (body.action === 'enrich' && body.hotelName) {
+        const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
+        if (!apiKey) {
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Google Maps API key not configured' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        const enrichment = await enrichHotelWithPlaces(
+          body.hotelName,
+          body.destination || '',
+          apiKey
+        );
+        
+        return new Response(JSON.stringify({ 
+          success: !!enrichment,
+          enrichment: enrichment || {},
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // Standard hotel search
       const hotels = await searchHotels(body);
       
       return new Response(JSON.stringify({ 

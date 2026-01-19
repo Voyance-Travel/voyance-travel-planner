@@ -125,6 +125,8 @@ export interface HotelSelection {
   reviewCount?: number;
   neighborhood?: string;
   description?: string;
+  website?: string;
+  googleMapsUrl?: string;
 }
 
 export interface EditorialItineraryProps {
@@ -986,6 +988,21 @@ export function EditorialItinerary({
                         <span className="font-serif text-2xl font-semibold text-primary">${hotelCost.toLocaleString()}</span>
                       </div>
                     </div>
+                    
+                    {/* Website Link */}
+                    {(hotelSelection.website || hotelSelection.googleMapsUrl) && (
+                      <div className="pt-3 border-t border-border">
+                        <a
+                          href={hotelSelection.website || hotelSelection.googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          {hotelSelection.website ? 'Visit Hotel Website' : 'View on Google Maps'}
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-muted-foreground">No hotel selected</p>
@@ -1033,17 +1050,69 @@ interface DestinationCarouselProps {
 
 function DestinationCarousel({ destination, destinationCountry }: DestinationCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [images, setImages] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Generate destination-themed image URLs
-  const images = [
-    `https://source.unsplash.com/800x400/?${destination},landmark`,
-    `https://source.unsplash.com/800x400/?${destination},architecture`,
-    `https://source.unsplash.com/800x400/?${destination},street`,
-    `https://source.unsplash.com/800x400/?${destination},culture`,
-  ];
+  // Fetch real destination images from the backend
+  useEffect(() => {
+    async function fetchImages() {
+      setIsLoading(true);
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data, error } = await supabase.functions.invoke('destination-images', {
+          body: {
+            destination,
+            imageType: 'gallery',
+            limit: 6,
+          },
+        });
+        
+        if (!error && data?.images?.length > 0) {
+          const urls = data.images.map((img: { url: string }) => img.url);
+          setImages(urls);
+        } else {
+          // Fallback to curated Unsplash images for the destination
+          setImages([
+            `https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80`, // Rome Colosseum
+            `https://images.unsplash.com/photo-1529260830199-42c24126f198?w=1200&q=80`, // Rome Trevi
+            `https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=1200&q=80`, // Rome Vatican
+            `https://images.unsplash.com/photo-1531572753322-ad063cecc140?w=1200&q=80`, // Rome Pantheon
+          ]);
+        }
+      } catch (err) {
+        console.error('[DestinationCarousel] Failed to fetch images:', err);
+        // Fallback images
+        setImages([
+          `https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80`,
+          `https://images.unsplash.com/photo-1529260830199-42c24126f198?w=1200&q=80`,
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    if (destination) {
+      fetchImages();
+    }
+  }, [destination]);
 
-  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % images.length);
-  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % Math.max(1, images.length));
+  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + Math.max(1, images.length)) % Math.max(1, images.length));
+
+  if (isLoading || images.length === 0) {
+    return (
+      <div className="relative overflow-hidden rounded-xl mb-6">
+        <div className="relative h-48 md:h-64 bg-gradient-to-br from-primary/20 to-accent/20 animate-pulse flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl md:text-3xl font-serif text-foreground">{destination}</h2>
+            {destinationCountry && (
+              <p className="text-muted-foreground text-sm">{destinationCountry}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden rounded-xl mb-6">
@@ -1051,7 +1120,10 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
         <img
           src={images[currentIndex]}
           alt={`${destination} ${currentIndex + 1}`}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-opacity duration-300"
+          onError={(e) => {
+            e.currentTarget.src = `https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80`;
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
         <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
@@ -1061,28 +1133,32 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
               <p className="text-white/80 text-sm">{destinationCountry}</p>
             )}
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" size="icon" onClick={prevSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
-              <ChevronLeft className="h-4 w-4 text-white" />
-            </Button>
-            <Button variant="secondary" size="icon" onClick={nextSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
-              <ChevronRight className="h-4 w-4 text-white" />
-            </Button>
-          </div>
+          {images.length > 1 && (
+            <div className="flex gap-2">
+              <Button variant="secondary" size="icon" onClick={prevSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
+                <ChevronLeft className="h-4 w-4 text-white" />
+              </Button>
+              <Button variant="secondary" size="icon" onClick={nextSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
+                <ChevronRight className="h-4 w-4 text-white" />
+              </Button>
+            </div>
+          )}
         </div>
         {/* Dots */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {images.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentIndex(idx)}
-              className={cn(
-                "w-2 h-2 rounded-full transition-colors",
-                idx === currentIndex ? "bg-white" : "bg-white/40"
-              )}
-            />
-          ))}
-        </div>
+        {images.length > 1 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {images.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentIndex(idx)}
+                className={cn(
+                  "w-2 h-2 rounded-full transition-colors",
+                  idx === currentIndex ? "bg-white" : "bg-white/40"
+                )}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

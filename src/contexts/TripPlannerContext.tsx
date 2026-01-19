@@ -74,11 +74,13 @@ export interface HotelSelection {
   imageUrl?: string;
   images?: string[];
   website?: string;
+  googleMapsUrl?: string;
   checkIn?: string;
   checkOut?: string;
   nights?: number;
   reviewCount?: number;
   description?: string;
+  placeId?: string;
 }
 
 export interface Activity {
