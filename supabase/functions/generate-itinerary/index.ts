@@ -538,15 +538,65 @@ function getCategoryIcon(category: string): string {
 // STAGE 1: CONTEXT PREPARATION
 // =============================================================================
 
+interface DirectTripData {
+  tripId: string;
+  destination: string;
+  destinationCountry?: string;
+  startDate: string;
+  endDate: string;
+  travelers?: number;
+  tripType?: string;
+  budgetTier?: string;
+  userId?: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function prepareContext(supabase: any, tripId: string, userId?: string): Promise<GenerationContext | null> {
+async function prepareContext(supabase: any, tripId: string, userId?: string, directTripData?: DirectTripData): Promise<GenerationContext | null> {
   console.log(`[Stage 1] Preparing context for trip ${tripId}`);
 
+  // First try to fetch from database
   const { data: trip, error } = await supabase
     .from('trips')
     .select('*')
     .eq('id', tripId)
-    .single();
+    .maybeSingle();
+
+  // If we have direct trip data, use it as fallback (for localStorage/demo mode trips)
+  if (!trip && directTripData) {
+    console.log('[Stage 1] Trip not in database, using direct trip data');
+    
+    const totalDays = calculateDays(directTripData.startDate, directTripData.endDate);
+    
+    const context: GenerationContext = {
+      tripId: directTripData.tripId,
+      userId: directTripData.userId || userId || 'anonymous',
+      destination: directTripData.destination,
+      destinationCountry: directTripData.destinationCountry,
+      startDate: directTripData.startDate,
+      endDate: directTripData.endDate,
+      totalDays,
+      travelers: directTripData.travelers || 1,
+      tripType: directTripData.tripType,
+      budgetTier: directTripData.budgetTier,
+      pace: 'moderate',
+      interests: [],
+      currency: 'USD'
+    };
+    
+    // Set daily budget based on tier
+    const budgetMap: Record<string, number> = {
+      budget: 75,
+      economy: 100,
+      standard: 150,
+      comfort: 200,
+      premium: 300,
+      luxury: 500
+    };
+    context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
+    
+    console.log(`[Stage 1] Context prepared from direct data: ${context.totalDays} days in ${context.destination}`);
+    return context;
+  }
 
   if (error || !trip) {
     console.error('[Stage 1] Trip not found:', error);
@@ -1055,10 +1105,22 @@ serve(async (req) => {
     // ACTION: generate-full - Complete 7-stage pipeline
     // ==========================================================================
     if (action === 'generate-full') {
-      const { tripId, userId } = params;
+      const { tripId, userId, tripData } = params;
 
-      // STAGE 1: Context Preparation
-      const context = await prepareContext(supabase, tripId, userId);
+      // STAGE 1: Context Preparation (supports direct trip data for localStorage/demo mode)
+      const directTripData = tripData ? {
+        tripId,
+        destination: tripData.destination,
+        destinationCountry: tripData.destinationCountry,
+        startDate: tripData.startDate,
+        endDate: tripData.endDate,
+        travelers: tripData.travelers,
+        tripType: tripData.tripType,
+        budgetTier: tripData.budgetTier,
+        userId: tripData.userId || userId,
+      } : undefined;
+
+      const context = await prepareContext(supabase, tripId, userId, directTripData);
       if (!context) {
         return new Response(
           JSON.stringify({ error: "Trip not found" }),

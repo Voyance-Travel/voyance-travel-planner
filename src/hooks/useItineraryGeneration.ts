@@ -143,11 +143,23 @@ export function useItineraryGeneration() {
       setState(prev => ({ ...prev, progress: 20, status: 'generating' }));
 
       // Call the new generate-full action
+      // Pass trip data directly for localStorage/demo mode trips that aren't in DB
       const { data, error } = await supabase.functions.invoke('generate-itinerary', {
         body: {
           action: 'generate-full',
           tripId: trip.tripId,
           userId: trip.userId,
+          // Include trip data as fallback for when trip isn't in database
+          tripData: {
+            destination: trip.destination,
+            destinationCountry: trip.destinationCountry,
+            startDate: trip.startDate,
+            endDate: trip.endDate,
+            travelers: trip.travelers,
+            tripType: trip.tripType,
+            budgetTier: trip.budgetTier,
+            userId: trip.userId,
+          },
         },
       });
 
