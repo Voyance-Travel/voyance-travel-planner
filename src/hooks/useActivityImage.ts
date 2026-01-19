@@ -37,8 +37,8 @@ const CATEGORY_FALLBACKS: Record<string, string> = {
   accommodation: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop',
 };
 
-function getCacheKey(title: string, destination?: string): string {
-  const normalized = `${title}-${destination || 'unknown'}`
+function getCacheKey(title: string, destination?: string, cacheId?: string): string {
+  const normalized = `${cacheId || title}-${destination || 'unknown'}`
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .slice(0, 80);
@@ -86,7 +86,8 @@ export function useActivityImage(
   title: string,
   category?: string,
   existingPhoto?: string | null,
-  destination?: string
+  destination?: string,
+  cacheId?: string
 ): { 
   imageUrl: string | null; 
   loading: boolean; 
@@ -120,7 +121,7 @@ export function useActivityImage(
       return;
     }
 
-    const cacheKey = getCacheKey(title, destination);
+    const cacheKey = getCacheKey(title, destination, cacheId);
 
     // Check in-memory cache first
     if (imageCache.has(cacheKey)) {
@@ -148,6 +149,15 @@ export function useActivityImage(
       return;
     }
 
+    // If destination is missing, don't attempt "real" venue lookup.
+    // Without destination we get wildly irrelevant results and cache collisions.
+    if (!destination || destination.trim().length < 2) {
+      setImageUrl(getCategoryFallback(category));
+      setSource('fallback');
+      setLoading(false);
+      return;
+    }
+
     // Set loading state with category fallback as placeholder
     setImageUrl(getCategoryFallback(category));
     setLoading(true);
@@ -156,7 +166,7 @@ export function useActivityImage(
     const fetchPromise = fetchImageFromBackend(
       title,
       category || 'activity',
-      destination || ''
+      destination
     );
 
     pendingRequests.set(cacheKey, fetchPromise);
