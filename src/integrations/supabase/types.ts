@@ -585,6 +585,13 @@ export type Database = {
             referencedRelation: "trip_members"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "expense_splits_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       feature_flags: {
@@ -856,7 +863,6 @@ export type Database = {
           bio: string | null
           created_at: string
           display_name: string | null
-          email: string | null
           first_name: string | null
           handle: string | null
           home_airport: string | null
@@ -873,7 +879,6 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
-          email?: string | null
           first_name?: string | null
           handle?: string | null
           home_airport?: string | null
@@ -890,7 +895,6 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
-          email?: string | null
           first_name?: string | null
           handle?: string | null
           home_airport?: string | null
@@ -1359,6 +1363,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "trip_expenses_paid_by_member_id_fkey"
+            columns: ["paid_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "trip_expenses_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
@@ -1534,10 +1545,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "trip_settlements_from_member_id_fkey"
+            columns: ["from_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "trip_settlements_to_member_id_fkey"
             columns: ["to_member_id"]
             isOneToOne: false
             referencedRelation: "trip_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_settlements_to_member_id_fkey"
+            columns: ["to_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members_safe"
             referencedColumns: ["id"]
           },
           {
@@ -2081,6 +2106,53 @@ export type Database = {
         }
         Relationships: []
       }
+      trip_members_safe: {
+        Row: {
+          accepted_at: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          invited_at: string | null
+          name: string | null
+          role: Database["public"]["Enums"]["trip_member_role"] | null
+          trip_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string | null
+          email?: never
+          id?: string | null
+          invited_at?: string | null
+          name?: string | null
+          role?: Database["public"]["Enums"]["trip_member_role"] | null
+          trip_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string | null
+          email?: never
+          id?: string | null
+          invited_at?: string | null
+          name?: string | null
+          role?: Database["public"]["Enums"]["trip_member_role"] | null
+          trip_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences_safe: {
         Row: {
           activity_level: string | null
@@ -2142,6 +2214,7 @@ export type Database = {
         }
         Returns: string
       }
+      is_trip_owner: { Args: { p_trip_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "user" | "admin" | "moderator"
