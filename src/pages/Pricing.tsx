@@ -350,7 +350,7 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="text-center mt-8 text-sm text-muted-foreground"
           >
-            <p>Manual edits are always free: rearranging activities, adding notes, adjusting times, and deleting items costs nothing.</p>
+            <p>Manual edits are always free: move, delete, reorder, and add notes without limits.</p>
           </motion.div>
         </div>
       </section>
@@ -436,9 +436,9 @@ export default function Pricing() {
           <h2 className="text-2xl font-serif font-bold text-foreground text-center mb-10">Common questions</h2>
           <div className="space-y-4">
             {[
-              { q: "What counts as an AI activity swap?", a: "When you ask Voyance to find you a different restaurant, attraction, or activity — that's an AI swap. It uses AI to search for better alternatives based on your preferences. Manual edits like rearranging, adding notes, or deleting items are always free." },
-              { q: "What's always free?", a: "Rearranging activities, changing times, adding personal notes, deleting items, and reordering days. Anything you do manually without asking AI for help is unlimited and free on every plan." },
-              { q: "What's the difference between Free and Trip Pass?", a: "Free gives you limited AI features each month across all trips. Trip Pass removes all AI limits for one specific trip, forever. Great when you're seriously planning and want to perfect every detail." },
+              { q: "What's a Smart Refinement?", a: "Swapping a restaurant, adjusting the vibe, or optimizing a block. Anything where Voyance searches for a better fit based on your preferences. Manual edits like moving, deleting, or reordering are always free." },
+              { q: "What's always free?", a: "Moving activities, deleting items, reordering days, and adding personal notes. Anything you do manually is unlimited on every plan." },
+              { q: "What's the difference between Free and Trip Pass?", a: "Free gives you limited refinements each month across all trips. Trip Pass removes all limits for one specific trip, forever. Great when you're seriously planning and want to perfect every detail." },
               { q: "Can I cancel my subscription?", a: "Yes, anytime. You keep access until your billing period ends. No cancellation fees, no awkward phone calls." },
               { q: "Do you charge fees on bookings?", a: "Never. Flight and hotel prices are passed through at market rates. We make money from subscriptions, not booking commissions." },
             ].map((faq, i) => (
