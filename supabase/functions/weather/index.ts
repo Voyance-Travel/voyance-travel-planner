@@ -150,63 +150,91 @@ function generateFallbackForecast(destination: string, startDate: string, days: 
 }
 
 async function fetchWeatherStack(destination: string, apiKey: string): Promise<WeatherData | null> {
-  try {
-    const url = `http://api.weatherstack.com/current?access_key=${apiKey}&query=${encodeURIComponent(destination)}&units=m`;
-    
-    console.log('[Weather] Fetching from Weatherstack for:', destination);
-    
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error('[Weather] Weatherstack HTTP error:', response.status);
-      return null;
-    }
-    
-    const data: WeatherStackResponse = await response.json();
-    
-    if (data.error) {
-      console.error('[Weather] Weatherstack API error:', data.error.info);
-      return null;
-    }
-    
-    const current = data.current;
-    const condition = current.weather_descriptions?.[0] || 'Unknown';
-    
-    // Generate forecast based on current conditions (Weatherstack free tier only has current)
-    const baseTemp = current.temperature;
-    const forecast = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
-      const variance = Math.random() * 6 - 3;
-      
-      forecast.push({
-        date: date.toISOString().split('T')[0],
-        high: Math.round(baseTemp + 3 + variance),
-        low: Math.round(baseTemp - 5 + variance),
-        condition: i === 0 ? condition : 'Similar conditions',
-        icon: getWeatherIcon(condition),
-        precipitation: current.precip || 0,
-      });
-    }
-    
-    return {
-      destination: data.location?.name || destination,
-      current: {
-        temp: current.temperature,
-        feelsLike: current.feelslike,
-        condition,
-        icon: getWeatherIcon(condition),
-        humidity: current.humidity,
-        windSpeed: current.wind_speed,
-        precipitation: current.precip || 0,
-      },
-      forecast,
-      source: 'weatherstack',
-    };
-  } catch (error) {
-    console.error('[Weather] Weatherstack fetch error:', error);
+  const cleanedKey = (apiKey || '').trim();
+  if (!cleanedKey) {
+    console.error('[Weather] WEATHERSTACK_API_KEY is empty after trimming');
     return null;
   }
+
+  const query = encodeURIComponent(destination);
+  const endpoints = [
+    `https://api.weatherstack.com/current?access_key=${cleanedKey}&query=${query}&units=m`,
+    `http://api.weatherstack.com/current?access_key=${cleanedKey}&query=${query}&units=m`,
+  ];
+
+  for (const url of endpoints) {
+    const protocol = url.startsWith('https') ? 'https' : 'http';
+
+    try {
+      console.log(`[Weather] Fetching from Weatherstack (${protocol}) for:`, destination);
+
+      const response = await fetch(url, {
+        headers: {
+          // Some API gateways behave differently without a UA.
+          'User-Agent': 'voyance-weather/1.0',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        console.error(
+          '[Weather] Weatherstack HTTP error:',
+          response.status,
+          text ? `| body: ${text.slice(0, 300)}` : ''
+        );
+        continue;
+      }
+
+      const data: WeatherStackResponse = await response.json();
+
+      if (data.error) {
+        console.error('[Weather] Weatherstack API error:', data.error.info);
+        continue;
+      }
+
+      const current = data.current;
+      const condition = current.weather_descriptions?.[0] || 'Unknown';
+
+      // Generate forecast based on current conditions (Weatherstack free tier only has current)
+      const baseTemp = current.temperature;
+      const forecast = [];
+      for (let i = 0; i < 7; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() + i);
+        const variance = Math.random() * 6 - 3;
+
+        forecast.push({
+          date: date.toISOString().split('T')[0],
+          high: Math.round(baseTemp + 3 + variance),
+          low: Math.round(baseTemp - 5 + variance),
+          condition: i === 0 ? condition : 'Similar conditions',
+          icon: getWeatherIcon(condition),
+          precipitation: current.precip || 0,
+        });
+      }
+
+      return {
+        destination: data.location?.name || destination,
+        current: {
+          temp: current.temperature,
+          feelsLike: current.feelslike,
+          condition,
+          icon: getWeatherIcon(condition),
+          humidity: current.humidity,
+          windSpeed: current.wind_speed,
+          precipitation: current.precip || 0,
+        },
+        forecast,
+        source: 'weatherstack',
+      };
+    } catch (error) {
+      console.error(`[Weather] Weatherstack fetch error (${protocol}):`, error);
+      // try next endpoint
+    }
+  }
+
+  return null;
 }
 
 serve(async (req) => {
