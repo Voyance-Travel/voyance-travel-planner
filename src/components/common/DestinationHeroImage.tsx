@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import { useHeroImage } from '@/services/destinationImagesAPI';
+import { getDestinationImage, hasCuratedImages } from '@/utils/destinationImages';
 
 interface DestinationHeroImageProps {
   destinationId?: string;
@@ -37,6 +38,16 @@ function generateGradientDataUrl(label: string): string {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
+/**
+ * Extract city name from destination string (e.g., "Paris, France" -> "paris")
+ */
+function extractCityKey(destinationName: string): string {
+  // Handle "City, Country" format
+  const city = destinationName.split(',')[0].trim().toLowerCase();
+  // Handle slug format (e.g., "new-york")
+  return city.replace(/\s+/g, '-');
+}
+
 export default function DestinationHeroImage({
   destinationId,
   destinationName,
@@ -44,10 +55,30 @@ export default function DestinationHeroImage({
   className,
   overlayGradient = '',
 }: DestinationHeroImageProps) {
-  const { data } = useHeroImage(destinationId, destinationName);
+  // First check if we have curated images - these are instant, no API call needed
+  const cityKey = extractCityKey(destinationName);
+  const hasCurated = hasCuratedImages(cityKey);
+  
+  // Only call the API if we don't have curated images
+  const { data } = useHeroImage(
+    hasCurated ? undefined : destinationId, 
+    hasCurated ? undefined : destinationName
+  );
 
-  const fallback = useMemo(() => generateGradientDataUrl(destinationName), [destinationName]);
-  const src = data?.url || fallback;
+  const src = useMemo(() => {
+    // Priority 1: Curated static images (instant, no API call)
+    if (hasCurated) {
+      return getDestinationImage(cityKey);
+    }
+    
+    // Priority 2: API-fetched image
+    if (data?.url) {
+      return data.url;
+    }
+    
+    // Priority 3: Gradient fallback
+    return generateGradientDataUrl(destinationName);
+  }, [hasCurated, cityKey, data?.url, destinationName]);
 
   return (
     <HeroImageWithFallback
