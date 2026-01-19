@@ -39,7 +39,7 @@ import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityIma
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { WeatherForecast } from './WeatherForecast';
 import { BookingButton } from '@/components/booking/BookingButton';
-import { PaymentSummary } from '@/components/booking/PaymentSummary';
+import { PaymentsTab } from './PaymentsTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 
 // =============================================================================
@@ -369,7 +369,7 @@ export function EditorialItinerary({
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'payments' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -807,14 +807,12 @@ export function EditorialItinerary({
       {/* Destination Photo Carousel */}
       <DestinationCarousel destination={destination} destinationCountry={destinationCountry} />
 
-      {/* Payment Summary - Shows paid vs outstanding */}
-      <PaymentSummary tripId={tripId} />
-
       {/* Navigation Tabs */}
       <div className="border-b border-border">
         <div className="flex gap-1">
           {[
             { id: 'itinerary', label: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
+            { id: 'payments', label: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
             { id: 'weather', label: 'Weather', icon: <CloudSun className="h-4 w-4" /> },
             { id: 'overview', label: 'Flight & Hotel', icon: <Plane className="h-4 w-4" /> },
             { id: 'needtoknow', label: 'Need to Know', icon: <Info className="h-4 w-4" /> },
@@ -885,6 +883,16 @@ export function EditorialItinerary({
               />
             ))}
           </motion.div>
+        )}
+
+        {activeTab === 'payments' && (
+          <PaymentsTab
+            tripId={tripId}
+            days={days}
+            flightSelection={flightSelection}
+            hotelSelection={hotelSelection}
+            travelers={travelers}
+          />
         )}
 
         {activeTab === 'weather' && (
