@@ -136,9 +136,9 @@ export default function Footer() {
             <Link to={ROUTES.TERMS} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Terms
             </Link>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link to={ROUTES.PRIVACY} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Cookies
-            </a>
+            </Link>
           </div>
         </div>
       </div>
