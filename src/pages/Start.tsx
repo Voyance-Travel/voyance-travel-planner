@@ -845,7 +845,18 @@ export default function Start() {
                   )}
                 </Button>
                 
-                {/* Skip to Itinerary Option (only show if not already in itinerary mode) */}
+                {/* Skip to Itinerary Option - More prominent card style */}
+                {!itineraryOnlyMode && (
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-card px-3 text-xs text-muted-foreground">or</span>
+                    </div>
+                  </div>
+                )}
+                
                 {!itineraryOnlyMode && (
                   <button
                     type="button"
@@ -871,10 +882,19 @@ export default function Start() {
                       }
                     }}
                     disabled={!isFormValid}
-                    className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={cn(
+                      "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed transition-all",
+                      "border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50",
+                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary/5"
+                    )}
                   >
-                    <Sparkles className="h-3.5 w-3.5 inline mr-1.5" />
-                    Skip flights & hotels — just build my itinerary
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium text-primary">
+                      Just Build My Itinerary
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-1">
+                      (I'll book flights & hotels later)
+                    </span>
                   </button>
                 )}
               </div>
