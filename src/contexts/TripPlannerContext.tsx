@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
+import { useEntitlements } from '@/hooks/useEntitlements';
 
 // Anonymous session management
 const ANON_SESSION_KEY = 'voyance_anonymous_session';
@@ -146,6 +147,7 @@ const TripPlannerContext = createContext<TripPlannerContextType | undefined>(und
 
 export function TripPlannerProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { plans } = useEntitlements();
   const [state, setState] = useState<TripPlannerState>(initialState);
 
   // Calculate total price
@@ -211,6 +213,9 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
     try {
       const tripName = state.basics.destination ? `Trip to ${state.basics.destination}` : 'New Trip';
 
+      // Determine owner's plan tier (free if not authenticated or no plan data)
+      const ownerPlanTier = plans?.[0] || 'free';
+
       const tripData: Record<string, unknown> = {
         id: state.tripId || undefined,
         user_id: user?.id ?? null,
@@ -223,6 +228,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         travelers: state.basics.travelers || 1,
         origin_city: state.basics.originCity,
         budget_tier: state.basics.budgetTier || 'moderate',
+        owner_plan_tier: ownerPlanTier, // Track owner's plan for collaboration rules
         status: 'draft',
         flight_selection: state.flights ? JSON.parse(JSON.stringify(state.flights)) : null,
         hotel_selection: state.hotel ? JSON.parse(JSON.stringify(state.hotel)) : null,
