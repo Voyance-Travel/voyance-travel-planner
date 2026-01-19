@@ -372,6 +372,7 @@ export function EditorialItinerary({
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
   // Calculate totals with smart estimation
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier), 0);
@@ -386,6 +387,40 @@ export function EditorialItinerary({
         : [...prev, dayNumber]
     );
   };
+
+  // Auto-save when there are changes (debounced)
+  useEffect(() => {
+    if (!hasChanges || !isEditable) return;
+    
+    const autoSaveTimer = setTimeout(async () => {
+      try {
+        const itineraryData = {
+          days: JSON.parse(JSON.stringify(days)),
+          status: 'ready',
+          savedAt: new Date().toISOString(),
+        };
+
+        const { error } = await supabase
+          .from('trips')
+          .update({
+            itinerary_data: itineraryData,
+            itinerary_status: 'ready',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', tripId);
+
+        if (!error) {
+          setHasChanges(false);
+          setLastSaved(new Date());
+          console.log('[EditorialItinerary] Auto-saved successfully');
+        }
+      } catch (err) {
+        console.error('[EditorialItinerary] Auto-save failed:', err);
+      }
+    }, 3000); // Auto-save 3 seconds after last change
+
+    return () => clearTimeout(autoSaveTimer);
+  }, [hasChanges, days, tripId, isEditable]);
 
   // ===========================================================================
   // HANDLERS
@@ -655,8 +690,13 @@ export function EditorialItinerary({
                 </Button>
                 <Button onClick={handleSave} disabled={isSaving || !hasChanges} className="gap-2 bg-primary hover:bg-primary/90 shadow-md">
                   {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+                  {isSaving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved ✓'}
                 </Button>
+                {lastSaved && !hasChanges && (
+                  <span className="text-xs text-muted-foreground">
+                    Auto-saved {format(lastSaved, 'h:mm a')}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -1998,11 +2038,18 @@ function ActivityRow({
   const isRatingEligible = ratingEligibleTypes.includes(activityType) && !isDowntime && !isTransport && !isCheckIn && !isAirport && !isAccommodation;
   const rating = isRatingEligible ? rawRating : null;
   
+  // Determine the best search term for images:
+  // 1. Use location.name (actual venue) if available - best for Google Places
+  // 2. Fall back to activity title
+  const imageSearchTerm = activity.location?.name && activity.location.name.length > 3
+    ? activity.location.name
+    : activity.title;
+  
   // Use useActivityImage hook for real place photos with deduplication
   // This fetches from Google Places / TripAdvisor with caching
   const shouldFetchRealPhoto = showThumbnail && !isCheckIn && !isAirport && !isAccommodation;
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-    activity.title,
+    imageSearchTerm,
     activityType,
     existingPhoto,
     shouldFetchRealPhoto ? destination : undefined // Only pass destination if we want real photos
@@ -2010,6 +2057,10 @@ function ActivityRow({
   
   const thumbnailUrl = fetchedImageUrl;
   const [thumbnailError, setThumbnailError] = useState(false);
+  
+  // Determine if this is a dining activity that should show venue name prominently
+  const isDiningActivity = ['dining', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'].includes(activityType);
+  const venueNameForDining = isDiningActivity && activity.location?.name ? activity.location.name : null;
 
   return (
     <div className={cn(
@@ -2067,6 +2118,10 @@ function ActivityRow({
             <div className="flex items-center gap-2 mb-1.5">
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
+              {/* Show venue name prominently for dining */}
+              {venueNameForDining && (
+                <span className="text-sm font-medium text-foreground">@ {venueNameForDining}</span>
+              )}
               {rating && (
                 <Badge variant="secondary" className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none">
                   <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
