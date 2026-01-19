@@ -14,6 +14,9 @@ import type { Json } from '@/integrations/supabase/types';
 
 export interface Profile {
   id: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
   handle: string | null;
   display_name: string | null;
   avatar_url: string | null;
@@ -35,6 +38,9 @@ export interface ProfileSearchResult {
 }
 
 export interface ProfileUpdate {
+  email?: string;
+  first_name?: string;
+  last_name?: string;
   handle?: string;
   display_name?: string;
   avatar_url?: string;
