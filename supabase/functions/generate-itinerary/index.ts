@@ -551,7 +551,14 @@ async function getUserPreferences(supabase: any, userId: string) {
         climate_preferences,
         weather_preferences,
         preferred_regions,
-        eco_friendly
+        eco_friendly,
+        traveler_type,
+        travel_vibes,
+        planning_preference,
+        travel_companions,
+        vibe,
+        travel_style,
+        primary_goal
       `)
       .eq('user_id', userId)
       .maybeSingle();
@@ -606,6 +613,52 @@ function buildPreferenceContext(insights: any, prefs: any): string {
     const mobilityItems: string[] = [];
     const climateItems: string[] = [];
     const accommodationItems: string[] = [];
+    const personaItems: string[] = [];
+
+    // Traveler persona (from quiz - key for personalization!)
+    if (prefs.traveler_type) {
+      const personaMap: Record<string, string> = {
+        'explorer': 'Curiosity-driven explorer who seeks authentic, off-the-beaten-path adventures and hidden gems',
+        'escape_artist': 'Peace-seeker who travels to disconnect, recharge, and find inner peace',
+        'curated_luxe': 'Refinement-focused traveler who appreciates curated experiences and premium service',
+        'story_seeker': 'Moment-collector who focuses on memorable experiences and cultural connections',
+      };
+      personaItems.push(`🧭 TRAVELER TYPE: ${personaMap[prefs.traveler_type] || prefs.traveler_type}`);
+    }
+    
+    if (prefs.travel_vibes?.length) {
+      personaItems.push(`Attracted to: ${prefs.travel_vibes.join(', ')} environments`);
+    }
+    
+    if (prefs.vibe || prefs.travel_style) {
+      personaItems.push(`Overall vibe: ${prefs.vibe || prefs.travel_style}`);
+    }
+    
+    if (prefs.travel_companions?.length) {
+      const companionContext = prefs.travel_companions.map((c: string) => {
+        const map: Record<string, string> = {
+          'solo': 'solo traveler - include opportunities for reflection and meeting locals',
+          'partner': 'traveling with partner - include romantic spots and couple activities',
+          'family': 'family travel - ensure kid-friendly options and manageable pacing',
+          'friends': 'group of friends - include social activities and shared experiences',
+        };
+        return map[c] || c;
+      });
+      personaItems.push(`Travel style: ${companionContext.join('; ')}`);
+    }
+    
+    if (prefs.planning_preference) {
+      const planningMap: Record<string, string> = {
+        'detailed': 'Plans everything in advance - provide specific times, reservations, and backup options',
+        'flexible': 'Prefers a loose framework - provide key bookings but leave room for spontaneity',
+        'spontaneous': 'Minimal planning preferred - focus on must-see highlights, leave gaps for discovery',
+      };
+      personaItems.push(`Planning style: ${planningMap[prefs.planning_preference] || prefs.planning_preference}`);
+    }
+    
+    if (personaItems.length > 0) {
+      sections.push({ title: '🎭 TRAVELER PERSONA', items: personaItems });
+    }
 
     // Core preferences
     if (prefs.interests?.length) {

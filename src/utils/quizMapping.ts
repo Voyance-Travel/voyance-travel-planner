@@ -321,23 +321,24 @@ export function mapQuizAnswersToPreferences(
       }
     }
     
-    // Handle flight_preferences multi-select specially
-    // Extract individual preferences from the multi-select
-    if (questionId === 'flight_preferences' && Array.isArray(value)) {
-      // Check for specific preferences in the array
-      if (value.includes('direct')) {
+    // Handle flight_preferences - now single select with 'direct' or 'flexible'
+    if (questionId === 'flight_preferences') {
+      if (value === 'direct') {
+        preferences.direct_flights_only = true;
+      } else if (value === 'flexible') {
+        preferences.direct_flights_only = false;
+      }
+      // Also handle legacy multi-select format for backward compatibility
+      if (Array.isArray(value) && value.includes('direct')) {
         preferences.direct_flights_only = true;
       }
-      if (value.includes('window')) {
-        preferences.seat_preference = 'window';
-      } else if (value.includes('aisle')) {
-        preferences.seat_preference = 'aisle';
-      }
-      if (value.includes('morning')) {
-        preferences.flight_time_preference = 'morning';
-      } else if (value.includes('evening')) {
-        preferences.flight_time_preference = 'evening';
-      }
+    }
+    
+    // Handle food_allergies text input - append to dietary info
+    if (questionId === 'food_allergies' && typeof value === 'string' && value.trim()) {
+      // Store allergies in dietary_restrictions with a prefix for clarity
+      const existingRestrictions = preferences.dietary_restrictions || [];
+      preferences.dietary_restrictions = [...existingRestrictions, `ALLERGIES: ${value.trim()}`];
     }
   }
 
