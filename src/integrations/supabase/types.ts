@@ -317,6 +317,63 @@ export type Database = {
         }
         Relationships: []
       }
+      curated_images: {
+        Row: {
+          alt_text: string | null
+          attribution: string | null
+          created_at: string | null
+          destination: string | null
+          entity_key: string
+          entity_type: string
+          expires_at: string | null
+          id: string
+          image_url: string
+          metadata: Json | null
+          photo_reference: string | null
+          place_id: string | null
+          quality_score: number | null
+          source: string
+          thumbnail_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          alt_text?: string | null
+          attribution?: string | null
+          created_at?: string | null
+          destination?: string | null
+          entity_key: string
+          entity_type: string
+          expires_at?: string | null
+          id?: string
+          image_url: string
+          metadata?: Json | null
+          photo_reference?: string | null
+          place_id?: string | null
+          quality_score?: number | null
+          source: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          alt_text?: string | null
+          attribution?: string | null
+          created_at?: string | null
+          destination?: string | null
+          entity_key?: string
+          entity_type?: string
+          expires_at?: string | null
+          id?: string
+          image_url?: string
+          metadata?: Json | null
+          photo_reference?: string | null
+          place_id?: string | null
+          quality_score?: number | null
+          source?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       destination_images: {
         Row: {
           alt_text: string | null

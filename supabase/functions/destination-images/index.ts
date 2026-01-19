@@ -11,9 +11,12 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: "hero" | "gallery" | "activity";
-  source: "pexels" | "google_places" | "lovable_ai" | "fallback";
+  source: "curated" | "google_places" | "tripadvisor" | "wikimedia" | "lovable_ai" | "fallback";
   width?: number;
   height?: number;
+  attribution?: string;
+  placeId?: string;
+  photoReference?: string;
 }
 
 interface RequestParams {
@@ -21,58 +24,86 @@ interface RequestParams {
   destination?: string;
   imageType?: string;
   limit?: number;
+  venueName?: string; // Specific venue for activity images
+  category?: string;  // Activity category for context
+  skipCache?: boolean;
 }
 
-async function getPexelsPhoto(destination: string, apiKey: string): Promise<DestinationImage | null> {
+interface CachedImage {
+  id: string;
+  entity_type: string;
+  entity_key: string;
+  destination: string;
+  source: string;
+  image_url: string;
+  thumbnail_url?: string;
+  alt_text?: string;
+  attribution?: string;
+  quality_score?: number;
+  photo_reference?: string;
+  place_id?: string;
+}
+
+// =============================================================================
+// TIER 1: CHECK CURATED CACHE
+// =============================================================================
+async function checkCuratedCache(
+  supabase: any,
+  entityType: string,
+  entityKey: string,
+  destination?: string
+): Promise<DestinationImage | null> {
   try {
-    console.log("[Images] Searching Pexels for:", destination);
-
-    const query = `${destination} landmark`;
-    const pexelsUrl = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&size=large`;
-
-    const res = await fetch(pexelsUrl, {
-      headers: {
-        Authorization: apiKey,
-      },
-    });
-
-    if (!res.ok) {
-      console.error("[Images] Pexels search error:", res.status);
+    const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+    
+    let query = supabase
+      .from("curated_images")
+      .select("*")
+      .eq("entity_type", entityType)
+      .ilike("entity_key", `%${normalizedKey}%`);
+    
+    if (destination) {
+      query = query.ilike("destination", `%${destination}%`);
+    }
+    
+    const { data, error } = await query.limit(1).maybeSingle();
+    
+    if (error || !data) {
       return null;
     }
-
-    const json = await res.json();
-    const photo = json?.photos?.[0];
-    const url = photo?.src?.large2x || photo?.src?.large || photo?.src?.original;
-    if (!url) {
-      console.log("[Images] No Pexels photos for:", destination);
-      return null;
-    }
-
+    
+    console.log(`[Images] ✅ Found cached image for: ${entityKey}`);
+    
     return {
-      id: `pexels-${photo.id}`,
-      url,
-      alt: `${destination} - Photo`,
-      type: "hero",
-      source: "pexels",
-      width: photo.width,
-      height: photo.height,
+      id: data.id,
+      url: data.image_url,
+      alt: data.alt_text || `${entityKey} photo`,
+      type: entityType === "destination" ? "hero" : "activity",
+      source: "curated",
+      attribution: data.attribution,
+      placeId: data.place_id,
+      photoReference: data.photo_reference,
     };
-  } catch (error) {
-    console.error("[Images] Pexels error:", error);
+  } catch (e) {
+    console.error("[Images] Cache check error:", e);
     return null;
   }
 }
 
-async function getGooglePlacesPhoto(destination: string, apiKey: string): Promise<DestinationImage | null> {
+// =============================================================================
+// TIER 2: GOOGLE PLACES PHOTOS (Real venue photos)
+// =============================================================================
+async function getGooglePlacesPhoto(
+  venueName: string,
+  destination: string,
+  apiKey: string
+): Promise<DestinationImage | null> {
   try {
-    // Use Text Search API which is more reliable for destinations
-    const query = `${destination} city landmark`;
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-      query
-    )}&key=${apiKey}`;
+    // Precise search: venue name + destination for exact match
+    const query = `${venueName} ${destination}`;
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
 
-    console.log("[Images] Searching Google Places (textsearch) for:", destination);
+    console.log("[Images] Searching Google Places for:", query);
 
     const searchResponse = await fetch(searchUrl);
     if (!searchResponse.ok) {
@@ -84,30 +115,39 @@ async function getGooglePlacesPhoto(destination: string, apiKey: string): Promis
     console.log("[Images] Google Places status:", searchData.status, "results:", searchData.results?.length || 0);
 
     if (searchData.status !== "OK" || !searchData.results?.length) {
-      console.log("[Images] No Google Places results for:", destination);
+      console.log("[Images] No Google Places results for:", query);
       return null;
     }
 
-    // Find the first result with photos
-    const resultWithPhoto = searchData.results.find((r: any) => r.photos?.length > 0);
-    if (!resultWithPhoto) {
-      console.log("[Images] No photos in any Google Places results for:", destination);
+    // Find the best result with photos (prioritize exact name match)
+    let bestResult = searchData.results.find((r: any) => 
+      r.photos?.length > 0 && r.name?.toLowerCase().includes(venueName.toLowerCase().split(' ')[0])
+    );
+    
+    if (!bestResult) {
+      bestResult = searchData.results.find((r: any) => r.photos?.length > 0);
+    }
+    
+    if (!bestResult) {
+      console.log("[Images] No photos in Google Places results for:", query);
       return null;
     }
 
-    const photoRef = resultWithPhoto.photos[0].photo_reference;
-    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1600&photo_reference=${photoRef}&key=${apiKey}`;
+    const photoRef = bestResult.photos[0].photo_reference;
+    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${photoRef}&key=${apiKey}`;
 
-    console.log("[Images] ✅ Found Google Places photo for:", destination);
+    console.log("[Images] ✅ Found Google Places photo for:", venueName);
 
     return {
-      id: `google-${resultWithPhoto.place_id}`,
+      id: `google-${bestResult.place_id}`,
       url: photoUrl,
-      alt: `${resultWithPhoto.name || destination} - Photo`,
-      type: "hero",
+      alt: `${bestResult.name || venueName} - Photo`,
+      type: "activity",
       source: "google_places",
-      width: 1600,
-      height: 900,
+      width: 1200,
+      height: 800,
+      placeId: bestResult.place_id,
+      photoReference: photoRef,
     };
   } catch (error) {
     console.error("[Images] Google Places error:", error);
@@ -115,24 +155,153 @@ async function getGooglePlacesPhoto(destination: string, apiKey: string): Promis
   }
 }
 
-async function generateAIImage(destination: string, lovableApiKey: string): Promise<DestinationImage | null> {
+// =============================================================================
+// TIER 3: TRIPADVISOR PHOTOS
+// =============================================================================
+async function getTripAdvisorPhoto(
+  venueName: string,
+  destination: string,
+  apiKey: string
+): Promise<DestinationImage | null> {
   try {
-    console.log("[Images] Generating AI image for:", destination);
+    // Step 1: Search for location
+    const searchQuery = `${venueName} ${destination}`;
+    const searchUrl = `https://api.content.tripadvisor.com/api/v1/location/search?key=${apiKey}&searchQuery=${encodeURIComponent(searchQuery)}&language=en`;
+
+    console.log("[Images] Searching TripAdvisor for:", searchQuery);
+
+    const searchResponse = await fetch(searchUrl, {
+      headers: { "accept": "application/json" }
+    });
+
+    if (!searchResponse.ok) {
+      console.log("[Images] TripAdvisor search failed:", searchResponse.status);
+      return null;
+    }
+
+    const searchData = await searchResponse.json();
+    const location = searchData.data?.[0];
+
+    if (!location?.location_id) {
+      console.log("[Images] No TripAdvisor location found for:", searchQuery);
+      return null;
+    }
+
+    // Step 2: Get photos for the location
+    const photosUrl = `https://api.content.tripadvisor.com/api/v1/location/${location.location_id}/photos?key=${apiKey}&language=en`;
+
+    const photosResponse = await fetch(photosUrl, {
+      headers: { "accept": "application/json" }
+    });
+
+    if (!photosResponse.ok) {
+      console.log("[Images] TripAdvisor photos failed:", photosResponse.status);
+      return null;
+    }
+
+    const photosData = await photosResponse.json();
+    const photo = photosData.data?.[0];
+
+    if (!photo?.images?.large?.url) {
+      console.log("[Images] No TripAdvisor photos for:", venueName);
+      return null;
+    }
+
+    console.log("[Images] ✅ Found TripAdvisor photo for:", venueName);
+
+    return {
+      id: `tripadvisor-${location.location_id}`,
+      url: photo.images.large.url,
+      alt: `${location.name || venueName} - TripAdvisor Photo`,
+      type: "activity",
+      source: "tripadvisor",
+      width: photo.images.large.width || 1200,
+      height: photo.images.large.height || 800,
+      attribution: photo.user?.username ? `Photo by ${photo.user.username}` : undefined,
+    };
+  } catch (error) {
+    console.error("[Images] TripAdvisor error:", error);
+    return null;
+  }
+}
+
+// =============================================================================
+// TIER 4: WIKIMEDIA COMMONS (Free, good for landmarks)
+// =============================================================================
+async function getWikimediaPhoto(
+  venueName: string,
+  destination: string
+): Promise<DestinationImage | null> {
+  try {
+    // Search Wikipedia for the venue/landmark
+    const searchQuery = `${venueName} ${destination}`;
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=original&titles=${encodeURIComponent(searchQuery)}&origin=*`;
+
+    console.log("[Images] Searching Wikimedia for:", searchQuery);
+
+    const response = await fetch(searchUrl);
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const pages = data.query?.pages;
     
-    const prompt = `A beautiful, high-quality travel photograph of ${destination}. Scenic landmark view, golden hour lighting, professional travel photography, no people, ultra high resolution. 16:9 aspect ratio.`;
-    
+    if (!pages) {
+      return null;
+    }
+
+    // Get the first page with an image
+    for (const pageId of Object.keys(pages)) {
+      const page = pages[pageId];
+      const imageUrl = page.original?.source;
+      
+      if (imageUrl && !imageUrl.includes('.svg')) {
+        console.log("[Images] ✅ Found Wikimedia photo for:", venueName);
+        
+        return {
+          id: `wikimedia-${pageId}`,
+          url: imageUrl,
+          alt: `${page.title || venueName} - Wikimedia Commons`,
+          type: "activity",
+          source: "wikimedia",
+          width: page.original?.width,
+          height: page.original?.height,
+          attribution: "Wikimedia Commons - CC BY-SA",
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[Images] Wikimedia error:", error);
+    return null;
+  }
+}
+
+// =============================================================================
+// TIER 5: AI GENERATION (Last resort)
+// =============================================================================
+async function generateAIImage(
+  subject: string,
+  context: string,
+  lovableApiKey: string
+): Promise<DestinationImage | null> {
+  try {
+    console.log("[Images] Generating AI image for:", subject);
+
+    const prompt = `A beautiful, high-quality travel photograph of ${subject} in ${context}. Scenic landmark view, golden hour lighting, professional travel photography, no people, ultra high resolution. 16:9 aspect ratio.`;
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${lovableApiKey}`,
+        Authorization: `Bearer ${lovableApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image-preview",
-        messages: [
-          { role: "user", content: prompt }
-        ],
-        modalities: ["image", "text"]
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
       }),
     });
 
@@ -149,12 +318,12 @@ async function generateAIImage(destination: string, lovableApiKey: string): Prom
       return null;
     }
 
-    console.log("[Images] Successfully generated AI image for:", destination);
+    console.log("[Images] ✅ Generated AI image for:", subject);
 
     return {
-      id: `ai-${destination.replace(/\s/g, "-").toLowerCase()}-${Date.now()}`,
+      id: `ai-${subject.replace(/\s/g, "-").toLowerCase()}-${Date.now()}`,
       url: imageUrl,
-      alt: `${destination} - AI Generated Travel Photo`,
+      alt: `${subject} - AI Generated Travel Photo`,
       type: "hero",
       source: "lovable_ai",
       width: 1024,
@@ -166,6 +335,107 @@ async function generateAIImage(destination: string, lovableApiKey: string): Prom
   }
 }
 
+// =============================================================================
+// AI RANKING: Select best image from candidates
+// =============================================================================
+async function rankImageCandidates(
+  candidates: DestinationImage[],
+  subject: string,
+  lovableApiKey: string
+): Promise<DestinationImage | null> {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  try {
+    console.log(`[Images] Ranking ${candidates.length} candidates for: ${subject}`);
+
+    const prompt = `You are an image quality expert for a travel app. Given these image sources for "${subject}", rank them by quality for a travel itinerary.
+
+IMAGE CANDIDATES:
+${candidates.map((c, i) => `${i + 1}. Source: ${c.source}, URL: ${c.url.substring(0, 100)}...`).join('\n')}
+
+RANKING CRITERIA (in order of importance):
+1. Real photos of the actual venue (not stock photos)
+2. Good lighting and composition
+3. Shows the landmark/venue clearly
+4. No people blocking the view
+5. High resolution
+
+Return ONLY the number (1, 2, 3, etc.) of the best image. Just the number, nothing else.`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 10,
+      }),
+    });
+
+    if (!response.ok) {
+      console.log("[Images] AI ranking failed, using first candidate");
+      return candidates[0];
+    }
+
+    const data = await response.json();
+    const answer = data.choices?.[0]?.message?.content?.trim();
+    const selectedIndex = parseInt(answer) - 1;
+
+    if (selectedIndex >= 0 && selectedIndex < candidates.length) {
+      console.log(`[Images] AI selected candidate ${selectedIndex + 1}: ${candidates[selectedIndex].source}`);
+      return candidates[selectedIndex];
+    }
+
+    return candidates[0];
+  } catch (error) {
+    console.error("[Images] AI ranking error:", error);
+    return candidates[0];
+  }
+}
+
+// =============================================================================
+// CACHE RESULT
+// =============================================================================
+async function cacheImage(
+  supabase: any,
+  entityType: string,
+  entityKey: string,
+  destination: string,
+  image: DestinationImage,
+  qualityScore?: number
+): Promise<void> {
+  try {
+    const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+
+    await supabase.from("curated_images").upsert({
+      entity_type: entityType,
+      entity_key: normalizedKey,
+      destination: destination,
+      source: image.source,
+      image_url: image.url,
+      alt_text: image.alt,
+      attribution: image.attribution,
+      quality_score: qualityScore || 0.8,
+      photo_reference: image.photoReference,
+      place_id: image.placeId,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'entity_type,entity_key,destination'
+    });
+
+    console.log(`[Images] Cached image for: ${entityKey}`);
+  } catch (e) {
+    console.error("[Images] Cache save error:", e);
+  }
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
 async function getDestinationName(supabase: any, destinationId: string): Promise<string | null> {
   try {
     const { data } = await supabase
@@ -175,7 +445,7 @@ async function getDestinationName(supabase: any, destinationId: string): Promise
       .single();
 
     if (data?.city && data?.country) return `${data.city}, ${data.country}`;
-    if (data?.city) return `${data.city}`;
+    if (data?.city) return data.city;
     return null;
   } catch {
     return null;
@@ -215,6 +485,89 @@ function generateFallbackGradient(destination: string): DestinationImage {
   };
 }
 
+// =============================================================================
+// MAIN TIERED FETCH FUNCTION
+// =============================================================================
+async function fetchImageTiered(
+  supabase: any,
+  venueName: string,
+  destination: string,
+  entityType: string,
+  googleApiKey?: string,
+  tripAdvisorApiKey?: string,
+  lovableApiKey?: string,
+  skipCache?: boolean
+): Promise<DestinationImage> {
+  const candidates: DestinationImage[] = [];
+
+  // TIER 1: Check cache first (unless skipCache is true)
+  if (!skipCache) {
+    const cached = await checkCuratedCache(supabase, entityType, venueName, destination);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  // TIER 2: Google Places (best for real venue photos)
+  if (googleApiKey) {
+    const googleImage = await getGooglePlacesPhoto(venueName, destination, googleApiKey);
+    if (googleImage) {
+      candidates.push(googleImage);
+    }
+  }
+
+  // TIER 3: TripAdvisor (good for attractions/restaurants)
+  if (tripAdvisorApiKey && candidates.length === 0) {
+    const tripAdvisorImage = await getTripAdvisorPhoto(venueName, destination, tripAdvisorApiKey);
+    if (tripAdvisorImage) {
+      candidates.push(tripAdvisorImage);
+    }
+  }
+
+  // TIER 4: Wikimedia (free, good for landmarks)
+  if (candidates.length === 0) {
+    const wikimediaImage = await getWikimediaPhoto(venueName, destination);
+    if (wikimediaImage) {
+      candidates.push(wikimediaImage);
+    }
+  }
+
+  // If we have real photo candidates, optionally rank with AI and cache
+  if (candidates.length > 0) {
+    let bestImage = candidates[0];
+    
+    // If multiple candidates and AI available, rank them
+    if (candidates.length > 1 && lovableApiKey) {
+      const ranked = await rankImageCandidates(candidates, venueName, lovableApiKey);
+      if (ranked) {
+        bestImage = ranked;
+      }
+    }
+
+    // Cache the result
+    await cacheImage(supabase, entityType, venueName, destination, bestImage, 0.9);
+    
+    return bestImage;
+  }
+
+  // TIER 5: AI Generation (last resort)
+  if (lovableApiKey) {
+    const aiImage = await generateAIImage(venueName, destination, lovableApiKey);
+    if (aiImage) {
+      // Cache AI images with lower quality score
+      await cacheImage(supabase, entityType, venueName, destination, aiImage, 0.5);
+      return aiImage;
+    }
+  }
+
+  // TIER 6: Gradient fallback (absolute last resort)
+  console.log("[Images] Using gradient fallback for:", venueName);
+  return generateFallbackGradient(venueName);
+}
+
+// =============================================================================
+// SERVE
+// =============================================================================
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -230,11 +583,17 @@ serve(async (req) => {
     const qDestination = url.searchParams.get("destination");
     const qImageType = url.searchParams.get("imageType");
     const qLimit = url.searchParams.get("limit");
+    const qVenueName = url.searchParams.get("venueName");
+    const qCategory = url.searchParams.get("category");
+    const qSkipCache = url.searchParams.get("skipCache");
 
     if (qDestinationId) params.destinationId = qDestinationId;
     if (qDestination) params.destination = qDestination;
     if (qImageType) params.imageType = qImageType;
     if (qLimit) params.limit = parseInt(qLimit);
+    if (qVenueName) params.venueName = qVenueName;
+    if (qCategory) params.category = qCategory;
+    if (qSkipCache) params.skipCache = qSkipCache === 'true';
 
     // Then try to parse body (POST)
     if (req.method === "POST") {
@@ -245,6 +604,9 @@ serve(async (req) => {
         if (body.destination) params.destination = body.destination;
         if (body.imageType) params.imageType = body.imageType;
         if (body.limit) params.limit = body.limit;
+        if (body.venueName) params.venueName = body.venueName;
+        if (body.category) params.category = body.category;
+        if (body.skipCache !== undefined) params.skipCache = body.skipCache;
       } catch (e) {
         console.log("[Images] Could not parse body:", e);
       }
@@ -255,10 +617,10 @@ serve(async (req) => {
     const destinationId = params.destinationId;
     const destination = params.destination;
     const imageType = params.imageType || "hero";
-    const limit = Math.max(1, Math.min(params.limit || 1, 10));
+    const venueName = params.venueName;
 
-    if (!destinationId && !destination) {
-      return new Response(JSON.stringify({ error: "destinationId or destination name is required" }), {
+    if (!destinationId && !destination && !venueName) {
+      return new Response(JSON.stringify({ error: "destinationId, destination name, or venueName is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -269,7 +631,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const googleApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-    const pexelsApiKey = Deno.env.get("PEXELS_API_KEY");
+    const tripAdvisorApiKey = Deno.env.get("TRIPADVISOR_API_KEY");
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
     let resolvedDestination = destination;
@@ -277,50 +639,32 @@ serve(async (req) => {
       resolvedDestination = await getDestinationName(supabase, destinationId) || undefined;
     }
 
-    if (!resolvedDestination) {
-      return new Response(JSON.stringify({ error: "Could not resolve destination name" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Determine what we're searching for
+    const searchSubject = venueName || resolvedDestination || "unknown";
+    const entityType = venueName ? "activity" : "destination";
+    const contextDestination = resolvedDestination || destination || "";
 
-    let images: DestinationImage[] = [];
+    console.log(`[Images] Fetching ${entityType} image for: ${searchSubject} in ${contextDestination}`);
 
-    // Priority 1: Lovable AI Generated (best quality)
-    if (lovableApiKey) {
-      console.log("[Images] Generating Lovable AI image for:", resolvedDestination);
-      const aiImage = await generateAIImage(resolvedDestination, lovableApiKey);
-      if (aiImage) {
-        images = [aiImage];
-        console.log("[Images] ✅ Using AI-generated image for:", resolvedDestination);
-      }
-    }
-
-    // Priority 2: Google Places (fallback)
-    if (images.length === 0 && googleApiKey) {
-      const googleImage = await getGooglePlacesPhoto(resolvedDestination, googleApiKey);
-      if (googleImage) {
-        images = [googleImage];
-        console.log("[Images] ✅ Using Google Places image for:", resolvedDestination);
-      }
-    }
-
-    // Priority 3: Gradient fallback (last resort)
-    if (images.length === 0) {
-      images = [generateFallbackGradient(resolvedDestination)];
-      console.log("[Images] Using gradient fallback for:", resolvedDestination);
-    }
+    const image = await fetchImageTiered(
+      supabase,
+      searchSubject,
+      contextDestination,
+      entityType,
+      googleApiKey,
+      tripAdvisorApiKey,
+      lovableApiKey,
+      params.skipCache
+    );
 
     // Update type if specified
-    if (images[0]) {
-      images[0] = { ...images[0], type: imageType as any };
-    }
+    const finalImage = { ...image, type: imageType as any };
 
     return new Response(
       JSON.stringify({
         success: true,
-        images,
-        source: images[0]?.source || "none",
+        images: [finalImage],
+        source: finalImage.source,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
