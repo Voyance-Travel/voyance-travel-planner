@@ -689,18 +689,35 @@ Create a well-paced, authentic travel experience!`;
     const result = JSON.parse(toolCall.function.arguments);
     console.log(`[Stage 2] Generated ${result.days?.length || 0} days`);
 
-    // Enhance activities with calculated fields
+    // Enhance activities with calculated fields and fallback costs
+    const fallbackCosts: Record<string, number> = {
+      sightseeing: 15,
+      cultural: 20,
+      dining: 35,
+      shopping: 0,
+      relaxation: 40,
+      transport: 10,
+      accommodation: 0,
+      activity: 25
+    };
+
     result.days = result.days.map((day: StrictDay) => ({
       ...day,
-      activities: day.activities.map((act: StrictActivity) => ({
-        ...act,
-        durationMinutes: calculateDuration(act.startTime, act.endTime),
-        categoryIcon: getCategoryIcon(act.category),
-        cost: {
-          ...act.cost,
-          formatted: `$${act.cost.amount} ${act.cost.currency}`
-        }
-      }))
+      activities: day.activities.map((act: StrictActivity) => {
+        const amount = act.cost?.amount && act.cost.amount > 0 
+          ? act.cost.amount 
+          : (fallbackCosts[act.category] || 20);
+        return {
+          ...act,
+          durationMinutes: calculateDuration(act.startTime, act.endTime),
+          categoryIcon: getCategoryIcon(act.category),
+          cost: {
+            amount,
+            currency: act.cost?.currency || 'USD',
+            formatted: `$${amount} USD`
+          }
+        };
+      })
     }));
 
     return result;
