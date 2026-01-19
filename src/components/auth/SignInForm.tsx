@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,10 +17,14 @@ export function SignInForm() {
   const [error, setError] = useState('');
   
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
   
-  const nextPath = searchParams.get('next') || ROUTES.PROFILE.VIEW;
+  // Check for redirect path in: 1) location state, 2) query param, 3) default
+  const stateFrom = (location.state as { from?: string })?.from;
+  const queryNext = searchParams.get('next') || searchParams.get('redirect');
+  const nextPath = stateFrom || queryNext || ROUTES.PROFILE.VIEW;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

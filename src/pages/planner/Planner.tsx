@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { format } from 'date-fns';
+import { getDestinationById } from '@/lib/destinations';
 
 type PlannerStep = 'context' | 'flights' | 'hotels' | 'booking' | 'itinerary';
 
@@ -56,10 +57,25 @@ export default function Planner() {
   const [currentStep, setCurrentStep] = useState<PlannerStep>('context');
   const [isLoading, setIsLoading] = useState(false);
   
-  // Initialize form data from TripPlannerContext (set by Start page)
+  // Initialize form data from TripPlannerContext, query params, and user preferences
   const [formData, setFormData] = useState<PlannerFormData>(() => {
     // Read from context first
     const contextData = tripPlannerState.basics;
+    
+    // Check for destination in query params (from Explore/Destinations pages)
+    const destinationParam = searchParams.get('destination');
+    let destinationName = contextData.destination || '';
+    
+    // If destination came from query param (it's an ID like 'paris'), resolve to city name
+    if (destinationParam && !destinationName) {
+      const destinationData = getDestinationById(destinationParam);
+      if (destinationData) {
+        destinationName = destinationData.city;
+      } else {
+        // Fallback: use the param as-is if not found (could be a city name already)
+        destinationName = destinationParam;
+      }
+    }
     
     // Generate companion slots based on traveler count
     const travelers = contextData.travelers || 2;
@@ -70,7 +86,7 @@ export default function Planner() {
     }));
     
     return {
-      destination: contextData.destination || '',
+      destination: destinationName,
       name: '',
       startDate: contextData.startDate || '',
       endDate: contextData.endDate || '',
@@ -86,8 +102,46 @@ export default function Planner() {
     };
   });
 
-  // Check if we have basic trip info, if not redirect to Start
+  // Prefill departure city from user preferences if not already set
   useEffect(() => {
+    const prefillHomeAirport = async () => {
+      if (formData.departureCity || !isAuthenticated || !user) return;
+      
+      try {
+        // First check user_preferences
+        const { data: prefs } = await supabase
+          .from('user_preferences')
+          .select('home_airport')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (prefs?.home_airport) {
+          setFormData(prev => ({ ...prev, departureCity: prefs.home_airport }));
+          return;
+        }
+        
+        // Fallback to profiles table
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('home_airport')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.home_airport) {
+          setFormData(prev => ({ ...prev, departureCity: profile.home_airport }));
+        }
+      } catch (err) {
+        console.log('Could not prefill home airport:', err);
+      }
+    };
+    
+    prefillHomeAirport();
+  }, [isAuthenticated, user, formData.departureCity]);
+
+  // Check if we have basic trip info, if not check localStorage or redirect with destination preserved
+  useEffect(() => {
+    const destinationParam = searchParams.get('destination');
+    
     if (!formData.destination || !formData.startDate || !formData.endDate) {
       // Check localStorage for saved trip
       const savedTrip = localStorage.getItem('voyance-current-trip');
@@ -109,11 +163,18 @@ export default function Planner() {
         }
       }
       
+      // If we have a destination but no dates, redirect to /start with destination preserved
+      if (formData.destination) {
+        // Navigate to Start with the destination pre-selected
+        navigate(`/start?destination=${encodeURIComponent(formData.destination)}`);
+        return;
+      }
+      
       // No valid data, redirect to start
       toast.error('Please start by selecting your destination and dates');
       navigate('/start');
     }
-  }, []);
+  }, [searchParams, formData.destination, formData.startDate, formData.endDate, navigate]);
 
   // Update companions when traveler count changes
   useEffect(() => {

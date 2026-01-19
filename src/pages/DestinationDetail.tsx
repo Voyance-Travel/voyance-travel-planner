@@ -57,10 +57,12 @@ export default function DestinationDetail() {
   }
 
   const handleStartTrip = () => {
+    // Pass city name for better UX - the Start page can work with city names directly
+    const destinationParam = encodeURIComponent(destination.city);
     if (isAuthenticated) {
-      navigate(`/planner?destination=${destination.id}`);
+      navigate(`/planner?destination=${destinationParam}`);
     } else {
-      navigate('/signin', { state: { from: `/planner?destination=${destination.id}` } });
+      navigate('/signin', { state: { from: `/planner?destination=${destinationParam}` } });
     }
   };
 
