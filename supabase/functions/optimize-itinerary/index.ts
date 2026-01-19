@@ -64,7 +64,13 @@ interface OptimizeRequest {
   enableRealTransport?: boolean;
   enableCostLookup?: boolean;
   enableGapFilling?: boolean;
+  enableTagGeneration?: boolean;
+  enableGeocoding?: boolean;
+  enableVenueVerification?: boolean;
+  enablePhotoEnrichment?: boolean;
   currency?: string;
+  travelers?: number;
+  nights?: number;
 }
 
 // =============================================================================
@@ -217,7 +223,116 @@ function fillGaps(activities: Activity[]): Activity[] {
 }
 
 // =============================================================================
-// ALGORITHM 4: PACING LEVEL CALCULATION
+// ALGORITHM 4: TAG GENERATION
+// Generate comprehensive tags based on category, keywords, cost, time
+// =============================================================================
+
+function generateTags(
+  title: string,
+  description: string | undefined,
+  category: string | undefined,
+  existingTags: string[] = [],
+  cost: number | null | undefined
+): string[] {
+  const tags = new Set<string>(existingTags);
+  const combined = `${title} ${description || ''}`.toLowerCase();
+
+  // Category-based tags
+  const categoryTagMap: Record<string, string[]> = {
+    sightseeing: ['sightseeing', 'attraction', 'landmark'],
+    dining: ['food', 'restaurant', 'dining'],
+    cultural: ['culture', 'history', 'art'],
+    shopping: ['shopping', 'market', 'souvenirs'],
+    relaxation: ['relaxation', 'leisure', 'chill'],
+    transport: ['transport', 'travel'],
+    accommodation: ['accommodation', 'hotel'],
+    activity: ['activity', 'experience'],
+  };
+
+  const catLower = (category || '').toLowerCase();
+  if (categoryTagMap[catLower]) {
+    categoryTagMap[catLower].forEach(t => tags.add(t));
+  }
+
+  // Keyword-based tags
+  const keywordMap: Record<string, string[]> = {
+    museum: ['museum', 'art', 'history'],
+    park: ['park', 'outdoor', 'nature'],
+    temple: ['temple', 'religious', 'spiritual'],
+    palace: ['palace', 'royal', 'historic'],
+    market: ['market', 'shopping', 'local'],
+    beach: ['beach', 'seaside', 'outdoor'],
+    tower: ['tower', 'views', 'landmark'],
+    restaurant: ['restaurant', 'food', 'dining'],
+    cafe: ['cafe', 'coffee', 'casual'],
+    bar: ['bar', 'drinks', 'nightlife'],
+    tour: ['tour', 'guided', 'group'],
+    walk: ['walking', 'outdoor', 'exploration'],
+    cruise: ['cruise', 'boat', 'water'],
+    show: ['show', 'entertainment', 'performance'],
+  };
+
+  for (const [keyword, keywordTags] of Object.entries(keywordMap)) {
+    if (combined.includes(keyword)) {
+      keywordTags.forEach(t => tags.add(t));
+    }
+  }
+
+  // Cost-based tags
+  if (cost === 0 || cost === null) {
+    tags.add('free');
+  } else if (cost !== undefined && cost < 15) {
+    tags.add('budget-friendly');
+  } else if (cost !== undefined && cost < 50) {
+    tags.add('moderate-price');
+  } else if (cost !== undefined && cost >= 100) {
+    tags.add('premium');
+    tags.add('splurge');
+  }
+
+  // Time-based tags
+  const timeKeywords: Record<string, string> = {
+    morning: 'morning',
+    breakfast: 'morning',
+    afternoon: 'afternoon',
+    lunch: 'afternoon',
+    evening: 'evening',
+    dinner: 'evening',
+    sunset: 'sunset',
+    sunrise: 'sunrise',
+    night: 'night',
+  };
+
+  for (const [keyword, timeTag] of Object.entries(timeKeywords)) {
+    if (combined.includes(keyword)) {
+      tags.add(timeTag);
+    }
+  }
+
+  // Experience-based tags
+  if (combined.includes('family') || combined.includes('kids')) {
+    tags.add('family-friendly');
+  }
+  if (combined.includes('photo') || combined.includes('view') || combined.includes('scenic')) {
+    tags.add('photo-op');
+    tags.add('instagram-worthy');
+  }
+  if (combined.includes('romantic') || combined.includes('couples')) {
+    tags.add('romantic');
+  }
+  if (combined.includes('adventure') || combined.includes('adrenaline')) {
+    tags.add('adventure');
+  }
+  if (combined.includes('authentic') || combined.includes('local')) {
+    tags.add('authentic');
+    tags.add('local-experience');
+  }
+
+  return Array.from(tags);
+}
+
+// =============================================================================
+// ALGORITHM 5: PACING LEVEL CALCULATION
 // ≤3 = relaxed, 4-5 = moderate, ≥6 = packed
 // =============================================================================
 
@@ -225,6 +340,212 @@ function calculatePacingLevel(activityCount: number): 'relaxed' | 'moderate' | '
   if (activityCount <= 3) return 'relaxed';
   if (activityCount <= 5) return 'moderate';
   return 'packed';
+}
+
+// =============================================================================
+// ALGORITHM 6: GEOCODING (Google Geocoding API)
+// Convert addresses to coordinates with 4-decimal precision
+// =============================================================================
+
+interface GeocodingResult {
+  lat: number;
+  lng: number;
+  formattedAddress: string;
+  placeId?: string;
+}
+
+async function geocodeAddress(
+  address: string,
+  destination: string
+): Promise<GeocodingResult | null> {
+  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY") || Deno.env.get("GOOGLE_GEOCODE_API_KEY");
+  if (!apiKey) return null;
+
+  try {
+    const searchQuery = encodeURIComponent(`${address}, ${destination}`);
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}&key=${apiKey}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status !== 'OK' || !data.results?.[0]) {
+      console.warn(`[geocoding] No results for: ${address}`);
+      return null;
+    }
+
+    const result = data.results[0];
+    const location = result.geometry.location;
+
+    return {
+      lat: Math.round(location.lat * 10000) / 10000, // 4 decimal precision
+      lng: Math.round(location.lng * 10000) / 10000,
+      formattedAddress: result.formatted_address,
+      placeId: result.place_id,
+    };
+  } catch (error) {
+    console.error(`[geocoding] Error for ${address}:`, error);
+    return null;
+  }
+}
+
+// =============================================================================
+// ALGORITHM 7: VENUE VERIFICATION (Google Places API)
+// Verify AI-generated venues exist with confidence scoring
+// =============================================================================
+
+interface VerificationResult {
+  isValid: boolean;
+  confidence: number;
+  placeId?: string;
+  name?: string;
+  rating?: number;
+  userRatingsTotal?: number;
+  location?: { lat: number; lng: number };
+  formattedAddress?: string;
+  openingHours?: string[];
+}
+
+function calculateStringSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+  const s2 = str2.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+
+  if (s1.includes(s2) || s2.includes(s1)) return 0.9;
+
+  const words1 = s1.split(/\s+/);
+  const words2 = s2.split(/\s+/);
+  const matchingWords = words1.filter(w => words2.includes(w)).length;
+  const totalWords = Math.max(words1.length, words2.length);
+
+  return totalWords > 0 ? matchingWords / totalWords : 0;
+}
+
+async function verifyVenue(
+  venueName: string,
+  destination: string,
+  category?: string
+): Promise<VerificationResult> {
+  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  if (!apiKey) {
+    return { isValid: false, confidence: 0 };
+  }
+
+  try {
+    const query = encodeURIComponent(`${venueName} ${destination}`);
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status !== 'OK' || !data.results?.[0]) {
+      return { isValid: false, confidence: 0 };
+    }
+
+    const place = data.results[0];
+    const similarity = calculateStringSimilarity(venueName, place.name);
+    const ratingBoost = (place.rating || 0) >= 4.0 ? 0.1 : 0;
+    const confidence = Math.min(similarity + ratingBoost, 1.0);
+
+    return {
+      isValid: confidence >= 0.7,
+      confidence,
+      placeId: place.place_id,
+      name: place.name,
+      rating: place.rating,
+      userRatingsTotal: place.user_ratings_total,
+      location: place.geometry?.location ? {
+        lat: place.geometry.location.lat,
+        lng: place.geometry.location.lng,
+      } : undefined,
+      formattedAddress: place.formatted_address,
+      openingHours: place.opening_hours?.weekday_text,
+    };
+  } catch (error) {
+    console.error(`[venue-verification] Error for ${venueName}:`, error);
+    return { isValid: false, confidence: 0 };
+  }
+}
+
+// =============================================================================
+// ALGORITHM 8: PHOTO ENRICHMENT (Pexels API with fallback queries)
+// =============================================================================
+
+interface PhotoResult {
+  url: string;
+  thumbnailUrl?: string;
+  photographer: string;
+  alt: string;
+}
+
+async function getActivityPhotos(
+  activityTitle: string,
+  locationName: string,
+  destination: string,
+  maxPhotos: number = 2
+): Promise<PhotoResult[]> {
+  const apiKey = Deno.env.get("PEXELS_API_KEY");
+  if (!apiKey) return [];
+
+  // Search queries in priority order
+  const searchQueries = [
+    locationName,
+    `${locationName} ${destination}`,
+    `${activityTitle} ${destination}`,
+    destination,
+  ];
+
+  for (const query of searchQueries) {
+    try {
+      const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${maxPhotos}&orientation=landscape`;
+      const response = await fetch(url, {
+        headers: { Authorization: apiKey },
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      if (data.photos?.length > 0) {
+        return data.photos.slice(0, maxPhotos).map((photo: {
+          src: { large: string; medium: string };
+          photographer: string;
+          photographer_url: string;
+          alt: string;
+        }) => ({
+          url: photo.src.large,
+          thumbnailUrl: photo.src.medium,
+          photographer: photo.photographer,
+          alt: photo.alt || `${activityTitle} in ${destination}`,
+        }));
+      }
+    } catch (error) {
+      console.warn(`[photos] Search failed for "${query}":`, error);
+    }
+  }
+
+  return [];
+}
+
+// =============================================================================
+// ALGORITHM 9: HOTEL PRICE SCALING (Amadeus Sandbox Fix)
+// Scale prices: price_total = base × (nights_actual/nights_simple) × √(adults_actual/adults_simple)
+// =============================================================================
+
+function scaleHotelPrice(
+  simplifiedPrice: number,
+  originalNights: number,
+  originalAdults: number,
+  simplifiedNights: number = 1,
+  simplifiedAdults: number = 1
+): number {
+  // Nights multiplier (linear)
+  const nightsMultiplier = originalNights / simplifiedNights;
+  
+  // Guests multiplier (square root - additional guests share resources)
+  const guestsMultiplier = Math.sqrt(originalAdults / simplifiedAdults);
+  
+  // Apply scaling
+  const scaledPrice = simplifiedPrice * nightsMultiplier * guestsMultiplier;
+  
+  return Math.round(scaledPrice);
 }
 
 // =============================================================================
@@ -714,17 +1035,27 @@ serve(async (req) => {
       enableRealTransport = true,
       enableCostLookup = true,
       enableGapFilling = true,
+      enableTagGeneration = true,
+      enableGeocoding = false, // Off by default - API intensive
+      enableVenueVerification = false, // Off by default - API intensive
+      enablePhotoEnrichment = false, // Off by default - API intensive
       currency = 'USD',
+      travelers = 1,
+      nights = 1,
     } = body;
 
     console.log(`[optimize-itinerary] Processing trip ${tripId}: ${days.length} days, destination: ${destination}`);
-    console.log(`[optimize-itinerary] Options: route=${enableRouteOptimization}, transport=${enableRealTransport}, cost=${enableCostLookup}, gaps=${enableGapFilling}`);
+    console.log(`[optimize-itinerary] Options: route=${enableRouteOptimization}, transport=${enableRealTransport}, cost=${enableCostLookup}, gaps=${enableGapFilling}, tags=${enableTagGeneration}`);
 
     const optimizedDays: Day[] = [];
     let totalActivitiesOptimized = 0;
     let transportCalculated = 0;
     let costsLookedUp = 0;
     let gapsInserted = 0;
+    let tagsGenerated = 0;
+    let geocoded = 0;
+    let venuesVerified = 0;
+    let photosAdded = 0;
 
     // Collect all activities for batched cost lookup
     const allActivities: Activity[] = days.flatMap(d => d.activities);
@@ -739,27 +1070,42 @@ serve(async (req) => {
     for (const day of days) {
       let activities = [...day.activities];
 
-      // Step 2: Try extracting costs from descriptions
+      // Step 2: Try extracting costs from descriptions + generate tags
       activities = activities.map(act => {
-        // Already has a valid cost
-        if (act.cost?.amount !== null && act.cost?.amount !== undefined && act.cost?.amount > 0) {
-          return act;
+        let updated = { ...act };
+
+        // Cost extraction
+        if (act.cost?.amount === null || act.cost?.amount === undefined || act.cost?.amount <= 0) {
+          // Try cost from lookup results
+          if (costLookupResults.has(act.id)) {
+            costsLookedUp++;
+            updated = { ...updated, cost: costLookupResults.get(act.id)! };
+          } else {
+            // Try extracting from description
+            const extracted = extractCost(act.description, currency);
+            if (extracted) {
+              costsLookedUp++;
+              updated = { ...updated, cost: extracted };
+            }
+          }
         }
 
-        // Try cost from lookup results
-        if (costLookupResults.has(act.id)) {
-          costsLookedUp++;
-          return { ...act, cost: costLookupResults.get(act.id)! };
+        // Tag generation
+        if (enableTagGeneration) {
+          const newTags = generateTags(
+            act.title,
+            act.description,
+            act.category,
+            act.tags || [],
+            updated.cost?.amount
+          );
+          if (newTags.length > (act.tags?.length || 0)) {
+            tagsGenerated++;
+          }
+          updated = { ...updated, tags: newTags };
         }
 
-        // Try extracting from description
-        const extracted = extractCost(act.description, currency);
-        if (extracted) {
-          costsLookedUp++;
-          return { ...act, cost: extracted };
-        }
-
-        return act;
+        return updated;
       });
 
       // Step 3: Calculate durations
@@ -769,14 +1115,59 @@ serve(async (req) => {
         return { ...act, durationMinutes: duration };
       });
 
-      // Step 4: Route optimization
+      // Step 4: Geocoding (if enabled and missing coordinates)
+      if (enableGeocoding) {
+        for (let i = 0; i < activities.length; i++) {
+          const act = activities[i];
+          if (!act.location?.lat && act.location?.address) {
+            const geo = await geocodeAddress(act.location.address, destination);
+            if (geo) {
+              activities[i] = {
+                ...act,
+                location: {
+                  ...act.location,
+                  lat: geo.lat,
+                  lng: geo.lng,
+                  address: geo.formattedAddress,
+                },
+              };
+              geocoded++;
+            }
+          }
+        }
+      }
+
+      // Step 5: Venue verification (if enabled)
+      if (enableVenueVerification) {
+        for (let i = 0; i < activities.length; i++) {
+          const act = activities[i];
+          // Skip downtime and already verified
+          if (act.timeBlockType === 'downtime') continue;
+          
+          const verification = await verifyVenue(act.title, destination, act.category);
+          if (verification.isValid) {
+            activities[i] = {
+              ...act,
+              location: {
+                name: act.location?.name || act.title,
+                address: verification.formattedAddress || act.location?.address,
+                lat: verification.location?.lat || act.location?.lat,
+                lng: verification.location?.lng || act.location?.lng,
+              },
+            };
+            venuesVerified++;
+          }
+        }
+      }
+
+      // Step 6: Route optimization
       if (enableRouteOptimization && activities.length > 2) {
         console.log(`[optimize-itinerary] Day ${day.dayNumber}: Optimizing route for ${activities.length} activities`);
         activities = optimizeDayRoute(activities);
         totalActivitiesOptimized += activities.length;
       }
 
-      // Step 5: Calculate real transportation between activities
+      // Step 7: Calculate real transportation between activities
       if (enableRealTransport) {
         for (let i = 1; i < activities.length; i++) {
           const prev = activities[i - 1];
@@ -808,14 +1199,34 @@ serve(async (req) => {
         }
       }
 
-      // Step 6: Gap filling
+      // Step 8: Photo enrichment (if enabled)
+      if (enablePhotoEnrichment) {
+        for (let i = 0; i < activities.length; i++) {
+          const act = activities[i];
+          if (act.timeBlockType === 'downtime') continue;
+          
+          const photos = await getActivityPhotos(
+            act.title,
+            act.location?.name || act.title,
+            destination,
+            2
+          );
+          if (photos.length > 0) {
+            // Store photos in a way the frontend can use
+            (activities[i] as unknown as { photos: PhotoResult[] }).photos = photos;
+            photosAdded++;
+          }
+        }
+      }
+
+      // Step 9: Gap filling
       if (enableGapFilling) {
         const beforeCount = activities.length;
         activities = fillGaps(activities);
         gapsInserted += activities.length - beforeCount;
       }
 
-      // Step 7: Calculate day metadata
+      // Step 10: Calculate day metadata
       const realActivities = activities.filter(a => a.timeBlockType !== 'downtime');
       const totalDayCost = activities.reduce((sum, a) => {
         const actCost = a.cost?.amount || 0;
@@ -844,6 +1255,10 @@ serve(async (req) => {
       - Route optimized: ${totalActivitiesOptimized} activities
       - Transport calculated: ${transportCalculated} legs
       - Costs looked up: ${costsLookedUp}
+      - Tags generated: ${tagsGenerated}
+      - Geocoded: ${geocoded}
+      - Venues verified: ${venuesVerified}
+      - Photos added: ${photosAdded}
       - Gaps filled: ${gapsInserted}
       - Budget total: $${budgetBreakdown.total}`);
 
@@ -872,10 +1287,18 @@ serve(async (req) => {
           realTransport: enableRealTransport,
           costLookup: enableCostLookup,
           gapFilling: enableGapFilling,
+          tagGeneration: enableTagGeneration,
+          geocoding: enableGeocoding,
+          venueVerification: enableVenueVerification,
+          photoEnrichment: enablePhotoEnrichment,
           stats: {
             activitiesOptimized: totalActivitiesOptimized,
             transportCalculated,
             costsLookedUp,
+            tagsGenerated,
+            geocoded,
+            venuesVerified,
+            photosAdded,
             gapsInserted,
           },
         },
@@ -905,10 +1328,18 @@ serve(async (req) => {
           realTransport: enableRealTransport,
           costLookup: enableCostLookup,
           gapFilling: enableGapFilling,
+          tagGeneration: enableTagGeneration,
+          geocoding: enableGeocoding,
+          venueVerification: enableVenueVerification,
+          photoEnrichment: enablePhotoEnrichment,
           stats: {
             activitiesOptimized: totalActivitiesOptimized,
             transportCalculated,
             costsLookedUp,
+            tagsGenerated,
+            geocoded,
+            venuesVerified,
+            photosAdded,
             gapsInserted,
           },
         },
