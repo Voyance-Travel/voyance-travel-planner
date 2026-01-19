@@ -17,11 +17,26 @@ interface FlightSearchParams {
 }
 
 // ============= TOKEN MANAGEMENT =============
-let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedToken: { token: string; expiresAt: number; isProduction: boolean } | null = null;
+
+// Determine if we should use production API (based on env var)
+function isProductionMode(): boolean {
+  const mode = Deno.env.get('AMADEUS_MODE') || 'test';
+  return mode.toLowerCase() === 'production';
+}
+
+function getAmadeusBaseUrl(): string {
+  return isProductionMode() 
+    ? 'https://api.amadeus.com' 
+    : 'https://test.api.amadeus.com';
+}
 
 async function getAmadeusToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60000) {
-    console.log('[Flights] Using cached token');
+  const isProd = isProductionMode();
+  
+  // Check if we have a valid cached token for the current mode
+  if (cachedToken && cachedToken.isProduction === isProd && Date.now() < cachedToken.expiresAt - 60000) {
+    console.log('[Flights] Using cached token (mode:', isProd ? 'PRODUCTION' : 'TEST', ')');
     return cachedToken.token;
   }
 
@@ -35,9 +50,10 @@ async function getAmadeusToken(): Promise<string> {
     throw new Error('Amadeus credentials not configured');
   }
 
-  console.log('[Flights] Fetching new Amadeus access token (TEST MODE)');
+  const baseUrl = getAmadeusBaseUrl();
+  console.log('[Flights] Fetching new Amadeus access token (mode:', isProd ? 'PRODUCTION' : 'TEST', ')');
   
-  const response = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
+  const response = await fetch(`${baseUrl}/v1/security/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `grant_type=client_credentials&client_id=${apiKey}&client_secret=${apiSecret}`,
@@ -53,6 +69,7 @@ async function getAmadeusToken(): Promise<string> {
   cachedToken = {
     token: data.access_token,
     expiresAt: Date.now() + (data.expires_in * 1000),
+    isProduction: isProd,
   };
 
   console.log('[Flights] Token obtained, expires in', data.expires_in, 'seconds');
@@ -239,8 +256,9 @@ async function searchFlights(params: FlightSearchParams): Promise<{ results: any
 
     console.log('[Flights] API request:', Object.fromEntries(searchParams));
 
+    const baseUrl = getAmadeusBaseUrl();
     const response = await fetch(
-      `https://test.api.amadeus.com/v2/shopping/flight-offers?${searchParams}`,
+      `${baseUrl}/v2/shopping/flight-offers?${searchParams}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
