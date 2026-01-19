@@ -74,22 +74,53 @@ serve(async (req) => {
 
     if (tripError || !trip) throw new Error("Trip not found");
 
-    // Update trip status to booked
+    // Generate booking reference if not already present
+    const existingMetadata = trip.metadata as Record<string, any> || {};
+    const bookingReference = existingMetadata.booking_reference || `VOY-${tripId.slice(0, 8).toUpperCase()}`;
+
+    // Update trip status to booked with full payment details
     await supabaseClient
       .from('trips')
       .update({ 
         status: 'booked',
         metadata: {
-          ...(trip.metadata as object || {}),
+          ...existingMetadata,
           payment_status: 'paid',
           payment_completed_at: new Date().toISOString(),
           stripe_session_id: sessionId,
+          stripe_payment_intent_id: session.payment_intent,
           amount_paid: session.amount_total,
+          booking_reference: bookingReference,
+          booking_confirmed_at: new Date().toISOString(),
         },
       })
       .eq('id', tripId);
 
-    logStep("Trip updated to booked");
+    logStep("Trip updated to booked", { bookingReference });
+
+    // Update all pending payment records to paid
+    const { data: updatedPayments, error: paymentUpdateError } = await supabaseClient
+      .from('trip_payments')
+      .update({ 
+        status: 'paid',
+        paid_at: new Date().toISOString(),
+        stripe_payment_intent_id: session.payment_intent as string || null,
+      })
+      .eq('trip_id', tripId)
+      .eq('stripe_checkout_session_id', sessionId)
+      .eq('status', 'pending')
+      .select();
+
+    if (paymentUpdateError) {
+      logStep("Warning: Failed to update payment records", { error: paymentUpdateError.message });
+    } else {
+      logStep("Payment records updated to paid", { count: updatedPayments?.length || 0 });
+    }
+
+    // Save itinerary snapshot at booking time (if exists in context but not saved)
+    if (trip.itinerary_data) {
+      logStep("Itinerary already saved", { dayCount: Array.isArray(trip.itinerary_data) ? trip.itinerary_data.length : 'n/a' });
+    }
 
     // Send confirmation email
     if (SENDGRID_API_KEY) {
@@ -135,7 +166,7 @@ serve(async (req) => {
                         </div>
                         <div>
                           <p style="margin: 0; color: #aaa; font-size: 12px;">BOOKING REFERENCE</p>
-                          <p style="margin: 5px 0 0 0; font-size: 16px; font-family: monospace;">${tripId.slice(0, 8).toUpperCase()}</p>
+                          <p style="margin: 5px 0 0 0; font-size: 16px; font-family: monospace;">${bookingReference}</p>
                         </div>
                       </div>
                     </div>
@@ -180,6 +211,8 @@ serve(async (req) => {
       tripId,
       destination: trip.destination,
       amountPaid: session.amount_total,
+      bookingReference,
+      paymentsUpdated: updatedPayments?.length || 0,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
