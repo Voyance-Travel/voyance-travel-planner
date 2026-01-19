@@ -41,6 +41,9 @@ import { WeatherForecast } from './WeatherForecast';
 import { BookingButton } from '@/components/booking/BookingButton';
 import { PaymentsTab } from './PaymentsTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { CreditTopUpPrompt } from '@/components/checkout/CreditTopUpPrompt';
+import { CREDIT_COSTS } from '@/config/pricing';
 
 // =============================================================================
 // TYPES
@@ -378,6 +381,11 @@ export function EditorialItinerary({
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [payments, setPayments] = useState<TripPayment[]>([]);
+  const [showCreditPrompt, setShowCreditPrompt] = useState(false);
+  const [pendingRegenerateDay, setPendingRegenerateDay] = useState<number | null>(null);
+
+  // Get entitlements for credit checking
+  const { data: entitlements, isPaid } = useEntitlements();
 
   // Fetch payments on mount
   useEffect(() => {
@@ -655,7 +663,29 @@ export function EditorialItinerary({
     toast.success('Activity removed');
   }, []);
 
-  const handleDayRegenerate = useCallback(async (dayIndex: number) => {
+  // Check if user can regenerate (has credits or is paid)
+  const canRegenerateWithCredits = useCallback(() => {
+    // Paid users always can
+    if (isPaid) return true;
+    // Free users need credits
+    const creditBalance = entitlements?.credit_balance ?? 0;
+    return creditBalance >= CREDIT_COSTS.BUILD_DAY;
+  }, [isPaid, entitlements?.credit_balance]);
+
+  // Request regeneration - checks credits first
+  const requestDayRegenerate = useCallback((dayIndex: number) => {
+    if (canRegenerateWithCredits()) {
+      // Has credits or is paid - proceed with regeneration
+      handleDayRegenerateInternal(dayIndex);
+    } else {
+      // Show credit prompt
+      setPendingRegenerateDay(dayIndex);
+      setShowCreditPrompt(true);
+    }
+  }, [canRegenerateWithCredits]);
+
+  // Internal regenerate handler (after credit check passed)
+  const handleDayRegenerateInternal = useCallback(async (dayIndex: number) => {
     const day = days[dayIndex];
     if (!day) return;
 
@@ -697,6 +727,9 @@ export function EditorialItinerary({
       setRegeneratingDay(null);
     }
   }, [days, tripId, destination, destinationCountry, travelers, budgetTier, onRegenerateDay]);
+
+  // Alias for backwards compatibility
+  const handleDayRegenerate = requestDayRegenerate;
 
   const handleDayLock = useCallback((dayIndex: number) => {
     setDays(prev => prev.map((day, idx) => {
@@ -2574,6 +2607,11 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+// Credit top-up prompt wrapper for the component
+function EditorialItineraryWithCreditPrompt(props: EditorialItineraryProps) {
+  return <EditorialItinerary {...props} />;
 }
 
 export default EditorialItinerary;
