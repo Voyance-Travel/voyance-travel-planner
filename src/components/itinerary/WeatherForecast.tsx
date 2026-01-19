@@ -172,7 +172,7 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
                 <div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-serif font-bold">{weather.current.temp}°</span>
-                    <span className="text-lg text-muted-foreground">C</span>
+                    <span className="text-lg text-muted-foreground">F</span>
                   </div>
                   <p className="text-sm font-medium text-foreground/80">{currentCondition}</p>
                   <p className="text-xs text-muted-foreground">Feels like {weather.current.feelsLike}°</p>
@@ -186,7 +186,7 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground justify-end">
                   <Wind className="h-4 w-4" />
-                  <span>{weather.current.windSpeed} km/h</span>
+                  <span>{weather.current.windSpeed} mph</span>
                 </div>
                 {weather.source === 'fallback' && (
                   <Badge variant="outline" className="text-xs mt-2">
@@ -266,8 +266,9 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
 function getPackingSuggestion(weather: WeatherData): string {
   const avgHigh = weather.forecast.reduce((sum, d) => sum + d.high, 0) / weather.forecast.length;
   const hasRain = weather.forecast.some(d => d.condition.toLowerCase().includes('rain') || d.precipitation > 40);
-  const hasCold = weather.forecast.some(d => d.low < 10);
-  const hasHot = weather.forecast.some(d => d.high > 28);
+  // Thresholds in Fahrenheit: 50°F = cold, 82°F = hot, 77°F = sunny
+  const hasCold = weather.forecast.some(d => d.low < 50);
+  const hasHot = weather.forecast.some(d => d.high > 82);
   
   const tips: string[] = [];
   
@@ -276,7 +277,7 @@ function getPackingSuggestion(weather: WeatherData): string {
   else if (hasCold) tips.push('Bring warm layers for cooler evenings');
   else if (hasHot) tips.push('Light, breathable clothing recommended');
   
-  if (avgHigh > 25) tips.push('Don\'t forget sunscreen and a hat');
+  if (avgHigh > 77) tips.push('Don\'t forget sunscreen and a hat');
   
   if (tips.length === 0) {
     return 'Comfortable casual wear should work perfectly for your trip!';
