@@ -44,6 +44,15 @@ export interface ImagesResponse {
 // API FUNCTIONS
 // ============================================================================
 
+function normalizeDestinationQuery(destination?: string): string | undefined {
+  if (!destination) return undefined;
+  return destination
+    .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+    .replace(/\b(international\s+)?airport\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 /**
  * Get destination images with fallback chain:
  * Database → Google Places → Gradient
@@ -55,7 +64,7 @@ export async function getDestinationImages(
   const { data, error } = await supabase.functions.invoke('destination-images', {
     body: {
       destinationId: params.destinationId,
-      destination: params.destination,
+      destination: normalizeDestinationQuery(params.destination),
       imageType: params.imageType,
       limit: params.limit,
     },
