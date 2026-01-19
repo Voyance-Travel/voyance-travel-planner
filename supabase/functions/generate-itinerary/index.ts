@@ -232,7 +232,27 @@ async function getUserPreferences(supabase: any, userId: string) {
   try {
     const { data, error } = await supabase
       .from('user_preferences')
-      .select('interests, travel_pace, budget_tier, dining_style, activity_level')
+      .select(`
+        interests, 
+        travel_pace, 
+        budget_tier, 
+        dining_style, 
+        activity_level,
+        dietary_restrictions,
+        accessibility_needs,
+        mobility_needs,
+        mobility_level,
+        hotel_style,
+        accommodation_style,
+        flight_preferences,
+        flight_time_preference,
+        seat_preference,
+        direct_flights_only,
+        climate_preferences,
+        weather_preferences,
+        preferred_regions,
+        eco_friendly
+      `)
       .eq('user_id', userId)
       .maybeSingle();
     if (error) return null;
@@ -244,15 +264,20 @@ async function getUserPreferences(supabase: any, userId: string) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildPreferenceContext(insights: any, prefs: any): string {
-  const parts: string[] = [];
+  const sections: { title: string; items: string[] }[] = [];
 
+  // ==========================================================================
+  // LEARNED INSIGHTS (from activity feedback)
+  // ==========================================================================
   if (insights) {
+    const insightItems: string[] = [];
+    
     const lovedTypes = Object.entries(insights.loved_activity_types || {})
       .sort((a, b) => (b[1] as number) - (a[1] as number))
       .slice(0, 3)
       .map(([type]) => type.replace(/_/g, ' '));
     if (lovedTypes.length > 0) {
-      parts.push(`Traveler LOVES: ${lovedTypes.join(', ')}`);
+      insightItems.push(`✅ LOVES: ${lovedTypes.join(', ')}`);
     }
 
     const dislikedTypes = Object.entries(insights.disliked_activity_types || {})
@@ -260,27 +285,135 @@ function buildPreferenceContext(insights: any, prefs: any): string {
       .slice(0, 3)
       .map(([type]) => type.replace(/_/g, ' '));
     if (dislikedTypes.length > 0) {
-      parts.push(`AVOID: ${dislikedTypes.join(', ')}`);
+      insightItems.push(`❌ AVOID activities: ${dislikedTypes.join(', ')}`);
     }
 
     if (insights.preferred_pace) {
-      parts.push(`Preferred pace: ${insights.preferred_pace}`);
+      insightItems.push(`Learned pace preference: ${insights.preferred_pace}`);
+    }
+    
+    if (insightItems.length > 0) {
+      sections.push({ title: '🧠 LEARNED FROM PAST TRIPS', items: insightItems });
     }
   }
 
+  // ==========================================================================
+  // USER PREFERENCES
+  // ==========================================================================
   if (prefs) {
+    const coreItems: string[] = [];
+    const restrictionItems: string[] = [];
+    const mobilityItems: string[] = [];
+    const climateItems: string[] = [];
+    const accommodationItems: string[] = [];
+
+    // Core preferences
     if (prefs.interests?.length) {
-      parts.push(`Interests: ${prefs.interests.slice(0, 5).join(', ')}`);
+      coreItems.push(`Interests: ${prefs.interests.slice(0, 6).join(', ')}`);
     }
     if (prefs.travel_pace) {
-      parts.push(`Travel pace: ${prefs.travel_pace}`);
+      coreItems.push(`Travel pace: ${prefs.travel_pace}`);
+    }
+    if (prefs.activity_level) {
+      coreItems.push(`Activity level: ${prefs.activity_level}`);
     }
     if (prefs.dining_style) {
-      parts.push(`Dining style: ${prefs.dining_style}`);
+      coreItems.push(`Dining style: ${prefs.dining_style}`);
+    }
+    if (prefs.eco_friendly) {
+      coreItems.push(`🌱 Eco-conscious traveler - prefer sustainable options`);
+    }
+    
+    if (coreItems.length > 0) {
+      sections.push({ title: '🎯 TRAVEL STYLE', items: coreItems });
+    }
+
+    // CRITICAL: Dietary restrictions
+    if (prefs.dietary_restrictions?.length) {
+      restrictionItems.push(`⚠️ DIETARY RESTRICTIONS: ${prefs.dietary_restrictions.join(', ')}`);
+      restrictionItems.push(`ALL meal recommendations MUST accommodate these restrictions`);
+    }
+    
+    if (restrictionItems.length > 0) {
+      sections.push({ title: '🍽️ DIETARY REQUIREMENTS (MANDATORY)', items: restrictionItems });
+    }
+
+    // CRITICAL: Accessibility & Mobility
+    if (prefs.accessibility_needs?.length || prefs.mobility_needs || prefs.mobility_level) {
+      if (prefs.accessibility_needs?.length) {
+        mobilityItems.push(`♿ ACCESSIBILITY NEEDS: ${prefs.accessibility_needs.join(', ')}`);
+      }
+      if (prefs.mobility_needs) {
+        mobilityItems.push(`Mobility requirements: ${prefs.mobility_needs}`);
+      }
+      if (prefs.mobility_level) {
+        mobilityItems.push(`Mobility level: ${prefs.mobility_level}`);
+      }
+      mobilityItems.push(`ALL venues MUST be accessible. Avoid long walks, steep stairs, or inaccessible locations.`);
+      
+      sections.push({ title: '♿ ACCESSIBILITY (MANDATORY)', items: mobilityItems });
+    }
+
+    // Climate & Weather preferences - THE DIFFERENTIATOR
+    if (prefs.climate_preferences?.length || prefs.weather_preferences?.length) {
+      if (prefs.climate_preferences?.length) {
+        climateItems.push(`Preferred climates: ${prefs.climate_preferences.join(', ')}`);
+      }
+      if (prefs.weather_preferences?.length) {
+        climateItems.push(`Weather preferences: ${prefs.weather_preferences.join(', ')}`);
+      }
+      climateItems.push(`Schedule outdoor activities during optimal weather conditions`);
+      climateItems.push(`Have indoor backup options for weather-sensitive activities`);
+      
+      sections.push({ title: '🌤️ CLIMATE & WEATHER PREFERENCES', items: climateItems });
+    }
+
+    // Accommodation preferences
+    if (prefs.hotel_style || prefs.accommodation_style) {
+      if (prefs.hotel_style) {
+        accommodationItems.push(`Hotel style: ${prefs.hotel_style}`);
+      }
+      if (prefs.accommodation_style) {
+        accommodationItems.push(`Accommodation preference: ${prefs.accommodation_style}`);
+      }
+      
+      sections.push({ title: '🏨 ACCOMMODATION STYLE', items: accommodationItems });
+    }
+
+    // Flight preferences (useful for airport arrival/departure context)
+    if (prefs.flight_preferences || prefs.flight_time_preference || prefs.seat_preference) {
+      const flightItems: string[] = [];
+      if (prefs.flight_time_preference) {
+        flightItems.push(`Preferred flight times: ${prefs.flight_time_preference}`);
+      }
+      if (prefs.direct_flights_only) {
+        flightItems.push(`Prefers direct flights only`);
+      }
+      
+      if (flightItems.length > 0) {
+        sections.push({ title: '✈️ FLIGHT PREFERENCES', items: flightItems });
+      }
+    }
+
+    // Preferred regions
+    if (prefs.preferred_regions?.length) {
+      sections.push({ 
+        title: '🗺️ REGIONAL PREFERENCES', 
+        items: [`Favorite regions: ${prefs.preferred_regions.join(', ')}`] 
+      });
     }
   }
 
-  return parts.length > 0 ? `\n\n🎯 USER PREFERENCES:\n${parts.join('\n')}` : '';
+  // Build the final context string
+  if (sections.length === 0) {
+    return '';
+  }
+
+  const contextParts = sections.map(section => 
+    `${section.title}:\n${section.items.map(item => `  - ${item}`).join('\n')}`
+  );
+
+  return `\n\n${'='.repeat(60)}\n🎯 PERSONALIZED TRAVELER PROFILE\n${'='.repeat(60)}\n${contextParts.join('\n\n')}`;
 }
 
 function calculateDays(startDate: string, endDate: string): number {
@@ -381,12 +514,20 @@ async function generateItineraryAI(
 ): Promise<{ days: StrictDay[] } | null> {
   console.log(`[Stage 2] Starting AI generation for ${context.totalDays} days`);
 
-  const systemPrompt = `You are an expert travel planner creating personalized itineraries. Your itineraries are:
+  const systemPrompt = `You are an expert travel planner creating HIGHLY PERSONALIZED itineraries. Your itineraries are:
 - Realistic with proper timing and logistics
 - Include a balanced mix of experiences (cultural, culinary, relaxation, activities)
 - Feature local hidden gems alongside popular attractions
 - Account for travel time between activities
-- Tailored to the traveler's preferences and budget
+- STRICTLY tailored to the traveler's personal profile and constraints
+
+MANDATORY PERSONALIZATION RULES:
+1. DIETARY RESTRICTIONS are NON-NEGOTIABLE - never recommend restaurants or food that violate dietary requirements
+2. ACCESSIBILITY NEEDS are NON-NEGOTIABLE - all venues must be accessible, avoid stairs/long walks if mobility issues exist
+3. CLIMATE/WEATHER preferences should inform activity timing (outdoor activities during preferred conditions)
+4. Use the traveler's INTERESTS to prioritize activity categories
+5. Match the traveler's PACE preference (relaxed = fewer activities with more downtime, packed = more activities)
+6. Honor LEARNED PREFERENCES from past trips - include activities they've loved, avoid what they disliked
 
 CRITICAL REQUIREMENTS:
 1. EVERY activity MUST have a complete street address (not just venue name)
