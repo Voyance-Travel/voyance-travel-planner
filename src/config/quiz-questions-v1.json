@@ -1,0 +1,646 @@
+{
+  "version": "1.0.0",
+  "questions": [
+    {
+      "id": "q1",
+      "prompt": "Your ideal first morning of a trip looks like...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "a1",
+          "label": "A quiet balcony with coffee and silence",
+          "mappings": [
+            { "trait": "restorationSeeker", "weight": 0.9 },
+            { "trait": "solitudeEmbracer", "weight": 0.7 },
+            { "trait": "slowTraveler", "weight": 0.5 }
+          ],
+          "toneTags": ["soft luxury", "slowness", "contemplation"],
+          "emotionalDrivers": ["peace", "control", "restoration"]
+        },
+        {
+          "id": "a2",
+          "label": "Already out exploring before breakfast",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.9 },
+            { "trait": "energySeeker", "weight": 0.7 },
+            { "trait": "discoveryDriven", "weight": 0.6 }
+          ],
+          "toneTags": ["active", "curious", "go-getter"],
+          "emotionalDrivers": ["excitement", "discovery", "momentum"]
+        },
+        {
+          "id": "a3",
+          "label": "Researching local food spots while still in bed",
+          "mappings": [
+            { "trait": "culinaryExplorer", "weight": 0.85 },
+            { "trait": "plannerMindset", "weight": 0.6 },
+            { "trait": "authenticitySeeker", "weight": 0.5 }
+          ],
+          "toneTags": ["foodie", "strategic", "local"],
+          "emotionalDrivers": ["anticipation", "curation", "taste"]
+        },
+        {
+          "id": "a4",
+          "label": "Whatever the group decides",
+          "mappings": [
+            { "trait": "socialConnector", "weight": 0.8 },
+            { "trait": "flexibilityEmbracer", "weight": 0.7 },
+            { "trait": "harmonySeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["social", "easygoing", "group-oriented"],
+          "emotionalDrivers": ["connection", "belonging", "ease"]
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "prompt": "When you think about your dream destination, you imagine...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "b1",
+          "label": "Ancient streets with layers of history",
+          "mappings": [
+            { "trait": "culturalExplorer", "weight": 0.95 },
+            { "trait": "authenticitySeeker", "weight": 0.8 },
+            { "trait": "historyBuff", "weight": 0.7 }
+          ],
+          "toneTags": ["heritage", "deep", "timeless"],
+          "emotionalDrivers": ["meaning", "connection to past", "wonder"]
+        },
+        {
+          "id": "b2",
+          "label": "Pristine nature, far from crowds",
+          "mappings": [
+            { "trait": "wildernessSeeker", "weight": 0.9 },
+            { "trait": "solitudeEmbracer", "weight": 0.75 },
+            { "trait": "adventureChaser", "weight": 0.5 }
+          ],
+          "toneTags": ["nature", "remote", "untouched"],
+          "emotionalDrivers": ["escape", "awe", "grounding"]
+        },
+        {
+          "id": "b3",
+          "label": "A vibrant city with endless options",
+          "mappings": [
+            { "trait": "urbanExplorer", "weight": 0.9 },
+            { "trait": "energySeeker", "weight": 0.7 },
+            { "trait": "socialConnector", "weight": 0.5 }
+          ],
+          "toneTags": ["dynamic", "cosmopolitan", "buzzing"],
+          "emotionalDrivers": ["stimulation", "options", "energy"]
+        },
+        {
+          "id": "b4",
+          "label": "A luxurious retreat with every amenity",
+          "mappings": [
+            { "trait": "luxurySeeker", "weight": 0.95 },
+            { "trait": "comfortPrioritizer", "weight": 0.85 },
+            { "trait": "restorationSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["premium", "polished", "elevated"],
+          "emotionalDrivers": ["indulgence", "ease", "status"]
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "prompt": "Your travel budget mindset is...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "c1",
+          "label": "Experiences over expense—I'll stretch every dollar",
+          "mappings": [
+            { "trait": "budgetConscious", "weight": 0.9 },
+            { "trait": "authenticitySeeker", "weight": 0.6 },
+            { "trait": "resourcefulTraveler", "weight": 0.7 }
+          ],
+          "toneTags": ["savvy", "value-driven", "scrappy"],
+          "emotionalDrivers": ["achievement", "smart choices", "maximization"]
+        },
+        {
+          "id": "c2",
+          "label": "Balanced—splurge on what matters, save elsewhere",
+          "mappings": [
+            { "trait": "balancedSpender", "weight": 0.85 },
+            { "trait": "intentionalTraveler", "weight": 0.7 },
+            { "trait": "flexibilityEmbracer", "weight": 0.5 }
+          ],
+          "toneTags": ["strategic", "balanced", "thoughtful"],
+          "emotionalDrivers": ["control", "value", "smart indulgence"]
+        },
+        {
+          "id": "c3",
+          "label": "Comfort is non-negotiable—I invest in quality",
+          "mappings": [
+            { "trait": "comfortPrioritizer", "weight": 0.9 },
+            { "trait": "luxurySeeker", "weight": 0.7 },
+            { "trait": "qualityFocused", "weight": 0.8 }
+          ],
+          "toneTags": ["premium", "quality-first", "selective"],
+          "emotionalDrivers": ["ease", "reliability", "enjoyment"]
+        },
+        {
+          "id": "c4",
+          "label": "Money is no object when I travel",
+          "mappings": [
+            { "trait": "luxurySeeker", "weight": 0.95 },
+            { "trait": "statusSeeker", "weight": 0.6 },
+            { "trait": "experienceMaximizer", "weight": 0.7 }
+          ],
+          "toneTags": ["luxury", "limitless", "exclusive"],
+          "emotionalDrivers": ["indulgence", "freedom", "best-of-best"]
+        }
+      ]
+    },
+    {
+      "id": "q4",
+      "prompt": "Your ideal travel pace is...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "d1",
+          "label": "Slow and immersive—one place, deeply",
+          "mappings": [
+            { "trait": "slowTraveler", "weight": 0.95 },
+            { "trait": "authenticitySeeker", "weight": 0.7 },
+            { "trait": "depthOverBreadth", "weight": 0.8 }
+          ],
+          "toneTags": ["slow", "intentional", "immersive"],
+          "emotionalDrivers": ["depth", "understanding", "presence"]
+        },
+        {
+          "id": "d2",
+          "label": "Active—sunrise to sunset with activities",
+          "mappings": [
+            { "trait": "energySeeker", "weight": 0.9 },
+            { "trait": "adventureChaser", "weight": 0.75 },
+            { "trait": "experienceMaximizer", "weight": 0.7 }
+          ],
+          "toneTags": ["packed", "energetic", "go-go-go"],
+          "emotionalDrivers": ["achievement", "momentum", "fullness"]
+        },
+        {
+          "id": "d3",
+          "label": "Flexible—some plans, lots of spontaneity",
+          "mappings": [
+            { "trait": "flexibilityEmbracer", "weight": 0.85 },
+            { "trait": "balancedSpender", "weight": 0.5 },
+            { "trait": "discoveryDriven", "weight": 0.6 }
+          ],
+          "toneTags": ["flexible", "balanced", "open"],
+          "emotionalDrivers": ["freedom", "serendipity", "balance"]
+        },
+        {
+          "id": "d4",
+          "label": "Relaxed—I'm on vacation, minimal agenda",
+          "mappings": [
+            { "trait": "restorationSeeker", "weight": 0.9 },
+            { "trait": "comfortPrioritizer", "weight": 0.7 },
+            { "trait": "solitudeEmbracer", "weight": 0.5 }
+          ],
+          "toneTags": ["relaxed", "vacation-mode", "unstructured"],
+          "emotionalDrivers": ["rest", "decompression", "peace"]
+        }
+      ]
+    },
+    {
+      "id": "q5",
+      "prompt": "When planning a trip, you typically...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "e1",
+          "label": "Research everything and create detailed itineraries",
+          "mappings": [
+            { "trait": "plannerMindset", "weight": 0.95 },
+            { "trait": "controlSeeker", "weight": 0.7 },
+            { "trait": "researchDriven", "weight": 0.8 }
+          ],
+          "toneTags": ["organized", "thorough", "prepared"],
+          "emotionalDrivers": ["security", "optimization", "confidence"]
+        },
+        {
+          "id": "e2",
+          "label": "Book the basics, figure out the rest on the ground",
+          "mappings": [
+            { "trait": "flexibilityEmbracer", "weight": 0.8 },
+            { "trait": "adaptableTraveler", "weight": 0.7 },
+            { "trait": "discoveryDriven", "weight": 0.6 }
+          ],
+          "toneTags": ["adaptive", "light-touch", "trusting"],
+          "emotionalDrivers": ["freedom", "trust", "surprise"]
+        },
+        {
+          "id": "e3",
+          "label": "Prefer someone else to handle the planning",
+          "mappings": [
+            { "trait": "delegator", "weight": 0.85 },
+            { "trait": "comfortPrioritizer", "weight": 0.6 },
+            { "trait": "experienceFocused", "weight": 0.5 }
+          ],
+          "toneTags": ["hands-off", "trusting", "experience-focused"],
+          "emotionalDrivers": ["ease", "expertise", "simplicity"]
+        },
+        {
+          "id": "e4",
+          "label": "Completely spontaneous—book a flight and go",
+          "mappings": [
+            { "trait": "spontaneousTraveler", "weight": 0.95 },
+            { "trait": "adventureChaser", "weight": 0.7 },
+            { "trait": "thrillSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["impulsive", "adventurous", "bold"],
+          "emotionalDrivers": ["thrill", "freedom", "unpredictability"]
+        }
+      ]
+    },
+    {
+      "id": "q6",
+      "prompt": "Your ideal travel companions are...",
+      "type": "multi",
+      "maxSelections": 2,
+      "answers": [
+        {
+          "id": "f1",
+          "label": "Solo—I love traveling alone",
+          "mappings": [
+            { "trait": "solitudeEmbracer", "weight": 0.9 },
+            { "trait": "independentTraveler", "weight": 0.85 },
+            { "trait": "selfDiscovery", "weight": 0.6 }
+          ],
+          "toneTags": ["solo", "independent", "introspective"],
+          "emotionalDrivers": ["freedom", "self-discovery", "autonomy"]
+        },
+        {
+          "id": "f2",
+          "label": "Partner—romantic getaways",
+          "mappings": [
+            { "trait": "romanticTraveler", "weight": 0.9 },
+            { "trait": "connectionSeeker", "weight": 0.75 },
+            { "trait": "intimacyValuer", "weight": 0.7 }
+          ],
+          "toneTags": ["romantic", "couples", "intimate"],
+          "emotionalDrivers": ["connection", "romance", "shared memories"]
+        },
+        {
+          "id": "f3",
+          "label": "Friends—the more the merrier",
+          "mappings": [
+            { "trait": "socialConnector", "weight": 0.9 },
+            { "trait": "groupTraveler", "weight": 0.8 },
+            { "trait": "funSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["social", "group", "festive"],
+          "emotionalDrivers": ["fun", "bonding", "shared experiences"]
+        },
+        {
+          "id": "f4",
+          "label": "Family—creating memories together",
+          "mappings": [
+            { "trait": "familyFocused", "weight": 0.9 },
+            { "trait": "memoryMaker", "weight": 0.8 },
+            { "trait": "inclusivePlanner", "weight": 0.7 }
+          ],
+          "toneTags": ["family", "multigenerational", "inclusive"],
+          "emotionalDrivers": ["legacy", "togetherness", "tradition"]
+        }
+      ]
+    },
+    {
+      "id": "q7",
+      "prompt": "What activities make a trip unforgettable?",
+      "type": "multi",
+      "maxSelections": 3,
+      "answers": [
+        {
+          "id": "g1",
+          "label": "Outdoor adventures (hiking, diving, climbing)",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.9 },
+            { "trait": "thrillSeeker", "weight": 0.75 },
+            { "trait": "physicallyActive", "weight": 0.7 }
+          ],
+          "toneTags": ["adventure", "outdoor", "adrenaline"],
+          "emotionalDrivers": ["challenge", "achievement", "nature connection"]
+        },
+        {
+          "id": "g2",
+          "label": "Cultural experiences (museums, history, art)",
+          "mappings": [
+            { "trait": "culturalExplorer", "weight": 0.9 },
+            { "trait": "historyBuff", "weight": 0.7 },
+            { "trait": "learningOriented", "weight": 0.6 }
+          ],
+          "toneTags": ["cultural", "intellectual", "enriching"],
+          "emotionalDrivers": ["learning", "meaning", "appreciation"]
+        },
+        {
+          "id": "g3",
+          "label": "Food and drink experiences",
+          "mappings": [
+            { "trait": "culinaryExplorer", "weight": 0.9 },
+            { "trait": "authenticitySeeker", "weight": 0.6 },
+            { "trait": "sensoryExplorer", "weight": 0.7 }
+          ],
+          "toneTags": ["foodie", "epicurean", "sensory"],
+          "emotionalDrivers": ["pleasure", "discovery", "local connection"]
+        },
+        {
+          "id": "g4",
+          "label": "Nightlife and entertainment",
+          "mappings": [
+            { "trait": "socialConnector", "weight": 0.8 },
+            { "trait": "funSeeker", "weight": 0.85 },
+            { "trait": "energySeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["nightlife", "social", "vibrant"],
+          "emotionalDrivers": ["excitement", "connection", "celebration"]
+        },
+        {
+          "id": "g5",
+          "label": "Wellness and relaxation (spa, yoga, beaches)",
+          "mappings": [
+            { "trait": "restorationSeeker", "weight": 0.9 },
+            { "trait": "wellnessOriented", "weight": 0.85 },
+            { "trait": "selfCare", "weight": 0.7 }
+          ],
+          "toneTags": ["wellness", "restorative", "peaceful"],
+          "emotionalDrivers": ["restoration", "self-care", "balance"]
+        },
+        {
+          "id": "g6",
+          "label": "Shopping and local markets",
+          "mappings": [
+            { "trait": "collectorMindset", "weight": 0.75 },
+            { "trait": "authenticitySeeker", "weight": 0.6 },
+            { "trait": "sensoryExplorer", "weight": 0.5 }
+          ],
+          "toneTags": ["shopping", "local", "treasure-hunting"],
+          "emotionalDrivers": ["discovery", "collecting", "local connection"]
+        }
+      ]
+    },
+    {
+      "id": "q8",
+      "prompt": "Your ideal accommodation is...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "h1",
+          "label": "Boutique hotel with local character",
+          "mappings": [
+            { "trait": "authenticitySeeker", "weight": 0.85 },
+            { "trait": "designAppreciator", "weight": 0.7 },
+            { "trait": "uniquenessSeeker", "weight": 0.75 }
+          ],
+          "toneTags": ["boutique", "unique", "characterful"],
+          "emotionalDrivers": ["authenticity", "design", "story"]
+        },
+        {
+          "id": "h2",
+          "label": "Luxury resort with all amenities",
+          "mappings": [
+            { "trait": "luxurySeeker", "weight": 0.9 },
+            { "trait": "comfortPrioritizer", "weight": 0.85 },
+            { "trait": "pamperedTraveler", "weight": 0.7 }
+          ],
+          "toneTags": ["luxury", "resort", "full-service"],
+          "emotionalDrivers": ["indulgence", "ease", "pampering"]
+        },
+        {
+          "id": "h3",
+          "label": "Vacation rental / local apartment",
+          "mappings": [
+            { "trait": "authenticitySeeker", "weight": 0.8 },
+            { "trait": "localLiving", "weight": 0.85 },
+            { "trait": "independentTraveler", "weight": 0.6 }
+          ],
+          "toneTags": ["local", "immersive", "home-like"],
+          "emotionalDrivers": ["authenticity", "independence", "local life"]
+        },
+        {
+          "id": "h4",
+          "label": "Reliable chain hotel—I know what to expect",
+          "mappings": [
+            { "trait": "predictabilitySeeker", "weight": 0.8 },
+            { "trait": "comfortPrioritizer", "weight": 0.6 },
+            { "trait": "efficiencyFocused", "weight": 0.5 }
+          ],
+          "toneTags": ["reliable", "consistent", "practical"],
+          "emotionalDrivers": ["security", "predictability", "efficiency"]
+        },
+        {
+          "id": "h5",
+          "label": "Unique stays (treehouses, yurts, boats)",
+          "mappings": [
+            { "trait": "uniquenessSeeker", "weight": 0.95 },
+            { "trait": "adventureChaser", "weight": 0.6 },
+            { "trait": "storyCollector", "weight": 0.7 }
+          ],
+          "toneTags": ["unique", "unconventional", "memorable"],
+          "emotionalDrivers": ["novelty", "story", "adventure"]
+        }
+      ]
+    },
+    {
+      "id": "q9",
+      "prompt": "What climate/environment calls to you most?",
+      "type": "multi",
+      "maxSelections": 2,
+      "answers": [
+        {
+          "id": "i1",
+          "label": "Tropical beaches and warm sun",
+          "mappings": [
+            { "trait": "beachLover", "weight": 0.9 },
+            { "trait": "warmthSeeker", "weight": 0.8 },
+            { "trait": "restorationSeeker", "weight": 0.5 }
+          ],
+          "toneTags": ["tropical", "beachy", "sun-soaked"],
+          "emotionalDrivers": ["warmth", "relaxation", "escape"]
+        },
+        {
+          "id": "i2",
+          "label": "Mountain landscapes and fresh air",
+          "mappings": [
+            { "trait": "mountainLover", "weight": 0.9 },
+            { "trait": "wildernessSeeker", "weight": 0.7 },
+            { "trait": "adventureChaser", "weight": 0.5 }
+          ],
+          "toneTags": ["alpine", "majestic", "crisp"],
+          "emotionalDrivers": ["awe", "challenge", "clarity"]
+        },
+        {
+          "id": "i3",
+          "label": "European cities and mild weather",
+          "mappings": [
+            { "trait": "urbanExplorer", "weight": 0.8 },
+            { "trait": "culturalExplorer", "weight": 0.7 },
+            { "trait": "temperatePreference", "weight": 0.6 }
+          ],
+          "toneTags": ["european", "walkable", "temperate"],
+          "emotionalDrivers": ["culture", "exploration", "charm"]
+        },
+        {
+          "id": "i4",
+          "label": "Desert landscapes and unique terrain",
+          "mappings": [
+            { "trait": "uniquenessSeeker", "weight": 0.8 },
+            { "trait": "wildernessSeeker", "weight": 0.7 },
+            { "trait": "adventureChaser", "weight": 0.6 }
+          ],
+          "toneTags": ["desert", "dramatic", "otherworldly"],
+          "emotionalDrivers": ["wonder", "isolation", "perspective"]
+        },
+        {
+          "id": "i5",
+          "label": "Lush forests and biodiversity",
+          "mappings": [
+            { "trait": "natureLover", "weight": 0.9 },
+            { "trait": "ecoConscious", "weight": 0.7 },
+            { "trait": "wildernessSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["forest", "green", "biodiverse"],
+          "emotionalDrivers": ["connection", "discovery", "grounding"]
+        }
+      ]
+    },
+    {
+      "id": "q10",
+      "prompt": "What emotional need does travel fulfill for you?",
+      "type": "multi",
+      "maxSelections": 2,
+      "answers": [
+        {
+          "id": "j1",
+          "label": "Escape from routine and stress",
+          "mappings": [
+            { "trait": "escapeSeeker", "weight": 0.9 },
+            { "trait": "restorationSeeker", "weight": 0.7 },
+            { "trait": "decompressor", "weight": 0.8 }
+          ],
+          "toneTags": ["escape", "reset", "relief"],
+          "emotionalDrivers": ["relief", "freedom", "reset"]
+        },
+        {
+          "id": "j2",
+          "label": "Personal growth and transformation",
+          "mappings": [
+            { "trait": "transformationSeeker", "weight": 0.9 },
+            { "trait": "selfDiscovery", "weight": 0.8 },
+            { "trait": "meaningSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["growth", "transformative", "meaningful"],
+          "emotionalDrivers": ["growth", "meaning", "self-knowledge"]
+        },
+        {
+          "id": "j3",
+          "label": "Adventure and excitement",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.85 },
+            { "trait": "thrillSeeker", "weight": 0.8 },
+            { "trait": "energySeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["adventure", "exciting", "thrilling"],
+          "emotionalDrivers": ["excitement", "adrenaline", "aliveness"]
+        },
+        {
+          "id": "j4",
+          "label": "Connection with loved ones",
+          "mappings": [
+            { "trait": "connectionSeeker", "weight": 0.9 },
+            { "trait": "memoryMaker", "weight": 0.8 },
+            { "trait": "socialConnector", "weight": 0.6 }
+          ],
+          "toneTags": ["bonding", "shared", "meaningful"],
+          "emotionalDrivers": ["connection", "love", "memories"]
+        },
+        {
+          "id": "j5",
+          "label": "Learning about the world",
+          "mappings": [
+            { "trait": "learningOriented", "weight": 0.9 },
+            { "trait": "culturalExplorer", "weight": 0.7 },
+            { "trait": "curiousTraveler", "weight": 0.8 }
+          ],
+          "toneTags": ["educational", "curious", "worldly"],
+          "emotionalDrivers": ["curiosity", "knowledge", "perspective"]
+        }
+      ]
+    }
+  ],
+  "traitDefinitions": {
+    "restorationSeeker": { "description": "Seeks rest, renewal, and escape from stress", "dimension": "pace" },
+    "solitudeEmbracer": { "description": "Values alone time and independence", "dimension": "social" },
+    "slowTraveler": { "description": "Prefers depth over breadth, slow immersive experiences", "dimension": "pace" },
+    "adventureChaser": { "description": "Seeks thrills, physical challenges, and new experiences", "dimension": "adventure" },
+    "energySeeker": { "description": "Prefers active, packed itineraries", "dimension": "pace" },
+    "discoveryDriven": { "description": "Motivated by finding new places and experiences", "dimension": "adventure" },
+    "culinaryExplorer": { "description": "Food and drink are central to travel experience", "dimension": "authenticity" },
+    "plannerMindset": { "description": "Prefers detailed planning and research", "dimension": "planning" },
+    "authenticitySeeker": { "description": "Values local, genuine experiences over tourist traps", "dimension": "authenticity" },
+    "socialConnector": { "description": "Travel is about connection with others", "dimension": "social" },
+    "flexibilityEmbracer": { "description": "Comfortable with change and spontaneity", "dimension": "planning" },
+    "harmonySeeker": { "description": "Prioritizes group dynamics and consensus", "dimension": "social" },
+    "culturalExplorer": { "description": "Drawn to history, art, and cultural experiences", "dimension": "authenticity" },
+    "historyBuff": { "description": "Fascinated by historical sites and stories", "dimension": "authenticity" },
+    "wildernessSeeker": { "description": "Drawn to nature and remote locations", "dimension": "adventure" },
+    "urbanExplorer": { "description": "Loves city energy, architecture, and urban culture", "dimension": "adventure" },
+    "luxurySeeker": { "description": "Values premium experiences and accommodations", "dimension": "comfort" },
+    "comfortPrioritizer": { "description": "Comfort and ease are non-negotiable", "dimension": "comfort" },
+    "budgetConscious": { "description": "Values maximizing value for money", "dimension": "budget" },
+    "balancedSpender": { "description": "Strategic spending—splurge on priorities", "dimension": "budget" },
+    "qualityFocused": { "description": "Willing to pay for quality experiences", "dimension": "budget" },
+    "statusSeeker": { "description": "Values exclusive and prestigious experiences", "dimension": "comfort" },
+    "experienceMaximizer": { "description": "Wants to fit in as many experiences as possible", "dimension": "pace" },
+    "depthOverBreadth": { "description": "Prefers fewer, deeper experiences", "dimension": "pace" },
+    "adaptableTraveler": { "description": "Comfortable adapting to changing circumstances", "dimension": "planning" },
+    "delegator": { "description": "Prefers others to handle logistics", "dimension": "planning" },
+    "spontaneousTraveler": { "description": "Thrives on last-minute decisions", "dimension": "planning" },
+    "thrillSeeker": { "description": "Drawn to adrenaline and risk", "dimension": "adventure" },
+    "independentTraveler": { "description": "Prefers solo exploration and autonomy", "dimension": "social" },
+    "selfDiscovery": { "description": "Uses travel for personal growth", "dimension": "transformation" },
+    "romanticTraveler": { "description": "Travel as romantic experience", "dimension": "social" },
+    "connectionSeeker": { "description": "Values deep connection with travel partners", "dimension": "social" },
+    "groupTraveler": { "description": "Energized by traveling in groups", "dimension": "social" },
+    "funSeeker": { "description": "Prioritizes fun and enjoyment", "dimension": "social" },
+    "familyFocused": { "description": "Travel centered on family bonding", "dimension": "social" },
+    "memoryMaker": { "description": "Focused on creating lasting memories", "dimension": "social" },
+    "inclusivePlanner": { "description": "Plans with everyone's needs in mind", "dimension": "planning" },
+    "physicallyActive": { "description": "Values physical activity and movement", "dimension": "adventure" },
+    "learningOriented": { "description": "Travel as education", "dimension": "authenticity" },
+    "sensoryExplorer": { "description": "Engages all senses in travel experiences", "dimension": "authenticity" },
+    "wellnessOriented": { "description": "Prioritizes health and wellness", "dimension": "comfort" },
+    "selfCare": { "description": "Travel as self-care and restoration", "dimension": "comfort" },
+    "collectorMindset": { "description": "Loves collecting souvenirs and experiences", "dimension": "adventure" },
+    "designAppreciator": { "description": "Values aesthetic and design", "dimension": "authenticity" },
+    "uniquenessSeeker": { "description": "Drawn to unusual and unique experiences", "dimension": "adventure" },
+    "localLiving": { "description": "Wants to live like a local", "dimension": "authenticity" },
+    "pamperedTraveler": { "description": "Values being taken care of", "dimension": "comfort" },
+    "predictabilitySeeker": { "description": "Values knowing what to expect", "dimension": "planning" },
+    "efficiencyFocused": { "description": "Values time efficiency and practicality", "dimension": "planning" },
+    "storyCollector": { "description": "Travels for stories to tell", "dimension": "adventure" },
+    "beachLover": { "description": "Drawn to coastal destinations", "dimension": "adventure" },
+    "warmthSeeker": { "description": "Prefers warm, tropical climates", "dimension": "comfort" },
+    "mountainLover": { "description": "Drawn to alpine environments", "dimension": "adventure" },
+    "natureLover": { "description": "Deep connection to natural environments", "dimension": "adventure" },
+    "ecoConscious": { "description": "Values sustainable travel", "dimension": "authenticity" },
+    "escapeSeeker": { "description": "Travel as escape from daily life", "dimension": "transformation" },
+    "decompressor": { "description": "Needs travel to decompress and reset", "dimension": "transformation" },
+    "transformationSeeker": { "description": "Seeks personal transformation through travel", "dimension": "transformation" },
+    "meaningSeeker": { "description": "Looks for meaning and purpose in travel", "dimension": "transformation" },
+    "curiousTraveler": { "description": "Driven by curiosity about the world", "dimension": "authenticity" }
+  },
+  "dimensionWeights": {
+    "planning": { "weight": 0.125, "description": "Preference for structure vs spontaneity" },
+    "social": { "weight": 0.125, "description": "Solo vs group travel preference" },
+    "comfort": { "weight": 0.125, "description": "Comfort and luxury priority" },
+    "pace": { "weight": 0.125, "description": "Relaxed vs active pace" },
+    "authenticity": { "weight": 0.125, "description": "Local/authentic vs tourist experiences" },
+    "adventure": { "weight": 0.125, "description": "Risk tolerance and thrill-seeking" },
+    "budget": { "weight": 0.125, "description": "Price sensitivity" },
+    "transformation": { "weight": 0.125, "description": "Personal growth focus" }
+  }
+}
