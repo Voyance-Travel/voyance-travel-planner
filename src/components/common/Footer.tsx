@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Instagram, Facebook } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
+import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 
 const footerLinks = {
   company: [
@@ -48,8 +49,8 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 lg:gap-12">
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-4 lg:col-span-1">
-            <Link to={ROUTES.HOME} className="flex items-center gap-2 text-foreground mb-4">
-              <span className="font-display text-xl font-semibold">Voyance</span>
+            <Link to={ROUTES.HOME} className="flex items-center mb-4">
+              <VoyanceWordmark size="md" />
             </Link>
             <p className="text-sm text-muted-foreground mb-6 max-w-xs">
               Personalized travel experiences powered by AI

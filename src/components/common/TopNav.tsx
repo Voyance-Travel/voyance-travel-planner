@@ -15,18 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { Button } from '@/components/ui/button';
 import { NotificationBell } from '@/components/common/NotificationBell';
-
-// Elegant V logo component - adapts to transparent/solid nav states
-const VoyanceLogo = ({ isTransparent }: { isTransparent: boolean }) => (
-  <span 
-    className={`font-serif text-2xl font-semibold leading-none transition-colors ${
-      isTransparent ? 'text-white' : 'text-primary'
-    }`}
-    style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
-  >
-    V
-  </span>
-);
+import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 
 const navLinks = [
   { href: ROUTES.START, label: 'Start Planning', highlight: true },
@@ -113,14 +102,8 @@ export default function TopNav() {
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
-          <Link
-            to={ROUTES.HOME}
-            className={`flex items-center gap-2.5 font-display text-xl font-semibold transition-colors ${
-              isTransparent ? 'text-white' : 'text-foreground'
-            }`}
-          >
-            <VoyanceLogo isTransparent={isTransparent} />
-            <span>Voyance</span>
+          <Link to={ROUTES.HOME} className="flex items-center">
+            <VoyanceWordmark variant={isTransparent ? 'light' : 'default'} size="md" />
           </Link>
 
           {/* Desktop Navigation */}
