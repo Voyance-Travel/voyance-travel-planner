@@ -153,6 +153,9 @@ export function useEntitlements() {
 // Utility Functions
 // ============================================================================
 
+// QA MODE: Bypass all payment gates - treat everyone as premium
+const QA_MODE_PREMIUM = true;
+
 /**
  * Check if a feature is enabled
  */
@@ -160,6 +163,9 @@ export function canUse(
   entitlements: Record<string, Entitlement> | undefined,
   flag: FeatureFlag
 ): boolean {
+  // QA Override: Always allow all features
+  if (QA_MODE_PREMIUM) return true;
+  
   if (!entitlements) return false;
   const ent = entitlements[flag];
   if (!ent) return false;
@@ -179,6 +185,9 @@ export function getRemainingQuota(
   entitlements: Record<string, Entitlement> | undefined,
   flag: FeatureFlag
 ): number | null {
+  // QA Override: Always return high quota
+  if (QA_MODE_PREMIUM) return 999;
+  
   if (!entitlements) return null;
   const ent = entitlements[flag];
   if (!ent || ent.limit === undefined) return null;
@@ -194,6 +203,9 @@ export function isAtLimit(
   entitlements: Record<string, Entitlement> | undefined,
   flag: FeatureFlag
 ): boolean {
+  // QA Override: Never at limit
+  if (QA_MODE_PREMIUM) return false;
+  
   if (!entitlements) return true;
   const ent = entitlements[flag];
   if (!ent) return true;
