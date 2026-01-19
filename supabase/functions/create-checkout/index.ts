@@ -17,12 +17,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
-  );
-
   try {
     logStep("Function started");
 
@@ -35,13 +29,63 @@ serve(async (req) => {
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header provided");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      logStep("No valid authorization header");
+      return new Response(JSON.stringify({ error: "No authorization header provided" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabaseClient.auth.getUser(token);
-    const user = data.user;
-    if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    
+    // Create Supabase client with the user's token
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { 
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false } 
+      }
+    );
+
+    // Use getClaims to validate the JWT token
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      logStep("Invalid JWT token", { error: claimsError?.message });
+      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
+
+    const userId = claimsData.claims.sub;
+    const userEmail = claimsData.claims.email as string | undefined;
+    
+    if (!userId) {
+      logStep("No user ID in token claims");
+      return new Response(JSON.stringify({ error: "Invalid token: missing user ID" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
+
+    // If we don't have email in claims, fetch the full user
+    let email = userEmail;
+    if (!email) {
+      const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+      if (userError || !userData.user?.email) {
+        logStep("Could not get user email", { error: userError?.message });
+        return new Response(JSON.stringify({ error: "Could not retrieve user email" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401,
+        });
+      }
+      email = userData.user.email;
+    }
+
+    logStep("User authenticated", { userId, email });
 
     // Initialize Stripe
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
@@ -49,7 +93,7 @@ serve(async (req) => {
     });
 
     // Check for existing Stripe customer
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    const customers = await stripe.customers.list({ email, limit: 1 });
     let customerId;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
@@ -61,7 +105,7 @@ serve(async (req) => {
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      customer_email: customerId ? undefined : user.email,
+      customer_email: customerId ? undefined : email,
       line_items: [
         {
           price: priceId,
@@ -72,7 +116,7 @@ serve(async (req) => {
       success_url: `${origin}/profile?success=true`,
       cancel_url: `${origin}/profile?canceled=true`,
       metadata: {
-        user_id: user.id,
+        user_id: userId,
       },
     });
 
