@@ -75,8 +75,9 @@ function transformProfile(
 
 // Demo mode for preview testing (dev only)
 const DEMO_MODE_KEY = 'voyance_demo_mode';
+// Demo user points to Graham Lightfoot's real DB record for full personalization
 const DEMO_USER: User = {
-  id: '00000000-0000-0000-0000-000000000001', // Valid UUID for demo user
+  id: 'fdc80e1c-af6c-4c9d-8ecd-2713d9008ccb', // Graham Lightfoot's real UUID
   email: 'demo@voyance.travel',
   name: 'Demo Traveler',
   avatar: undefined,
