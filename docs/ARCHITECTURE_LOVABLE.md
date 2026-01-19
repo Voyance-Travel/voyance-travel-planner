@@ -1,16 +1,16 @@
-# Voyance Architecture - Lovable Codebase
+# Voyance Architecture - Lovable Cloud
 
 <!--
-@keywords: architecture, backend, frontend, API, edge function, Supabase, Neon, auth, data flow
+@keywords: architecture, backend, frontend, API, edge function, Supabase, auth, data flow, Lovable Cloud
 @category: CORE
 @searchTerms: how it works, system design, backend setup, API calls, authentication
 -->
 
-**Last Updated**: 2025-01-17  
+**Last Updated**: 2025-01-19  
 **Status**: ✅ Current  
 **See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [INDEX.md](./INDEX.md)
 
-This document adapts the original Voyance SOT documents for the Lovable codebase architecture.
+This document describes the Voyance architecture on Lovable Cloud (Supabase-powered backend).
 
 ---
 
@@ -29,168 +29,191 @@ This document adapts the original Voyance SOT documents for the Lovable codebase
          │
          ▼
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
-│   neonDb.ts      │────▶│ Edge Function    │────▶│   Neon DB   │
-│   (API Client)   │     │ (neon-db)        │     │ (Postgres)  │
+│  Supabase Client │────▶│ Lovable Cloud    │────▶│  PostgreSQL │
+│  (Direct queries)│     │ (Edge Functions) │     │  (with RLS) │
 └─────────────────┘     └──────────────────┘     └─────────────┘
 ```
 
 ---
 
-## Key Differences from Original Backend
+## Technology Stack
 
 <!--
-@section: differences
-@keywords: Railway, Express, Deno, JWT, migration
+@section: tech-stack
+@keywords: React, Vite, Tailwind, TypeScript, Supabase
 -->
 
-| Original System | Lovable System | Keywords |
-|-----------------|----------------|----------|
-| Custom JWT auth | Supabase Auth | auth, JWT, session |
-| Railway backend | Edge Functions | railway, deno, serverless |
-| Direct API calls | `supabase.functions.invoke()` | invoke, fetch |
-| `/api/v1/auth/*` | `/neon-db/*` | routes, endpoints |
-| Express.js routes | Deno.serve handlers | express, deno |
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 18 + TypeScript + Vite |
+| **Styling** | Tailwind CSS + shadcn/ui |
+| **State** | React Context + Zustand |
+| **Data Fetching** | TanStack Query (React Query) |
+| **Backend** | Lovable Cloud (Supabase) |
+| **Database** | PostgreSQL with RLS |
+| **Auth** | Supabase Auth |
+| **Serverless** | Deno Edge Functions |
+| **Storage** | Supabase Storage |
+| **Payments** | Stripe |
 
 ---
 
-## API Endpoint Mapping
+## Data Access Patterns
 
 <!--
-@section: api-mapping
-@keywords: endpoints, original, lovable, migration, routes
+@section: data-access
+@keywords: Supabase, client, edge functions, queries
 -->
 
-### Original → Lovable
+### Direct Supabase Client (Primary)
 
-| Original Endpoint | Lovable Equivalent | Keywords |
-|-------------------|-------------------|----------|
-| `POST /api/v1/auth/signup` | `supabase.auth.signUp()` | signup, register |
-| `POST /api/v1/auth/login` | `supabase.auth.signInWithPassword()` | login, signin |
-| `GET /api/preferences` | `GET /neon-db/preferences?userId=X` | preferences, get |
-| `POST /api/preferences` | `PUT /neon-db/preferences` | preferences, save |
-| `GET /api/trips` | `GET /neon-db/trips?userId=X` | trips, list |
-| `POST /api/trips` | `POST /neon-db/trips` | trips, create |
-| `GET /api/profile` | `GET /neon-db/profiles?userId=X` | profile, get |
-
-### Usage in Code
+For most CRUD operations, use the Supabase client directly:
 
 ```typescript
-// src/services/neonDb.ts - Already implemented
-import { preferencesApi, tripsApi, profilesApi } from '@/services/neonDb';
+import { supabase } from '@/integrations/supabase/client';
 
-// Get preferences
-const prefs = await preferencesApi.get(userId);
+// Read with RLS (auto-filtered to current user)
+const { data: trips } = await supabase.from('trips').select('*');
 
-// Update preferences  
-await preferencesApi.update(userId, { style: 'luxury', budget: 'premium' });
+// Insert
+const { data: newTrip } = await supabase
+  .from('trips')
+  .insert({ destination: 'Tokyo', user_id: userId })
+  .select()
+  .single();
 
-// List trips
-const trips = await tripsApi.list(userId);
+// Update
+await supabase
+  .from('profiles')
+  .update({ display_name: 'New Name' })
+  .eq('id', userId);
 
-// Create trip
-await tripsApi.create(userId, { destination: 'Tokyo', status: 'draft' });
+// Delete
+await supabase.from('trips').delete().eq('id', tripId);
+```
+
+### Edge Functions (Complex Operations)
+
+For operations requiring:
+- External API calls (Amadeus, Stripe)
+- AI processing (Lovable AI Gateway)
+- Admin operations (service role)
+- Complex business logic
+
+```typescript
+// Invoke edge function
+const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+  body: { tripId, destination, preferences }
+});
+
+// List of edge functions (29 total)
+// - generate-itinerary   (AI itinerary generation)
+// - flights              (Amadeus flight search)
+// - hotels               (Amadeus hotel search)
+// - calculate-travel-dna (Quiz processing)
+// - create-checkout      (Stripe sessions)
+// - check-subscription   (Subscription status)
+// - send-contact-email   (SendGrid emails)
+// - weather              (Weather API)
+// - destination-images   (Image fetching)
+// ... and more
 ```
 
 ---
 
-## Data Flow Adaptations
+## API Endpoint Mapping (Historical Reference)
+
+<!--
+@section: api-mapping
+@keywords: endpoints, migration, legacy
+-->
+
+| Legacy Endpoint | Current Implementation |
+|-----------------|------------------------|
+| `POST /api/v1/auth/signup` | `supabase.auth.signUp()` |
+| `POST /api/v1/auth/login` | `supabase.auth.signInWithPassword()` |
+| `GET /api/preferences` | `supabase.from('user_preferences').select()` |
+| `POST /api/preferences` | `supabase.from('user_preferences').upsert()` |
+| `GET /api/trips` | `supabase.from('trips').select()` |
+| `POST /api/trips` | `supabase.from('trips').insert()` |
+| `GET /api/profile` | `supabase.from('profiles').select()` |
+| `POST /api/itinerary/generate` | Edge function: `generate-itinerary` |
+
+---
+
+## Data Flow Examples
 
 <!--
 @section: data-flow
 @keywords: quiz, auth, flow, save, session
 -->
 
-### Quiz Flow (Simplified)
+### Quiz Flow
 
-**Original (11 steps, quiz_sessions table):**
 ```
-quiz/start → quiz/save-step → quiz/finalize → travel_dna_profiles
+Quiz.tsx (QuizContext)
+    │
+    ├─ Step 1-10: Collect travel preferences
+    │
+    ▼
+Submit → Edge Function: calculate-travel-dna
+    │
+    ├─ Calculate archetype scores
+    ├─ Determine primary/secondary types
+    │
+    ▼
+Supabase Tables Updated:
+  - travel_dna_profiles (full DNA data)
+  - profiles.travel_dna (summary)
+  - profiles.quiz_completed = true
+  - user_preferences (all preferences)
+    │
+    ▼
+Navigate to /profile → TravelDNAReveal component
 ```
-
-**Lovable (5 questions, direct save):**
-```
-Quiz.tsx → setPreferences() → /neon-db/preferences → user_preferences table
-```
-
-The Lovable version is simplified:
-- No quiz_sessions tracking (future enhancement)
-- No quiz_responses table (answers saved directly as preferences)
-- No travel_dna_profiles table (archetype derived on frontend)
 
 ### Auth Flow
 
-**Original:**
 ```
-signup → JWT token → localStorage → axios interceptor
-```
-
-**Lovable:**
-```
-supabase.auth.signUp() → Session → AuthContext → Auto-managed by Supabase client
+Sign Up / Sign In
+    │
+    ▼
+supabase.auth.signUp() / signInWithPassword()
+    │
+    ▼
+onAuthStateChange triggered in AuthContext
+    │
+    ├─ DB Trigger: handle_new_user() auto-creates profile
+    │
+    ▼
+loadUserData() fetches:
+  - profiles (display_name, avatar, etc.)
+  - user_preferences (travel settings)
+    │
+    ▼
+transformProfile() → User state in AuthContext
 ```
 
 ---
 
-## Neon Database Tables
+## Database Tables
 
 <!--
-@section: neon-tables
+@section: tables
 @keywords: tables, schema, SQL, profiles, preferences, trips
 -->
 
-### Currently Used
+### 33 Tables (All with RLS)
 
-| Table | Purpose | Edge Function Path | Keywords |
-|-------|---------|-------------------|----------|
-| `profiles` | User profile data | `/profiles` | user, name, avatar |
-| `user_preferences` | Quiz results, travel style | `/preferences` | quiz, style, budget |
-| `trips` | User trips | `/trips` | trip, destination, dates |
-
-### Schema (user_preferences)
-
-```sql
-CREATE TABLE user_preferences (
-  user_id UUID PRIMARY KEY,
-  travel_style TEXT,    -- luxury, adventure, cultural, relaxation
-  budget TEXT,          -- budget, moderate, premium, luxury
-  pace TEXT,            -- slow, moderate, fast
-  interests TEXT[],     -- ['food', 'art', 'nature']
-  accommodation TEXT,   -- hotel, boutique, airbnb, hostel
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
-);
-```
-
-### Schema (trips)
-
-```sql
-CREATE TABLE trips (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  destination TEXT,
-  start_date DATE,
-  end_date DATE,
-  travelers INTEGER DEFAULT 1,
-  status TEXT DEFAULT 'draft',  -- draft, planning, booked, completed, cancelled
-  data JSONB DEFAULT '{}',
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP
-);
-```
-
-### Schema (profiles)
-
-```sql
-CREATE TABLE profiles (
-  user_id UUID PRIMARY KEY,
-  email TEXT,
-  name TEXT,
-  avatar_url TEXT,
-  home_airport TEXT,  -- IATA code
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP
-);
-```
+| Category | Tables |
+|----------|--------|
+| **User** | profiles, user_preferences, user_roles, user_usage, user_enrichment, user_entitlement_overrides, user_preference_insights |
+| **Quiz/DNA** | quiz_sessions, quiz_responses, travel_dna_profiles, travel_dna_history |
+| **Trips** | trips, trip_activities, trip_collaborators, trip_payments |
+| **Content** | destinations, destination_images, airports, attractions, activities, activity_catalog, activity_feedback, guides, curated_images |
+| **Social** | friendships, saved_items |
+| **System** | audit_logs, feature_flags, plans, plan_entitlements |
+| **Legacy** | user_id_mappings |
 
 ---
 
@@ -209,53 +232,79 @@ AuthContext (src/contexts/AuthContext.tsx)
 ├── session: Session | null
 ├── preferences: TravelPreferences
 └── Methods:
-    ├── login()        → Supabase Auth + Neon sync
-    ├── signup()       → Supabase Auth + profile create
+    ├── login()        → Supabase Auth
+    ├── signup()       → Supabase Auth + auto profile
     ├── logout()       → Clear session
-    ├── setPreferences() → Saves to Neon
-    └── refreshUserData() → Fetches from Neon
+    ├── setPreferences() → Saves to Supabase
+    └── refreshUserData() → Fetches profile/preferences
 ```
 
-### Key Files
+### Key Directories
 
-| File | Purpose | Keywords |
-|------|---------|----------|
-| `src/services/neonDb.ts` | API client for Neon edge function | API, fetch, invoke |
-| `src/contexts/AuthContext.tsx` | Auth state + Neon data sync | auth, user, session |
-| `src/pages/Quiz.tsx` | Quiz flow, saves to Neon on complete | quiz, questions |
-| `src/pages/Profile.tsx` | Displays data from Neon | profile, display |
-| `supabase/functions/neon-db/index.ts` | Edge function handlers | edge, routes |
+| Directory | Purpose |
+|-----------|---------|
+| `src/pages/` | Route components |
+| `src/components/` | Reusable UI components |
+| `src/services/` | API service files |
+| `src/services/supabase/` | Direct Supabase queries |
+| `src/contexts/` | React contexts |
+| `src/hooks/` | Custom React hooks |
+| `src/lib/` | Utilities and stores |
+| `supabase/functions/` | Edge functions |
 
 ---
 
-## Future Enhancements
+## Security Architecture
 
 <!--
-@section: future
-@keywords: todo, planned, enhancement, roadmap
+@section: security
+@keywords: RLS, policies, auth, admin
 -->
 
-To fully match original system, implement:
+### Row Level Security (RLS)
+- All 31 tables have RLS enabled
+- Policies use `auth.uid()` for user-specific data
+- Public data (destinations, airports) allows authenticated/anon reads
+- Admin operations require `has_role('admin')`
 
-1. **Quiz Sessions Table** - Track quiz progress, allow resume
-2. **Quiz Responses Table** - Store individual answers
-3. **Travel DNA Profiles** - Calculated archetype with confidence
-4. **Travel DNA History** - Track changes over time
-5. **Extended Preferences Tables**:
-   - `user_flight_preferences`
-   - `user_food_preferences`
-   - `user_mobility_accessibility`
-   - `user_emotional_signature`
+### Views for Limited Exposure
+- `profiles_public`: Only id, handle, display_name, avatar_url (for friend search)
+- `user_preferences_safe`: Non-sensitive fields only
+
+### Admin Functions
+- Use `SECURITY DEFINER` with service role
+- Role checks via `has_role()` function
+- Audit logging for admin actions
+
+---
+
+## Edge Functions
+
+<!--
+@section: edge-functions
+@keywords: serverless, deno, functions
+-->
+
+| Function | Purpose | External APIs |
+|----------|---------|---------------|
+| `generate-itinerary` | AI itinerary creation | Lovable AI |
+| `flights` | Flight search | Amadeus |
+| `hotels` | Hotel search | Amadeus |
+| `calculate-travel-dna` | Quiz processing | Lovable AI |
+| `create-checkout` | Payment sessions | Stripe |
+| `check-subscription` | Subscription status | Stripe |
+| `customer-portal` | Billing management | Stripe |
+| `send-contact-email` | Contact form | SendGrid |
+| `weather` | Weather data | WeatherStack |
+| `destination-images` | Image fetching | Pexels |
 
 ---
 
 ## Related Documents
 
-| Document | Purpose | Keywords |
-|----------|---------|----------|
-| [SYSTEM_SOT.md](./SYSTEM_SOT.md) | Master source of truth | main, canonical |
-| [ITINERARY_LOVABLE.md](./ITINERARY_LOVABLE.md) | Itinerary system | activities, days |
-| [PREFERENCES_LOVABLE.md](./PREFERENCES_LOVABLE.md) | Preferences system | quiz, style |
-| [airport-codes-database-full.md](./airport-codes-database-full.md) | 879 airports | IATA, cities |
-| [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) | 25+ traveler personalities | DNA, archetype |
-| [database-schema-reference.md](./database-schema-reference.md) | Full original schema | schema, tables |
+| Document | Purpose |
+|----------|---------|
+| [SYSTEM_SOT.md](./SYSTEM_SOT.md) | Master source of truth |
+| [ITINERARY_LOVABLE.md](./ITINERARY_LOVABLE.md) | Itinerary system |
+| [PREFERENCES_LOVABLE.md](./PREFERENCES_LOVABLE.md) | Preferences system |
+| [QUIZ_FLOW_LOVABLE.md](./QUIZ_FLOW_LOVABLE.md) | Quiz implementation |

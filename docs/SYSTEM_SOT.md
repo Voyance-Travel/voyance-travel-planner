@@ -7,10 +7,10 @@
 -->
 
 **Last Updated**: January 2025  
-**Status**: ✅ CANONICAL - Lovable Codebase  
-**Version**: 2.0 (Lovable)
+**Status**: ✅ CANONICAL - Lovable Cloud  
+**Version**: 3.0 (Lovable Cloud)
 
-> **This document is the single source of truth for the Lovable implementation.** All code must align with these specifications.
+> **This document is the single source of truth for the Lovable Cloud implementation.** All code must align with these specifications.
 
 ---
 
@@ -18,12 +18,12 @@
 
 <!--
 @section: architecture
-@keywords: frontend, backend, services, state, database, neon, edge function
+@keywords: frontend, backend, services, state, database, supabase, edge function, lovable cloud
 -->
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (React)                          │
+│                        FRONTEND (React + Vite)                   │
 ├─────────────────────────────────────────────────────────────────┤
 │  Pages          │  Components        │  State                   │
 │  ─────────────  │  ───────────────   │  ──────────────────      │
@@ -37,29 +37,21 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                    SERVICES (src/services/)                      │
 ├─────────────────────────────────────────────────────────────────┤
-│  neonDb.ts      │  API client for Neon via Edge Functions       │
+│  supabase/      │  Direct Supabase client queries               │
 │  ────────────   │  ─────────────────────────────────────────    │
-│  profilesApi    │  GET/PUT /profiles                             │
-│  preferencesApi │  GET/PUT /preferences                          │
-│  tripsApi       │  GET/POST/PUT/DELETE /trips                    │
+│  profiles.ts    │  User profiles & search                       │
+│  trips.ts       │  Trip CRUD operations                         │
+│  friends.ts     │  Friend relationships                         │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  SUPABASE EDGE FUNCTION                          │
+│                  LOVABLE CLOUD (Supabase)                        │
 ├─────────────────────────────────────────────────────────────────┤
-│  supabase/functions/neon-db/index.ts                            │
-│  ─────────────────────────────────────                          │
-│  Routes to Neon PostgreSQL database                              │
-│  Handles: profiles, preferences, trips, itineraries             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    NEON POSTGRESQL                               │
-├─────────────────────────────────────────────────────────────────┤
-│  Tables: profiles, user_preferences, trips                      │
-│  Future: itineraries, itinerary_days, itinerary_activities      │
+│  Database       │  PostgreSQL with RLS policies                 │
+│  Edge Functions │  29 serverless functions                      │
+│  Auth           │  Supabase Auth (email + OAuth)                │
+│  Storage        │  File storage (avatars bucket)                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -69,115 +61,98 @@
 
 <!--
 @section: database-schema
-@keywords: SQL, tables, columns, schema, profiles, preferences, trips, Neon, PostgreSQL
+@keywords: SQL, tables, columns, schema, profiles, preferences, trips, PostgreSQL, Supabase
 -->
+
+### Core Tables (33 total)
+
+| Category | Tables |
+|----------|--------|
+| **User Data** | profiles, user_preferences, user_roles, user_enrichment |
+| **Travel DNA** | travel_dna_profiles, travel_dna_history, quiz_sessions, quiz_responses |
+| **Trips** | trips, trip_activities, trip_collaborators, trip_payments |
+| **Content** | destinations, airports, attractions, activities, guides |
+| **Social** | friendships, saved_items, activity_feedback |
+| **System** | audit_logs, feature_flags, plans, plan_entitlements |
 
 ### `profiles` Table
 | Column | Type | Description |
 |--------|------|-------------|
-| user_id | UUID | Primary key (from Supabase Auth) |
-| email | TEXT | User email |
-| name | TEXT | Display name |
+| id | UUID | Primary key (from Supabase Auth) |
+| display_name | TEXT | User display name |
+| handle | TEXT | Unique username (@handle) |
 | avatar_url | TEXT | Profile image URL |
+| bio | TEXT | User bio |
 | home_airport | TEXT | IATA code (e.g., 'JFK') |
+| quiz_completed | BOOLEAN | Has completed travel quiz |
+| travel_dna | JSONB | Calculated travel personality |
 | created_at | TIMESTAMPTZ | Creation timestamp |
 | updated_at | TIMESTAMPTZ | Last update |
-
-```sql
-CREATE TABLE profiles (
-  user_id UUID PRIMARY KEY,
-  email TEXT,
-  name TEXT,
-  avatar_url TEXT,
-  home_airport TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
 
 ### `user_preferences` Table
 | Column | Type | Description |
 |--------|------|-------------|
-| user_id | UUID | Primary key |
+| user_id | UUID | Primary key (FK to auth.users) |
 | travel_style | TEXT | luxury, adventure, cultural, relaxation |
-| budget | TEXT | budget, moderate, premium, luxury |
-| pace | TEXT | slow, moderate, fast |
+| budget_tier | TEXT | budget, moderate, premium, luxury |
+| travel_pace | TEXT | slow, moderate, fast |
 | interests | TEXT[] | Array of interests |
-| accommodation | TEXT | hotel, boutique, airbnb, hostel |
-
-```sql
-CREATE TABLE user_preferences (
-  user_id UUID PRIMARY KEY,
-  travel_style TEXT,
-  budget TEXT,
-  pace TEXT,
-  interests TEXT[],
-  accommodation TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
+| accommodation_style | TEXT | hotel, boutique, airbnb, hostel |
+| dietary_restrictions | TEXT[] | Food restrictions |
+| mobility_needs | TEXT | Accessibility requirements |
+| home_airport | TEXT | Departure airport preference |
 
 ### `trips` Table
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
 | user_id | UUID | Owner user ID |
+| name | TEXT | Trip name |
 | destination | TEXT | City/location name |
+| destination_country | TEXT | Country |
 | start_date | DATE | Trip start |
 | end_date | DATE | Trip end |
 | travelers | INTEGER | Number of travelers |
-| status | TEXT | draft, planning, booked, completed, cancelled |
-| data | JSONB | Additional trip data |
-
-```sql
-CREATE TABLE trips (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  destination TEXT,
-  start_date DATE,
-  end_date DATE,
-  travelers INTEGER DEFAULT 1,
-  status TEXT DEFAULT 'draft',
-  data JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
+| status | ENUM | draft, planning, booked, completed, cancelled |
+| flight_selection | JSONB | Selected flight data |
+| hotel_selection | JSONB | Selected hotel data |
+| itinerary_data | JSONB | Generated itinerary |
+| itinerary_status | ENUM | pending, generating, complete, failed |
 
 ---
 
-## 🔌 API Endpoints (Edge Function)
+## 🔌 API Architecture
 
 <!--
-@section: api-endpoints
-@keywords: API, REST, endpoints, GET, POST, PUT, DELETE, edge function, neon-db
+@section: api
+@keywords: API, Supabase, edge functions, client, RLS
 -->
 
-Base: `supabase/functions/neon-db`
+### Data Access Pattern
 
-| Method | Path | Description | Auth | Keywords |
-|--------|------|-------------|------|----------|
-| GET | `/health` | Health check | No | status, ping |
-| GET | `/profiles?userId=` | Get user profile | Yes | profile, user |
-| PUT | `/profiles` | Create/update profile | Yes | profile, save |
-| GET | `/preferences?userId=` | Get preferences | Yes | preferences, quiz |
-| PUT | `/preferences` | Update preferences | Yes | preferences, save |
-| GET | `/trips?userId=` | List user trips | Yes | trips, list |
-| GET | `/trips/:id` | Get single trip | Yes | trip, detail |
-| POST | `/trips` | Create trip | Yes | trip, create |
-| PUT | `/trips/:id` | Update trip | Yes | trip, update |
-| DELETE | `/trips/:id` | Delete trip | Yes | trip, delete |
-
-### Request/Response Format
-
+**Direct Supabase Client** (for most operations):
 ```typescript
-// All responses follow this format:
-interface NeonResponse<T> {
-  data: T | null;
-  error: string | null;
-}
+import { supabase } from '@/integrations/supabase/client';
+
+// Profiles
+const { data } = await supabase.from('profiles').select('*').eq('id', userId);
+
+// Trips with RLS (auto-filtered to current user)
+const { data } = await supabase.from('trips').select('*');
+
+// Preferences
+const { data } = await supabase.from('user_preferences').select('*').eq('user_id', userId);
 ```
+
+**Edge Functions** (for complex operations):
+| Function | Purpose |
+|----------|---------|
+| `generate-itinerary` | AI-powered itinerary generation |
+| `flights` | Flight search (Amadeus API) |
+| `hotels` | Hotel search (Amadeus API) |
+| `calculate-travel-dna` | Quiz result processing |
+| `create-checkout` | Stripe payment sessions |
+| `check-subscription` | Subscription verification |
 
 ---
 
@@ -185,7 +160,7 @@ interface NeonResponse<T> {
 
 <!--
 @section: authentication
-@keywords: auth, login, signup, session, Supabase, JWT, token, user
+@keywords: auth, login, signup, session, Supabase, OAuth
 -->
 
 ```
@@ -195,15 +170,20 @@ User → Supabase Auth → Session
                 ↓
     ┌───────────┴───────────┐
     │                       │
-loadUserData()         syncProfile()
-    │                       │
-    ▼                       ▼
-Neon: profiles         Neon: profiles
-Neon: preferences      (upsert on login)
+loadUserData()         Auto-created profile
+    │                   (via DB trigger)
+    ▼                       
+Supabase: profiles     
+Supabase: user_preferences
     │
     ▼
-transformUser() → User state
+transformProfile() → User state
 ```
+
+### Supported Auth Methods
+- Email + Password
+- Google OAuth
+- Password Reset via Email
 
 ### User Type (Frontend)
 ```typescript
@@ -216,14 +196,11 @@ interface User {
   createdAt: string;     // ISO date
   quizCompleted?: boolean;
   preferences?: TravelPreferences;
-}
-
-interface TravelPreferences {
-  style?: string;        // Travel style
-  budget?: string;       // Budget level
-  pace?: string;         // Travel pace
-  interests?: string[];  // Interest categories
-  accommodation?: string;// Preferred lodging
+  travelDNA?: {
+    type: string;
+    secondary?: string;
+    confidence?: number;
+  };
 }
 ```
 
@@ -236,26 +213,22 @@ interface TravelPreferences {
 @keywords: flow, data, quiz, preferences, trips, save, load
 -->
 
-### Quiz → Preferences
+### Quiz → Travel DNA
 ```
 Quiz.tsx (QuizContext)
     │
-    ├─ Collect answers (5 steps)
+    ├─ Collect answers (10 steps)
     │
     ▼
-useAuth().setPreferences(preferences)
+Edge Function: calculate-travel-dna
     │
     ▼
-preferencesApi.update(userId, preferences)
+Supabase: travel_dna_profiles
+Supabase: profiles.travel_dna
+Supabase: user_preferences
     │
     ▼
-Edge Function → Neon: user_preferences
-    │
-    ▼
-Update AuthContext.user.preferences
-    │
-    ▼
-Navigate to /profile
+Navigate to /profile (DNA reveal)
 ```
 
 ### Trip Creation
@@ -265,16 +238,22 @@ TripPlanner → TripSetup
     ├─ Collect: destination, dates, travelers
     │
     ▼
-tripsApi.create(userId, tripData)
-    │
-    ▼
-Edge Function → Neon: trips
-    │
-    ▼
-Update tripStore (Zustand)
+supabase.from('trips').insert()
     │
     ▼
 Navigate to /planner/flights
+    │
+    ▼
+Edge Function: flights (search)
+    │
+    ▼
+Edge Function: hotels (search)
+    │
+    ▼
+Edge Function: generate-itinerary
+    │
+    ▼
+supabase.from('trips').update({ itinerary_data })
 ```
 
 ---
@@ -283,156 +262,92 @@ Navigate to /planner/flights
 
 <!--
 @section: state-management
-@keywords: state, context, zustand, store, persist, local storage
+@keywords: state, context, zustand, store, persist
 -->
 
 ### AuthContext (React Context)
 - **Purpose**: User session and profile
 - **Location**: `src/contexts/AuthContext.tsx`
 - **State**: user, session, isLoading
-- **Keywords**: auth, user, session, login
+- **Auto-sync**: Loads profile/preferences on auth change
 
 ### TripPlannerContext (React Context)
 - **Purpose**: Active trip planning session
 - **Location**: `src/contexts/TripPlannerContext.tsx`
-- **State**: currentTrip, flights, hotels
-- **Keywords**: planner, trip, flights, hotels
+- **State**: currentTrip, flights, hotels, step
 
 ### tripStore (Zustand)
 - **Purpose**: Trip persistence and selection
 - **Location**: `src/lib/tripStore.ts`
 - **State**: trips[], selections, itineraries
-- **Persistence**: localStorage
-- **Keywords**: store, persist, trips, itinerary
+- **Persistence**: localStorage (for demo/guest trips)
 
 ---
 
-## 🎨 Type Definitions
+## 🔒 Security Model
 
 <!--
-@section: types
-@keywords: TypeScript, interfaces, types, TripActivity, ItineraryDay, Trip
+@section: security
+@keywords: RLS, policies, auth, admin, roles
 -->
 
-### Core Types (src/types/trip.ts)
-```typescript
-interface TripActivity {
-  id: string;
-  name: string;           // Display name
-  type: string;           // activity | food | transport | attraction
-  description?: string;
-  startTime?: string;     // HH:MM format
-  endTime?: string;       // HH:MM format
-  duration?: number;      // Minutes
-  location?: { 
-    name?: string; 
-    address?: string; 
-    lat?: number; 
-    lng?: number; 
-  };
-  price?: number;
-  currency?: string;
-  isLocked?: boolean;     // User locked this activity
-  bookingRequired?: boolean;
-  bookingUrl?: string;
-}
+### Row Level Security
+- All 31 tables have RLS enabled
+- User data restricted to owner (auth.uid() = user_id)
+- Public data (destinations, airports) readable by all
+- Admin functions use service_role key
 
-interface ItineraryDay {
-  date: string;           // YYYY-MM-DD
-  dayNumber: number;      // 1, 2, 3...
-  activities: TripActivity[];
-  weather?: { 
-    high: number; 
-    low: number; 
-    condition: string; 
-  };
-}
+### Role System
+```sql
+-- Roles stored in separate table (not profiles)
+CREATE TABLE user_roles (
+  user_id UUID REFERENCES auth.users(id),
+  role app_role NOT NULL  -- 'admin', 'moderator', 'user'
+);
 
-interface Trip {
-  id: string;
-  userId?: string;
-  name: string;
-  destination: string;
-  startDate: string;      // YYYY-MM-DD
-  endDate: string;        // YYYY-MM-DD
-  totalDays: number;
-  status: TripStatus;     // draft | planning | booked | completed | cancelled
-  travelers: number;
-  budget?: number;
-  currency: string;
-  itinerary?: ItineraryDay[];
-  flight?: FlightSelection;
-  hotel?: HotelSelection;
-}
+-- Check role via function
+SELECT public.has_role('admin');
 ```
 
----
-
-## 🔄 Mapping: SOT Docs → Lovable
-
-<!--
-@section: mapping
-@keywords: original, migration, mapping, Railway, Edge Function
--->
-
-| Original Concept | Lovable Implementation |
-|-----------------|------------------------|
-| Railway backend | Edge Function (neon-db) |
-| `/api/v1/planner/trips` | `tripsApi.create()` |
-| `/api/v1/flights/search` | Mock data (future: Amadeus) |
-| `/api/v1/hotels/search` | Mock data (future: Amadeus) |
-| `/api/v1/user/preferences` | `preferencesApi.update()` |
-| Price lock system | tripStore.selections |
-| Stripe checkout | Future implementation |
-| OpenAI itinerary | Lovable AI Gateway |
+### Views for Public Data
+- `profiles_public`: id, handle, display_name, avatar_url (for friend search)
+- `user_preferences_safe`: Non-sensitive preference fields only
 
 ---
 
-## ✅ Implementation Checklist
+## ✅ Implementation Status
 
 <!--
 @section: checklist
 @keywords: status, done, todo, progress, implementation
 -->
 
-### Done ✅
-- [x] Supabase Auth integration
-- [x] Neon DB Edge Function
-- [x] Profiles CRUD
-- [x] Preferences CRUD
+### Complete ✅
+- [x] Supabase Auth integration (email + Google OAuth)
+- [x] 33 database tables with RLS
+- [x] Profiles CRUD with avatar upload
+- [x] User preferences system
+- [x] Travel Quiz (10 steps)
+- [x] Travel DNA calculation
 - [x] Trips CRUD
-- [x] Basic trip planner UI
-- [x] Quiz flow
+- [x] Trip planner wizard
+- [x] AI itinerary generation
+- [x] Friends system
+- [x] Saved items
+- [x] 2,250 destinations
+- [x] 740 airports
+- [x] 29 edge functions
+- [x] Audit logging
 
-### In Progress 🔧
-- [ ] Extended preferences schema
-- [ ] Itinerary tables & endpoints
-- [ ] Flight/hotel mock data
-- [ ] Zustand persistence wiring
+### Partial 🔧
+- [ ] Stripe payments (edge functions exist, needs real testing)
+- [ ] Price locking (timer UI exists, backend partial)
+- [ ] Push notifications (needs FCM setup)
 
-### Future 📋
-- [ ] Amadeus API integration
-- [ ] AI itinerary generation
-- [ ] Price locking
-- [ ] Stripe checkout
-- [ ] Companion system
-- [ ] Billing system
-
----
-
-## 🚨 Key Differences from Original
-
-<!--
-@section: differences
-@keywords: differences, original, changes, migration
--->
-
-1. **No direct API routes** - All backend calls go through Edge Function
-2. **Supabase Auth** - Not custom JWT
-3. **Simpler preferences** - 5 fields vs 20+ in original
-4. **Mock flight/hotel data** - Amadeus integration is future work
-5. **No price locking yet** - Will use Zustand + Edge Function
-6. **No Stripe yet** - Future implementation
+### Planned 📋
+- [ ] Real Amadeus API integration
+- [ ] Actual hotel booking
+- [ ] Rate limiting on edge functions
 
 ---
 
@@ -440,8 +355,8 @@ interface Trip {
 
 | Document | Purpose |
 |----------|---------|
-| [INDEX.md](./INDEX.md) | Documentation index |
 | [ARCHITECTURE_LOVABLE.md](./ARCHITECTURE_LOVABLE.md) | Detailed architecture |
 | [ITINERARY_LOVABLE.md](./ITINERARY_LOVABLE.md) | Itinerary system |
 | [PREFERENCES_LOVABLE.md](./PREFERENCES_LOVABLE.md) | Preferences system |
 | [QUIZ_FLOW_LOVABLE.md](./QUIZ_FLOW_LOVABLE.md) | Quiz implementation |
+| [database-schema-reference.md](./database-schema-reference.md) | Full schema reference |

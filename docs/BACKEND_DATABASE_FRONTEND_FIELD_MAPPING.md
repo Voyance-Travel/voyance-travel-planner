@@ -1,13 +1,16 @@
 # Backend Database → API → Frontend Field Mapping
 
-**Last Updated:** 2026-01-10
-**Backend Commit:** `09c22c4b`
-**Database:** Neon PostgreSQL
-**Purpose:** Complete field mapping for GET `/api/v1/trips/:tripId/itinerary` endpoint
+**Last Updated:** 2025-01-19
+**Database:** Lovable Cloud (PostgreSQL via Supabase)
+**Purpose:** Complete field mapping for itinerary data structure
+
+> **Note**: This document was originally written for the Neon/Railway architecture. 
+> The field mappings remain accurate - only the data access method has changed 
+> (now using Supabase client instead of REST API).
 
 ---
 
-## 📊 Database Schema (NEON PostgreSQL)
+## 📊 Database Schema (Lovable Cloud PostgreSQL)
 
 ### Table: `itinerary_frontend_ready`
 
