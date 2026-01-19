@@ -155,30 +155,40 @@ export const TOPUP_OPTIONS = [
 ] as const;
 
 // Credit spend menu (what users can buy with credits)
+// Note: These are standalone purchases - they don't include subscription perks
 export const CREDIT_MENU = [
   { 
     key: 'build_day',
     label: 'Build 1 day',
     cost: CREDIT_COSTS.BUILD_DAY,
-    description: 'AI-generate activities for one day',
+    description: 'AI fills one day with activities based on your preferences',
+    includes: ['AI activity suggestions', 'Time blocking', 'Activity details'],
+    excludes: ['Route optimization', 'Weather alerts', 'Group budgeting'],
   },
   { 
     key: 'build_full_trip',
     label: 'Build full trip',
     cost: CREDIT_COSTS.BUILD_FULL_TRIP,
-    description: 'AI-generate complete itinerary',
+    description: 'AI generates your complete multi-day itinerary',
+    includes: ['All days filled', 'AI activity suggestions', 'Time blocking'],
+    excludes: ['Unlimited rebuilds', 'Route optimization', 'Group tools', 'Co-editing'],
+    upsell: 'For $6 more, go Monthly and get unlimited rebuilds + group budgeting + co-editing',
   },
   { 
     key: 'route_optimize',
-    label: 'Route + transportation',
+    label: 'Route optimization',
     cost: CREDIT_COSTS.ROUTE_OPTIMIZE,
-    description: 'Optimize travel between activities',
+    description: 'Calculate optimal order and transport between activities',
+    includes: ['Travel time estimates', 'Reordered activities', 'Transport modes'],
+    excludes: [],
   },
   { 
     key: 'group_budget_setup',
     label: 'Group budget setup',
     cost: CREDIT_COSTS.GROUP_BUDGET_SETUP,
-    description: 'Auto-split expenses for your group',
+    description: 'Auto-split expenses across trip members',
+    includes: ['Expense tracking', 'Split calculations', 'Settlement summary'],
+    excludes: [],
   },
 ] as const;
 
