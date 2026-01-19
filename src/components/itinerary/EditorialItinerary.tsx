@@ -39,6 +39,7 @@ import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityIma
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { WeatherForecast } from './WeatherForecast';
 import { BookingButton } from '@/components/booking/BookingButton';
+import { PaymentSummary } from '@/components/booking/PaymentSummary';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 
 // =============================================================================
@@ -805,6 +806,9 @@ export function EditorialItinerary({
 
       {/* Destination Photo Carousel */}
       <DestinationCarousel destination={destination} destinationCountry={destinationCountry} />
+
+      {/* Payment Summary - Shows paid vs outstanding */}
+      <PaymentSummary tripId={tripId} />
 
       {/* Navigation Tabs */}
       <div className="border-b border-border">

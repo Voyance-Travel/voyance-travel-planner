@@ -16,7 +16,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
 import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
 import { enrichHotel } from '@/services/hotelAPI';
-import { PaymentSummary } from '@/components/booking/PaymentSummary';
 import { usePaymentVerification } from '@/hooks/usePaymentVerification';
 
 type Trip = Tables<'trips'>;
@@ -610,9 +609,6 @@ export default function TripDetail() {
               ) : null}
             </div>
           )}
-
-          {/* Payment Summary - Shows paid vs outstanding */}
-          <PaymentSummary tripId={trip.id} key={paymentsRefreshKey} />
 
           {/* Live Itinerary View for active trips */}
           {isLiveTrip ? (
