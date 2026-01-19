@@ -1257,94 +1257,308 @@ interface NeedToKnowSectionProps {
 }
 
 function NeedToKnowSection({ destination, destinationCountry, destinationInfo }: NeedToKnowSectionProps) {
+  const [expandedCards, setExpandedCards] = useState<string[]>([]);
+
+  const toggleCard = (cardId: string) => {
+    setExpandedCards(prev => 
+      prev.includes(cardId) 
+        ? prev.filter(id => id !== cardId)
+        : [...prev, cardId]
+    );
+  };
+
   // Default information for common destinations
   const getDefaultInfo = () => {
     const country = destinationCountry?.toLowerCase() || '';
     if (country.includes('italy') || destination.toLowerCase().includes('rome')) {
       return {
         currency: 'Euro (€)',
+        currencyTips: [
+          'Credit cards widely accepted in cities',
+          'Cash preferred at smaller shops & markets',
+          'ATMs (Bancomat) available everywhere',
+          'Notify your bank before traveling'
+        ],
         language: 'Italian',
+        languageTips: [
+          '"Buongiorno" (Good morning) - formal greeting',
+          '"Grazie" (Thank you) - essential phrase',
+          '"Scusi" (Excuse me) - polite way to get attention',
+          'English spoken at tourist spots, less in small towns'
+        ],
         timezone: 'CET (UTC+1)',
+        timezoneTips: [
+          'Shops often close 1-4 PM for "riposo"',
+          'Dinner typically starts 8-9 PM',
+          'Museums may close early on Mondays'
+        ],
         tipping: '10% at restaurants is appreciated but not required',
+        tippingTips: [
+          'Service charge ("coperto") often included',
+          'Round up taxi fares',
+          'Hotel porters: €1-2 per bag',
+          'Not expected at cafes for standing service'
+        ],
         transit: 'Metro, buses, trams. Buy tickets before boarding.',
+        transitTips: [
+          'Validate tickets on buses/trams to avoid fines',
+          'Roma Pass includes transport + museum entries',
+          'Uber/taxi apps work well in major cities',
+          'Walking is often the best way in historic centers'
+        ],
         water: 'Tap water is safe to drink',
+        waterTips: [
+          'Public drinking fountains ("nasoni") everywhere',
+          'Free water at restaurants upon request',
+          'Bottled water widely available'
+        ],
         voltage: '230V, Type C/F plugs',
+        voltageTips: [
+          'US/UK devices need adapters',
+          'Most hotels have adapters available',
+          'USB charging works without adapters'
+        ],
         emergency: '112 (EU Emergency), 118 (Ambulance)',
+        emergencyTips: [
+          '112 works from any phone, even without SIM',
+          'Pharmacies display green cross, rotate night shifts',
+          'Keep copies of passport separate from originals'
+        ],
       };
     }
     return {
       currency: destinationInfo?.currency || 'Local currency',
+      currencyTips: ['Check current exchange rates before you go', 'ATMs usually offer best rates', 'Notify your bank of travel plans'],
       language: destinationInfo?.language || 'Local language',
+      languageTips: ['Learn basic greetings', 'Translation apps work offline', 'Locals appreciate any effort'],
       timezone: destinationInfo?.timezone || 'Local time',
+      timezoneTips: ['Adjust sleep schedule a few days before', 'Stay hydrated during flights'],
       tipping: destinationInfo?.tipping || 'Varies by location',
+      tippingTips: ['Research local customs', 'Cash tips often preferred'],
       transit: destinationInfo?.transit || 'Various public transport options available',
+      transitTips: ['Download local transit apps', 'Consider day passes for savings'],
       water: destinationInfo?.water || 'Check local advisories',
+      waterTips: ['When in doubt, use bottled water', 'Ice in drinks may use tap water'],
       voltage: destinationInfo?.voltage || 'Check adapter requirements',
+      voltageTips: ['Universal adapters are convenient', 'Check voltage compatibility for hair dryers'],
       emergency: destinationInfo?.emergency || 'Contact local authorities',
+      emergencyTips: ['Save emergency numbers in your phone', 'Know your hotel address in local language'],
     };
   };
 
   const info = getDefaultInfo();
 
-  const infoCards = [
-    { icon: <Wallet className="h-5 w-5" />, label: 'Currency', value: info.currency },
-    { icon: <Languages className="h-5 w-5" />, label: 'Language', value: info.language },
-    { icon: <Clock className="h-5 w-5" />, label: 'Timezone', value: info.timezone },
-    { icon: <Train className="h-5 w-5" />, label: 'Transit', value: info.transit },
+  const infoCategories = [
+    { 
+      id: 'currency',
+      icon: <Wallet className="h-5 w-5" />, 
+      label: 'Currency & Money', 
+      value: info.currency,
+      tips: info.currencyTips,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bgColor: 'from-emerald-500/10 to-emerald-500/5'
+    },
+    { 
+      id: 'language',
+      icon: <Languages className="h-5 w-5" />, 
+      label: 'Language', 
+      value: info.language,
+      tips: info.languageTips,
+      color: 'text-blue-600 dark:text-blue-400',
+      bgColor: 'from-blue-500/10 to-blue-500/5'
+    },
+    { 
+      id: 'timezone',
+      icon: <Clock className="h-5 w-5" />, 
+      label: 'Timezone', 
+      value: info.timezone,
+      tips: info.timezoneTips,
+      color: 'text-amber-600 dark:text-amber-400',
+      bgColor: 'from-amber-500/10 to-amber-500/5'
+    },
+    { 
+      id: 'transit',
+      icon: <Train className="h-5 w-5" />, 
+      label: 'Getting Around', 
+      value: info.transit,
+      tips: info.transitTips,
+      color: 'text-purple-600 dark:text-purple-400',
+      bgColor: 'from-purple-500/10 to-purple-500/5'
+    },
+    { 
+      id: 'tipping',
+      icon: <Utensils className="h-5 w-5" />, 
+      label: 'Tipping', 
+      value: info.tipping,
+      tips: info.tippingTips,
+      color: 'text-rose-600 dark:text-rose-400',
+      bgColor: 'from-rose-500/10 to-rose-500/5'
+    },
+    { 
+      id: 'water',
+      icon: <Info className="h-5 w-5" />, 
+      label: 'Water & Safety', 
+      value: info.water,
+      tips: info.waterTips,
+      color: 'text-cyan-600 dark:text-cyan-400',
+      bgColor: 'from-cyan-500/10 to-cyan-500/5'
+    },
+    { 
+      id: 'voltage',
+      icon: <Sparkles className="h-5 w-5" />, 
+      label: 'Electricity', 
+      value: info.voltage,
+      tips: info.voltageTips,
+      color: 'text-orange-600 dark:text-orange-400',
+      bgColor: 'from-orange-500/10 to-orange-500/5'
+    },
+    { 
+      id: 'emergency',
+      icon: <AlertCircle className="h-5 w-5" />, 
+      label: 'Emergency', 
+      value: info.emergency,
+      tips: info.emergencyTips,
+      color: 'text-red-600 dark:text-red-400',
+      bgColor: 'from-red-500/10 to-red-500/5'
+    },
   ];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Globe className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-serif">Need to Know: {destination}</h2>
+        <div className="p-2 rounded-full bg-primary/10">
+          <Globe className="h-6 w-6 text-primary" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-serif">Need to Know</h2>
+          <p className="text-sm text-muted-foreground">Essential info for {destination}</p>
+        </div>
       </div>
 
-      {/* Quick Info Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {infoCards.map((card, idx) => (
-          <Card key={idx} className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2 text-primary">
-                {card.icon}
-                <span className="text-xs uppercase tracking-wider font-medium">{card.label}</span>
-              </div>
-              <p className="text-sm text-foreground font-medium">{card.value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Detailed Info */}
+      {/* Interactive Info Cards */}
       <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <h3 className="font-medium mb-2 flex items-center gap-2">
-              <Utensils className="h-4 w-4 text-primary" /> Tipping
-            </h3>
-            <p className="text-sm text-muted-foreground">{info.tipping}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <h3 className="font-medium mb-2 flex items-center gap-2">
-              <Info className="h-4 w-4 text-primary" /> Water & Safety
-            </h3>
-            <p className="text-sm text-muted-foreground">{info.water}</p>
-          </CardContent>
-        </Card>
+        {infoCategories.map((category) => {
+          const isExpanded = expandedCards.includes(category.id);
+          return (
+            <motion.div key={category.id} layout>
+              <Card 
+                className={cn(
+                  "cursor-pointer transition-all duration-200 overflow-hidden border-2",
+                  isExpanded 
+                    ? "border-primary/30 shadow-lg" 
+                    : "border-transparent hover:border-primary/10 hover:shadow-md"
+                )}
+                onClick={() => toggleCard(category.id)}
+              >
+                <CardContent className={cn("p-0 bg-gradient-to-br", category.bgColor)}>
+                  {/* Header - Always visible */}
+                  <div className="p-4 flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className={cn("p-2 rounded-lg bg-background/80 shadow-sm", category.color)}>
+                        {category.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn("text-xs uppercase tracking-wider font-semibold mb-1", category.color)}>
+                          {category.label}
+                        </p>
+                        <p className="text-sm text-foreground font-medium leading-relaxed">
+                          {category.value}
+                        </p>
+                      </div>
+                    </div>
+                    <motion.div
+                      animate={{ rotate: isExpanded ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="shrink-0 ml-2"
+                    >
+                      <ChevronDown className={cn("h-5 w-5", category.color)} />
+                    </motion.div>
+                  </div>
+
+                  {/* Expandable Tips Section */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <div className="px-4 pb-4 pt-0">
+                          <div className="border-t border-border/50 pt-3 mt-1">
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2 font-medium">
+                              Quick Tips
+                            </p>
+                            <ul className="space-y-2">
+                              {category.tips.map((tip, idx) => (
+                                <motion.li 
+                                  key={idx}
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: idx * 0.05 }}
+                                  className="flex items-start gap-2 text-sm text-muted-foreground"
+                                >
+                                  <span className={cn("mt-1.5 h-1.5 w-1.5 rounded-full shrink-0", category.color.replace('text-', 'bg-'))} />
+                                  <span>{tip}</span>
+                                </motion.li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
       </div>
 
+      {/* Cultural Notes - Full Width */}
       {destinationInfo?.culturalNotes && (
-        <Card>
-          <CardContent className="p-4">
-            <h3 className="font-medium mb-2 flex items-center gap-2">
-              <Globe className="h-4 w-4 text-primary" /> Cultural Notes
-            </h3>
-            <p className="text-sm text-muted-foreground">{destinationInfo.culturalNotes}</p>
+        <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10">
+          <CardContent className="p-5">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Globe className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2 text-primary">Cultural Notes</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{destinationInfo.culturalNotes}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Expand All / Collapse All */}
+      <div className="flex justify-center">
+        <Button 
+          variant="ghost" 
+          size="sm"
+          onClick={() => {
+            if (expandedCards.length === infoCategories.length) {
+              setExpandedCards([]);
+            } else {
+              setExpandedCards(infoCategories.map(c => c.id));
+            }
+          }}
+          className="text-muted-foreground hover:text-foreground gap-2"
+        >
+          {expandedCards.length === infoCategories.length ? (
+            <>
+              <ChevronUp className="h-4 w-4" />
+              Collapse All
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-4 w-4" />
+              Expand All Tips
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
