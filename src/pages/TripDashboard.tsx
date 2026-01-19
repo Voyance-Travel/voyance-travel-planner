@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -15,7 +15,8 @@ import {
   MapPin,
   Eye,
   ArrowRight,
-  Compass
+  Compass,
+  Loader2
 } from 'lucide-react';
 
 import MainLayout from '@/components/layout/MainLayout';
@@ -25,16 +26,35 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
-import { useAuth, isDemoModeEnabled } from '@/contexts/AuthContext';
-import { 
-  useTrips, 
-  type Trip, 
-  type DisplayStatus,
-  mapToDisplayStatus
-} from '@/services/tripsEnhancedAPI';
+import { isDemoModeEnabled } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { getDestinationImage } from '@/utils/destinationImages';
 
 type TabValue = 'all' | 'upcoming' | 'drafts' | 'completed';
+type TripStatus = 'draft' | 'planning' | 'booked' | 'completed' | 'cancelled';
+type DisplayStatus = 'draft' | 'upcoming' | 'completed' | 'canceled';
+
+interface Trip {
+  id: string;
+  destination: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  status: TripStatus;
+  travelers: number;
+  departureCity: string | null;
+  flightSelection: any;
+  hotelSelection: any;
+  metadata: Record<string, any> | null;
+}
+
+function mapToDisplayStatus(status: TripStatus): DisplayStatus {
+  if (['booked', 'planning'].includes(status)) return 'upcoming';
+  if (status === 'completed') return 'completed';
+  if (status === 'cancelled') return 'canceled';
+  return 'draft';
+}
 
 const statusConfig: Record<DisplayStatus, { label: string; color: string; icon: typeof Edit3 }> = {
   draft: { label: 'Draft', color: 'bg-amber-500/20 text-amber-700 border border-amber-500/30', icon: Edit3 },
@@ -70,12 +90,11 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
   // Use curated destination images
   const imageUrl = getDestinationImage(trip.destination);
   
-  // Check metadata for itinerary/booking status
-  const metadata = trip.metadata as Record<string, unknown> | undefined;
-  const hasItinerary = metadata?.itineraryGenerationStatus === 'completed' || !!metadata?.itinerary;
-  const hasFlight = !!(metadata?.flightSelection);
-  const hasHotel = !!(metadata?.hotelSelection);
-  const travelersCount = Array.isArray(trip.travelers) ? trip.travelers.length : 1;
+  // Check for booking status - use direct properties or metadata
+  const hasItinerary = !!trip.metadata?.itinerary || trip.metadata?.itineraryGenerationStatus === 'completed';
+  const hasFlight = !!trip.flightSelection;
+  const hasHotel = !!trip.hotelSelection;
+  const travelersCount = typeof trip.travelers === 'number' ? trip.travelers : 1;
 
   const handleCardClick = () => {
     if (displayStatus === 'upcoming' || displayStatus === 'completed') {
@@ -306,17 +325,58 @@ function EmptyState({ tab }: { tab: TabValue }) {
 
 export default function TripDashboard() {
   const [activeTab, setActiveTab] = useState<TabValue>('all');
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const demoActive = isDemoModeEnabled();
-  const queryEnabled = isAuthenticated && !demoActive;
 
-  const { data: tripsData, isLoading, error } = useTrips(
-    { limit: 50, sortBy: 'updatedAt', sortOrder: 'desc' },
-    { enabled: queryEnabled }
-  );
+  // Fetch trips directly from Supabase
+  useEffect(() => {
+    async function loadTrips() {
+      if (!isAuthenticated || demoActive || !user?.id) {
+        setTrips([]);
+        setIsLoading(false);
+        return;
+      }
 
-  const trips = queryEnabled ? (tripsData?.data || []) : [];
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+          .limit(50);
+
+        if (fetchError) throw fetchError;
+
+        const mappedTrips: Trip[] = (data || []).map(row => ({
+          id: row.id,
+          destination: row.destination,
+          name: row.name,
+          startDate: row.start_date,
+          endDate: row.end_date,
+          status: row.status as TripStatus,
+          travelers: row.travelers || 1,
+          departureCity: row.origin_city,
+          flightSelection: row.flight_selection,
+          hotelSelection: row.hotel_selection,
+          metadata: row.metadata as Record<string, any> | null,
+        }));
+
+        setTrips(mappedTrips);
+      } catch (err: any) {
+        console.error('Failed to load trips:', err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadTrips();
+  }, [isAuthenticated, demoActive, user?.id]);
+
   const filterTrips = (tab: TabValue): Trip[] => {
     const now = new Date();
     switch (tab) {
