@@ -18,7 +18,7 @@ import {
   Lock, Unlock, MoveUp, MoveDown, Plus, RefreshCw,
   Plane, Hotel, Utensils, Camera, ShoppingBag, Palmtree, Car, Trash2,
   Sun, Cloud, CloudRain, Snowflake, Edit3, Sparkles, AlertCircle,
-  Calendar, Users, ExternalLink, Route
+  Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
 import type { ActivityType, WeatherCondition } from '@/types/itinerary';
 import { getActivityPlaceholder } from '@/hooks/useActivityImage';
+import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 
 // =============================================================================
 // TYPES
@@ -88,17 +89,23 @@ export interface EditorialDay {
 export interface FlightSelection {
   outbound?: {
     airline?: string;
+    airlineCode?: string;
     flightNumber?: string;
     departure?: { time?: string; airport?: string; date?: string };
     arrival?: { time?: string; airport?: string };
     price?: number;
+    cabinClass?: string;
+    seat?: string;
   };
   return?: {
     airline?: string;
+    airlineCode?: string;
     flightNumber?: string;
     departure?: { time?: string; airport?: string; date?: string };
     arrival?: { time?: string; airport?: string };
     price?: number;
+    cabinClass?: string;
+    seat?: string;
   };
 }
 
@@ -726,23 +733,103 @@ export function EditorialItinerary({
                   <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground">Flight</span>
                 </div>
                 {flightSelection?.outbound ? (
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Outbound</span>
-                      <span className="font-medium">{flightSelection.outbound.departure?.date || startDate}</span>
+                  <div className="space-y-4 text-sm">
+                    {/* Outbound Flight */}
+                    <div className="p-3 bg-secondary/20 rounded-lg">
+                      <div className="flex items-center gap-3 mb-2">
+                        <AirlineLogo 
+                          code={flightSelection.outbound.airlineCode || flightSelection.outbound.airline?.substring(0, 2) || ''} 
+                          name={flightSelection.outbound.airline}
+                          size="sm"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-foreground">
+                              {flightSelection.outbound.airline} {flightSelection.outbound.flightNumber}
+                            </span>
+                            <Badge variant="outline" className="text-xs">Outbound</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {flightSelection.outbound.departure?.date || startDate}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="text-center">
+                          <p className="font-medium">{flightSelection.outbound.departure?.time || '--:--'}</p>
+                          <p className="text-muted-foreground">{flightSelection.outbound.departure?.airport || 'DEP'}</p>
+                        </div>
+                        <div className="flex-1 flex items-center gap-1 px-2">
+                          <div className="h-px flex-1 bg-border" />
+                          <Plane className="h-3 w-3 text-muted-foreground" />
+                          <div className="h-px flex-1 bg-border" />
+                        </div>
+                        <div className="text-center">
+                          <p className="font-medium">{flightSelection.outbound.arrival?.time || '--:--'}</p>
+                          <p className="text-muted-foreground">{flightSelection.outbound.arrival?.airport || 'ARR'}</p>
+                        </div>
+                      </div>
+                      {(flightSelection.outbound.cabinClass || flightSelection.outbound.seat) && (
+                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                          {flightSelection.outbound.cabinClass && (
+                            <Badge variant="secondary" className="text-xs">{flightSelection.outbound.cabinClass}</Badge>
+                          )}
+                          {flightSelection.outbound.seat && (
+                            <span>Seat {flightSelection.outbound.seat}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {flightSelection.outbound.airline && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Airline</span>
-                        <span className="font-medium">{flightSelection.outbound.airline} {flightSelection.outbound.flightNumber}</span>
-                      </div>
-                    )}
+
+                    {/* Return Flight */}
                     {flightSelection.return && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Return</span>
-                        <span className="font-medium">{flightSelection.return.departure?.date || endDate}</span>
+                      <div className="p-3 bg-secondary/20 rounded-lg">
+                        <div className="flex items-center gap-3 mb-2">
+                          <AirlineLogo 
+                            code={flightSelection.return.airlineCode || flightSelection.return.airline?.substring(0, 2) || ''} 
+                            name={flightSelection.return.airline}
+                            size="sm"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-foreground">
+                                {flightSelection.return.airline} {flightSelection.return.flightNumber}
+                              </span>
+                              <Badge variant="outline" className="text-xs">Return</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {flightSelection.return.departure?.date || endDate}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="text-center">
+                            <p className="font-medium">{flightSelection.return.departure?.time || '--:--'}</p>
+                            <p className="text-muted-foreground">{flightSelection.return.departure?.airport || 'DEP'}</p>
+                          </div>
+                          <div className="flex-1 flex items-center gap-1 px-2">
+                            <div className="h-px flex-1 bg-border" />
+                            <Plane className="h-3 w-3 text-muted-foreground rotate-180" />
+                            <div className="h-px flex-1 bg-border" />
+                          </div>
+                          <div className="text-center">
+                            <p className="font-medium">{flightSelection.return.arrival?.time || '--:--'}</p>
+                            <p className="text-muted-foreground">{flightSelection.return.arrival?.airport || 'ARR'}</p>
+                          </div>
+                        </div>
+                        {(flightSelection.return.cabinClass || flightSelection.return.seat) && (
+                          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                            {flightSelection.return.cabinClass && (
+                              <Badge variant="secondary" className="text-xs">{flightSelection.return.cabinClass}</Badge>
+                            )}
+                            {flightSelection.return.seat && (
+                              <span>Seat {flightSelection.return.seat}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
+
                     <div className="pt-3 border-t border-border flex justify-between">
                       <span className="font-medium">Flight Total</span>
                       <span className="font-serif text-lg">${flightCost.toLocaleString()}</span>
@@ -943,11 +1030,11 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
   const transfer = getTransferEstimate();
 
   return (
-    <div className="border border-primary/30 bg-primary/5 rounded-lg overflow-hidden">
+    <div className="border border-border bg-card rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-primary/20 bg-primary/10">
+      <div className="p-4 border-b border-border bg-secondary/30">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/20 rounded-full">
+          <div className="p-2 bg-primary/10 rounded-full">
             <Plane className="h-5 w-5 text-primary" />
           </div>
           <div>
@@ -961,8 +1048,8 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
         {/* Recommended Airport Arrival */}
         {recommendedArrival && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
-              <Clock className="h-4 w-4 text-amber-600" />
+            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+              <Clock className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
               <p className="font-medium text-sm">Arrive at airport by {recommendedArrival}</p>
@@ -976,11 +1063,11 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
         {/* Landing Info */}
         {arrivalTime && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-              <MapPin className="h-4 w-4 text-green-600" />
+            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="font-medium text-sm">You land at {arrivalTime} ({arrivalAirport})</p>
+              <p className="font-medium text-sm">Land at {arrivalTime} ({arrivalAirport})</p>
               <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
             </div>
           </div>
@@ -989,17 +1076,17 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
         {/* Transfer Options */}
         {hotelSelection?.name && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-              <Hotel className="h-4 w-4 text-blue-600" />
+            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+              <Hotel className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="flex-1">
               <p className="font-medium text-sm">Getting to {hotelSelection.name}</p>
               <div className="grid grid-cols-2 gap-2 mt-2">
-                <div className="text-xs p-2 bg-background rounded border">
+                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
                   <span className="font-medium">🚕 Taxi/Uber</span>
                   <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
                 </div>
-                <div className="text-xs p-2 bg-background rounded border">
+                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
                   <span className="font-medium">🚆 Train/Metro</span>
                   <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
                 </div>
@@ -1009,9 +1096,9 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
         )}
 
         {/* Post-Landing Action */}
-        <div className="flex items-start gap-3 pt-2 border-t border-primary/20">
-          <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0">
-            <Sparkles className="h-4 w-4 text-purple-600" />
+        <div className="flex items-start gap-3 pt-3 border-t border-border">
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <Sparkles className="h-4 w-4 text-primary" />
           </div>
           <div>
             <p className="font-medium text-sm">Recommended: {postLanding.action}</p>
@@ -1248,9 +1335,19 @@ function ActivityRow({
 
   return (
     <div className={cn("flex items-stretch", !isLast && "border-b border-border")}>
-      {/* Time Column */}
-      <div className="w-24 shrink-0 p-4 border-r border-border bg-secondary/10">
-        <span className="text-sm font-sans">{formatTime(time)}</span>
+      {/* Time Column - Clickable for editing */}
+      <div 
+        className={cn(
+          "w-24 shrink-0 p-4 border-r border-border bg-secondary/10",
+          isEditable && "cursor-pointer hover:bg-secondary/20 transition-colors group"
+        )}
+        onClick={() => isEditable && toast.info('Time editing coming soon!')}
+        title={isEditable ? "Click to edit time" : undefined}
+      >
+        <div className="flex items-center gap-1">
+          <span className="text-sm font-sans">{formatTime(time)}</span>
+          {isEditable && <Edit3 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+        </div>
         {activity.endTime && (
           <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
         )}
@@ -1381,6 +1478,13 @@ function ActivityRow({
                   title={activity.isLocked ? "Unlock" : "Lock"}
                 >
                   {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                </button>
+                <button
+                  onClick={() => toast.info('AI swap: Find similar activities coming soon!')}
+                  className="p-1.5 rounded transition-colors hover:bg-primary/10 text-muted-foreground hover:text-primary"
+                  title="Find alternative"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => onRemove(dayIndex, activity.id)}
