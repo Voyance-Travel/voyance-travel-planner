@@ -42,8 +42,7 @@ import { BookingButton } from '@/components/booking/BookingButton';
 import { PaymentsTab } from './PaymentsTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useEntitlements } from '@/hooks/useEntitlements';
-import { CreditTopUpPrompt } from '@/components/checkout/CreditTopUpPrompt';
-import { CREDIT_COSTS } from '@/config/pricing';
+import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 
 // =============================================================================
 // TYPES
@@ -663,26 +662,26 @@ export function EditorialItinerary({
     toast.success('Activity removed');
   }, []);
 
-  // Check if user can regenerate (has credits or is paid)
-  const canRegenerateWithCredits = useCallback(() => {
+  // Check if user can regenerate (is paid subscriber)
+  const canRegenerate = useCallback(() => {
     // Paid users always can
     if (isPaid) return true;
-    // Free users need credits
-    const creditBalance = entitlements?.credit_balance ?? 0;
-    return creditBalance >= CREDIT_COSTS.BUILD_DAY;
-  }, [isPaid, entitlements?.credit_balance]);
+    // Free users: check if they have remaining builds
+    const freeBuildsRemaining = entitlements?.limits?.freeBuildsRemaining ?? 0;
+    return freeBuildsRemaining > 0;
+  }, [isPaid, entitlements?.limits?.freeBuildsRemaining]);
 
-  // Request regeneration - checks credits first
+  // Request regeneration - checks entitlements first
   const requestDayRegenerate = useCallback((dayIndex: number) => {
-    if (canRegenerateWithCredits()) {
-      // Has credits or is paid - proceed with regeneration
+    if (canRegenerate()) {
+      // Has access - proceed with regeneration
       handleDayRegenerateInternal(dayIndex);
     } else {
-      // Show credit prompt
+      // Show upgrade prompt
       setPendingRegenerateDay(dayIndex);
       setShowCreditPrompt(true);
     }
-  }, [canRegenerateWithCredits]);
+  }, [canRegenerate]);
 
   // Internal regenerate handler (after credit check passed)
   const handleDayRegenerateInternal = useCallback(async (dayIndex: number) => {
