@@ -600,6 +600,7 @@ export default function Start() {
                         mode="single"
                         selected={startDate}
                         onSelect={(date) => {
+                          console.log('[Calendar] Start date selected:', date, 'ISO:', date?.toISOString(), 'Local:', date?.toLocaleDateString());
                           setStartDate(date);
                           if (date && (!endDate || isBefore(endDate, date))) {
                             setEndDate(addDays(date, 7));
@@ -634,7 +635,10 @@ export default function Start() {
                       <Calendar
                         mode="single"
                         selected={endDate}
-                        onSelect={setEndDate}
+                        onSelect={(date) => {
+                          console.log('[Calendar] End date selected:', date, 'ISO:', date?.toISOString(), 'Local:', date?.toLocaleDateString());
+                          setEndDate(date);
+                        }}
                         disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, today)}
                         initialFocus
                         className={cn("p-3 pointer-events-auto")}
