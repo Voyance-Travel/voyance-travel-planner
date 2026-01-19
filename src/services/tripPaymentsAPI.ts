@@ -99,6 +99,7 @@ export async function verifyPayment(sessionId: string): Promise<{
 
 /**
  * Get all payments for a trip with totals
+ * Uses direct Supabase query (RLS handles security)
  */
 export async function getTripPayments(tripId: string): Promise<{
   success: boolean;
@@ -107,16 +108,34 @@ export async function getTripPayments(tripId: string): Promise<{
   error?: string;
 }> {
   try {
-    const { data, error } = await supabase.functions.invoke('verify-payment', {
-      body: { tripId },
-    });
+    const { data: payments, error } = await supabase
+      .from('trip_payments')
+      .select('*')
+      .eq('trip_id', tripId);
 
     if (error) {
       console.error('[tripPaymentsAPI] Get payments error:', error);
       return { success: false, error: error.message };
     }
 
-    return data;
+    // Calculate totals
+    const totalPaid = (payments || [])
+      .filter(p => p.status === 'paid')
+      .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
+
+    const totalPending = (payments || [])
+      .filter(p => p.status === 'pending' || p.status === 'processing')
+      .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
+
+    return {
+      success: true,
+      payments: payments as TripPayment[] || [],
+      totals: {
+        paid: totalPaid,
+        pending: totalPending,
+        total: totalPaid + totalPending,
+      },
+    };
   } catch (err) {
     console.error('[tripPaymentsAPI] Get payments exception:', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to get payments' };
