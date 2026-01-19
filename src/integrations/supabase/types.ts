@@ -766,9 +766,12 @@ export type Database = {
           bio: string | null
           created_at: string
           display_name: string | null
+          email: string | null
+          first_name: string | null
           handle: string | null
           home_airport: string | null
           id: string
+          last_name: string | null
           preferred_currency: string | null
           preferred_language: string | null
           quiz_completed: boolean | null
@@ -780,9 +783,12 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
+          email?: string | null
+          first_name?: string | null
           handle?: string | null
           home_airport?: string | null
           id: string
+          last_name?: string | null
           preferred_currency?: string | null
           preferred_language?: string | null
           quiz_completed?: boolean | null
@@ -794,9 +800,12 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
+          email?: string | null
+          first_name?: string | null
           handle?: string | null
           home_airport?: string | null
           id?: string
+          last_name?: string | null
           preferred_currency?: string | null
           preferred_language?: string | null
           quiz_completed?: boolean | null
