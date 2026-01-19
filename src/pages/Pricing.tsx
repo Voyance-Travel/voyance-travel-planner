@@ -179,45 +179,6 @@ export default function Pricing() {
               </Button>
             </motion.div>
 
-            {/* Monthly */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="relative rounded-3xl bg-card border border-border p-6 flex flex-col"
-            >
-              <div className="mb-6">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-500 text-white mb-4">
-                  <Sparkles className="h-6 w-6" />
-                </div>
-                <h3 className="text-2xl font-bold text-foreground">Monthly</h3>
-                <p className="text-sm text-muted-foreground">{PLAN_FEATURES.MONTHLY.headline}</p>
-              </div>
-              
-              <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
-                  <span className="text-muted-foreground">/month</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">{PLAN_FEATURES.MONTHLY.subheadline}</p>
-              </div>
-              
-              <ul className="space-y-3 mb-8 flex-1">
-                {PLAN_FEATURES.MONTHLY.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm">
-                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                    <span className="text-foreground">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              
-              <Button asChild size="lg" variant="outline" className="w-full">
-                <Link to={ROUTES.START}>
-                  Go Monthly
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </motion.div>
 
             {/* Yearly */}
             <motion.div
