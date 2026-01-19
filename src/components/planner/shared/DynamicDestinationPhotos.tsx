@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, MapPin, Calendar, Users, ImageOff, Loader2 }
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { getCachedImages, prefetchDestinationImages } from '@/utils/imagePrefetch';
+import { getDestinationImages, hasCuratedImages } from '@/utils/destinationImages';
 
 interface DynamicDestinationPhotosProps {
   destination: string;
@@ -20,7 +21,7 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: string;
-  source: 'database' | 'google_places' | 'lovable_ai' | 'pexels' | 'fallback';
+  source: 'curated' | 'database' | 'google_places' | 'lovable_ai' | 'pexels' | 'fallback';
 }
 
 export default function DynamicDestinationPhotos({
@@ -60,7 +61,25 @@ export default function DynamicDestinationPhotos({
     }
 
     const loadImages = async () => {
-      // First, check if images are already cached (normalize via util)
+      // TIER 0: Check curated high-quality images first (for popular destinations like Paris)
+      if (hasCuratedImages(cleanDestination)) {
+        const curatedUrls = getDestinationImages(cleanDestination, 4);
+        console.log('[DynamicPhotos] Using curated images for:', cleanDestination, curatedUrls.length);
+        setImages(
+          curatedUrls.map((url, i) => ({
+            id: `curated-${i}`,
+            url,
+            alt: `${cleanDestination} iconic view ${i + 1}`,
+            type: 'hero',
+            source: 'curated' as const,
+          }))
+        );
+        setIsLoading(false);
+        fetchedRef.current = cleanDestination;
+        return;
+      }
+
+      // TIER 1: Check if images are already cached (normalize via util)
       const cachedUrls = getCachedImages(cleanDestination);
       if (cachedUrls.length > 0) {
         console.log('[DynamicPhotos] Using cached images for:', cleanDestination, cachedUrls.length);
