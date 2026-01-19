@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, ArrowRight, Check, Sparkles, Compass, Plane, Hotel, Utensils, 
   Sun, Heart, Clock, Users, MapPin, Wand2, DollarSign, Briefcase, Glasses,
-  UserCircle2, Palette, Mountain, Coffee, Luggage, Globe, Star
+  UserCircle2, Palette, Mountain, Coffee, Luggage, Globe, Star, AlertCircle
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -293,7 +293,9 @@ const FloatingMotif = ({ icon, delay, x, y }: { icon: React.ReactNode; delay: nu
 );
 
 // Welcome/Intro Screen Component
-function QuizIntro({ onStart }: { onStart: () => void }) {
+function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {
+  const [showSkipWarning, setShowSkipWarning] = useState(false);
+  
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -386,6 +388,62 @@ function QuizIntro({ onStart }: { onStart: () => void }) {
               Begin Discovery
             </Button>
           </motion.div>
+          
+          {/* Skip Option */}
+          <AnimatePresence mode="wait">
+            {!showSkipWarning ? (
+              <motion.button
+                key="skip-btn"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowSkipWarning(true)}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors mt-4"
+              >
+                Skip for now →
+              </motion.button>
+            ) : (
+              <motion.div
+                key="skip-warning"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mt-6 max-w-md mx-auto"
+              >
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-left">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">
+                        Skip personalization?
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Without completing the quiz, your itineraries will be generic and won't reflect your unique travel preferences, dietary needs, or activity style.
+                      </p>
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowSkipWarning(false)}
+                          className="text-xs h-8"
+                        >
+                          Take the Quiz
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={onSkip}
+                          className="text-xs h-8 text-muted-foreground hover:text-foreground"
+                        >
+                          Skip Anyway
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
     </motion.div>
@@ -703,7 +761,7 @@ export default function Quiz() {
         
         <AnimatePresence mode="wait">
           {!hasStarted ? (
-            <QuizIntro key="intro" onStart={() => setHasStarted(true)} />
+            <QuizIntro key="intro" onStart={() => setHasStarted(true)} onSkip={() => navigate(ROUTES.START)} />
           ) : isComplete ? (
             <motion.div
               key="completion"
