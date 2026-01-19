@@ -169,7 +169,10 @@ serve(async (req) => {
 
     logStep("Checkout session created", { sessionId: session.id });
 
-    // Update trip status to pending payment
+    // Generate booking reference (VOY-XXXXXXXX format)
+    const bookingReference = `VOY-${tripId.slice(0, 8).toUpperCase()}`;
+
+    // Update trip status to pending payment with booking reference
     await serviceClient
       .from('trips')
       .update({ 
@@ -178,11 +181,87 @@ serve(async (req) => {
           ...(trip.metadata as object || {}),
           checkout_session_id: session.id,
           payment_status: 'pending',
+          booking_reference: bookingReference,
         },
       })
       .eq('id', tripId);
 
-    return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), {
+    // Create pending payment records in trip_payments for each item
+    const paymentRecords = [];
+    
+    // Flight payment record
+    if (flightCents > 0 && trip.flight_selection) {
+      const flightData = trip.flight_selection as any;
+      paymentRecords.push({
+        trip_id: tripId,
+        user_id: userId,
+        item_type: 'flight',
+        item_id: flightData?.id || `flight-${tripId.slice(0, 8)}`,
+        item_name: `Flights to ${trip.destination}`,
+        amount_cents: flightCents,
+        currency: 'USD',
+        quantity: 1,
+        status: 'pending',
+        stripe_checkout_session_id: session.id,
+        external_provider: 'amadeus',
+      });
+    }
+
+    // Hotel payment record
+    if (hotelCents > 0 && trip.hotel_selection) {
+      const hotelData = trip.hotel_selection as any;
+      paymentRecords.push({
+        trip_id: tripId,
+        user_id: userId,
+        item_type: 'hotel',
+        item_id: hotelData?.hotelId || hotelData?.id || `hotel-${tripId.slice(0, 8)}`,
+        item_name: hotelData?.name || `Hotel in ${trip.destination}`,
+        amount_cents: hotelCents,
+        currency: 'USD',
+        quantity: 1,
+        status: 'pending',
+        stripe_checkout_session_id: session.id,
+        external_provider: 'amadeus',
+      });
+    }
+
+    // Activities payment record (aggregated)
+    if (activitiesCents > 0) {
+      paymentRecords.push({
+        trip_id: tripId,
+        user_id: userId,
+        item_type: 'activity',
+        item_id: `activities-${tripId.slice(0, 8)}`,
+        item_name: `Activities & Experiences`,
+        amount_cents: activitiesCents,
+        currency: 'USD',
+        quantity: 1,
+        status: 'pending',
+        stripe_checkout_session_id: session.id,
+      });
+    }
+
+    // Insert payment records (upsert to handle retries)
+    if (paymentRecords.length > 0) {
+      const { error: paymentError } = await serviceClient
+        .from('trip_payments')
+        .upsert(paymentRecords, { 
+          onConflict: 'trip_id,item_type,item_id',
+          ignoreDuplicates: false 
+        });
+      
+      if (paymentError) {
+        logStep("Warning: Failed to create payment records", { error: paymentError.message });
+      } else {
+        logStep("Payment records created", { count: paymentRecords.length });
+      }
+    }
+
+    return new Response(JSON.stringify({ 
+      url: session.url, 
+      sessionId: session.id,
+      bookingReference,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });

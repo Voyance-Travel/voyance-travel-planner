@@ -35,6 +35,12 @@ interface TripData {
   status: string;
   flight_selection: any;
   hotel_selection: any;
+  metadata?: {
+    booking_reference?: string;
+    payment_status?: string;
+    amount_paid?: number;
+    [key: string]: any;
+  };
 }
 
 type DemoConfirmationState = {
@@ -325,10 +331,10 @@ export default function TripConfirmation() {
                   <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-10">
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3 font-medium">
-                        Confirmation Number
+                        Booking Reference
                       </p>
                       <p className="text-2xl md:text-3xl font-mono font-bold text-foreground tracking-wide">
-                        #{trip.id.slice(0, 8).toUpperCase()}
+                        {trip.metadata?.booking_reference || `VOY-${trip.id.slice(0, 8).toUpperCase()}`}
                       </p>
                     </div>
                     
