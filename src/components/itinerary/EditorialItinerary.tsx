@@ -1936,6 +1936,9 @@ interface DayCardProps {
   isExpanded: boolean;
   isRegenerating: boolean;
   isEditable: boolean;
+  tripId: string;
+  getPaymentForItem: (itemType: 'flight' | 'hotel' | 'activity', itemId: string) => TripPayment | undefined;
+  refreshPayments: () => void;
   onToggle: () => void;
   onActivityLock: (dayIndex: number, activityId: string) => void;
   onActivityMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
@@ -1954,6 +1957,9 @@ function DayCard({
   isExpanded,
   isRegenerating,
   isEditable,
+  tripId,
+  getPaymentForItem,
+  refreshPayments,
   onToggle,
   onActivityLock,
   onActivityMove,
@@ -2069,6 +2075,9 @@ function DayCard({
                   isEditable={isEditable}
                   travelers={travelers}
                   budgetTier={budgetTier}
+                  tripId={tripId}
+                  existingPayment={getPaymentForItem('activity', activity.id)}
+                  onPaymentSuccess={refreshPayments}
                   onLock={onActivityLock}
                   onMove={onActivityMove}
                   onRemove={onActivityRemove}
@@ -2127,6 +2136,9 @@ interface ActivityRowProps {
   isEditable: boolean;
   travelers: number;
   budgetTier?: string;
+  tripId: string;
+  existingPayment?: TripPayment;
+  onPaymentSuccess: () => void;
   onLock: (dayIndex: number, activityId: string) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onRemove: (dayIndex: number, activityId: string) => void;
@@ -2142,6 +2154,9 @@ function ActivityRow({
   isEditable,
   travelers,
   budgetTier,
+  tripId,
+  existingPayment,
+  onPaymentSuccess,
   onLock,
   onMove,
   onRemove,
@@ -2378,6 +2393,19 @@ function ActivityRow({
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
             <span className="font-medium">{formatCurrency(cost)}</span>
+            {/* Booking button for activities that require booking */}
+            {activity.bookingRequired && cost > 0 && (
+              <BookingButton
+                tripId={tripId}
+                itemType="activity"
+                itemId={activity.id}
+                itemName={activity.title}
+                amountCents={cost * 100}
+                existingPayment={existingPayment}
+                onSuccess={onPaymentSuccess}
+                size="sm"
+              />
+            )}
             {isEditable && (
               <div className="flex items-center gap-1">
                 <button
