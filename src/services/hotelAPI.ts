@@ -36,6 +36,7 @@ export interface HotelOption {
   pricePerNight: number;
   imageUrl: string;
   images?: string[];
+  photos?: string[];
   rating: number;
   reviewCount: number;
   amenities: string[];
@@ -47,6 +48,9 @@ export interface HotelOption {
   distance?: number;
   featured?: boolean;
   breakfast?: boolean;
+  website?: string;
+  googleMapsUrl?: string;
+  placeId?: string;
 }
 
 export interface HotelDestination {
@@ -367,6 +371,42 @@ export async function createHotelHold(input: HotelHoldInput): Promise<HotelHoldR
       lockedPrice: input.total,
     },
   };
+}
+
+/**
+ * Enrich hotel with Google Places data (address, website, photos)
+ */
+export interface HotelEnrichment {
+  address?: string;
+  website?: string;
+  googleMapsUrl?: string;
+  photos?: string[];
+  placeId?: string;
+}
+
+export async function enrichHotel(hotelName: string, destination: string): Promise<HotelEnrichment | null> {
+  try {
+    console.log('[HotelAPI] Enriching hotel:', hotelName, 'in', destination);
+    
+    const { data, error } = await supabase.functions.invoke('hotels', {
+      body: {
+        action: 'enrich',
+        hotelName,
+        destination,
+      },
+    });
+    
+    if (error || !data?.success) {
+      console.warn('[HotelAPI] Enrichment failed:', error);
+      return null;
+    }
+    
+    console.log('[HotelAPI] Enrichment result:', data.enrichment);
+    return data.enrichment as HotelEnrichment;
+  } catch (error) {
+    console.warn('[HotelAPI] Enrichment error:', error);
+    return null;
+  }
 }
 
 // ============================================================================
