@@ -22,7 +22,7 @@ export default function IntroSection() {
           </h2>
           <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             We're not a booking site. We're your AI-powered travel designer. Voyance
-            creates intelligent itineraries based on who you are—not who paid to be seen.
+            creates intelligent itineraries based on who you are, not who paid to be seen.
           </p>
         </motion.div>
       </div>

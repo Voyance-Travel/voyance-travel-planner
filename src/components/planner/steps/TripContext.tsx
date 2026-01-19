@@ -337,7 +337,7 @@ export default function TripContext({
           Tell us about your trip
         </h1>
         <p className="text-slate-600">
-          Help us personalize your experience — or skip ahead if you're in a hurry
+          Help us personalize your experience, or skip ahead if you're in a hurry
         </p>
       </motion.div>
 

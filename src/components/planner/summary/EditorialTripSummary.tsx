@@ -560,7 +560,7 @@ export default function EditorialTripSummary({
                                   {activitiesBudget > 0 ? 'Planned spending' : 'Set your activities budget'}
                                   <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </span>
-                                <span>{activitiesBudget > 0 ? `$${activitiesBudget.toFixed(0)}` : '—'}</span>
+                                <span>{activitiesBudget > 0 ? `$${activitiesBudget.toFixed(0)}` : '-'}</span>
                               </button>
                             )}
                             <p className="text-xs text-muted-foreground/70 mt-1">
