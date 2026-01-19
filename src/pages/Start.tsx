@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info } from 'lucide-react';
-import { format, addDays, isBefore, startOfToday } from 'date-fns';
+import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -244,10 +244,10 @@ export default function Start() {
     };
   });
   const [startDate, setStartDate] = useState<Date | undefined>(
-    plannerState.basics.startDate ? new Date(plannerState.basics.startDate) : undefined
+    plannerState.basics.startDate ? parseISO(plannerState.basics.startDate) : undefined
   );
   const [endDate, setEndDate] = useState<Date | undefined>(
-    plannerState.basics.endDate ? new Date(plannerState.basics.endDate) : undefined
+    plannerState.basics.endDate ? parseISO(plannerState.basics.endDate) : undefined
   );
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [tripType, setTripType] = useState<string>('leisure');
@@ -372,13 +372,13 @@ export default function Start() {
       });
     }
     if (plannerState.basics.startDate) {
-      const contextDate = new Date(plannerState.basics.startDate);
+      const contextDate = parseISO(plannerState.basics.startDate);
       if (!startDate || contextDate.getTime() !== startDate.getTime()) {
         setStartDate(contextDate);
       }
     }
     if (plannerState.basics.endDate) {
-      const contextDate = new Date(plannerState.basics.endDate);
+      const contextDate = parseISO(plannerState.basics.endDate);
       if (!endDate || contextDate.getTime() !== endDate.getTime()) {
         setEndDate(contextDate);
       }
