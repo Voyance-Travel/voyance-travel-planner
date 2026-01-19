@@ -382,6 +382,7 @@ export function EditorialItinerary({
   const [hasChanges, setHasChanges] = useState(false);
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
+  const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [payments, setPayments] = useState<TripPayment[]>([]);
@@ -771,6 +772,28 @@ export function EditorialItinerary({
     toast.success('Activity added!');
   }, []);
 
+  // Update activity time
+  const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string) => {
+    setDays(prev => prev.map((day, dIdx) => {
+      if (dIdx !== dayIndex) return day;
+      return {
+        ...day,
+        activities: day.activities.map((activity, aIdx) => {
+          if (aIdx !== activityIndex) return activity;
+          return {
+            ...activity,
+            startTime,
+            endTime,
+            time: startTime, // Keep backward compatibility
+          };
+        }),
+      };
+    }));
+    setHasChanges(true);
+    setTimeEditModal(null);
+    toast.success('Activity time updated');
+  }, []);
+
   // ===========================================================================
   // RENDER
   // ===========================================================================
@@ -917,6 +940,7 @@ export function EditorialItinerary({
                 onDayLock={handleDayLock}
                 onDayRegenerate={() => handleDayRegenerate(dayIndex)}
                 onAddActivity={() => setAddActivityModal({ dayIndex })}
+                onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
               />
             ))}
           </motion.div>
@@ -2010,6 +2034,7 @@ interface DayCardProps {
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
   onAddActivity: () => void;
+  onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
 }
 
 function DayCard({
@@ -2031,6 +2056,7 @@ function DayCard({
   onDayLock,
   onDayRegenerate,
   onAddActivity,
+  onTimeEdit,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
@@ -2145,6 +2171,7 @@ function DayCard({
                   onLock={onActivityLock}
                   onMove={onActivityMove}
                   onRemove={onActivityRemove}
+                  onTimeEdit={onTimeEdit}
                 />
               ))}
             </div>
@@ -2206,6 +2233,7 @@ interface ActivityRowProps {
   onLock: (dayIndex: number, activityId: string) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onRemove: (dayIndex: number, activityId: string) => void;
+  onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
 }
 
 function ActivityRow({
@@ -2224,6 +2252,7 @@ function ActivityRow({
   onLock,
   onMove,
   onRemove,
+  onTimeEdit,
 }: ActivityRowProps) {
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
@@ -2322,7 +2351,7 @@ function ActivityRow({
           "w-24 shrink-0 p-4 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5",
           isEditable && "cursor-pointer hover:from-primary/10 hover:to-primary/5 transition-colors group"
         )}
-        onClick={() => isEditable && toast.info('Time editing coming soon!')}
+        onClick={() => isEditable && onTimeEdit(dayIndex, activityIndex, activity)}
         title={isEditable ? "Click to edit time" : undefined}
       >
         <div className="flex items-center gap-1">
@@ -2622,6 +2651,69 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={!title}>Add Activity</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// TIME EDIT MODAL
+// =============================================================================
+
+interface TimeEditModalProps {
+  isOpen: boolean;
+  activity: EditorialActivity | null;
+  onClose: () => void;
+  onSave: (startTime: string, endTime: string) => void;
+}
+
+function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps) {
+  const [startTime, setStartTime] = useState(activity?.startTime || activity?.time || '12:00');
+  const [endTime, setEndTime] = useState(activity?.endTime || '13:00');
+
+  useEffect(() => {
+    if (activity) {
+      setStartTime(activity.startTime || activity.time || '12:00');
+      setEndTime(activity.endTime || '13:00');
+    }
+  }, [activity]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Edit Time
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-4">
+          <p className="text-sm text-muted-foreground mb-4">{activity?.title}</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Start Time</label>
+              <Input 
+                type="time" 
+                value={startTime} 
+                onChange={(e) => setStartTime(e.target.value)}
+                className="text-base"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">End Time</label>
+              <Input 
+                type="time" 
+                value={endTime} 
+                onChange={(e) => setEndTime(e.target.value)}
+                className="text-base"
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => onSave(startTime, endTime)}>Save Time</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
