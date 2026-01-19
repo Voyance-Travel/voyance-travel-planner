@@ -1,8 +1,13 @@
 # Backend Integration Guide for Voyance Frontend
 
-**Date**: 2026-01-17  
-**Contract Version**: v1 (schemaVersion: "v1")  
-**Base URL**: `https://voyance-backend.railway.app`
+> ## ⚠️ UPDATED: January 2026
+> 
+> This guide has been updated to reflect the **Lovable Cloud (Supabase)** architecture.
+> The old Railway backend has been decommissioned.
+
+**Date**: 2026-01-19  
+**Contract Version**: v2 (Lovable Cloud)  
+**Backend**: Supabase Edge Functions + Direct Database Queries
 
 ---
 
@@ -10,162 +15,160 @@
 
 ### Authentication
 ```typescript
-// All requests require Supabase JWT
-Authorization: Bearer <supabase_jwt>
+// Supabase handles authentication automatically
+import { supabase } from '@/integrations/supabase/client';
+
+// All authenticated requests use the session automatically
+const { data } = await supabase.from('trips').select('*');
 ```
 
-### Core Endpoints
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/trips` | Create trip |
-| GET | `/api/v1/trips` | List trips |
-| GET | `/api/v1/trips/:id` | Get trip |
-| PATCH | `/api/v1/trips/:id` | Update trip |
-| DELETE | `/api/v1/trips/:id` | Delete trip |
-| POST | `/api/v1/trips/:id/itinerary/generate-now` | Generate itinerary |
-| GET | `/api/v1/trips/:id/itinerary` | Get itinerary/status |
-| GET | `/api/v1/user/preferences` | Get preferences |
-| POST | `/api/v1/user/preferences` | Save preferences |
+### Core Services
+
+| Feature | Implementation | Location |
+|---------|---------------|----------|
+| Trips | Direct Supabase queries | `src/services/supabase/trips.ts` |
+| Profiles | Direct Supabase queries | `src/services/supabase/profiles.ts` |
+| Friends | Direct Supabase queries | `src/services/supabase/friends.ts` |
+| Flights | Edge Function | `supabase/functions/flights/` |
+| Hotels | Edge Function | `supabase/functions/hotels/` |
+| Itinerary | Edge Function | `supabase/functions/generate-itinerary/` |
+| Payments | Edge Function | `supabase/functions/create-checkout/` |
 
 ---
 
-## 1. User Preferences (5 Core Enums)
+## 1. User Preferences (Database)
 
 ```typescript
-type BudgetPreference = 'tight' | 'moderate' | 'flexible' | 'luxury';
-type PacePreference = 'relaxed' | 'balanced' | 'packed';
-type StylePreference = 'local' | 'tourist' | 'mixed';
-type ComfortPreference = 'basic' | 'standard' | 'premium';
-type PlanningPreference = 'structured' | 'flexible' | 'spontaneous';
-```
+// Read preferences
+const { data } = await supabase
+  .from('user_preferences')
+  .select('*')
+  .eq('user_id', userId)
+  .single();
 
-**Defaults**: moderate, balanced, mixed, standard, flexible
+// Update preferences
+await supabase
+  .from('user_preferences')
+  .upsert({ user_id: userId, budget_tier: 'moderate', travel_pace: 'balanced' });
+```
 
 ---
 
-## 2. Trip Creation
+## 2. Trip Management (Database)
 
-### Request
+### Create Trip
 ```typescript
-POST /api/v1/trips
-{
-  "name": "London Adventure",      // REQUIRED
-  "destination": "London",         // REQUIRED
-  "startDate": "2026-06-01",       // Optional (YYYY-MM-DD)
-  "endDate": "2026-06-15",         // Optional
-  "totalDays": 15,                 // Optional (auto-calculated)
-  "travelers": 2,                  // Optional (default: 1)
-  "budgetRange": "moderate",       // Optional
-  "emotionalTags": ["relaxing"],   // Optional
-  "departureCity": "New York"      // Optional
-}
+const { data, error } = await supabase
+  .from('trips')
+  .insert({
+    user_id: userId,
+    name: 'London Adventure',
+    destination: 'London',
+    destination_country: 'United Kingdom',
+    start_date: '2026-06-01',
+    end_date: '2026-06-15',
+    travelers: 2,
+    status: 'draft'
+  })
+  .select()
+  .single();
 ```
 
-### Response (201)
+### Get User Trips
 ```typescript
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "name": "London Adventure",
-    "destination": "London",
-    "status": "draft",
-    "createdAt": "2026-01-17T10:00:00Z"
+const { data } = await supabase
+  .from('trips')
+  .select('*')
+  .eq('user_id', userId)
+  .order('created_at', { ascending: false });
+```
+
+---
+
+## 3. Edge Functions
+
+### Flight Search
+```typescript
+const { data, error } = await supabase.functions.invoke('flights', {
+  body: {
+    action: 'search',
+    origin: 'JFK',
+    destination: 'LHR',
+    departureDate: '2026-06-01',
+    passengers: 2
   }
-}
+});
 ```
 
----
-
-## 3. Itinerary Generation
-
-### Start Generation
+### Hotel Search
 ```typescript
-POST /api/v1/trips/:id/itinerary/generate-now
-// Optional: ?force=true to regenerate
-```
-
-### Response (202 - Queued)
-```typescript
-{
-  "success": true,
-  "status": "queued",
-  "schemaVersion": "v1",
-  "tripId": "uuid",
-  "progress": 0
-}
-```
-
-### Poll for Status
-```typescript
-GET /api/v1/trips/:id/itinerary
-// Poll every 3-5 seconds until status === "ready"
-```
-
-### Response (200 - Ready)
-```typescript
-{
-  "success": true,
-  "status": "ready",
-  "schemaVersion": "v1",
-  "tripId": "uuid",
-  "destination": "London",
-  "title": "London - 15 Days",
-  "totalDays": 15,
-  "itineraryId": "uuid",
-  
-  "days": [                    // ⚠️ AT ROOT LEVEL!
-    {
-      "dayNumber": 1,
-      "date": "2026-06-01",
-      "title": "Arrival Day",
-      "theme": "Getting settled",
-      "activities": [...]
-    }
-  ],
-  
-  "overview": {
-    "budgetBreakdown": {...},
-    "highlights": [...],
-    "localTips": [...]
+const { data, error } = await supabase.functions.invoke('hotels', {
+  body: {
+    action: 'search',
+    cityCode: 'LON',
+    checkIn: '2026-06-01',
+    checkOut: '2026-06-15',
+    guests: 2
   }
-}
+});
 ```
 
-### Status Values
-- `not_started` - No generation initiated
-- `queued` - Generation queued
-- `running` - In progress
-- `ready` - Complete ✅
-- `failed` - Error occurred
-- `empty` - Generated but no data
+### Itinerary Generation
+```typescript
+const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+  body: {
+    tripId: 'uuid',
+    destination: 'London',
+    startDate: '2026-06-01',
+    endDate: '2026-06-15',
+    preferences: userPreferences
+  }
+});
+```
 
 ---
 
-## 4. Frontend Integration Files
+## 4. Stripe Payments
 
-### API Client
-`src/services/voyanceAPI.ts`
-- Full typed API client
-- Authentication handling
-- Error handling
-- Polling utilities
+### Create Checkout Session
+```typescript
+const { data, error } = await supabase.functions.invoke('create-booking-checkout', {
+  body: {
+    tripId: 'uuid',
+    items: [
+      { type: 'flight', id: 'flight-id', amount: 50000 },
+      { type: 'hotel', id: 'hotel-id', amount: 150000 }
+    ],
+    successUrl: `${window.location.origin}/trip/confirmation`,
+    cancelUrl: `${window.location.origin}/trip/checkout`
+  }
+});
 
-### React Query Hooks
-`src/hooks/useVoyanceAPI.ts`
-- `useTrips()` - List trips
-- `useTrip(id)` - Get single trip
-- `useCreateTrip()` - Create mutation
-- `useUpdateTrip()` - Update mutation
-- `useDeleteTrip()` - Delete mutation
-- `useItinerary(tripId)` - Get itinerary
-- `useGenerateItinerary()` - Generate with polling
-- `usePreferences()` - Get preferences
-- `useSavePreferences()` - Save preferences
+// Redirect to Stripe
+window.location.href = data.url;
+```
 
 ---
 
-## 5. Error Handling
+## 5. Frontend Service Files
+
+### Database Services (Direct Queries)
+- `src/services/supabase/trips.ts` - Trip CRUD
+- `src/services/supabase/profiles.ts` - User profiles
+- `src/services/supabase/friends.ts` - Friend system
+- `src/services/supabase/destinations.ts` - Destination lookup
+- `src/services/supabase/airports.ts` - Airport search
+- `src/services/supabase/guides.ts` - Travel guides
+
+### API Services (Edge Functions)
+- `src/services/flightAPI.ts` - Flight search & holds
+- `src/services/hotelAPI.ts` - Hotel search & holds
+- `src/services/tripPaymentsAPI.ts` - Payment verification
+- `src/services/tripNotificationsAPI.ts` - Notifications
+
+---
+
+## 6. Error Handling
 
 | Status | Meaning | Action |
 |--------|---------|--------|
@@ -176,10 +179,22 @@ GET /api/v1/trips/:id/itinerary
 
 ---
 
-## 6. Important Notes
+## 7. Important Notes
 
-1. **Days Array Location**: Always at ROOT level, not nested in `itinerary` object
-2. **Schema Version**: Always check `schemaVersion === "v1"`
-3. **Polling Timeout**: 5 minutes max for generation
-4. **Required Fields**: Only `name` and `destination` for trip creation
-5. **Auth Flow**: Backend auto-creates user from Supabase JWT
+1. **No External Backend**: All backend is Lovable Cloud (Supabase)
+2. **Auth Automatic**: Supabase client handles authentication
+3. **RLS Enabled**: All tables have Row Level Security
+4. **Edge Function Timeout**: 60 seconds max
+5. **Real-time**: Use Supabase Realtime for live updates
+
+---
+
+## 8. Legacy Services (Archived)
+
+The following services have been archived to `src/services/_legacy/`:
+- `mealPlanningAPI.ts`
+- `destinationsCanonicalAPI.ts`
+- `bdqAPI.ts`
+- See `src/services/_legacy/README.md` for full list
+
+Do not use legacy services - they reference the decommissioned Railway backend.
