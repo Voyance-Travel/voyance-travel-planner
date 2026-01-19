@@ -87,10 +87,11 @@
 
 ### High Priority (Blocking monetization)
 
-1. **Trip Pass enforcement in UI** — Check `unlocked_trips[]` before allowing rebuilds
-2. **Draft trip limit enforcement** — Block creating new drafts when at limit
-3. **Credit fulfillment webhook** — Add credits to `user_credits` after Stripe payment
-4. **Co-edit permission checks** — Only collaborators can edit, check `can_co_edit`
+1. ~~**Trip Pass enforcement in UI**~~ — ✅ Created `useTripPassCheck` hook
+2. ~~**Draft trip limit enforcement**~~ — ✅ Created `useDraftLimitCheck` hook + `DraftLimitBanner`
+3. ~~**Credit fulfillment webhook**~~ — ✅ Created `stripe-webhook` edge function
+4. ~~**Saved presets removed from Yearly**~~ — ✅ Removed unbuilt feature from pricing
+5. **Co-edit permission checks** — Only collaborators can edit, check `can_co_edit`
 
 ### Medium Priority (Promised features)
 

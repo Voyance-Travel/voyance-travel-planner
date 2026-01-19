@@ -27,6 +27,28 @@ export interface EntitlementsResponse {
   subscription_end: string | null;
   entitlements: Record<string, Entitlement>;
   usage: Record<string, number>;
+  // Extended fields from get-entitlements
+  limits?: {
+    fullBuilds?: number;
+    draftTrips?: number;
+    draftTripsRemaining?: number;
+    dayRebuilds?: number;
+    tripVersions?: number;
+    flightHotelOptimization?: boolean;
+    groupBudgeting?: boolean;
+    coEditCollaboration?: boolean;
+    routeOptimization?: boolean;
+    weatherTracker?: boolean;
+    freeBuildsRemaining?: number;
+  };
+  unlocked_trips?: string[];
+  credit_balance?: number;
+  can_build_itinerary?: boolean;
+  can_build_day?: boolean;
+  can_use_flight_hotel_optimization?: boolean;
+  can_use_group_budgeting?: boolean;
+  can_co_edit?: boolean;
+  can_optimize_routes?: boolean;
 }
 
 // Feature flag keys for type safety

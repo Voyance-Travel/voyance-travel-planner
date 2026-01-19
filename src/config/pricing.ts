@@ -127,7 +127,6 @@ export const PLAN_FEATURES = {
       'Unlimited Mystery Trip favorites ("Mystery Vault")',
       'Unlimited trip versions',
       'Preference learning over time',
-      'Saved presets & reusable templates',
       'Trip history archive',
     ],
     limits: {
