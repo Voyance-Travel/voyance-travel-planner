@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles, SkipForward } from 'lucide-react';
 import { toast } from 'sonner';
 import { prefetchDestinationImages } from '@/utils/imagePrefetch';
 
@@ -29,6 +29,7 @@ import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestina
 import EditorialProgressTracker from '@/components/planner/shared/EditorialProgressTracker';
 import FlightFilters, { type FlightFiltersState } from '@/components/planner/flight/FlightFilters';
 import EnhancedFlightCard, { type EnhancedFlightOption } from '@/components/planner/flight/EnhancedFlightCard';
+import { ManualBookingModal, type ManualFlightData } from '@/components/planner/ManualBookingModal';
 
 // User preference types
 interface UserFlightPrefs {
@@ -227,6 +228,7 @@ export default function PlannerFlightEnhanced() {
   const [holdingFlightId, setHoldingFlightId] = useState<string | null>(null);
   const [userPrefs, setUserPrefs] = useState<UserFlightPrefs | null>(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [showSkipModal, setShowSkipModal] = useState(false);
 
   const createHold = useCreateFlightHold();
 
@@ -473,6 +475,19 @@ export default function PlannerFlightEnhanced() {
 
   const canContinue = !!(plannerState.flights?.departure && plannerState.flights?.return);
 
+  const getNavigationParams = () => {
+    const params = new URLSearchParams(searchParams);
+    params.set('destination', destination);
+    params.set('origin', origin);
+    params.set('startDate', startDate);
+    params.set('endDate', endDate);
+    params.set('travelers', String(travelers));
+    if (tripBudget) {
+      params.set('budget', String(tripBudget));
+    }
+    return params;
+  };
+
   const handleContinue = async () => {
     if (!canContinue) {
       toast.error('Please select both an outbound and return flight');
@@ -490,21 +505,52 @@ export default function PlannerFlightEnhanced() {
       // Continue navigation even if save fails - data is still in context
     }
 
-    const params = new URLSearchParams(searchParams);
-    params.set('destination', destination);
-    params.set('origin', origin);
-    params.set('startDate', startDate);
-    params.set('endDate', endDate);
-    params.set('travelers', String(travelers));
-    if (tripBudget) {
-      params.set('budget', String(tripBudget));
-    }
-
+    const params = getNavigationParams();
     if (selectedOutboundId) params.set('outboundFlightId', selectedOutboundId);
     if (selectedReturnId) params.set('returnFlightId', selectedReturnId);
     params.set('outboundCabin', selectedOutboundCabin);
     params.set('returnCabin', selectedReturnCabin);
 
+    navigate(`/planner/hotel?${params.toString()}`);
+  };
+
+  const handleSkipFlights = () => {
+    setShowSkipModal(true);
+  };
+
+  const handleManualFlightSubmit = async (data: { flight?: ManualFlightData }) => {
+    if (data.flight) {
+      // Store manual flight as a special selection
+      setFlights({
+        departure: {
+          airline: data.flight.airline || 'Manual Entry',
+          flightNumber: data.flight.flightNumber || 'N/A',
+          departureTime: `${data.flight.departureDate}T${data.flight.departureTime || '09:00'}:00`,
+          arrivalTime: `${data.flight.arrivalDate || data.flight.departureDate}T${data.flight.arrivalTime || '18:00'}:00`,
+          price: 0,
+          cabin: 'economy',
+        },
+        return: {
+          airline: data.flight.airline || 'Manual Entry',
+          flightNumber: '',
+          departureTime: '',
+          arrivalTime: '',
+          price: 0,
+          cabin: 'economy',
+        },
+      });
+      toast.success('Flight details saved');
+    }
+    
+    const params = getNavigationParams();
+    params.set('skippedFlight', 'true');
+    if (data.flight) params.set('manualFlight', 'true');
+    navigate(`/planner/hotel?${params.toString()}`);
+  };
+
+  const handleSkipWithoutDetails = () => {
+    const params = getNavigationParams();
+    params.set('skippedFlight', 'true');
     navigate(`/planner/hotel?${params.toString()}`);
   };
 
@@ -677,10 +723,16 @@ export default function PlannerFlightEnhanced() {
                 <Button variant="outline" onClick={() => navigate(-1)}>
                   Back
                 </Button>
-                <Button onClick={handleContinue} disabled={!canContinue} size="lg">
-                  Continue to Hotels
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
+                <div className="flex gap-3">
+                  <Button variant="ghost" onClick={handleSkipFlights} className="text-muted-foreground">
+                    <SkipForward className="h-4 w-4 mr-2" />
+                    Skip & Add Later
+                  </Button>
+                  <Button onClick={handleContinue} disabled={!canContinue} size="lg">
+                    Continue to Hotels
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
               </motion.div>
             </div>
 
@@ -720,6 +772,15 @@ export default function PlannerFlightEnhanced() {
           </div>
         </div>
       </section>
+
+      {/* Skip Flight Modal */}
+      <ManualBookingModal
+        open={showSkipModal}
+        onClose={() => setShowSkipModal(false)}
+        onSubmit={handleManualFlightSubmit}
+        type="flight"
+        onSkip={handleSkipWithoutDetails}
+      />
     </MainLayout>
   );
 }
