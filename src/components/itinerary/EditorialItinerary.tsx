@@ -19,8 +19,9 @@ import {
   Plane, Hotel, Utensils, Camera, ShoppingBag, Palmtree, Car, Trash2,
   Sun, Cloud, CloudRain, Snowflake, Edit3, Sparkles, AlertCircle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
-  Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info
+  Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images
 } from 'lucide-react';
+import { HotelGalleryModal } from './HotelGalleryModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -369,6 +370,7 @@ export function EditorialItinerary({
   const [hasChanges, setHasChanges] = useState(false);
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
+  const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
 
   // Calculate totals with smart estimation
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier), 0);
@@ -863,12 +865,17 @@ export function EditorialItinerary({
             {/* Hotel Info */}
             <Card className="bg-card border border-border overflow-hidden">
               {/* Hotel Image - use provided or placeholder */}
-              <div className="relative overflow-hidden h-48 bg-muted/30">
+              <div className="relative overflow-hidden h-48 bg-muted/30 group cursor-pointer" onClick={() => {
+                const images = hotelSelection?.images;
+                if (images && images.length > 0) {
+                  setHotelGalleryOpen(true);
+                }
+              }}>
                 {hotelSelection?.imageUrl ? (
                   <img
                     src={hotelSelection.imageUrl}
                     alt={hotelSelection.name || 'Hotel'}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => { 
                       e.currentTarget.src = `https://source.unsplash.com/400x200/?hotel,${destination}`;
                     }}
@@ -877,7 +884,7 @@ export function EditorialItinerary({
                   <img
                     src={`https://source.unsplash.com/400x200/?hotel,${hotelSelection.name.split(' ')[0]},${destination}`}
                     alt={hotelSelection.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => { 
                       e.currentTarget.style.display = 'none';
                     }}
@@ -889,6 +896,21 @@ export function EditorialItinerary({
                 )}
                 {/* Gradient overlay for better text readability */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                
+                {/* View Gallery Button */}
+                {hotelSelection?.images && hotelSelection.images.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setHotelGalleryOpen(true);
+                    }}
+                    className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-white text-xs font-medium backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/80"
+                  >
+                    <Images className="h-3.5 w-3.5" />
+                    {hotelSelection.images.length} Photos
+                  </button>
+                )}
+                
                 {/* Hotel name overlay */}
                 {hotelSelection?.name && (
                   <div className="absolute bottom-3 left-4 right-4">
@@ -1035,6 +1057,14 @@ export function EditorialItinerary({
         isOpen={!!addActivityModal}
         onClose={() => setAddActivityModal(null)}
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
+      />
+      
+      {/* Hotel Gallery Modal */}
+      <HotelGalleryModal
+        isOpen={hotelGalleryOpen}
+        onClose={() => setHotelGalleryOpen(false)}
+        images={hotelSelection?.images || []}
+        hotelName={hotelSelection?.name}
       />
     </div>
   );
