@@ -860,60 +860,62 @@ async function earlySaveItinerary(supabase: any, tripId: string, days: StrictDay
 }
 
 // =============================================================================
-// STAGE 4: ENRICHMENT (Photos via Lovable AI - consistent with destination images)
+// STAGE 4: ENRICHMENT (Real Photos via Tiered Sources)
 // =============================================================================
 
+// Fetch real venue photos using the destination-images edge function
+// Priority: Cache → Google Places → TripAdvisor → Wikimedia → AI (last resort)
 async function fetchActivityImage(
   activityTitle: string,
   category: string,
   destination: string,
-  lovableApiKey: string
-): Promise<string | null> {
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<{ url: string; source: string; attribution?: string } | null> {
   try {
-    // Build a context-aware search prompt for real-looking images
-    const categoryHints: Record<string, string> = {
-      dining: 'restaurant food cuisine interior',
-      cultural: 'museum gallery exhibition art',
-      sightseeing: 'landmark monument scenic view',
-      shopping: 'market store boutique shopping',
-      relaxation: 'spa wellness peaceful serene',
-      activity: 'adventure outdoor experience'
-    };
-    
-    const hint = categoryHints[category?.toLowerCase()] || 'travel destination';
-    const prompt = `A beautiful, high-quality travel photograph of ${activityTitle} in ${destination}. ${hint}. Professional travel photography, cinematic lighting, no text overlays, ultra high resolution. 16:9 aspect ratio.`;
+    // Skip image fetching for transport/downtime activities
+    const skipCategories = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'];
+    if (skipCategories.includes(category?.toLowerCase() || '')) {
+      return null;
+    }
 
-    console.log(`[Stage 4] Generating AI image for: ${activityTitle}`);
+    console.log(`[Stage 4] Fetching real photo for: ${activityTitle} in ${destination}`);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
+    // Call the destination-images edge function with venue name
+    const response = await fetch(`${supabaseUrl}/functions/v1/destination-images`, {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [{ role: "user", content: prompt }],
-        modalities: ["image", "text"]
+        venueName: activityTitle,
+        destination: destination,
+        category: category,
+        imageType: 'activity',
       }),
     });
 
     if (!response.ok) {
-      console.log(`[Stage 4] AI image generation failed for "${activityTitle}":`, response.status);
+      console.log(`[Stage 4] Image fetch failed for "${activityTitle}":`, response.status);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    const image = data.images?.[0];
 
-    if (imageUrl) {
-      console.log(`[Stage 4] ✅ Generated AI image for: ${activityTitle}`);
-      return imageUrl;
+    if (image?.url && image.source !== 'fallback') {
+      console.log(`[Stage 4] ✅ Got ${image.source} photo for: ${activityTitle}`);
+      return {
+        url: image.url,
+        source: image.source,
+        attribution: image.attribution,
+      };
     }
 
     return null;
   } catch (e) {
-    console.log(`[Stage 4] AI image generation error for "${activityTitle}":`, e);
+    console.log(`[Stage 4] Image fetch error for "${activityTitle}":`, e);
     return null;
   }
 }
@@ -921,7 +923,8 @@ async function fetchActivityImage(
 async function enrichActivity(
   activity: StrictActivity,
   destination: string,
-  lovableApiKey?: string
+  supabaseUrl: string,
+  supabaseKey: string
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
@@ -932,28 +935,32 @@ async function enrichActivity(
     return enriched;
   }
 
-  // Use Lovable AI for activity images (consistent with destination-images function)
-  if (lovableApiKey && !enriched.photos?.length) {
-    const photoUrl = await fetchActivityImage(
+  // Fetch real venue photo using tiered approach
+  if (!enriched.photos?.length) {
+    const photoResult = await fetchActivityImage(
       activity.title,
       activity.category || 'sightseeing',
       destination,
-      lovableApiKey
+      supabaseUrl,
+      supabaseKey
     );
 
-    if (photoUrl) {
-      enriched.photos = [{ 
-        url: photoUrl, 
+    if (photoResult) {
+      enriched.photos = [{
+        url: photoResult.url,
         alt: `${activity.title} in ${destination}`,
-        photographer: 'AI Generated'
+        photographer: photoResult.attribution || `Source: ${photoResult.source}`,
       }];
     }
   }
 
-  // Mark as verified with confidence
+  // Mark as verified with confidence based on photo source
+  const hasRealPhoto = enriched.photos?.length && 
+    !enriched.photos[0]?.photographer?.includes('AI Generated');
+  
   enriched.verified = {
     isValid: true,
-    confidence: enriched.photos?.length ? 0.9 : 0.75
+    confidence: hasRealPhoto ? 0.95 : (enriched.photos?.length ? 0.7 : 0.6)
   };
 
   return enriched;
@@ -962,9 +969,10 @@ async function enrichActivity(
 async function enrichItinerary(
   days: StrictDay[],
   destination: string,
-  lovableApiKey?: string
+  supabaseUrl: string,
+  supabaseKey: string
 ): Promise<StrictDay[]> {
-  console.log(`[Stage 4] Starting enrichment for ${days.length} days (Lovable AI: ${!!lovableApiKey})`);
+  console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos`);
 
   const enrichedDays: StrictDay[] = [];
   let totalPhotos = 0;
@@ -972,18 +980,18 @@ async function enrichItinerary(
   for (const day of days) {
     const enrichedActivities: StrictActivity[] = [];
 
-    // Process activities in batches of 2 with longer delays for AI rate limits
+    // Process activities in batches of 2 with delays for rate limits
     for (let i = 0; i < day.activities.length; i += 2) {
       const batch = day.activities.slice(i, i + 2);
       const enrichedBatch = await Promise.all(
-        batch.map(act => enrichActivity(act, destination, lovableApiKey))
+        batch.map(act => enrichActivity(act, destination, supabaseUrl, supabaseKey))
       );
       enrichedActivities.push(...enrichedBatch);
       totalPhotos += enrichedBatch.filter(a => a.photos?.length).length;
 
-      // Longer delay between batches for AI image generation rate limits
+      // Delay between batches to respect API rate limits
       if (i + 2 < day.activities.length) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 300));
       }
     }
 
@@ -1004,7 +1012,7 @@ async function enrichItinerary(
     });
   }
 
-  console.log(`[Stage 4] Enrichment complete - ${totalPhotos} photos added`);
+  console.log(`[Stage 4] Enrichment complete - ${totalPhotos} real photos added`);
   return enrichedDays;
 }
 
@@ -1230,10 +1238,10 @@ serve(async (req) => {
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
 
-      // STAGE 4: Enrichment (photos via Lovable AI - consistent with destination images)
+      // STAGE 4: Enrichment (real photos via tiered sources: cache → Google → TripAdvisor → Wikimedia → AI)
       let enrichedDays: StrictDay[];
       try {
-        enrichedDays = await enrichItinerary(aiResult.days, context.destination, LOVABLE_API_KEY);
+        enrichedDays = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey);
       } catch (enrichError) {
         console.warn('[generate-itinerary] Enrichment failed, using base itinerary:', enrichError);
         enrichedDays = aiResult.days;
