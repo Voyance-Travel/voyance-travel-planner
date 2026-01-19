@@ -69,7 +69,9 @@ export default function PlannerBooking() {
     (sum, day) => sum + day.activities.reduce((daySum, act) => daySum + (act.price || 0), 0),
     0
   );
-  const serviceFee = 29.99;
+  // Only charge service fee if user has selected flights or hotels
+  const hasSelections = flightSubtotal > 0 || hotelSubtotal > 0;
+  const serviceFee = hasSelections ? 29.99 : 0;
   const totalTaxes = flightTaxes + hotelTaxes;
   const grandTotal = flightSubtotal + hotelSubtotal + activitiesTotal + totalTaxes + serviceFee;
 

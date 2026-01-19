@@ -922,17 +922,11 @@ serve(async (req) => {
   }
 
   try {
-    // Validate authentication
+    // Allow both authenticated and anonymous requests for destination images
+    // This is safe because we're only serving publicly-available images
     const authResult = await validateAuth(req);
-    if (!authResult) {
-      console.error("[Images] Unauthorized request");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized. Please sign in to fetch images." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    console.log(`[Images] Authenticated user: ${authResult.userId}`);
+    const userId = authResult?.userId || 'anonymous';
+    console.log(`[Images] Request from: ${userId}`);
 
     // Parse params from both query string and body
     const url = new URL(req.url);
