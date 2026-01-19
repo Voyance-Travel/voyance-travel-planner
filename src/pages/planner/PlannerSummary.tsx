@@ -135,8 +135,10 @@ export default function PlannerSummary() {
             onSave={async () => {
               const tripId = await ensureTripId();
               if (!tripId) return;
-              toast.success('Trip saved!');
-              navigate('/trip/dashboard');
+              toast.success('Trip saved! Ready to build your itinerary.');
+              const params = new URLSearchParams(searchParams);
+              params.set('tripId', tripId);
+              navigate(`/planner/itinerary?${params.toString()}`);
             }}
             onBuildItinerary={async () => {
               const tripId = await ensureTripId();

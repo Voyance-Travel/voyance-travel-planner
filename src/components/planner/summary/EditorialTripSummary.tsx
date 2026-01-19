@@ -545,26 +545,16 @@ export default function EditorialTripSummary({
                   Complete Booking
                 </Button>
                 
-                <div className="grid grid-cols-2 gap-3">
-                  <Button 
-                    variant="outline" 
-                    onClick={onBuildItinerary} 
-                    disabled={isLoading} 
-                    className="h-12 rounded-none text-sm font-normal"
-                  >
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Itinerary
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={onSave} 
-                    disabled={isLoading} 
-                    className="h-12 rounded-none text-sm font-normal"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Save
-                  </Button>
-                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={onSave} 
+                  disabled={isLoading} 
+                  size="lg"
+                  className="w-full h-12 rounded-none text-sm font-normal"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Save & Build Itinerary
+                </Button>
                 
                 <Button 
                   variant="ghost" 
