@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -225,8 +225,9 @@ export default function Start() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  // Check for destination from query param (from Explore/Destinations pages)
+  // Check for mode and destination from query params
   const destinationFromQuery = searchParams.get('destination');
+  const itineraryOnlyMode = searchParams.get('mode') === 'itinerary';
   
   // Structured location state - stores both display and data
   const [originSelection, setOriginSelection] = useState<LocationSelection>({
@@ -474,6 +475,15 @@ export default function Start() {
     params.set('tripType', tripType);
     if (budgetAmount) {
       params.set('budget', String(budgetAmount));
+    }
+
+    // If in itinerary-only mode, skip to itinerary generation
+    if (itineraryOnlyMode) {
+      const tripId = await saveTrip();
+      if (tripId) {
+        navigate(`/trip/${tripId}?generate=true`);
+      }
+      return;
     }
 
     navigate(`${ROUTES.PLANNER.FLIGHT}?${params.toString()}`);
@@ -796,15 +806,57 @@ export default function Start() {
                 </CollapsibleContent>
               </Collapsible>
 
-              {/* CTA Button */}
-              <Button
-                onClick={handleStart}
-                disabled={!isFormValid}
-                className="w-full h-14 text-base font-medium mt-2"
-                size="lg"
-              >
-                Plan My Trip
-              </Button>
+              {/* CTA Buttons */}
+              <div className="space-y-3 mt-2">
+                <Button
+                  onClick={handleStart}
+                  disabled={!isFormValid}
+                  className="w-full h-14 text-base font-medium"
+                  size="lg"
+                >
+                  {itineraryOnlyMode ? (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate My Itinerary
+                    </>
+                  ) : (
+                    'Plan My Trip'
+                  )}
+                </Button>
+                
+                {/* Skip to Itinerary Option (only show if not already in itinerary mode) */}
+                {!itineraryOnlyMode && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!isFormValid) return;
+                      const start = format(startDate!, 'yyyy-MM-dd');
+                      const end = format(endDate!, 'yyyy-MM-dd');
+                      
+                      setBasics({
+                        destination: destinationSelection.cityName,
+                        startDate: start,
+                        endDate: end,
+                        travelers,
+                        originCity: originSelection.cityName,
+                        budgetTier: 'moderate',
+                      });
+                      
+                      const tripId = await saveTrip();
+                      if (tripId) {
+                        navigate(`/trip/${tripId}?generate=true`);
+                      } else {
+                        toast.error('Please sign in to generate an itinerary');
+                      }
+                    }}
+                    disabled={!isFormValid}
+                    className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 inline mr-1.5" />
+                    Skip flights & hotels — just build my itinerary
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         </div>

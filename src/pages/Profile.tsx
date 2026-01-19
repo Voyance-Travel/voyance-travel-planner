@@ -468,7 +468,26 @@ export default function Profile() {
             {/* Travel Map */}
             <TravelMap userId={user?.id || ''} />
 
-            {/* Removed from overview - now in its own tab */}
+            {/* Quick Create Itinerary Card */}
+            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl border border-primary/20 p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground mb-1">Quick Itinerary Builder</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Just want an AI-generated itinerary? Skip the flight & hotel search — add them later or bring your own.
+                  </p>
+                  <Button asChild size="sm">
+                    <Link to="/start?mode=itinerary">
+                      <Zap className="h-4 w-4 mr-2" />
+                      Build Itinerary Only
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
 
             {/* Surprise Trip Card */}
             <SurpriseTripCard isPremium={!!subscription?.subscribed} />

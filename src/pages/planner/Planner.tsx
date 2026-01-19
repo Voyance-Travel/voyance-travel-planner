@@ -315,6 +315,20 @@ export default function Planner() {
     }
   };
 
+  const handleSkipToItinerary = async () => {
+    scrollToTop();
+    const tripId = await saveTrip();
+    
+    if (tripId) {
+      // Navigate directly to trip detail which handles itinerary generation
+      const params = new URLSearchParams();
+      params.set('generate', 'true'); // Signal to auto-generate itinerary
+      navigate(`/trip/${tripId}?${params.toString()}`);
+    } else {
+      toast.error('Failed to save trip. Please try again.');
+    }
+  };
+
   const handleBack = () => {
     scrollToTop();
 
@@ -423,6 +437,7 @@ export default function Planner() {
             updateBudgetAllocation={(budgetAllocation) => updateFormData({ budgetAllocation })}
             updateTripType={(tripType) => updateFormData({ tripType })}
             onContinue={() => handleStepComplete('context')}
+            onSkipToItinerary={handleSkipToItinerary}
             onBack={() => navigate('/start')}
           />
         )}
