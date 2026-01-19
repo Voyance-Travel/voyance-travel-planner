@@ -166,9 +166,9 @@ export default function FriendProfileCard({ friendId, children, className }: Fri
                 {data.travelDNA.tone_tags.slice(0, 3).map((tag, i) => (
                   <span 
                     key={i} 
-                    className="text-[10px] text-muted-foreground px-2 py-0.5 rounded-full border border-border capitalize"
+                    className="text-[10px] text-muted-foreground px-2 py-0.5 rounded-full border border-border"
                   >
-                    {tag.replace(/_/g, ' ')}
+                    {tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                   </span>
                 ))}
               </div>

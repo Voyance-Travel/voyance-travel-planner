@@ -25,9 +25,9 @@ interface RefinedDNAProps {
 
 const formatValue = (value: string): string => {
   return value
-    .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .trim();
 };
 
 export default function RefinedDNA({ className = '', travelDNA }: RefinedDNAProps) {
