@@ -499,6 +499,74 @@ function TravelStyleSection({ preferences, onChange }: SectionProps) {
           })}
         </div>
       </div>
+
+      {/* Climate Preferences - DIFFERENTIATOR */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-3">🌤️ What climate do you prefer?</h4>
+        <p className="text-xs text-muted-foreground mb-4">This helps us recommend destinations and schedule outdoor activities optimally</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { value: 'tropical', label: 'Warm & Tropical', icon: '🏝️' },
+            { value: 'temperate', label: 'Mild & Temperate', icon: '🌸' },
+            { value: 'cold', label: 'Cool & Crisp', icon: '❄️' },
+            { value: 'variable', label: 'I Adapt', icon: '🌈' },
+          ].map(option => {
+            const isSelected = (preferences.core.climate_preferences || []).includes(option.value);
+            return (
+              <motion.button
+                key={option.value}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  const current = preferences.core.climate_preferences || [];
+                  if (isSelected) {
+                    onChange('core', 'climate_preferences', current.filter(v => v !== option.value));
+                  } else {
+                    onChange('core', 'climate_preferences', [...current, option.value]);
+                  }
+                }}
+                className={`
+                  p-4 rounded-xl border-2 transition-all text-center
+                  ${isSelected ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground/30'}
+                `}
+              >
+                <div className="text-2xl mb-2">{option.icon}</div>
+                <p className="text-xs font-medium text-foreground">{option.label}</p>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Interests */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-3">🎯 Your travel interests</h4>
+        <div className="flex flex-wrap gap-2">
+          {['Art & Museums', 'Food & Culinary', 'Architecture', 'History', 'Nature', 'Adventure', 'Nightlife', 'Shopping', 'Wellness', 'Photography', 'Local Culture', 'Beach & Water'].map(interest => {
+            const value = interest.toLowerCase().replace(/ & /g, '_').replace(/ /g, '_');
+            const isSelected = (preferences.core.interests || []).includes(value);
+            return (
+              <button
+                key={interest}
+                onClick={() => {
+                  const current = preferences.core.interests || [];
+                  if (isSelected) {
+                    onChange('core', 'interests', current.filter(v => v !== value));
+                  } else {
+                    onChange('core', 'interests', [...current, value]);
+                  }
+                }}
+                className={`
+                  px-4 py-2 rounded-full text-sm font-medium transition-all
+                  ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}
+                `}
+              >
+                {interest}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

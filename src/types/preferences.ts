@@ -15,6 +15,15 @@ export interface CorePreferences {
   room_preferences?: string | null;
   trip_structure_preference?: string | null;
   planning_preference?: string | null;
+  // NEW: Critical personalization fields
+  interests?: string[] | null;
+  travel_vibes?: string[] | null;
+  traveler_type?: string | null;
+  activity_level?: string | null;
+  // NEW: Climate preferences (differentiator!)
+  climate_preferences?: string[] | null;
+  weather_preferences?: string[] | null;
+  preferred_regions?: string[] | null;
 }
 
 export interface FlightPreferences {
@@ -69,6 +78,13 @@ export const createEmptyPreferences = (): BackendPreferencesData => ({
     room_preferences: null,
     trip_structure_preference: null,
     planning_preference: null,
+    interests: null,
+    travel_vibes: null,
+    traveler_type: null,
+    activity_level: null,
+    climate_preferences: null,
+    weather_preferences: null,
+    preferred_regions: null,
   },
   flight: {
     home_airport: null,
