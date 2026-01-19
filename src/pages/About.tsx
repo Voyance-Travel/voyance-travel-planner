@@ -323,7 +323,7 @@ export default function About() {
               We fixed it.
             </h1>
             <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
-              Voyance is an intelligent trip builder that listens, curates, and learns — 
+              Voyance is an intelligent trip builder that listens, curates, and learns, 
               transforming the chaos of travel planning into a seamless, personalized experience.
             </p>
             
@@ -501,7 +501,7 @@ export default function About() {
               {
                 step: '01',
                 title: 'Discover Your Travel DNA',
-                description: 'Our comprehensive quiz understands your preferences, pace, budget, and style — far beyond basic filters.',
+                description: 'Our comprehensive quiz understands your preferences, pace, budget, and style, far beyond basic filters.',
                 icon: <Search className="w-6 h-6" />,
                 image: 'https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=400&q=80',
               },

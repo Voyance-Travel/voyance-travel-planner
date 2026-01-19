@@ -88,7 +88,7 @@ const questions = [
     step: 4,
     category: 'Budget',
     title: 'What\'s your travel budget style?',
-    subtitle: 'Per person, per trip — we\'ll match recommendations accordingly',
+    subtitle: 'Per person, per trip. We\'ll match recommendations accordingly',
     icon: <Sparkles className="w-5 h-5" />,
     options: [
       { value: 'budget', label: 'Budget-Conscious', description: 'Maximize experiences without overspending' },
@@ -207,7 +207,7 @@ const questions = [
     step: 9,
     category: 'Dining',
     title: 'Any dietary considerations?',
-    subtitle: 'Select all that apply — we\'ll factor these in',
+    subtitle: 'Select all that apply. We\'ll factor these in',
     icon: <Utensils className="w-5 h-5" />,
     multiSelect: true,
     optional: true,

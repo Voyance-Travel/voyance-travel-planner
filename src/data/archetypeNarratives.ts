@@ -203,7 +203,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "The best stories come from unexpected detours",
       "Connection matters more than comfort"
     ],
-    perfectTripPreview: "The Amalfi Coast by private yacht, Aman Tokyo suite, Necker Island for New Year's—because life is the ultimate luxury.",
+    perfectTripPreview: "The Amalfi Coast by private yacht, Aman Tokyo suite, Necker Island for New Year's, because life is the ultimate luxury.",
     emoji: "✨"
   },
   family_architect: {
@@ -379,7 +379,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Home can hold healing too",
       "Sometimes the escape is internal"
     ],
-    perfectTripPreview: "A week in the Maldives, overwater bungalow, no schedule, no obligations—just you, the ocean, and the luxury of doing nothing.",
+    perfectTripPreview: "A week in the Maldives, overwater bungalow, no schedule, no obligations. Just you, the ocean, and the luxury of doing nothing.",
     emoji: "🏝️"
   },
 };

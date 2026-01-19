@@ -74,17 +74,17 @@ export function FeatureGate({
     switch (upgradePath) {
       case 'trip_pass':
         return {
-          label: 'Unlock This Trip — $12.99',
+          label: 'Unlock This Trip ($12.99)',
           action: () => navigate(`${ROUTES.PRICING}?highlight=trip_pass&tripId=${tripId || ''}`),
         };
       case 'monthly':
         return {
-          label: 'Go Monthly — $15.99/mo',
+          label: 'Go Monthly ($15.99/mo)',
           action: () => navigate(`${ROUTES.PRICING}?highlight=monthly`),
         };
       case 'yearly':
         return {
-          label: 'Go Yearly — Save 48%',
+          label: 'Go Yearly (Save 48%)',
           action: () => navigate(`${ROUTES.PRICING}?highlight=yearly`),
         };
       default:

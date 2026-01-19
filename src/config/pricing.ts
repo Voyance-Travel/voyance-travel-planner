@@ -141,7 +141,7 @@ export const PLAN_FEATURES = {
       preferenceLearning: true,
       mysteryTrips: true,
     },
-    cta: 'Go Yearly — Save 48%',
+    cta: 'Go Yearly (Save 48%)',
   },
 } as const;
 

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 
 const testimonials = [
   {
-    quote: 'It felt like someone planned my dream trip for me — and they nailed it.',
+    quote: 'It felt like someone planned my dream trip for me, and they nailed it.',
     tag: 'Anonymous beta user, 2025',
   },
   {
