@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Plane, Hotel, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, DollarSign, Users } from 'lucide-react';
+import { Plane, Hotel, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, DollarSign, Users, Car } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { DayItinerary } from '@/types/itinerary';
@@ -17,6 +17,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import TripBudgetTracker from '@/components/planner/budget/TripBudgetTracker';
 import TripMembersPanel from '@/components/planner/budget/TripMembersPanel';
+import TransportationPreferences, { TransportationPreference } from '@/components/planner/TransportationPreferences';
+import RentalCarModal, { RentalCarDetails } from '@/components/planner/RentalCarModal';
+import { useTripPlanner } from '@/contexts/TripPlannerContext';
 
 interface ItineraryPreviewProps {
   tripId?: string;
@@ -151,8 +154,11 @@ export default function ItineraryPreview({
   isLoading: isSubmitting,
 }: ItineraryPreviewProps) {
   const { isAuthenticated, user } = useAuth();
+  const { state: plannerState, setBasics } = useTripPlanner();
   const { entitlements, isLoading: isLoadingEntitlements, isPaid } = useEntitlements();
   const consumeUsage = useConsumeUsage();
+  const [showRentalCarModal, setShowRentalCarModal] = useState(false);
+  const [hasSetTransport, setHasSetTransport] = useState(false);
   const [hasConsumedQuota, setHasConsumedQuota] = useState(false);
   
   // Check if user has completed the quiz
@@ -182,27 +188,61 @@ export default function ItineraryPreview({
     clearError,
   } = useLovableItinerary(tripId || null);
 
+  // Transportation preference state
+  const [transportPref, setTransportPref] = useState<TransportationPreference>(
+    plannerState.basics.transportationPreference || { modes: [] }
+  );
+  const [rentalCar, setRentalCar] = useState<RentalCarDetails | undefined>(
+    plannerState.basics.rentalCar
+  );
+
+  // Handle transportation change
+  const handleTransportChange = (pref: TransportationPreference) => {
+    setTransportPref(pref);
+    setBasics({ transportationPreference: pref });
+  };
+
+  const handleRentalCarSave = (details: RentalCarDetails) => {
+    setRentalCar(details);
+    setBasics({ rentalCar: details });
+  };
+
   // Check for existing itinerary on mount, then auto-start if needed
   useEffect(() => {
     if (!tripId) return;
     
     const init = async () => {
       const exists = await checkExisting();
-      if (!exists && canGenerate && !hasConsumedQuota) {
-        // Consume quota before generating
-        consumeUsage.mutate(
-          { metricKey: 'ai.itinerary.generate', amount: 1 },
-          {
-            onSuccess: () => {
-              setHasConsumedQuota(true);
-              generateItinerary();
-            },
-          }
-        );
+      if (exists) {
+        setHasSetTransport(true); // Already has itinerary, skip transport selection
       }
+      // Don't auto-generate yet - wait for user to set transport preferences
     };
     init();
-  }, [tripId, canGenerate, hasConsumedQuota]);
+  }, [tripId]);
+
+  // Start generation after transport preferences are set
+  const handleStartGeneration = () => {
+    if (!tripId || !canGenerate) return;
+    
+    setHasSetTransport(true);
+    
+    // Consume quota before generating
+    consumeUsage.mutate(
+      { metricKey: 'ai.itinerary.generate', amount: 1 },
+      {
+        onSuccess: () => {
+          setHasConsumedQuota(true);
+          // Pass transport preferences to generation
+          generateItinerary({
+            transportationModes: transportPref.modes,
+            primaryTransport: transportPref.primaryMode,
+            hasRentalCar: !!rentalCar,
+          });
+        },
+      }
+    );
+  };
 
   const isReady = currentStep === 'complete' && days.length > 0;
   const isGenerating = loading;
@@ -294,6 +334,115 @@ export default function ItineraryPreview({
             </div>
           </CardContent>
         </Card>
+      </motion.div>
+    );
+  }
+
+  // Show transportation selection before generation starts
+  if (!hasSetTransport && !isGenerating && !isReady && !hasExistingItinerary) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-4xl mx-auto"
+      >
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-display font-medium text-foreground mb-2">
+            Before We Plan Your Trip
+          </h1>
+          <p className="text-muted-foreground">
+            Help us personalize your {tripDetails.destination} itinerary
+          </p>
+        </div>
+
+        {/* Trip Summary Card */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white mb-8">
+          <h2 className="text-xl font-display font-medium mb-4">
+            {tripDetails.name || `Trip to ${tripDetails.destination}`}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-slate-400" />
+              <span>{tripDetails.destination}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Plane className="w-4 h-4 text-slate-400" />
+              <span>{tripDetails.departureCity}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <span>
+                {format(new Date(tripDetails.startDate), 'MMM d')} - {format(new Date(tripDetails.endDate), 'MMM d')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-slate-400" />
+              <span>{tripDetails.travelers} travelers</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Transportation Preferences */}
+        <TransportationPreferences
+          value={transportPref}
+          onChange={handleTransportChange}
+          onAddRentalCar={() => setShowRentalCarModal(true)}
+          hasRentalCar={!!rentalCar}
+        />
+
+        {/* Rental Car Summary */}
+        {rentalCar && (
+          <Card className="mt-4 border-primary/20 bg-primary/5">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Car className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium">
+                      {rentalCar.rentalCompany ? `${rentalCar.rentalCompany} - ` : ''}
+                      {rentalCar.carType || 'Rental Car'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {rentalCar.pickupLocation || 'Pickup location TBD'}
+                      {rentalCar.totalCost && ` • ${rentalCar.currency || 'USD'} ${rentalCar.totalCost}`}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRentalCarModal(true)}
+                >
+                  Edit
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex justify-between mt-8">
+          <Button variant="outline" onClick={onBack} className="h-12 px-6">
+            Back
+          </Button>
+          <Button
+            onClick={handleStartGeneration}
+            disabled={!canGenerate}
+            className="h-12 px-8 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+          >
+            <Sparkles className="w-4 h-4" />
+            Generate My Itinerary
+          </Button>
+        </div>
+
+        {/* Rental Car Modal */}
+        <RentalCarModal
+          open={showRentalCarModal}
+          onClose={() => setShowRentalCarModal(false)}
+          onSave={handleRentalCarSave}
+          initialData={rentalCar}
+          tripDates={{ startDate: tripDetails.startDate, endDate: tripDetails.endDate }}
+        />
       </motion.div>
     );
   }
