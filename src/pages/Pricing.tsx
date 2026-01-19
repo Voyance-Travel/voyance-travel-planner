@@ -3,11 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, Sparkles, Compass, Crown, Zap, ArrowRight, Shield, Clock, Users, Heart, Star, Wallet, Loader2, CreditCard, CheckCircle } from 'lucide-react';
+import { Check, Sparkles, Compass, Crown, Zap, ArrowRight, Shield, Clock, Users, Heart, Loader2, CreditCard, Infinity, MapPin, Wallet } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
-import { PLAN_FEATURES, STRIPE_PRODUCTS, TOPUP_OPTIONS } from '@/config/pricing';
+import { PLAN_FEATURES, STRIPE_PRODUCTS, TOPUP_OPTIONS, CREDIT_COSTS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
@@ -19,6 +19,20 @@ interface CheckoutConfig {
   returnPath: string;
 }
 
+const planIcons = {
+  free: Compass,
+  trip_pass: Zap,
+  monthly: Sparkles,
+  yearly: Crown,
+};
+
+const planColors = {
+  free: 'from-slate-400 to-slate-500',
+  trip_pass: 'from-violet-500 to-purple-600',
+  monthly: 'from-primary to-accent',
+  yearly: 'from-amber-500 to-orange-500',
+};
+
 export default function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutConfig, setCheckoutConfig] = useState<CheckoutConfig | null>(null);
@@ -26,14 +40,12 @@ export default function Pricing() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Handle success/canceled URL params
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       toast({
         title: "Purchase successful!",
         description: "Your subscription is now active.",
       });
-      // Clean up URL
       searchParams.delete('success');
       setSearchParams(searchParams);
     }
@@ -61,7 +73,6 @@ export default function Pricing() {
     setLoadingPlan(planName);
     
     try {
-      // Check if user is logged in
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -74,7 +85,6 @@ export default function Pricing() {
         return;
       }
 
-      // Open embedded checkout modal
       setCheckoutConfig({
         priceId,
         mode,
@@ -137,76 +147,85 @@ export default function Pricing() {
         description="Plan your first trip free. Pay only when you want Voyance to build more."
       />
       
-      {/* Hero */}
-      <section className="pt-32 pb-20 bg-gradient-to-br from-primary/10 via-background to-accent/10 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent" />
-        <div className="max-w-5xl mx-auto px-4 text-center relative">
-          <motion.span
+      {/* Hero - Editorial Style */}
+      <section className="relative pt-32 pb-24 overflow-hidden">
+        {/* Background layers */}
+        <div className="absolute inset-0 bg-gradient-to-b from-muted/80 via-background to-background" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/8 via-transparent to-transparent" />
+        <div className="absolute top-20 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-gold/5 rounded-full blur-3xl" />
+        
+        <div className="relative max-w-4xl mx-auto px-4 text-center">
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="inline-block px-4 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium mb-6"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-8"
           >
-            Simple, Transparent Pricing
-          </motion.span>
+            <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+            <span className="text-sm font-medium text-primary">Simple, transparent pricing</span>
+          </motion.div>
+          
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6 leading-tight"
+            className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-foreground mb-6 leading-[1.1] tracking-tight"
           >
-            Plan your first trip free—<br />
-            <span className="text-primary">then pay only when you want more</span>
+            Your first trip is free.
+            <br />
+            <span className="text-primary">Pay only when you want more.</span>
           </motion.h1>
+          
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-xl text-muted-foreground max-w-2xl mx-auto"
+            className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
           >
-            One full itinerary build at full power. After that, keep planning manually 
-            or upgrade to auto-build days, budgets, routes, and smarter options.
+            One complete itinerary at full power. After that, plan manually or upgrade 
+            for unlimited AI-powered days, smart recommendations, and group tools.
           </motion.p>
         </div>
       </section>
 
-      {/* Main Pricing Cards */}
-      <section className="py-20 -mt-8 relative z-10">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Pricing Cards - Magazine Grid */}
+      <section className="relative py-16 -mt-8">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-5 lg:gap-6">
             
-            {/* 1. Free */}
+            {/* Free Plan */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="relative rounded-3xl bg-card border border-border p-6 flex flex-col"
+              className="group relative bg-card rounded-2xl border border-border p-6 lg:p-7 flex flex-col hover:shadow-lg hover:shadow-slate-900/5 transition-all duration-300"
             >
-              <div className="mb-6">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-400 to-slate-500 text-white mb-4">
-                  <Compass className="h-6 w-6" />
+              <div className="flex items-start justify-between mb-5">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center text-white">
+                  <Compass className="w-5 h-5" />
                 </div>
-                <h3 className="text-2xl font-bold text-foreground">Free</h3>
-                <p className="text-sm text-muted-foreground">{PLAN_FEATURES.FREE.headline}</p>
               </div>
               
+              <h3 className="text-xl font-serif font-bold text-foreground mb-1">Free</h3>
+              <p className="text-sm text-muted-foreground mb-5 leading-relaxed">{PLAN_FEATURES.FREE.headline}</p>
+              
               <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">$0</span>
-                  <span className="text-muted-foreground">forever</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold tracking-tight text-foreground">$0</span>
+                  <span className="text-muted-foreground text-sm">forever</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">{PLAN_FEATURES.FREE.subheadline}</p>
               </div>
               
-              <ul className="space-y-3 mb-8 flex-1">
-                {PLAN_FEATURES.FREE.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm">
-                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                    <span className="text-foreground">{feature}</span>
-                  </li>
+              <div className="flex-1 space-y-3 mb-6">
+                {PLAN_FEATURES.FREE.features.slice(0, 5).map((feature, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-sm">
+                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
+                    <span className="text-foreground/80">{feature}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
               
-              <Button asChild size="lg" variant="outline" className="w-full">
+              <Button asChild variant="outline" className="w-full h-11 font-medium">
                 <Link to={ROUTES.QUIZ}>
                   Start Free
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -214,50 +233,49 @@ export default function Pricing() {
               </Button>
             </motion.div>
 
-            {/* 2. Trip Pass */}
+            {/* Trip Pass */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="relative rounded-3xl bg-card border border-border p-6 flex flex-col"
+              className="group relative bg-card rounded-2xl border border-border p-6 lg:p-7 flex flex-col hover:shadow-lg hover:shadow-violet-900/5 transition-all duration-300"
             >
-              <div className="mb-6">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-500 text-white mb-4">
-                  <Zap className="h-6 w-6" />
+              <div className="flex items-start justify-between mb-5">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white">
+                  <Zap className="w-5 h-5" />
                 </div>
-                <h3 className="text-2xl font-bold text-foreground">Trip Pass</h3>
-                <p className="text-sm text-muted-foreground">{PLAN_FEATURES.TRIP_PASS.headline}</p>
+                <span className="px-2.5 py-1 text-xs font-medium bg-violet-500/10 text-violet-600 rounded-full">
+                  One-time
+                </span>
               </div>
               
+              <h3 className="text-xl font-serif font-bold text-foreground mb-1">Trip Pass</h3>
+              <p className="text-sm text-muted-foreground mb-5 leading-relaxed">{PLAN_FEATURES.TRIP_PASS.headline}</p>
+              
               <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
-                  <span className="text-muted-foreground">one-time</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold tracking-tight text-foreground">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
+                  <span className="text-muted-foreground text-sm">one-time</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">{PLAN_FEATURES.TRIP_PASS.subheadline}</p>
               </div>
               
-              <ul className="space-y-3 mb-8 flex-1">
-                {PLAN_FEATURES.TRIP_PASS.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm">
-                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-violet-500" />
-                    <span className="text-foreground">{feature}</span>
-                  </li>
+              <div className="flex-1 space-y-3 mb-6">
+                {PLAN_FEATURES.TRIP_PASS.features.slice(0, 5).map((feature, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-sm">
+                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500" />
+                    <span className="text-foreground/80">{feature}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
               
               <Button
-                size="lg"
                 variant="outline"
-                className="w-full"
+                className="w-full h-11 font-medium border-violet-200 hover:bg-violet-50 hover:border-violet-300 dark:border-violet-800 dark:hover:bg-violet-950"
                 onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Single Trip Pass')}
                 disabled={loadingPlan === 'trip_pass'}
               >
                 {loadingPlan === 'trip_pass' ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Opening checkout...
-                  </>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
                     Unlock This Trip
@@ -267,262 +285,259 @@ export default function Pricing() {
               </Button>
             </motion.div>
 
-            {/* 3. Monthly - BEST VALUE */}
+            {/* Monthly - Featured */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="relative rounded-3xl bg-gradient-to-b from-primary/10 to-background border-2 border-primary shadow-xl shadow-primary/10 p-6 flex flex-col"
+              className="group relative bg-gradient-to-b from-primary/5 via-card to-card rounded-2xl border-2 border-primary shadow-lg shadow-primary/10 p-6 lg:p-7 flex flex-col"
             >
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-full">
-                  <Star className="w-3.5 h-3.5 fill-current" />
-                  Best Value
+              {/* Best Value Badge */}
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground text-xs font-semibold rounded-full shadow-lg">
+                  <Sparkles className="w-3 h-3" />
+                  Most Popular
                 </span>
               </div>
               
-              <div className="mb-6">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-white mb-4">
-                  <Sparkles className="h-6 w-6" />
+              <div className="flex items-start justify-between mb-5 pt-2">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white">
+                  <Sparkles className="w-5 h-5" />
                 </div>
-                <h3 className="text-2xl font-bold text-foreground">Monthly</h3>
-                <p className="text-sm text-muted-foreground">{PLAN_FEATURES.MONTHLY.headline}</p>
               </div>
               
+              <h3 className="text-xl font-serif font-bold text-foreground mb-1">Monthly</h3>
+              <p className="text-sm text-muted-foreground mb-5 leading-relaxed">{PLAN_FEATURES.MONTHLY.headline}</p>
+              
               <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
-                  <span className="text-muted-foreground">/month</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold tracking-tight text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
+                  <span className="text-muted-foreground text-sm">/month</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">{PLAN_FEATURES.MONTHLY.subheadline}</p>
               </div>
               
-              <ul className="space-y-3 mb-8 flex-1">
-                {PLAN_FEATURES.MONTHLY.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm">
-                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-primary" />
-                    <span className="text-foreground">{feature}</span>
-                  </li>
+              <div className="flex-1 space-y-3 mb-6">
+                {PLAN_FEATURES.MONTHLY.features.slice(0, 6).map((feature, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-sm">
+                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                    <span className="text-foreground/80">{feature}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
               
               <Button
-                size="lg"
-                className="w-full"
+                className="w-full h-11 font-medium"
                 onClick={() => openCheckout(STRIPE_PRODUCTS.MONTHLY.priceId, 'subscription', 'monthly', 'Voyager Monthly')}
                 disabled={loadingPlan === 'monthly'}
               >
                 {loadingPlan === 'monthly' ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Opening checkout...
-                  </>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    Go Monthly
+                    Start Monthly
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
               </Button>
             </motion.div>
 
-            {/* 4. Yearly */}
+            {/* Yearly */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="relative rounded-3xl bg-card border border-border p-6 flex flex-col"
+              className="group relative bg-card rounded-2xl border border-border p-6 lg:p-7 flex flex-col hover:shadow-lg hover:shadow-amber-900/5 transition-all duration-300"
             >
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-full">
+              {/* Save Badge */}
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-semibold rounded-full shadow-lg">
                   Save 48%
                 </span>
               </div>
               
-              <div className="mb-6">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white mb-4">
-                  <Crown className="h-6 w-6" />
+              <div className="flex items-start justify-between mb-5 pt-2">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white">
+                  <Crown className="w-5 h-5" />
                 </div>
-                <h3 className="text-2xl font-bold text-foreground">Yearly</h3>
-                <p className="text-sm text-muted-foreground">{PLAN_FEATURES.YEARLY.headline}</p>
               </div>
               
+              <h3 className="text-xl font-serif font-bold text-foreground mb-1">Yearly</h3>
+              <p className="text-sm text-muted-foreground mb-5 leading-relaxed">{PLAN_FEATURES.YEARLY.headline}</p>
+              
               <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">${STRIPE_PRODUCTS.YEARLY.price}</span>
-                  <span className="text-muted-foreground">/year</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold tracking-tight text-foreground">${STRIPE_PRODUCTS.YEARLY.price}</span>
+                  <span className="text-muted-foreground text-sm">/year</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">{PLAN_FEATURES.YEARLY.subheadline}</p>
+                <p className="text-xs text-muted-foreground mt-1">That's just $8.25/month</p>
               </div>
               
-              <ul className="space-y-3 mb-8 flex-1">
-                {PLAN_FEATURES.YEARLY.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm">
-                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" />
-                    <span className="text-foreground">{feature}</span>
-                  </li>
+              <div className="flex-1 space-y-3 mb-6">
+                {PLAN_FEATURES.YEARLY.features.slice(0, 5).map((feature, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-sm">
+                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                    <span className="text-foreground/80">{feature}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
               
               <Button
-                size="lg"
                 variant="outline"
-                className="w-full border-amber-500/50 hover:bg-amber-500/10"
+                className="w-full h-11 font-medium border-amber-200 hover:bg-amber-50 hover:border-amber-300 dark:border-amber-800 dark:hover:bg-amber-950"
                 onClick={() => openCheckout(STRIPE_PRODUCTS.YEARLY.priceId, 'subscription', 'yearly', 'Voyager Yearly')}
                 disabled={loadingPlan === 'yearly'}
               >
                 {loadingPlan === 'yearly' ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Opening checkout...
-                  </>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    Go Yearly
+                    Start Yearly
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
               </Button>
             </motion.div>
           </div>
+        </div>
+      </section>
 
-          {/* Credits Section - Editorial Refresh */}
+      {/* À la Carte Credits - Editorial Section */}
+      <section className="py-20 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-background via-muted/30 to-background" />
+        
+        <div className="relative max-w-5xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="mt-20 max-w-4xl mx-auto"
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
           >
-            <div className="text-center mb-8">
-              <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-3">
-                Not ready to commit? That's okay.
-              </h2>
-              <p className="text-muted-foreground max-w-xl mx-auto">
-                Add credits to your wallet and use them whenever inspiration strikes. 
-                Perfect for finishing that one stubborn day or optimizing your route before you go.
-              </p>
-            </div>
+            <span className="inline-flex items-center gap-2 px-3 py-1 bg-muted border border-border rounded-full text-xs font-medium text-muted-foreground mb-4">
+              <Wallet className="w-3.5 h-3.5" />
+              Pay as you go
+            </span>
+            <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-3">
+              Not ready to commit?
+            </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              Add credits to your wallet and use them whenever inspiration strikes. 
+              Perfect for finishing that one stubborn day or optimizing a route before you leave.
+            </p>
+          </motion.div>
 
-            <div className="bg-gradient-to-br from-muted/60 via-muted/40 to-background rounded-3xl border border-border p-8">
-              {/* Credit Actions */}
-              <div className="grid md:grid-cols-2 gap-4 mb-8">
-                <div className="group bg-background rounded-2xl p-5 border border-border hover:border-primary/30 hover:shadow-lg transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">Build one day</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Let AI fill a single day with activities tailored to you
-                      </p>
-                    </div>
-                    <span className="text-xl font-bold text-primary">$3.99</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">AI suggestions</span>
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">Time blocking</span>
-                  </div>
+          {/* Credit Actions Grid */}
+          <div className="grid sm:grid-cols-2 gap-4 mb-8">
+            {[
+              { 
+                title: 'Build one day', 
+                price: (CREDIT_COSTS.BUILD_DAY / 100).toFixed(2),
+                desc: 'AI fills a single day with activities tailored to you',
+                tags: ['AI suggestions', 'Time blocking']
+              },
+              { 
+                title: 'Build entire trip', 
+                price: (CREDIT_COSTS.BUILD_FULL_TRIP / 100).toFixed(2),
+                desc: 'Generate a complete multi-day itinerary in one go',
+                tags: ['All days filled', 'AI personalized'],
+                tip: 'For just $6 more, Monthly gives you unlimited rebuilds'
+              },
+              { 
+                title: 'Optimize route', 
+                price: (CREDIT_COSTS.ROUTE_OPTIMIZE / 100).toFixed(2),
+                desc: 'Reorder activities and calculate travel times',
+                tags: ['Smart ordering', 'Transport modes']
+              },
+              { 
+                title: 'Group budget setup', 
+                price: (CREDIT_COSTS.GROUP_BUDGET_SETUP / 100).toFixed(2),
+                desc: 'Auto-split expenses among your travel crew',
+                tags: ['Expense tracking', 'Split calculator']
+              },
+            ].map((item, i) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                className="group bg-card rounded-xl p-5 border border-border hover:border-primary/20 hover:shadow-md transition-all duration-300"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                    {item.title}
+                  </h4>
+                  <span className="text-lg font-bold text-primary">${item.price}</span>
                 </div>
-
-                <div className="group bg-background rounded-2xl p-5 border border-border hover:border-primary/30 hover:shadow-lg transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">Build entire trip</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Generate a complete multi-day itinerary in one go
-                      </p>
-                    </div>
-                    <span className="text-xl font-bold text-primary">$9.99</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">All days filled</span>
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">AI personalized</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-3 italic">
-                    💡 Tip: For just $6 more, Monthly gives you unlimited rebuilds + group tools
+                <p className="text-sm text-muted-foreground mb-3">{item.desc}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {item.tags.map(tag => (
+                    <span key={tag} className="px-2 py-0.5 text-xs bg-primary/5 text-primary/80 rounded-full">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                {item.tip && (
+                  <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border italic">
+                    💡 {item.tip}
                   </p>
-                </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
 
-                <div className="group bg-background rounded-2xl p-5 border border-border hover:border-primary/30 hover:shadow-lg transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">Optimize your route</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Reorder activities and calculate travel times
-                      </p>
-                    </div>
-                    <span className="text-xl font-bold text-primary">$1.99</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">Smart ordering</span>
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">Transport modes</span>
-                  </div>
-                </div>
-
-                <div className="group bg-background rounded-2xl p-5 border border-border hover:border-primary/30 hover:shadow-lg transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">Group budget setup</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Auto-split expenses among your travel crew
-                      </p>
-                    </div>
-                    <span className="text-xl font-bold text-primary">$2.99</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">Expense tracking</span>
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600">Split calculator</span>
-                  </div>
-                </div>
+          {/* Top Up CTA */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="bg-gradient-to-br from-muted/60 to-muted/30 rounded-2xl p-6 border border-border"
+          >
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="text-center md:text-left">
+                <h4 className="font-semibold text-foreground mb-1">Add credits to your wallet</h4>
+                <p className="text-sm text-muted-foreground">Credits never expire. Use them whenever you need.</p>
               </div>
-
-              {/* Add Credits */}
-              <div className="bg-background/50 rounded-2xl p-6 border border-dashed border-border">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="text-center sm:text-left">
-                    <p className="font-medium text-foreground">Add credits to your wallet</p>
-                    <p className="text-sm text-muted-foreground">Use them anytime. They never expire.</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {TOPUP_OPTIONS.map((option) => (
-                      <Button
-                        key={option.amount}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddCredits(option.amount)}
-                        disabled={loadingPlan === `credits-${option.amount}`}
-                      >
-                        {loadingPlan === `credits-${option.amount}` ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          `Add ${option.label}`
-                        )}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                {TOPUP_OPTIONS.map((option) => (
+                  <Button
+                    key={option.amount}
+                    variant="outline"
+                    size="sm"
+                    className="min-w-[80px]"
+                    onClick={() => handleAddCredits(option.amount)}
+                    disabled={loadingPlan === `credits-${option.amount}`}
+                  >
+                    {loadingPlan === `credits-${option.amount}` ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      `Add ${option.label}`
+                    )}
+                  </Button>
+                ))}
               </div>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Value Props */}
-      <section className="py-20 bg-gradient-to-b from-muted/50 to-background">
+      {/* Value Props - Editorial Cards */}
+      <section className="py-20 bg-gradient-to-b from-background to-muted/20">
         <div className="max-w-6xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-14"
           >
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+            <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-3">
               Every plan includes
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-muted-foreground max-w-xl mx-auto">
               Core features that make Voyance the smartest way to plan travel
             </p>
           </motion.div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               { icon: Shield, title: 'No Hidden Fees', description: 'What you see is what you pay. No surprise charges ever.' },
               { icon: Clock, title: 'Save 15+ Hours', description: 'AI handles the research so you can focus on dreaming.' },
@@ -535,42 +550,45 @@ export default function Pricing() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card rounded-2xl p-6 border border-border text-center"
+                className="bg-card rounded-xl p-5 border border-border text-center hover:shadow-md transition-shadow"
               >
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <item.icon className="h-6 w-6 text-primary" />
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <item.icon className="h-5 w-5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.description}</p>
+                <h3 className="font-semibold text-foreground mb-1.5 text-sm">{item.title}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{item.description}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* FAQs */}
-      <section className="py-20 bg-gradient-to-b from-background to-muted/30">
+      {/* FAQs - Editorial Accordion Style */}
+      <section className="py-20">
         <div className="max-w-3xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-14"
           >
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+            <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-3">
               Frequently asked questions
             </h2>
+            <p className="text-muted-foreground">
+              Everything you need to know about our plans
+            </p>
           </motion.div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {[
               {
                 question: 'What\'s included in the free plan?',
-                answer: 'One full itinerary build at full power—no blur, no withholding. After that, you can keep planning manually using our DIY skeleton mode, or upgrade to auto-build more.',
+                answer: 'One full itinerary build at full power, no blur, no withholding. After that, you can keep planning manually using our DIY skeleton mode, or upgrade to auto-build more.',
               },
               {
                 question: 'What\'s the difference between Trip Pass and Monthly?',
-                answer: 'Trip Pass unlocks one trip with unlimited rebuilds. Monthly unlocks up to five draft trips at once—plus smarter flight/hotel ranking, group budgeting, and co-editing on every trip.',
+                answer: 'Trip Pass unlocks one trip with unlimited rebuilds. Monthly unlocks up to five draft trips at once, plus smarter flight/hotel ranking, group budgeting, and co-editing on every trip.',
               },
               {
                 question: 'How do credits work?',
@@ -595,38 +613,41 @@ export default function Pricing() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.05 }}
-                className="bg-card rounded-2xl p-6 border border-border"
+                className="bg-card rounded-xl p-5 border border-border hover:border-primary/20 transition-colors"
               >
                 <h3 className="font-semibold text-foreground mb-2">{faq.question}</h3>
-                <p className="text-muted-foreground">{faq.answer}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{faq.answer}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="py-20 bg-gradient-to-b from-muted/30 to-primary/5">
-        <div className="max-w-4xl mx-auto px-4 text-center">
+      {/* Final CTA - Refined */}
+      <section className="py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-t from-primary/5 via-muted/30 to-background" />
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-primary/10 rounded-full blur-3xl" />
+        
+        <div className="relative max-w-3xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+            <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-4">
               Ready to plan smarter?
             </h2>
-            <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+            <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
               Start with your free itinerary. No credit card required.
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button asChild size="lg" className="w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button asChild size="lg" className="min-w-[160px]">
                 <Link to={ROUTES.QUIZ}>
                   Start Free
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
+              <Button asChild size="lg" variant="outline" className="min-w-[160px]">
                 <Link to={ROUTES.HOW_IT_WORKS}>
                   See How It Works
                 </Link>
