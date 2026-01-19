@@ -7,15 +7,57 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const logStep = (step: string, details?: any) => {
+const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[GET-ENTITLEMENTS] ${step}${detailsStr}`);
 };
 
-// Stripe price ID to plan ID mapping
-const PRICE_TO_PLAN: Record<string, string> = {
-  'price_1RpYVWFYxIg9jcJU4t3JVCy0': 'paid',
-  'price_1RpYWpFYxIg9jcJUPrSLmFsu': 'addon_voyagermaps',
+// Stripe price ID to plan mapping
+const PRICE_TO_PLAN: Record<string, { plan: string; type: 'subscription' | 'payment' }> = {
+  // Subscriptions
+  'price_1SrKz2FYxIg9jcJUVbrbOfFl': { plan: 'monthly', type: 'subscription' },
+  'price_1SrKz4FYxIg9jcJU8kMbZDSk': { plan: 'yearly', type: 'subscription' },
+  // Legacy prices (keep for existing customers)
+  'price_1RpYVWFYxIg9jcJU4t3JVCy0': { plan: 'monthly', type: 'subscription' },
+  'price_1RpYWpFYxIg9jcJUPrSLmFsu': { plan: 'yearly', type: 'subscription' },
+};
+
+// Plan features configuration
+const PLAN_LIMITS = {
+  free: {
+    fullBuilds: 1,
+    draftTrips: 1,
+    dayRebuilds: 0,
+    tripVersions: 1,
+    flightHotelOptimization: false,
+    groupBudgeting: false,
+    coEditCollaboration: false,
+    routeOptimization: false,
+    weatherTracker: true, // Free users can see weather
+  },
+  monthly: {
+    fullBuilds: -1, // Unlimited
+    draftTrips: 5,
+    dayRebuilds: -1,
+    tripVersions: 4,
+    flightHotelOptimization: true,
+    groupBudgeting: true,
+    coEditCollaboration: true,
+    routeOptimization: true,
+    weatherTracker: true,
+  },
+  yearly: {
+    fullBuilds: -1,
+    draftTrips: -1, // Unlimited
+    dayRebuilds: -1,
+    tripVersions: -1,
+    flightHotelOptimization: true,
+    groupBudgeting: true,
+    coEditCollaboration: true,
+    routeOptimization: true,
+    weatherTracker: true,
+    preferenceLearning: true,
+  },
 };
 
 serve(async (req) => {
@@ -23,7 +65,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseClient = createClient(
+  const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     { auth: { persistSession: false } }
@@ -37,17 +79,19 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header provided");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
     
     const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
-    // 1. Check Stripe subscription status
-    let activePlans: string[] = ['free']; // Default to free
+    // Default to free plan
+    let activePlan = 'free';
     let subscriptionEnd: string | null = null;
+    let subscriptionPriceId: string | null = null;
 
+    // Check Stripe subscription status
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (stripeKey) {
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
@@ -58,107 +102,111 @@ serve(async (req) => {
         const subscriptions = await stripe.subscriptions.list({
           customer: customerId,
           status: "active",
-          limit: 10,
+          limit: 1,
         });
 
         if (subscriptions.data.length > 0) {
-          activePlans = ['free']; // Start fresh, keep free as base
+          const sub = subscriptions.data[0];
+          subscriptionEnd = new Date(sub.current_period_end * 1000).toISOString();
+          subscriptionPriceId = sub.items.data[0].price.id;
           
-          for (const sub of subscriptions.data) {
-            subscriptionEnd = new Date(sub.current_period_end * 1000).toISOString();
-            
-            for (const item of sub.items.data) {
-              const planId = PRICE_TO_PLAN[item.price.id];
-              if (planId && !activePlans.includes(planId)) {
-                activePlans.push(planId);
-              }
+          if (subscriptionPriceId) {
+            const planInfo = PRICE_TO_PLAN[subscriptionPriceId];
+            if (planInfo) {
+              activePlan = planInfo.plan;
             }
           }
-          logStep("Active plans from Stripe", { activePlans });
+          logStep("Active subscription found", { plan: activePlan, priceId: subscriptionPriceId });
         }
       }
     }
 
-    // 2. Get plan entitlements from database
-    const { data: entitlements, error: entError } = await supabaseClient
-      .from('plan_entitlements')
-      .select('flag_id, enabled, value_number, value_json, plan_id')
-      .in('plan_id', activePlans);
+    // Get user credits
+    const { data: credits } = await supabaseAdmin
+      .from('user_credits')
+      .select('balance_cents')
+      .eq('user_id', user.id)
+      .single();
 
-    if (entError) {
-      logStep("Error fetching entitlements", { error: entError.message });
-      throw new Error("Failed to fetch entitlements");
+    // Get user usage for free tier tracking
+    const { data: usage } = await supabaseAdmin
+      .from('user_usage')
+      .select('metric_key, count, period')
+      .eq('user_id', user.id)
+      .eq('period', 'lifetime');
+
+    // Get trip purchases (Trip Passes)
+    const { data: tripPurchases } = await supabaseAdmin
+      .from('trip_purchases')
+      .select('trip_id, purchase_type, features_unlocked')
+      .eq('user_id', user.id)
+      .eq('purchase_type', 'trip_pass');
+
+    // Get draft trips count
+    const { count: draftTripsCount } = await supabaseAdmin
+      .from('trips')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('status', 'draft');
+
+    // Build usage map
+    const usageMap: Record<string, number> = {};
+    for (const u of usage || []) {
+      usageMap[u.metric_key] = u.count;
     }
 
-    // 3. Get user overrides
-    const { data: overrides } = await supabaseClient
-      .from('user_entitlement_overrides')
-      .select('flag_id, enabled, value_number, value_json, expires_at')
-      .eq('user_id', user.id);
+    // Get plan limits
+    const limits = PLAN_LIMITS[activePlan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.free;
 
-    // 4. Get current month usage
-    const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM
-    const { data: usage } = await supabaseClient
-      .from('user_usage')
-      .select('metric_key, count')
-      .eq('user_id', user.id)
-      .eq('period', currentPeriod);
+    // Build unlocked trips map (trips with Trip Pass)
+    const unlockedTrips = (tripPurchases || []).map(p => p.trip_id);
 
-    // 5. Resolve entitlements (higher plan values override lower)
-    const resolvedEntitlements: Record<string, { enabled: boolean; limit?: number; used?: number }> = {};
-    const planPriority = ['free', 'paid', 'addon_voyagermaps'];
+    // Calculate remaining free builds
+    const freeBuildsUsed = usageMap['full_builds'] || 0;
+    const freeBuildsRemaining = activePlan === 'free' 
+      ? Math.max(0, limits.fullBuilds - freeBuildsUsed)
+      : -1; // Unlimited for paid
 
-    // Sort entitlements by plan priority
-    const sortedEntitlements = (entitlements || []).sort((a, b) => {
-      return planPriority.indexOf(a.plan_id) - planPriority.indexOf(b.plan_id);
+    logStep("Resolved entitlements", { 
+      plan: activePlan, 
+      credits: credits?.balance_cents || 0,
+      draftTrips: draftTripsCount,
+      unlockedTrips: unlockedTrips.length,
     });
 
-    for (const ent of sortedEntitlements) {
-      const current = resolvedEntitlements[ent.flag_id];
-      
-      // Higher priority plan overrides
-      if (!current || ent.enabled || ent.value_number !== null) {
-        resolvedEntitlements[ent.flag_id] = {
-          enabled: ent.enabled,
-          limit: ent.value_number ?? undefined,
-        };
-      }
-    }
-
-    // Apply user overrides (highest priority)
-    for (const override of overrides || []) {
-      // Check if override has expired
-      if (override.expires_at && new Date(override.expires_at) < new Date()) {
-        continue;
-      }
-      
-      resolvedEntitlements[override.flag_id] = {
-        enabled: override.enabled,
-        limit: override.value_number ?? undefined,
-      };
-    }
-
-    // Add usage data
-    for (const u of usage || []) {
-      if (resolvedEntitlements[u.metric_key]) {
-        resolvedEntitlements[u.metric_key].used = u.count;
-      }
-    }
-
-    logStep("Resolved entitlements", { count: Object.keys(resolvedEntitlements).length });
-
-    // 6. Build response
+    // Build response
     const response = {
       user_id: user.id,
-      plans: activePlans,
-      is_paid: activePlans.includes('paid'),
-      has_addon: activePlans.includes('addon_voyagermaps'),
+      plan: activePlan,
+      is_subscribed: activePlan !== 'free',
       subscription_end: subscriptionEnd,
-      entitlements: resolvedEntitlements,
-      usage: (usage || []).reduce((acc, u) => {
-        acc[u.metric_key] = u.count;
-        return acc;
-      }, {} as Record<string, number>),
+      subscription_price_id: subscriptionPriceId,
+      
+      // Credits/wallet
+      credits_balance_cents: credits?.balance_cents || 0,
+      
+      // Usage
+      usage: usageMap,
+      draft_trips_count: draftTripsCount || 0,
+      
+      // Limits
+      limits: {
+        ...limits,
+        freeBuildsRemaining,
+        draftTripsRemaining: limits.draftTrips === -1 
+          ? -1 
+          : Math.max(0, limits.draftTrips - (draftTripsCount || 0)),
+      },
+      
+      // Trip Passes
+      unlocked_trips: unlockedTrips,
+      
+      // Feature flags (quick boolean checks)
+      can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0,
+      can_use_flight_hotel_optimization: limits.flightHotelOptimization,
+      can_use_group_budgeting: limits.groupBudgeting,
+      can_co_edit: limits.coEditCollaboration,
+      can_optimize_routes: limits.routeOptimization,
     };
 
     return new Response(JSON.stringify(response), {
