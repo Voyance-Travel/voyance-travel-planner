@@ -162,10 +162,9 @@ function applyFilters(flights: FlightOption[], filters: FlightFiltersState): Fli
     result = result.filter((f) => filters.airlines.includes(f.airline));
   }
 
-  result = result.filter((f) => {
-    const basePrice = typeof f.price === 'number' ? f.price : f.price.amount;
-    return basePrice <= filters.maxPrice;
-  });
+  // NOTE: Budget should *guide* not block. We no longer filter by maxPrice here.
+  // Budget is used for sorting preference and visual warnings only.
+  // Users can see all options and make their own trade-offs.
 
   if (filters.bagsIncluded) {
     result = result.filter((f) => !!f.baggageIncluded?.checked);
@@ -186,7 +185,7 @@ function applyFilters(flights: FlightOption[], filters: FlightFiltersState): Fli
   // Duration
   result = result.filter((f) => f.duration <= filters.maxDuration);
 
-  // Sort
+  // Sort - budget influences sort order but doesn't exclude options
   result.sort((a, b) => {
     const priceA = typeof a.price === 'number' ? a.price : a.price.amount;
     const priceB = typeof b.price === 'number' ? b.price : b.price.amount;
@@ -300,17 +299,19 @@ export default function PlannerFlightEnhanced() {
   }, [destination]);
 
   // Initialize filters with user preferences when loaded
+  // NOTE: Budget guides sorting preference but does NOT filter out options.
+  // Users should see all flights and make their own trade-off decisions.
   const getInitialFilters = (): FlightFiltersState => {
     const timeRange = getTimeRangeFromPreference(userPrefs?.flightTimePreference);
     return {
       directOnly: userPrefs?.directFlightsOnly ?? false,
       airlines: userPrefs?.preferredAirlines ?? [],
-      maxPrice: flightBudget || 5000,  // Use budget if set
+      maxPrice: 99999, // No price filtering - budget is for guidance only
       departureTimeRange: timeRange,
       arrivalTimeRange: [0, 24],
       maxDuration: 1440,
       bagsIncluded: false,
-      sortBy: flightBudget ? 'price' : 'recommended', // Sort by price if on budget
+      sortBy: flightBudget ? 'price' : 'recommended', // Sort by price if budget-conscious
     };
   };
 
@@ -324,10 +325,11 @@ export default function PlannerFlightEnhanced() {
     }
   }
 
+  // NOTE: maxPrice set high - budget is for visual warnings/sorting, not filtering
   const [outboundFilters, setOutboundFilters] = useState<FlightFiltersState>({
     directOnly: false,
     airlines: [],
-    maxPrice: flightBudget || 5000,
+    maxPrice: 99999, // No price filtering
     departureTimeRange: [0, 24],
     arrivalTimeRange: [0, 24],
     maxDuration: 1440,
@@ -346,10 +348,11 @@ export default function PlannerFlightEnhanced() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefsLoaded, userPrefs]);
 
+  // NOTE: maxPrice set high - budget is for visual warnings/sorting, not filtering
   const [returnFilters, setReturnFilters] = useState<FlightFiltersState>({
     directOnly: false,
     airlines: [],
-    maxPrice: flightBudget || 5000,
+    maxPrice: 99999, // No price filtering
     departureTimeRange: [0, 24],
     arrivalTimeRange: [0, 24],
     maxDuration: 1440,
