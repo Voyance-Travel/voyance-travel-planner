@@ -55,8 +55,80 @@ export default function TripDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
+
+  // Sync local trip to database before generating itinerary
+  const syncTripToDatabase = async (localTrip: Trip): Promise<boolean> => {
+    if (!user?.id) {
+      console.log('[TripDetail] Cannot sync - no authenticated user');
+      return false;
+    }
+
+    try {
+      setIsSyncingTrip(true);
+      console.log('[TripDetail] Syncing local trip to database:', localTrip.id);
+
+      const tripData = {
+        id: localTrip.id,
+        user_id: user.id,
+        name: localTrip.name,
+        destination: localTrip.destination,
+        destination_country: localTrip.destination_country,
+        start_date: localTrip.start_date,
+        end_date: localTrip.end_date,
+        status: localTrip.status || 'draft',
+        trip_type: localTrip.trip_type,
+        travelers: localTrip.travelers || 1,
+        origin_city: localTrip.origin_city,
+        budget_tier: localTrip.budget_tier,
+        flight_selection: localTrip.flight_selection,
+        hotel_selection: localTrip.hotel_selection,
+        itinerary_data: localTrip.itinerary_data,
+        metadata: localTrip.metadata,
+      };
+
+      const { data, error: upsertError } = await supabase
+        .from('trips')
+        .upsert(tripData as any, { onConflict: 'id' })
+        .select()
+        .single();
+
+      if (upsertError) {
+        console.error('[TripDetail] Failed to sync trip:', upsertError);
+        return false;
+      }
+
+      console.log('[TripDetail] Trip synced successfully:', data.id);
+      // Update local state with synced trip
+      setTrip(data);
+      return true;
+    } catch (err) {
+      console.error('[TripDetail] Sync error:', err);
+      return false;
+    } finally {
+      setIsSyncingTrip(false);
+    }
+  };
+
+  // Handle clicking "Generate Itinerary" - ensure trip is in DB first
+  const handleShowGenerator = async () => {
+    if (!trip) return;
+
+    // Check if trip is only in localStorage (user_id is 'local' or missing)
+    const isLocalOnly = trip.user_id === 'local' || !trip.user_id;
+
+    if (isLocalOnly) {
+      const synced = await syncTripToDatabase(trip);
+      if (!synced) {
+        console.error('[TripDetail] Could not sync trip to database');
+        // Still try to show generator - might work if user is logged in
+      }
+    }
+
+    setShowGenerator(true);
+  };
 
   const loadLocalTrip = (id: string): Trip | null => {
     try {
@@ -483,9 +555,18 @@ export default function TripDetail() {
                     for {trip.destination} based on your preferences.
                   </p>
                   
-                  <Button size="lg" onClick={() => setShowGenerator(true)} className="gap-2 shadow-lg">
-                    <Sparkles className="h-5 w-5" />
-                    Generate Itinerary
+                  <Button 
+                    size="lg" 
+                    onClick={handleShowGenerator} 
+                    disabled={isSyncingTrip}
+                    className="gap-2 shadow-lg"
+                  >
+                    {isSyncingTrip ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-5 w-5" />
+                    )}
+                    {isSyncingTrip ? 'Preparing...' : 'Generate Itinerary'}
                   </Button>
                 </div>
               </div>
