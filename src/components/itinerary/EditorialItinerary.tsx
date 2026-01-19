@@ -193,9 +193,9 @@ function formatTime(time: string | undefined): string {
   return `${displayHours}:${minutes} ${period}`;
 }
 
-function formatCurrency(amount: number | null | undefined, showEstimateLabel = true): string {
+function formatCurrency(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) {
-    return showEstimateLabel ? 'Estimate needed' : '—';
+    return '—'; // Should never happen with smart estimation
   }
   if (amount === 0) {
     return 'Free';
@@ -207,7 +207,79 @@ function formatCurrency(amount: number | null | undefined, showEstimateLabel = t
   }).format(amount);
 }
 
-function getActivityCost(activity: EditorialActivity): number | null {
+// Smart cost estimation by category when no explicit cost is provided
+// Base costs are per-person, will be multiplied by travelers
+const CATEGORY_COST_ESTIMATES: Record<string, { base: number; budgetMod: Record<string, number> }> = {
+  // Dining
+  breakfast: { base: 18, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.8, splurge: 2.5 } },
+  brunch: { base: 28, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.8, splurge: 2.5 } },
+  lunch: { base: 22, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.8, splurge: 2.5 } },
+  dinner: { base: 45, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.8, splurge: 2.5 } },
+  dining: { base: 35, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.6, splurge: 2.2 } },
+  coffee: { base: 8, budgetMod: { budget: 0.7, moderate: 1, luxury: 1.3, splurge: 1.5 } },
+  cafe: { base: 12, budgetMod: { budget: 0.7, moderate: 1, luxury: 1.4, splurge: 1.8 } },
+  // Activities
+  museum: { base: 20, budgetMod: { budget: 0.8, moderate: 1, luxury: 1.2, splurge: 1.5 } },
+  cultural: { base: 25, budgetMod: { budget: 0.7, moderate: 1, luxury: 1.3, splurge: 1.6 } },
+  sightseeing: { base: 15, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.4, splurge: 1.8 } },
+  tour: { base: 50, budgetMod: { budget: 0.5, moderate: 1, luxury: 1.6, splurge: 2.2 } },
+  activity: { base: 30, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.5, splurge: 2.0 } },
+  adventure: { base: 75, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.4, splurge: 1.8 } },
+  // Relaxation
+  spa: { base: 100, budgetMod: { budget: 0.5, moderate: 1, luxury: 1.8, splurge: 3.0 } },
+  relaxation: { base: 40, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.6, splurge: 2.5 } },
+  beach: { base: 10, budgetMod: { budget: 0.8, moderate: 1, luxury: 1.5, splurge: 2.0 } },
+  // Shopping/Entertainment
+  shopping: { base: 50, budgetMod: { budget: 0.4, moderate: 1, luxury: 2.0, splurge: 3.5 } },
+  entertainment: { base: 40, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.5, splurge: 2.0 } },
+  nightlife: { base: 60, budgetMod: { budget: 0.5, moderate: 1, luxury: 1.8, splurge: 2.5 } },
+  // Transport/Other
+  transportation: { base: 25, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.5, splurge: 2.0 } },
+  transport: { base: 20, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.5, splurge: 2.0 } },
+  accommodation: { base: 0, budgetMod: { budget: 1, moderate: 1, luxury: 1, splurge: 1 } }, // Usually bundled
+};
+
+function estimateCostByCategory(
+  category: string | undefined,
+  travelers: number = 1,
+  budgetTier: string = 'moderate'
+): number {
+  const cat = (category || 'activity').toLowerCase();
+  
+  // Find matching category (check for partial matches too)
+  let estimate = CATEGORY_COST_ESTIMATES[cat];
+  if (!estimate) {
+    // Check for partial matches in title keywords
+    for (const [key, val] of Object.entries(CATEGORY_COST_ESTIMATES)) {
+      if (cat.includes(key) || key.includes(cat)) {
+        estimate = val;
+        break;
+      }
+    }
+  }
+  
+  // Default fallback
+  if (!estimate) {
+    estimate = { base: 25, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.5, splurge: 2.0 } };
+  }
+  
+  const budgetMultiplier = estimate.budgetMod[budgetTier.toLowerCase()] || 1;
+  const baseCost = estimate.base * budgetMultiplier;
+  
+  // Add 20% for tip/tax on dining categories
+  const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'coffee', 'cafe'].includes(cat);
+  const withTax = isDining ? baseCost * 1.2 : baseCost;
+  
+  // Multiply by travelers and round to nearest $5
+  const total = withTax * travelers;
+  return Math.round(total / 5) * 5;
+}
+
+function getActivityCost(
+  activity: EditorialActivity,
+  travelers: number = 1,
+  budgetTier: string = 'moderate'
+): number {
   // Check cost.amount first, then estimatedCost.amount as fallback
   if (activity.cost?.amount !== undefined && activity.cost.amount >= 0) {
     return activity.cost.amount;
@@ -215,7 +287,10 @@ function getActivityCost(activity: EditorialActivity): number | null {
   if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount >= 0) {
     return activity.estimatedCost.amount;
   }
-  return null;
+  
+  // Smart estimation based on category, travelers, and budget
+  const category = activity.category || activity.type || 'activity';
+  return estimateCostByCategory(category, travelers, budgetTier);
 }
 
 function getActivityType(activity: EditorialActivity): string {
@@ -236,8 +311,8 @@ function getActivityPhoto(activity: EditorialActivity): string | null {
   return null;
 }
 
-function getDayTotalCost(activities: EditorialActivity[]): number {
-  return activities.reduce((sum, act) => sum + (getActivityCost(act) ?? 0), 0);
+function getDayTotalCost(activities: EditorialActivity[], travelers: number = 1, budgetTier: string = 'moderate'): number {
+  return activities.reduce((sum, act) => sum + getActivityCost(act, travelers, budgetTier), 0);
 }
 
 // =============================================================================
@@ -272,8 +347,8 @@ export function EditorialItinerary({
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
 
-  // Calculate totals
-  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities), 0);
+  // Calculate totals with smart estimation
+  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier), 0);
   const flightCost = (flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0);
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   const totalCost = totalActivityCost + flightCost + hotelCost;
@@ -616,6 +691,8 @@ export function EditorialItinerary({
                 key={day.dayNumber}
                 day={day}
                 dayIndex={dayIndex}
+                travelers={travelers}
+                budgetTier={budgetTier}
                 isExpanded={expandedDays.includes(day.dayNumber)}
                 isRegenerating={regeneratingDay === day.dayNumber}
                 isEditable={isEditable}
@@ -934,6 +1011,8 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
 interface DayCardProps {
   day: EditorialDay;
   dayIndex: number;
+  travelers: number;
+  budgetTier?: string;
   isExpanded: boolean;
   isRegenerating: boolean;
   isEditable: boolean;
@@ -949,6 +1028,8 @@ interface DayCardProps {
 function DayCard({
   day,
   dayIndex,
+  travelers,
+  budgetTier,
   isExpanded,
   isRegenerating,
   isEditable,
@@ -961,7 +1042,7 @@ function DayCard({
   onAddActivity,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = getDayTotalCost(day.activities);
+  const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
 
   return (
     <div className="border border-border bg-card overflow-hidden">
@@ -1053,6 +1134,8 @@ function DayCard({
                   totalActivities={day.activities.length}
                   isLast={activityIndex === day.activities.length - 1}
                   isEditable={isEditable}
+                  travelers={travelers}
+                  budgetTier={budgetTier}
                   onLock={onActivityLock}
                   onMove={onActivityMove}
                   onRemove={onActivityRemove}
@@ -1098,6 +1181,8 @@ interface ActivityRowProps {
   totalActivities: number;
   isLast: boolean;
   isEditable: boolean;
+  travelers: number;
+  budgetTier?: string;
   onLock: (dayIndex: number, activityId: string) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onRemove: (dayIndex: number, activityId: string) => void;
@@ -1110,6 +1195,8 @@ function ActivityRow({
   totalActivities,
   isLast,
   isEditable,
+  travelers,
+  budgetTier,
   onLock,
   onMove,
   onRemove,
@@ -1117,7 +1204,7 @@ function ActivityRow({
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
   const rating = getActivityRating(activity);
-  const cost = getActivityCost(activity);
+  const cost = getActivityCost(activity, travelers, budgetTier);
   const photo = getActivityPhoto(activity);
   const showPhoto = activityType !== 'transportation' && activityType !== 'transport' && photo;
   const time = activity.startTime || activity.time;
