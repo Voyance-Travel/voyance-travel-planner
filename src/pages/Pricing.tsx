@@ -7,7 +7,7 @@ import { Check, ArrowRight, Loader2, Sparkles, MapPin, Calendar, Users, Route, E
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
-import { PLAN_FEATURES, STRIPE_PRODUCTS, TOPUP_PRODUCTS } from '@/config/pricing';
+import { PLAN_FEATURES, STRIPE_PRODUCTS, TOPUP_PRODUCTS, TOPUP_MINIMUM } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
@@ -364,11 +364,11 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="text-center mb-10"
           >
-            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">Need a little more?</h2>
-            <p className="text-muted-foreground">Top up your free plan without committing to a subscription.</p>
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">Pay as you go</h2>
+            <p className="text-muted-foreground">Top up your account without a subscription. Minimum add: ${TOPUP_MINIMUM}.</p>
           </motion.div>
 
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {Object.values(TOPUP_PRODUCTS).map((item, i) => (
               <motion.div
                 key={item.name}
@@ -378,8 +378,8 @@ export default function Pricing() {
                 transition={{ delay: i * 0.05 }}
                 className="bg-card rounded-xl border border-border p-5 text-center"
               >
-                <div className="text-lg font-medium text-foreground mb-1">{item.name}</div>
-                <div className="text-2xl font-bold text-foreground mb-2">${item.price}</div>
+                <div className="text-base font-medium text-foreground mb-1">{item.name}</div>
+                <div className="text-2xl font-bold text-foreground mb-2">${item.price.toFixed(2)}</div>
                 <p className="text-xs text-muted-foreground">{item.description}</p>
               </motion.div>
             ))}
@@ -391,7 +391,7 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="text-center text-xs text-muted-foreground mt-6"
           >
-            Top-ups never expire and can be used on any trip.
+            Credits never expire and can be used on any trip.
           </motion.p>
         </div>
       </section>
