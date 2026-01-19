@@ -1761,7 +1761,162 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      user_preferences_safe: {
+        Row: {
+          accessibility_needs: string[] | null
+          accommodation_style: string | null
+          activity_level: string | null
+          activity_weights: Json | null
+          airport_radius_miles: number | null
+          budget_tier: string | null
+          climate_preferences: string[] | null
+          completed_at: string | null
+          created_at: string | null
+          daytime_bias: string | null
+          dietary_restrictions: string[] | null
+          dining_style: string | null
+          direct_flights_only: boolean | null
+          downtime_ratio: string | null
+          eco_friendly: boolean | null
+          email_notifications: boolean | null
+          flight_preferences: Json | null
+          flight_time_preference: string | null
+          food_dislikes: string[] | null
+          food_likes: string[] | null
+          home_airport: string | null
+          hotel_style: string | null
+          hotel_vs_flight: string | null
+          id: string | null
+          interests: string[] | null
+          loyalty_programs: string[] | null
+          marketing_emails: boolean | null
+          max_activities_per_day: number | null
+          mobility_level: string | null
+          mobility_needs: string | null
+          preferred_airlines: string[] | null
+          preferred_downtime_minutes: number | null
+          preferred_regions: string[] | null
+          price_alerts: boolean | null
+          push_notifications: boolean | null
+          quiz_completed: boolean | null
+          quiz_version: string | null
+          schedule_flexibility: string | null
+          seat_preference: string | null
+          travel_companions: string[] | null
+          travel_frequency: string | null
+          travel_pace: string | null
+          travel_style: string | null
+          traveler_type: string | null
+          trip_duration: string | null
+          trip_reminders: boolean | null
+          updated_at: string | null
+          user_id: string | null
+          weather_preferences: string[] | null
+        }
+        Insert: {
+          accessibility_needs?: string[] | null
+          accommodation_style?: string | null
+          activity_level?: string | null
+          activity_weights?: Json | null
+          airport_radius_miles?: number | null
+          budget_tier?: string | null
+          climate_preferences?: string[] | null
+          completed_at?: string | null
+          created_at?: string | null
+          daytime_bias?: string | null
+          dietary_restrictions?: string[] | null
+          dining_style?: string | null
+          direct_flights_only?: boolean | null
+          downtime_ratio?: string | null
+          eco_friendly?: boolean | null
+          email_notifications?: boolean | null
+          flight_preferences?: Json | null
+          flight_time_preference?: string | null
+          food_dislikes?: string[] | null
+          food_likes?: string[] | null
+          home_airport?: string | null
+          hotel_style?: string | null
+          hotel_vs_flight?: string | null
+          id?: string | null
+          interests?: string[] | null
+          loyalty_programs?: string[] | null
+          marketing_emails?: boolean | null
+          max_activities_per_day?: number | null
+          mobility_level?: string | null
+          mobility_needs?: string | null
+          preferred_airlines?: string[] | null
+          preferred_downtime_minutes?: number | null
+          preferred_regions?: string[] | null
+          price_alerts?: boolean | null
+          push_notifications?: boolean | null
+          quiz_completed?: boolean | null
+          quiz_version?: string | null
+          schedule_flexibility?: string | null
+          seat_preference?: string | null
+          travel_companions?: string[] | null
+          travel_frequency?: string | null
+          travel_pace?: string | null
+          travel_style?: string | null
+          traveler_type?: string | null
+          trip_duration?: string | null
+          trip_reminders?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+          weather_preferences?: string[] | null
+        }
+        Update: {
+          accessibility_needs?: string[] | null
+          accommodation_style?: string | null
+          activity_level?: string | null
+          activity_weights?: Json | null
+          airport_radius_miles?: number | null
+          budget_tier?: string | null
+          climate_preferences?: string[] | null
+          completed_at?: string | null
+          created_at?: string | null
+          daytime_bias?: string | null
+          dietary_restrictions?: string[] | null
+          dining_style?: string | null
+          direct_flights_only?: boolean | null
+          downtime_ratio?: string | null
+          eco_friendly?: boolean | null
+          email_notifications?: boolean | null
+          flight_preferences?: Json | null
+          flight_time_preference?: string | null
+          food_dislikes?: string[] | null
+          food_likes?: string[] | null
+          home_airport?: string | null
+          hotel_style?: string | null
+          hotel_vs_flight?: string | null
+          id?: string | null
+          interests?: string[] | null
+          loyalty_programs?: string[] | null
+          marketing_emails?: boolean | null
+          max_activities_per_day?: number | null
+          mobility_level?: string | null
+          mobility_needs?: string | null
+          preferred_airlines?: string[] | null
+          preferred_downtime_minutes?: number | null
+          preferred_regions?: string[] | null
+          price_alerts?: boolean | null
+          push_notifications?: boolean | null
+          quiz_completed?: boolean | null
+          quiz_version?: string | null
+          schedule_flexibility?: string | null
+          seat_preference?: string | null
+          travel_companions?: string[] | null
+          travel_frequency?: string | null
+          travel_pace?: string | null
+          travel_style?: string | null
+          traveler_type?: string | null
+          trip_duration?: string | null
+          trip_reminders?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+          weather_preferences?: string[] | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
