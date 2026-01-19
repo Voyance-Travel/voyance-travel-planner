@@ -103,14 +103,27 @@ export interface TravelDNAPayload {
  * Maps frontend quiz question IDs to backend database columns
  */
 const QUIZ_FIELD_MAP: Record<string, keyof UserPreferencesPayload> = {
-  // Current quiz fields
-  'style': 'travel_style',
+  // ==== QUIZ.TSX QUESTION IDS (MUST MATCH EXACTLY) ====
+  'traveler_type': 'traveler_type',
+  'travel_vibes': 'travel_vibes',
+  'trip_frequency': 'travel_frequency',
+  'trip_duration': 'trip_duration',
   'budget': 'budget_tier',
   'pace': 'travel_pace',
+  'planning_style': 'planning_preference',
+  'companions': 'travel_companions',
+  'group_size': 'preferred_group_size',
   'interests': 'interests',
-  'accommodation': 'accommodation_style',
+  'hotel_style': 'hotel_style',
+  'hotel_amenities': 'hotel_style', // Maps to same field as preference
+  'dining_style': 'dining_style',
+  'dietary_restrictions': 'dietary_restrictions',
+  'weather_preference': 'climate_preferences', // CRITICAL: climate prefs
+  // flight_preferences is multi-select, handled specially in mapQuizAnswersToPreferences
   
-  // Extended quiz fields (for future expansion)
+  // ==== LEGACY/ALTERNATE MAPPINGS ====
+  'style': 'travel_style',
+  'accommodation': 'accommodation_style',
   'travelerType': 'traveler_type',
   'travelVibes': 'travel_vibes',
   'emotionalDrivers': 'emotional_drivers',
@@ -296,6 +309,25 @@ export function mapQuizAnswersToPreferences(
         (preferences as Record<string, unknown>)[dbField] = parseInt(value, 10) || null;
       } else {
         (preferences as Record<string, unknown>)[dbField] = value;
+      }
+    }
+    
+    // Handle flight_preferences multi-select specially
+    // Extract individual preferences from the multi-select
+    if (questionId === 'flight_preferences' && Array.isArray(value)) {
+      // Check for specific preferences in the array
+      if (value.includes('direct')) {
+        preferences.direct_flights_only = true;
+      }
+      if (value.includes('window')) {
+        preferences.seat_preference = 'window';
+      } else if (value.includes('aisle')) {
+        preferences.seat_preference = 'aisle';
+      }
+      if (value.includes('morning')) {
+        preferences.flight_time_preference = 'morning';
+      } else if (value.includes('evening')) {
+        preferences.flight_time_preference = 'evening';
       }
     }
   }
