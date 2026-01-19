@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus } from 'lucide-react';
@@ -22,6 +22,14 @@ import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLink
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+// Types for structured location data
+interface LocationSelection {
+  display: string;        // What user sees: "Paris" or "Atlanta (ATL)"
+  cityName: string;       // Clean city name: "Paris", "Atlanta"
+  airportCodes?: string[]; // All airport codes if metro area selected
+  isMetroArea?: boolean;
+}
+
 // Debounce hook for search
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -40,7 +48,7 @@ function AirportAutocomplete({
   icon: Icon = Plane,
 }: {
   value: string;
-  onChange: (value: string, metroInfo?: { name: string; codes: string[] }) => void;
+  onChange: (selection: LocationSelection) => void;
   placeholder: string;
   icon?: typeof Plane;
 }) {
@@ -77,16 +85,27 @@ function AirportAutocomplete({
 
   const handleSelectMetro = () => {
     if (!metroInfo) return;
-    const display = `${metroInfo.name} (All airports)`;
-    setInputValue(display);
-    onChange(display, metroInfo);
+    // Show just the city name in UI, store codes separately
+    setInputValue(metroInfo.name);
+    onChange({
+      display: metroInfo.name,
+      cityName: metroInfo.name,
+      airportCodes: metroInfo.codes,
+      isMetroArea: true,
+    });
     setIsOpen(false);
   };
 
   const handleSelect = (airport: Airport) => {
-    const display = formatAirportDisplay(airport);
+    // Show city name for destination, show city (CODE) for origin
+    const display = `${airport.city} (${airport.code})`;
     setInputValue(display);
-    onChange(display);
+    onChange({
+      display,
+      cityName: airport.city,
+      airportCodes: [airport.code],
+      isMetroArea: false,
+    });
     setIsOpen(false);
   };
 
@@ -101,8 +120,17 @@ function AirportAutocomplete({
         placeholder={placeholder}
         value={inputValue}
         onChange={(e) => {
-          setInputValue(e.target.value);
-          onChange(e.target.value);
+          const val = e.target.value;
+          setInputValue(val);
+          // Only call onChange with partial data when typing (for incremental save)
+          if (val.length > 0) {
+            onChange({
+              display: val,
+              cityName: val,
+              airportCodes: undefined,
+              isMetroArea: false,
+            });
+          }
           setIsOpen(true);
         }}
         onFocus={() => {
@@ -195,8 +223,17 @@ export default function Start() {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const [origin, setOrigin] = useState(plannerState.basics.originCity || '');
-  const [destination, setDestination] = useState(plannerState.basics.destination || '');
+  // Structured location state - stores both display and data
+  const [originSelection, setOriginSelection] = useState<LocationSelection>({
+    display: plannerState.basics.originCity || '',
+    cityName: plannerState.basics.originCity || '',
+    airportCodes: undefined,
+  });
+  const [destinationSelection, setDestinationSelection] = useState<LocationSelection>({
+    display: plannerState.basics.destination || '',
+    cityName: plannerState.basics.destination || '',
+    airportCodes: undefined,
+  });
   const [startDate, setStartDate] = useState<Date | undefined>(
     plannerState.basics.startDate ? new Date(plannerState.basics.startDate) : undefined
   );
@@ -208,12 +245,65 @@ export default function Start() {
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const today = startOfToday();
 
-  useEffect(() => {
-    if (plannerState.basics.destination && plannerState.basics.destination !== destination) {
-      setDestination(plannerState.basics.destination);
+  // Incremental save - debounced to avoid too many writes
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const saveIncrementally = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
-    if (plannerState.basics.originCity && plannerState.basics.originCity !== origin) {
-      setOrigin(plannerState.basics.originCity);
+    
+    saveTimeoutRef.current = setTimeout(async () => {
+      // Only save if we have minimal data
+      if (destinationSelection.cityName && user) {
+        const basics = {
+          destination: destinationSelection.cityName, // Clean city name for UX
+          originCity: originSelection.cityName,
+          startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
+          endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+          travelers,
+          tripType: tripType as 'solo' | 'couple' | 'family' | 'group',
+          budgetTier: 'moderate',
+        };
+        setBasics(basics);
+        
+        // Save to database incrementally
+        try {
+          await saveTrip();
+          console.log('[Start] Incremental save completed');
+        } catch (err) {
+          console.error('[Start] Incremental save failed:', err);
+        }
+      }
+    }, 1500); // Debounce 1.5 seconds
+  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, user, setBasics, saveTrip]);
+
+  // Trigger incremental save when data changes
+  useEffect(() => {
+    if (destinationSelection.cityName) {
+      saveIncrementally();
+    }
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, saveIncrementally]);
+
+  useEffect(() => {
+    if (plannerState.basics.destination && plannerState.basics.destination !== destinationSelection.cityName) {
+      setDestinationSelection({
+        display: plannerState.basics.destination,
+        cityName: plannerState.basics.destination,
+        airportCodes: undefined,
+      });
+    }
+    if (plannerState.basics.originCity && plannerState.basics.originCity !== originSelection.cityName) {
+      setOriginSelection({
+        display: plannerState.basics.originCity,
+        cityName: plannerState.basics.originCity,
+        airportCodes: undefined,
+      });
     }
     if (plannerState.basics.startDate) {
       const contextDate = new Date(plannerState.basics.startDate);
@@ -234,17 +324,18 @@ export default function Start() {
   }, [plannerState.basics]);
 
   const handleStart = async () => {
-    if (!destination || !startDate || !endDate) return;
+    if (!destinationSelection.cityName || !startDate || !endDate) return;
 
     const start = format(startDate, 'yyyy-MM-dd');
     const end = format(endDate, 'yyyy-MM-dd');
 
+    // Store clean city name for UX, airport codes in metadata for API calls
     setBasics({
-      destination,
+      destination: destinationSelection.cityName, // Clean name: "Paris" not "Paris (CDG)"
       startDate: start,
       endDate: end,
       travelers,
-      originCity: origin,
+      originCity: originSelection.cityName,
       budgetTier: 'moderate',
     });
 
@@ -253,6 +344,22 @@ export default function Start() {
       const tripId = await saveTrip();
       if (tripId) {
         console.log('[Start] Trip saved before navigation:', tripId);
+        
+        // Store airport codes in trip metadata for flight search
+        if (destinationSelection.airportCodes || originSelection.airportCodes) {
+          try {
+            await supabase.from('trips').update({
+              metadata: {
+                destinationAirportCodes: destinationSelection.airportCodes,
+                originAirportCodes: originSelection.airportCodes,
+                isDestinationMetro: destinationSelection.isMetroArea,
+                isOriginMetro: originSelection.isMetroArea,
+              },
+            }).eq('id', tripId);
+          } catch (err) {
+            console.error('[Start] Error saving airport codes:', err);
+          }
+        }
         
         // Save linked guests as collaborators if we have a trip ID
         if (linkedGuests.length > 0) {
@@ -277,8 +384,15 @@ export default function Start() {
     }
 
     const params = new URLSearchParams();
-    params.set('destination', destination);
-    if (origin) params.set('origin', origin);
+    params.set('destination', destinationSelection.cityName);
+    if (originSelection.cityName) params.set('origin', originSelection.cityName);
+    // Also pass airport codes for flight search
+    if (destinationSelection.airportCodes) {
+      params.set('destAirports', destinationSelection.airportCodes.join(','));
+    }
+    if (originSelection.airportCodes) {
+      params.set('originAirports', originSelection.airportCodes.join(','));
+    }
     params.set('startDate', start);
     params.set('endDate', end);
     params.set('travelers', String(travelers));
@@ -298,7 +412,7 @@ export default function Start() {
     setLinkedGuests(guests);
   };
 
-  const isFormValid = destination && startDate && endDate;
+  const isFormValid = destinationSelection.cityName && startDate && endDate;
 
 
   return (
@@ -364,8 +478,8 @@ export default function Start() {
                   Departing from
                 </label>
                 <AirportAutocomplete
-                  value={origin}
-                  onChange={setOrigin}
+                  value={originSelection.display}
+                  onChange={setOriginSelection}
                   placeholder="Your city or airport"
                   icon={Plane}
                 />
@@ -377,8 +491,8 @@ export default function Start() {
                   Destination
                 </label>
                 <AirportAutocomplete
-                  value={destination}
-                  onChange={setDestination}
+                  value={destinationSelection.display}
+                  onChange={setDestinationSelection}
                   placeholder="Where do you want to go?"
                   icon={MapPin}
                 />
@@ -558,7 +672,12 @@ export default function Start() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                onClick={() => setDestination(`${dest.name}, ${dest.country}`)}
+                onClick={() => setDestinationSelection({
+                  display: `${dest.name}, ${dest.country}`,
+                  cityName: dest.name,
+                  airportCodes: undefined,
+                  isMetroArea: false,
+                })}
                 className="group relative aspect-[4/5] rounded-xl overflow-hidden"
               >
                 <img
