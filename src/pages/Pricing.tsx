@@ -21,6 +21,17 @@ interface CheckoutConfig {
   returnPath: string;
 }
 
+// Helper component for table cell rendering
+function TableCellContent({ value, highlight }: { value: string; highlight?: boolean }) {
+  if (value === '✓') {
+    return <Check className={`w-4 h-4 mx-auto ${highlight ? 'text-primary' : 'text-green-600'}`} />;
+  }
+  if (value === '—') {
+    return <span className="text-muted-foreground/50">—</span>;
+  }
+  return <span className={highlight ? 'text-foreground font-medium' : 'text-muted-foreground'}>{value}</span>;
+}
+
 export default function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutConfig, setCheckoutConfig] = useState<CheckoutConfig | null>(null);
@@ -109,7 +120,7 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed"
           >
-            Try Voyance for free. Upgrade when you're ready to finish.
+            Try Voyance for free. Upgrade when you want more.
           </motion.p>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -117,7 +128,7 @@ export default function Pricing() {
             transition={{ delay: 0.3 }}
             className="text-sm text-muted-foreground/80 max-w-lg mx-auto mt-4"
           >
-            Voyance isn't a chatbot — it's a trip engine: routes, budgets, versions, and one-tap refinements that stay organized as you change your mind.
+            Routes, budgets, versions, and one-tap refinements — everything stays organized as you explore your options.
           </motion.p>
         </div>
       </section>
@@ -363,19 +374,19 @@ export default function Pricing() {
             className="text-center mb-10"
           >
             <h2 className="text-2xl font-serif font-bold text-foreground mb-3">
-              Free helps you start. Paid helps you finish.
+              More tools when you need them.
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              When you upgrade, Voyance becomes your planning workspace:
+              Upgraded plans unlock a full planning workspace:
             </p>
           </motion.div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { icon: Wallet, title: 'Budget Tracking', desc: 'Know the trip cost as you refine' },
-              { icon: Route, title: 'Route + Map Layer', desc: 'Keep your days efficient, not zig-zagging' },
-              { icon: Layers, title: 'Trip Versions', desc: 'Compare options without losing progress' },
-              { icon: Zap, title: 'Unlimited Refinements', desc: 'Polish until it\'s exactly you' },
+              { icon: Wallet, title: 'Budget Tracking', desc: 'See trip cost as you refine' },
+              { icon: Route, title: 'Route + Map Layer', desc: 'Efficient days, less backtracking' },
+              { icon: Layers, title: 'Trip Versions', desc: 'Compare options side-by-side' },
+              { icon: Zap, title: 'Unlimited Refinements', desc: 'Tweak until it feels right' },
             ].map((item, i) => (
               <motion.div
                 key={item.title}
@@ -413,35 +424,52 @@ export default function Pricing() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="text-2xl font-serif font-bold text-foreground text-center mb-8"
+            className="text-2xl font-serif font-bold text-foreground text-center mb-3"
           >
-            Compare plans at a glance
+            Plans at a glance
           </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.05 }}
+            className="text-muted-foreground text-center mb-10 text-sm"
+          >
+            Find what fits your planning style.
+          </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="overflow-x-auto"
+            className="overflow-x-auto rounded-xl border border-border bg-card"
           >
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Feature</th>
-                  <th className="text-center py-3 px-4 font-medium text-foreground">Free</th>
-                  <th className="text-center py-3 px-4 font-medium text-foreground">Trip Pass</th>
-                  <th className="text-center py-3 px-4 font-medium text-foreground bg-primary/5 rounded-t-lg">Monthly</th>
-                  <th className="text-center py-3 px-4 font-medium text-foreground">Yearly</th>
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="text-left py-4 px-5 font-medium text-muted-foreground w-[200px]">Feature</th>
+                  <th className="text-center py-4 px-4 font-semibold text-foreground">Free</th>
+                  <th className="text-center py-4 px-4 font-semibold text-foreground">Trip Pass</th>
+                  <th className="text-center py-4 px-4 font-semibold text-primary-foreground bg-primary">Monthly</th>
+                  <th className="text-center py-4 px-4 font-semibold text-foreground">Yearly</th>
                 </tr>
               </thead>
               <tbody>
                 {COMPARISON_TABLE.rows.map((row, i) => (
-                  <tr key={row.feature} className="border-b border-border/50">
-                    <td className="py-3 px-4 text-foreground">{row.feature}</td>
-                    <td className="py-3 px-4 text-center text-muted-foreground">{row.free}</td>
-                    <td className="py-3 px-4 text-center text-muted-foreground">{row.tripPass}</td>
-                    <td className="py-3 px-4 text-center bg-primary/5">{row.monthly}</td>
-                    <td className="py-3 px-4 text-center text-muted-foreground">{row.yearly}</td>
+                  <tr key={row.feature} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}`}>
+                    <td className="py-3.5 px-5 text-foreground font-medium">{row.feature}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <TableCellContent value={row.free} />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <TableCellContent value={row.tripPass} />
+                    </td>
+                    <td className="py-3.5 px-4 text-center bg-primary/5">
+                      <TableCellContent value={row.monthly} highlight />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <TableCellContent value={row.yearly} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

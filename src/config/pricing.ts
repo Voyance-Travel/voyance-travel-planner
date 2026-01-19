@@ -99,8 +99,8 @@ export const PLAN_FEATURES = {
   TRIP_PASS: {
     id: 'trip_pass',
     name: 'Trip Pass',
-    headline: 'Finish one trip like a pro.',
-    subheadline: 'Everything unlocked for a single trip — perfect when you\'re ready to lock it in.',
+    headline: 'Everything unlocked for one trip.',
+    subheadline: 'All features, one purchase — ideal when you\'re ready to go deeper on a single journey.',
     bestFor: 'A single upcoming trip you want to perfect.',
     price: 12.99,
     priceDetail: 'one-time',
