@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Sparkles, SkipForward } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { prefetchDestinationImages } from '@/utils/imagePrefetch';
 
@@ -689,16 +689,10 @@ export default function PlannerFlightEnhanced() {
                 <Button variant="outline" onClick={() => navigate(-1)}>
                   Back
                 </Button>
-                <div className="flex gap-3">
-                  <Button variant="ghost" onClick={handleSkipFlights} className="text-muted-foreground">
-                    <SkipForward className="h-4 w-4 mr-2" />
-                    Skip & Add Later
-                  </Button>
-                  <Button onClick={handleContinue} disabled={!canContinue} size="lg">
-                    Continue to Hotels
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
+                <Button onClick={handleContinue} disabled={!canContinue} size="lg" className="lg:hidden">
+                  Continue to Hotels
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
               </motion.div>
             </div>
 
@@ -717,11 +711,12 @@ export default function PlannerFlightEnhanced() {
                   } : undefined}
                 />
                 
-                {/* Floating Continue Button */}
+                {/* Action Buttons */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
+                  className="space-y-3"
                 >
                   <Button 
                     onClick={handleContinue} 
@@ -732,6 +727,13 @@ export default function PlannerFlightEnhanced() {
                     Continue to Hotels
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
+                  
+                  <button 
+                    onClick={handleSkipFlights}
+                    className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+                  >
+                    I'll add my flight later
+                  </button>
                 </motion.div>
               </div>
             </div>
