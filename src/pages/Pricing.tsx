@@ -1,7 +1,7 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, Sparkles, Compass, Crown, Zap, ArrowRight, Shield, Clock, Users, Heart, Star, MapPin } from 'lucide-react';
+import { Check, Sparkles, Compass, Crown, Zap, ArrowRight, Shield, Clock, Users, Heart, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -121,26 +121,6 @@ const faqs = [
   },
 ];
 
-const testimonials = [
-  {
-    quote: "Voyance planned our honeymoon in Paris better than any travel agent could. Every restaurant, every activity was perfectly us.",
-    author: "Sarah & James",
-    trip: "Paris, France",
-    plan: "Voyage",
-  },
-  {
-    quote: "The Wanderlust plan is perfect for my lifestyle. I travel monthly and having unlimited everything is a game-changer.",
-    author: "Michael T.",
-    trip: "Tokyo, Japan",
-    plan: "Wanderlust",
-  },
-  {
-    quote: "I was skeptical about AI planning, but the itinerary knew I hate mornings and love street food. It just got me.",
-    author: "Priya K.",
-    trip: "Barcelona, Spain",
-    plan: "Voyage",
-  },
-];
 
 export default function Pricing() {
   return (
@@ -336,53 +316,6 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-              Travelers love Voyance
-            </h2>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((testimonial, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-card rounded-2xl p-6 border border-border"
-              >
-                <div className="flex items-center gap-1 mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-primary text-primary" />
-                  ))}
-                </div>
-                <p className="text-foreground mb-6 italic">"{testimonial.quote}"</p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-foreground">{testimonial.author}</p>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {testimonial.trip}
-                    </p>
-                  </div>
-                  <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                    {testimonial.plan}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* FAQs */}
       <section className="py-20 bg-gradient-to-b from-background to-muted/30">
