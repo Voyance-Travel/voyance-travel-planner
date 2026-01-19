@@ -74,14 +74,43 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
       if (!userId) return;
       
       try {
-        const { data, error } = await supabase
+        // First try travel_dna_profiles table
+        const { data: profileData, error: profileError } = await supabase
           .from('travel_dna_profiles')
           .select('*')
           .eq('user_id', userId)
           .maybeSingle();
         
-        if (error) throw error;
-        setDnaData(data);
+        if (profileData?.primary_archetype_name) {
+          setDnaData(profileData);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Fallback: Check profiles.travel_dna column
+        const { data: userProfile, error: userError } = await supabase
+          .from('profiles')
+          .select('travel_dna, quiz_completed')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        if (userProfile?.travel_dna && typeof userProfile.travel_dna === 'object') {
+          // Map from profiles.travel_dna to TravelDNAData format
+          const dnaJson = userProfile.travel_dna as Record<string, unknown>;
+          setDnaData({
+            primary_archetype_name: (dnaJson.primary_archetype_name as string) || null,
+            secondary_archetype_name: (dnaJson.secondary_archetype_name as string) || null,
+            dna_confidence_score: (dnaJson.dna_confidence_score as number) || null,
+            dna_rarity: (dnaJson.dna_rarity as string) || null,
+            trait_scores: dnaJson.trait_scores || null,
+            tone_tags: (dnaJson.tone_tags as string[]) || null,
+            emotional_drivers: (dnaJson.emotional_drivers as string[]) || null,
+            summary: (dnaJson.summary as string) || null,
+          });
+        }
+        
+        if (profileError) console.error('travel_dna_profiles error:', profileError);
+        if (userError) console.error('profiles error:', userError);
       } catch (error) {
         console.error('Failed to load travel DNA:', error);
       } finally {

@@ -399,15 +399,11 @@ function TravelStyleSection({ preferences, onUpdate, isSaving }: SectionProps) {
 }
 
 function FlightsSection({ preferences, onUpdate, isSaving }: SectionProps) {
-  const [airlinesToAvoid, setAirlinesToAvoid] = useState(
-    (preferences?.flight_preferences as Record<string, string>)?.airlines_to_avoid || ''
-  );
-
   return (
     <div className="space-y-8">
       <SectionHeader 
         title="Flight Preferences"
-        description="Customize your flying experience"
+        description="These preferences are used when searching for flights"
       />
       
       {/* Home Airport */}
@@ -439,26 +435,12 @@ function FlightsSection({ preferences, onUpdate, isSaving }: SectionProps) {
         </RadioGroup>
       </PreferenceGroup>
 
-      {/* Seat Preference */}
-      <PreferenceGroup label="Seat Preference">
-        <RadioGroup
-          value={preferences?.seat_preference || ''}
-          onValueChange={(value) => onUpdate('seat_preference', value)}
-          className="grid sm:grid-cols-2 gap-3"
-        >
-          <RadioOption value="window" label="Window" description="Views and wall to lean on" />
-          <RadioOption value="aisle" label="Aisle" description="Easy access to move around" />
-          <RadioOption value="middle" label="Middle" description="Between two companions" />
-          <RadioOption value="no_preference" label="No Preference" />
-        </RadioGroup>
-      </PreferenceGroup>
-
       {/* Direct Flights */}
       <PreferenceGroup label="">
         <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
           <div>
             <span className="text-sm font-medium">Prefer direct flights only</span>
-            <p className="text-xs text-muted-foreground">Avoid layovers when possible</p>
+            <p className="text-xs text-muted-foreground">We'll search for non-stop flights when available</p>
           </div>
           <Switch
             checked={preferences?.direct_flights_only || false}
@@ -467,34 +449,14 @@ function FlightsSection({ preferences, onUpdate, isSaving }: SectionProps) {
         </div>
       </PreferenceGroup>
 
-      {/* Departure Time */}
-      <PreferenceGroup label="Preferred Departure Time">
-        <RadioGroup
-          value={preferences?.flight_time_preference || ''}
-          onValueChange={(value) => onUpdate('flight_time_preference', value)}
-          className="grid sm:grid-cols-2 gap-3"
-        >
-          <RadioOption value="early_am" label="Early AM" description="6-9am" />
-          <RadioOption value="midday" label="Midday" description="9am-12pm" />
-          <RadioOption value="afternoon" label="Afternoon" description="12-6pm" />
-          <RadioOption value="red_eye" label="Red-eye" description="After 10pm" />
-        </RadioGroup>
-      </PreferenceGroup>
-
-      {/* Airlines to Avoid */}
-      <PreferenceGroup label="Airlines to Avoid">
-        <Textarea
-          placeholder="List any airlines you prefer to avoid..."
-          value={airlinesToAvoid}
-          onChange={(e) => setAirlinesToAvoid(e.target.value)}
-          onBlur={() => onUpdate('flight_preferences', { 
-            ...preferences?.flight_preferences as Record<string, unknown>, 
-            airlines_to_avoid: airlinesToAvoid 
-          })}
-          className="resize-none"
-          rows={2}
-        />
-      </PreferenceGroup>
+      {/* Note about what we can't enforce */}
+      <div className="bg-muted/20 border border-border rounded-lg p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground mb-1">💡 Good to know</p>
+        <p>
+          Seat selection and departure times depend on airline availability during booking. 
+          We focus on preferences we can actually deliver: cabin class and direct flight routing.
+        </p>
+      </div>
     </div>
   );
 }
