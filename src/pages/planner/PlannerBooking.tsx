@@ -24,7 +24,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
@@ -33,10 +35,12 @@ export default function PlannerBooking() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { state, loadTrip, saveTrip } = useTripPlanner();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [travelerNames, setTravelerNames] = useState<string[]>([]);
+  const [userIsTraveling, setUserIsTraveling] = useState(true); // Default: user is traveling
 
   const tripId = searchParams.get('tripId') || state.tripId;
   const wasCanceled = searchParams.get('canceled') === 'true';
@@ -56,20 +60,47 @@ export default function PlannerBooking() {
   }, [wasCanceled]);
 
   const travelers = state.basics.travelers || 1;
+
+  // Get user's full name from profile for pre-filling
+  const userFullName = useMemo(() => {
+    if (!user?.name) return '';
+    return user.name;
+  }, [user?.name]);
   
-  // Initialize traveler names array when travelers count changes
+  // Initialize traveler names array when travelers count changes or user data loads
   useEffect(() => {
-    if (travelers > 0 && travelerNames.length !== travelers) {
+    if (travelers > 0) {
       setTravelerNames(prev => {
         const newNames = [...prev];
         // Extend or trim array to match travelers count
         while (newNames.length < travelers) {
           newNames.push('');
         }
-        return newNames.slice(0, travelers);
+        const trimmed = newNames.slice(0, travelers);
+        
+        // Pre-fill first traveler with user's name if they're traveling and name is empty
+        if (userIsTraveling && userFullName && (!trimmed[0] || trimmed[0] === '')) {
+          trimmed[0] = userFullName;
+        }
+        
+        return trimmed;
       });
     }
-  }, [travelers, travelerNames.length]);
+  }, [travelers, userIsTraveling, userFullName]);
+
+  // Handle toggle change - pre-fill or clear the first traveler name
+  const handleUserTravelingChange = (isTraveling: boolean) => {
+    setUserIsTraveling(isTraveling);
+    setTravelerNames(prev => {
+      const updated = [...prev];
+      if (isTraveling && userFullName) {
+        updated[0] = userFullName;
+      } else if (!isTraveling) {
+        updated[0] = ''; // Clear when user is not traveling
+      }
+      return updated;
+    });
+  };
 
   const updateTravelerName = (index: number, name: string) => {
     setTravelerNames(prev => {
@@ -353,6 +384,34 @@ export default function PlannerBooking() {
                     <h2 className="text-lg font-medium">Traveler Information</h2>
                     <Badge variant="secondary" className="text-xs">Required</Badge>
                   </div>
+
+                  {/* "Are you traveling?" toggle - only show if user is logged in */}
+                  {user && (
+                    <div className="bg-gradient-to-r from-primary/5 to-transparent rounded-xl p-4 mb-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            id="user-traveling"
+                            checked={userIsTraveling}
+                            onCheckedChange={handleUserTravelingChange}
+                          />
+                          <Label htmlFor="user-traveling" className="text-sm font-medium cursor-pointer">
+                            I'm traveling on this trip
+                          </Label>
+                        </div>
+                        {userIsTraveling && userFullName && (
+                          <span className="text-xs text-muted-foreground">
+                            Using: {userFullName}
+                          </span>
+                        )}
+                      </div>
+                      {!userIsTraveling && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Booking this trip for someone else? Enter their names below.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   
                   <div className="space-y-3">
                     {Array.from({ length: travelers }).map((_, index) => (
@@ -361,18 +420,19 @@ export default function PlannerBooking() {
                         className="bg-gradient-to-r from-muted/50 to-transparent rounded-xl p-4"
                       >
                         <Label className="text-sm font-medium text-muted-foreground mb-2 block">
-                          Traveler {index + 1} {index === 0 && '(Primary)'}
+                          Traveler {index + 1} {index === 0 && userIsTraveling && user ? '(You)' : index === 0 ? '(Primary)' : ''}
                         </Label>
                         <Input
                           type="text"
                           placeholder="Full name as it appears on ID"
                           value={travelerNames[index] || ''}
                           onChange={(e) => updateTravelerName(index, e.target.value)}
+                          disabled={index === 0 && userIsTraveling && !!userFullName}
                           className={`bg-background ${
                             travelerNames[index]?.trim().length >= 2 
                               ? 'border-emerald-500/50 focus:border-emerald-500' 
                               : ''
-                          }`}
+                          } ${index === 0 && userIsTraveling && userFullName ? 'bg-muted/50' : ''}`}
                         />
                         {travelerNames[index]?.trim().length > 0 && travelerNames[index]?.trim().length < 2 && (
                           <p className="text-xs text-destructive mt-1">Name must be at least 2 characters</p>
