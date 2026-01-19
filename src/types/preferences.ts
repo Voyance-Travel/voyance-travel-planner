@@ -57,12 +57,24 @@ export interface AIPreferences {
   recommendation_frequency?: string | null;
 }
 
+export interface ItineraryPreferences {
+  enable_gap_filling?: boolean | null;
+  enable_route_optimization?: boolean | null;
+  enable_real_transport?: boolean | null;
+  enable_geocoding?: boolean | null;
+  enable_venue_verification?: boolean | null;
+  enable_cost_lookup?: boolean | null;
+  preferred_downtime_minutes?: number | null;
+  max_activities_per_day?: number | null;
+}
+
 export interface BackendPreferencesData {
   core: CorePreferences;
   flight: FlightPreferences;
   food: FoodPreferences;
   mobility: MobilityPreferences;
   ai: AIPreferences;
+  itinerary: ItineraryPreferences;
 }
 
 export const createEmptyPreferences = (): BackendPreferencesData => ({
@@ -112,5 +124,15 @@ export const createEmptyPreferences = (): BackendPreferencesData => ({
   ai: {
     ai_assistance_level: 'balanced',
     recommendation_frequency: 'mixed',
+  },
+  itinerary: {
+    enable_gap_filling: true,
+    enable_route_optimization: true,
+    enable_real_transport: true,
+    enable_geocoding: false,
+    enable_venue_verification: false,
+    enable_cost_lookup: true,
+    preferred_downtime_minutes: 30,
+    max_activities_per_day: 6,
   },
 });

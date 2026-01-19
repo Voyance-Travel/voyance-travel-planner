@@ -15,6 +15,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Loader2,
+  Sliders,
 } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -91,6 +92,12 @@ const PREFERENCE_SECTIONS = [
     title: 'Planning Style',
     subtitle: 'How you like to plan trips',
     icon: Calendar,
+  },
+  {
+    id: 'itinerary',
+    title: 'Itinerary Customization',
+    subtitle: 'Fine-tune how your itineraries are built',
+    icon: Sliders,
   },
 ];
 
@@ -375,6 +382,8 @@ function renderSectionContent(
       return <AccessibilitySection preferences={preferences} onChange={onChange} />;
     case 'planning':
       return <PlanningSection preferences={preferences} onChange={onChange} />;
+    case 'itinerary':
+      return <ItinerarySection preferences={preferences} onChange={onChange} />;
     default:
       return null;
   }
@@ -993,6 +1002,216 @@ function PlanningSection({ preferences, onChange }: SectionProps) {
           <option value="balanced">2-4 weeks advance</option>
           <option value="detailed">1+ months advance</option>
         </select>
+      </div>
+    </div>
+  );
+}
+
+// Itinerary Customization Section
+function ItinerarySection({ preferences, onChange }: SectionProps) {
+  // Ensure itinerary preferences exist with defaults
+  const itineraryPrefs = preferences.itinerary || {
+    enable_gap_filling: true,
+    enable_route_optimization: true,
+    enable_real_transport: true,
+    enable_geocoding: false,
+    enable_venue_verification: false,
+    enable_cost_lookup: true,
+    preferred_downtime_minutes: 30,
+    max_activities_per_day: 6,
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Free Time / Gap Filling */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-2">⏰ Free Time Between Activities</h4>
+        <p className="text-xs text-muted-foreground mb-4">
+          When there's a gap between activities, should we add "free time" blocks to your itinerary?
+        </p>
+        <div className="space-y-4">
+          <label className="flex items-center justify-between p-4 rounded-xl border-2 border-border hover:border-muted-foreground/30 cursor-pointer transition-all">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🧘</span>
+              <div>
+                <p className="font-medium text-foreground">Add free time blocks</p>
+                <p className="text-sm text-muted-foreground">Shows scheduled breaks for exploring or resting</p>
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={itineraryPrefs.enable_gap_filling ?? true}
+              onChange={e => onChange('itinerary', 'enable_gap_filling', e.target.checked)}
+              className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+            />
+          </label>
+
+          {itineraryPrefs.enable_gap_filling && (
+            <div className="ml-12">
+              <label htmlFor="downtime-minutes" className="block text-sm font-medium text-foreground mb-2">
+                Minimum gap to show as free time
+              </label>
+              <select
+                id="downtime-minutes"
+                value={itineraryPrefs.preferred_downtime_minutes ?? 30}
+                onChange={e => onChange('itinerary', 'preferred_downtime_minutes', parseInt(e.target.value))}
+                className="w-full p-3 border border-border rounded-xl bg-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+              >
+                <option value={15}>15 minutes or more</option>
+                <option value={30}>30 minutes or more</option>
+                <option value={45}>45 minutes or more</option>
+                <option value={60}>1 hour or more</option>
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Max Activities Per Day */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-2">📅 Activities Per Day</h4>
+        <p className="text-xs text-muted-foreground mb-4">
+          How many planned activities do you prefer in a typical day?
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { value: 4, label: 'Light', description: '3-4 activities', icon: '🌿' },
+            { value: 6, label: 'Moderate', description: '5-6 activities', icon: '⚖️' },
+            { value: 8, label: 'Packed', description: '7-8 activities', icon: '🔥' },
+          ].map(option => {
+            const isSelected = (itineraryPrefs.max_activities_per_day ?? 6) === option.value;
+            return (
+              <motion.button
+                key={option.value}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => onChange('itinerary', 'max_activities_per_day', option.value)}
+                className={`
+                  p-4 rounded-xl border-2 transition-all text-center
+                  ${isSelected ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground/30'}
+                `}
+              >
+                <div className="text-2xl mb-2">{option.icon}</div>
+                <p className="font-medium text-foreground">{option.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{option.description}</p>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Route Optimization */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-2">🗺️ Smart Route Planning</h4>
+        <p className="text-xs text-muted-foreground mb-4">
+          Optimize the order of activities to minimize travel time
+        </p>
+        <label className="flex items-center justify-between p-4 rounded-xl border-2 border-border hover:border-muted-foreground/30 cursor-pointer transition-all">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🚀</span>
+            <div>
+              <p className="font-medium text-foreground">Enable route optimization</p>
+              <p className="text-sm text-muted-foreground">Reorders activities for efficient travel</p>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={itineraryPrefs.enable_route_optimization ?? true}
+            onChange={e => onChange('itinerary', 'enable_route_optimization', e.target.checked)}
+            className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+          />
+        </label>
+      </div>
+
+      {/* Transport Estimates */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-2">🚗 Transportation Details</h4>
+        <p className="text-xs text-muted-foreground mb-4">
+          Show real transport times and options between activities
+        </p>
+        <label className="flex items-center justify-between p-4 rounded-xl border-2 border-border hover:border-muted-foreground/30 cursor-pointer transition-all">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🚌</span>
+            <div>
+              <p className="font-medium text-foreground">Calculate real transport times</p>
+              <p className="text-sm text-muted-foreground">Uses maps data for accurate travel estimates</p>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={itineraryPrefs.enable_real_transport ?? true}
+            onChange={e => onChange('itinerary', 'enable_real_transport', e.target.checked)}
+            className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+          />
+        </label>
+      </div>
+
+      {/* Cost Lookup */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-2">💰 Live Cost Estimates</h4>
+        <p className="text-xs text-muted-foreground mb-4">
+          Look up real prices for activities and attractions
+        </p>
+        <label className="flex items-center justify-between p-4 rounded-xl border-2 border-border hover:border-muted-foreground/30 cursor-pointer transition-all">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📊</span>
+            <div>
+              <p className="font-medium text-foreground">Enable cost lookup</p>
+              <p className="text-sm text-muted-foreground">Gets real pricing data when available</p>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={itineraryPrefs.enable_cost_lookup ?? true}
+            onChange={e => onChange('itinerary', 'enable_cost_lookup', e.target.checked)}
+            className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+          />
+        </label>
+      </div>
+
+      {/* Advanced Options (collapsed by default) */}
+      <div className="pt-4 border-t border-border">
+        <details className="group">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground transition-colors list-none flex items-center gap-2">
+            <ChevronRight className="w-4 h-4 group-open:rotate-90 transition-transform" />
+            Advanced Options
+          </summary>
+          <div className="mt-4 space-y-4 pl-6">
+            {/* Geocoding */}
+            <label className="flex items-center justify-between p-4 rounded-xl border-2 border-border hover:border-muted-foreground/30 cursor-pointer transition-all">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">📍</span>
+                <div>
+                  <p className="font-medium text-foreground">Precise location lookup</p>
+                  <p className="text-sm text-muted-foreground">Uses geocoding for exact coordinates (slower)</p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={itineraryPrefs.enable_geocoding ?? false}
+                onChange={e => onChange('itinerary', 'enable_geocoding', e.target.checked)}
+                className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+              />
+            </label>
+
+            {/* Venue Verification */}
+            <label className="flex items-center justify-between p-4 rounded-xl border-2 border-border hover:border-muted-foreground/30 cursor-pointer transition-all">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">✅</span>
+                <div>
+                  <p className="font-medium text-foreground">Venue verification</p>
+                  <p className="text-sm text-muted-foreground">Verify places exist via Places API (slower, more accurate)</p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={itineraryPrefs.enable_venue_verification ?? false}
+                onChange={e => onChange('itinerary', 'enable_venue_verification', e.target.checked)}
+                className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+              />
+            </label>
+          </div>
+        </details>
       </div>
     </div>
   );

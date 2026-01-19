@@ -60,6 +60,7 @@ interface OptimizeRequest {
   tripId: string;
   destination: string;
   days: Day[];
+  userId?: string; // If provided, fetch user's itinerary preferences
   enableRouteOptimization?: boolean;
   enableRealTransport?: boolean;
   enableCostLookup?: boolean;
@@ -67,10 +68,22 @@ interface OptimizeRequest {
   enableTagGeneration?: boolean;
   enableGeocoding?: boolean;
   enableVenueVerification?: boolean;
-  enablePhotoEnrichment?: boolean;
+  preferredDowntimeMinutes?: number;
+  maxActivitiesPerDay?: number;
   currency?: string;
   travelers?: number;
   nights?: number;
+}
+
+interface UserItineraryPreferences {
+  enable_gap_filling: boolean;
+  enable_route_optimization: boolean;
+  enable_real_transport: boolean;
+  enable_geocoding: boolean;
+  enable_venue_verification: boolean;
+  enable_cost_lookup: boolean;
+  preferred_downtime_minutes: number;
+  max_activities_per_day: number;
 }
 
 // =============================================================================
@@ -150,10 +163,10 @@ function calculateDuration(
 
 // =============================================================================
 // ALGORITHM 3: GAP FILLING
-// Insert downtime blocks for gaps > 30 minutes
+// Insert downtime blocks for gaps exceeding user-configured minimum
 // =============================================================================
 
-const MIN_GAP_MINUTES = 30;
+const DEFAULT_MIN_GAP_MINUTES = 30;
 
 function createDowntimeBlock(startTime: string, endTime: string, durationMinutes: number): Activity {
   return {
@@ -187,7 +200,7 @@ function minutesToTime(minutes: number): string {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
-function fillGaps(activities: Activity[]): Activity[] {
+function fillGaps(activities: Activity[], minGapMinutes: number = DEFAULT_MIN_GAP_MINUTES): Activity[] {
   if (activities.length === 0) return [];
 
   const result: Activity[] = [];
@@ -204,7 +217,7 @@ function fillGaps(activities: Activity[]): Activity[] {
         const nextStart = timeToMinutes(next.startTime);
         const gap = nextStart - currentEnd;
 
-        if (gap >= MIN_GAP_MINUTES) {
+        if (gap >= minGapMinutes) {
           const downtime = createDowntimeBlock(
             current.endTime,
             next.startTime,
@@ -1031,18 +1044,42 @@ serve(async (req) => {
       tripId,
       destination,
       days,
-      enableRouteOptimization = true,
-      enableRealTransport = true,
-      enableCostLookup = true,
-      enableGapFilling = true,
-      enableTagGeneration = true,
-      enableGeocoding = false, // Off by default - API intensive
-      enableVenueVerification = false, // Off by default - API intensive
-      enablePhotoEnrichment = false, // Off by default - API intensive
+      userId,
       currency = 'USD',
       travelers = 1,
       nights = 1,
+      preferredDowntimeMinutes,
+      maxActivitiesPerDay,
     } = body;
+
+    // Fetch user preferences if userId provided
+    let userPrefs: UserItineraryPreferences | null = null;
+    if (userId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('enable_gap_filling, enable_route_optimization, enable_real_transport, enable_geocoding, enable_venue_verification, enable_cost_lookup, preferred_downtime_minutes, max_activities_per_day')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (prefs) {
+        userPrefs = prefs as UserItineraryPreferences;
+        console.log(`[optimize-itinerary] Loaded user preferences for ${userId}`);
+      }
+    }
+
+    // Merge request options with user preferences (request overrides user prefs)
+    const enableRouteOptimization = body.enableRouteOptimization ?? userPrefs?.enable_route_optimization ?? true;
+    const enableRealTransport = body.enableRealTransport ?? userPrefs?.enable_real_transport ?? true;
+    const enableCostLookup = body.enableCostLookup ?? userPrefs?.enable_cost_lookup ?? true;
+    const enableGapFilling = body.enableGapFilling ?? userPrefs?.enable_gap_filling ?? true;
+    const enableTagGeneration = body.enableTagGeneration ?? true;
+    const enableGeocoding = body.enableGeocoding ?? userPrefs?.enable_geocoding ?? false;
+    const enableVenueVerification = body.enableVenueVerification ?? userPrefs?.enable_venue_verification ?? false;
+    const minGapMinutes = preferredDowntimeMinutes ?? userPrefs?.preferred_downtime_minutes ?? 30;
 
     console.log(`[optimize-itinerary] Processing trip ${tripId}: ${days.length} days, destination: ${destination}`);
     console.log(`[optimize-itinerary] Options: route=${enableRouteOptimization}, transport=${enableRealTransport}, cost=${enableCostLookup}, gaps=${enableGapFilling}, tags=${enableTagGeneration}`);
@@ -1055,7 +1092,6 @@ serve(async (req) => {
     let tagsGenerated = 0;
     let geocoded = 0;
     let venuesVerified = 0;
-    let photosAdded = 0;
 
     // Collect all activities for batched cost lookup
     const allActivities: Activity[] = days.flatMap(d => d.activities);
@@ -1199,30 +1235,12 @@ serve(async (req) => {
         }
       }
 
-      // Step 8: Photo enrichment (if enabled)
-      if (enablePhotoEnrichment) {
-        for (let i = 0; i < activities.length; i++) {
-          const act = activities[i];
-          if (act.timeBlockType === 'downtime') continue;
-          
-          const photos = await getActivityPhotos(
-            act.title,
-            act.location?.name || act.title,
-            destination,
-            2
-          );
-          if (photos.length > 0) {
-            // Store photos in a way the frontend can use
-            (activities[i] as unknown as { photos: PhotoResult[] }).photos = photos;
-            photosAdded++;
-          }
-        }
-      }
+      // Step 8: Photo enrichment - REMOVED per user feedback (unreliable, expensive)
 
       // Step 9: Gap filling
       if (enableGapFilling) {
         const beforeCount = activities.length;
-        activities = fillGaps(activities);
+        activities = fillGaps(activities, minGapMinutes);
         gapsInserted += activities.length - beforeCount;
       }
 
@@ -1258,7 +1276,6 @@ serve(async (req) => {
       - Tags generated: ${tagsGenerated}
       - Geocoded: ${geocoded}
       - Venues verified: ${venuesVerified}
-      - Photos added: ${photosAdded}
       - Gaps filled: ${gapsInserted}
       - Budget total: $${budgetBreakdown.total}`);
 
@@ -1290,7 +1307,7 @@ serve(async (req) => {
           tagGeneration: enableTagGeneration,
           geocoding: enableGeocoding,
           venueVerification: enableVenueVerification,
-          photoEnrichment: enablePhotoEnrichment,
+          minGapMinutes,
           stats: {
             activitiesOptimized: totalActivitiesOptimized,
             transportCalculated,
@@ -1298,7 +1315,6 @@ serve(async (req) => {
             tagsGenerated,
             geocoded,
             venuesVerified,
-            photosAdded,
             gapsInserted,
           },
         },
@@ -1331,7 +1347,7 @@ serve(async (req) => {
           tagGeneration: enableTagGeneration,
           geocoding: enableGeocoding,
           venueVerification: enableVenueVerification,
-          photoEnrichment: enablePhotoEnrichment,
+          minGapMinutes,
           stats: {
             activitiesOptimized: totalActivitiesOptimized,
             transportCalculated,
@@ -1339,7 +1355,6 @@ serve(async (req) => {
             tagsGenerated,
             geocoded,
             venuesVerified,
-            photosAdded,
             gapsInserted,
           },
         },
