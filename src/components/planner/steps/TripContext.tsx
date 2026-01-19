@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion';
-import { Users, User, DollarSign, Compass, Heart, Briefcase, Baby, UserCircle, SkipForward, ArrowRight } from 'lucide-react';
+import { Users, User, DollarSign, Compass, Heart, Briefcase, Baby, UserCircle, SkipForward, ArrowRight, Plane, Building, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import DestinationTeaser from '../shared/DestinationTeaser';
 
@@ -10,6 +11,12 @@ interface Companion {
   id: string;
   name: string;
   type: 'adult' | 'child';
+}
+
+interface BudgetAllocation {
+  hotel: number;
+  flight: number;
+  activities: number;
 }
 
 interface TripContextProps {
@@ -22,9 +29,11 @@ interface TripContextProps {
   };
   companions: Companion[];
   budget: string;
+  budgetAllocation: BudgetAllocation;
   tripType: string;
   updateCompanions: (companions: Companion[]) => void;
   updateBudget: (budget: string) => void;
+  updateBudgetAllocation: (allocation: BudgetAllocation) => void;
   updateTripType: (tripType: string) => void;
   onContinue: () => void;
   onBack: () => void;
@@ -236,9 +245,11 @@ export default function TripContext({
   formData,
   companions,
   budget,
+  budgetAllocation,
   tripType,
   updateCompanions,
   updateBudget,
+  updateBudgetAllocation,
   updateTripType,
   onContinue,
   onBack,
@@ -247,6 +258,38 @@ export default function TripContext({
     const newCompanions = [...companions];
     newCompanions[index] = { ...newCompanions[index], ...updates };
     updateCompanions(newCompanions);
+  };
+
+  const handleAllocationChange = (category: keyof BudgetAllocation, value: number) => {
+    const remaining = 100 - value;
+    const otherCategories = Object.keys(budgetAllocation).filter(k => k !== category) as (keyof BudgetAllocation)[];
+    const currentOtherTotal = otherCategories.reduce((sum, k) => sum + budgetAllocation[k], 0);
+    
+    if (currentOtherTotal === 0) {
+      // Split remaining equally among other categories
+      const splitValue = Math.floor(remaining / otherCategories.length);
+      const newAllocation = { ...budgetAllocation, [category]: value };
+      otherCategories.forEach((k, i) => {
+        newAllocation[k] = i === otherCategories.length - 1 
+          ? remaining - splitValue * (otherCategories.length - 1) 
+          : splitValue;
+      });
+      updateBudgetAllocation(newAllocation);
+    } else {
+      // Scale other categories proportionally
+      const scale = remaining / currentOtherTotal;
+      const newAllocation = { ...budgetAllocation, [category]: value };
+      let allocated = value;
+      otherCategories.forEach((k, i) => {
+        if (i === otherCategories.length - 1) {
+          newAllocation[k] = 100 - allocated;
+        } else {
+          newAllocation[k] = Math.round(budgetAllocation[k] * scale);
+          allocated += newAllocation[k];
+        }
+      });
+      updateBudgetAllocation(newAllocation);
+    }
   };
 
   const canContinue = budget && tripType;
@@ -359,6 +402,96 @@ export default function TripContext({
                 />
               ))}
             </div>
+
+            {/* Budget Allocation Sliders */}
+            {budget && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                transition={{ duration: 0.3 }}
+                className="mt-6 pt-6 border-t border-slate-100"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-sm font-medium text-slate-700">Customize your priorities</span>
+                  <span className="text-xs text-slate-400">(optional)</span>
+                </div>
+                
+                <div className="space-y-5">
+                  {/* Hotel Allocation */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Building className="w-4 h-4 text-violet-500" />
+                        <span className="text-sm font-medium text-slate-600">Hotel</span>
+                      </div>
+                      <span className="text-sm font-bold text-violet-600">{budgetAllocation.hotel}%</span>
+                    </div>
+                    <Slider
+                      value={[budgetAllocation.hotel]}
+                      onValueChange={([value]) => handleAllocationChange('hotel', value)}
+                      min={10}
+                      max={70}
+                      step={5}
+                      className="[&_[role=slider]]:bg-violet-500 [&_[role=slider]]:border-violet-500 [&_.bg-primary]:bg-violet-500"
+                    />
+                  </div>
+
+                  {/* Flight Allocation */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Plane className="w-4 h-4 text-sky-500" />
+                        <span className="text-sm font-medium text-slate-600">Flights</span>
+                      </div>
+                      <span className="text-sm font-bold text-sky-600">{budgetAllocation.flight}%</span>
+                    </div>
+                    <Slider
+                      value={[budgetAllocation.flight]}
+                      onValueChange={([value]) => handleAllocationChange('flight', value)}
+                      min={10}
+                      max={70}
+                      step={5}
+                      className="[&_[role=slider]]:bg-sky-500 [&_[role=slider]]:border-sky-500 [&_.bg-primary]:bg-sky-500"
+                    />
+                  </div>
+
+                  {/* Activities Allocation */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-emerald-500" />
+                        <span className="text-sm font-medium text-slate-600">Activities</span>
+                      </div>
+                      <span className="text-sm font-bold text-emerald-600">{budgetAllocation.activities}%</span>
+                    </div>
+                    <Slider
+                      value={[budgetAllocation.activities]}
+                      onValueChange={([value]) => handleAllocationChange('activities', value)}
+                      min={5}
+                      max={50}
+                      step={5}
+                      className="[&_[role=slider]]:bg-emerald-500 [&_[role=slider]]:border-emerald-500 [&_.bg-primary]:bg-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Visual Summary */}
+                <div className="mt-4 h-3 rounded-full overflow-hidden flex bg-slate-100">
+                  <div 
+                    className="bg-violet-500 transition-all duration-300" 
+                    style={{ width: `${budgetAllocation.hotel}%` }} 
+                  />
+                  <div 
+                    className="bg-sky-500 transition-all duration-300" 
+                    style={{ width: `${budgetAllocation.flight}%` }} 
+                  />
+                  <div 
+                    className="bg-emerald-500 transition-all duration-300" 
+                    style={{ width: `${budgetAllocation.activities}%` }} 
+                  />
+                </div>
+              </motion.div>
+            )}
           </motion.div>
 
           {/* Trip Type Section */}
