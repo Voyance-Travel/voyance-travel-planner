@@ -244,16 +244,12 @@ const questions = [
     step: 10,
     category: 'Logistics',
     title: 'Flight preferences?',
-    subtitle: 'Select what matters to you',
+    subtitle: 'Do you prefer direct flights?',
     icon: <Plane className="w-5 h-5" />,
-    multiSelect: true,
     optional: true,
     options: [
       { value: 'direct', label: 'Direct Flights Only', description: 'No layovers, even if more expensive' },
-      { value: 'window', label: 'Window Seat', description: 'I love looking out the window' },
-      { value: 'aisle', label: 'Aisle Seat', description: 'Easy access and legroom' },
-      { value: 'morning', label: 'Morning Flights', description: 'Early departures preferred' },
-      { value: 'evening', label: 'Evening Flights', description: 'Later departures work better' },
+      { value: 'flexible', label: 'Flexible on Connections', description: 'Open to layovers if it saves money or time' },
     ],
   },
 ];
