@@ -5,3 +5,5 @@ export { ActivityFeedbackModal } from './ActivityFeedbackModal';
 export { default as FullItinerary } from './FullItinerary';
 export { ItineraryGenerator } from './ItineraryGenerator';
 export { ItineraryEditor } from './ItineraryEditor';
+export { EditorialItinerary } from './EditorialItinerary';
+export type { EditorialDay, EditorialActivity, EditorialItineraryProps } from './EditorialItinerary';
