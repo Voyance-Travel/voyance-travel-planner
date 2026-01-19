@@ -35,7 +35,9 @@ export function Header() {
   const navLinks = [
     { to: '/', label: 'Home' },
     { to: '/explore', label: 'Explore' },
-    { to: '/trip/new', label: 'Start Planning' },
+    // Only show Start Planning in nav for non-authenticated users
+    // Authenticated users have the CTA button and quick access via Profile
+    ...(isAuthenticated ? [] : [{ to: '/trip/new', label: 'Start Planning' }]),
     { to: '/profile', label: 'Profile' },
     { to: '/about', label: 'About Us' },
   ];
