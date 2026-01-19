@@ -25,6 +25,12 @@ interface Companion {
   type: 'adult' | 'child';
 }
 
+interface BudgetAllocation {
+  hotel: number;
+  flight: number;
+  activities: number;
+}
+
 interface PlannerFormData {
   destination: string;
   name: string;
@@ -33,6 +39,7 @@ interface PlannerFormData {
   travelers: number;
   departureCity: string;
   budget: string;
+  budgetAllocation: BudgetAllocation;
   tripType: string;
   companions: Companion[];
   selectedDepartureFlight: string | null;
@@ -93,6 +100,7 @@ export default function Planner() {
       travelers: travelers,
       departureCity: contextData.originCity || '',
       budget: contextData.budgetTier || '',
+      budgetAllocation: { hotel: 40, flight: 40, activities: 20 },
       tripType: contextData.tripType || '',
       companions,
       selectedDepartureFlight: null,
@@ -408,9 +416,11 @@ export default function Planner() {
             formData={formData}
             companions={formData.companions}
             budget={formData.budget}
+            budgetAllocation={formData.budgetAllocation}
             tripType={formData.tripType}
             updateCompanions={(companions) => updateFormData({ companions })}
             updateBudget={(budget) => updateFormData({ budget })}
+            updateBudgetAllocation={(budgetAllocation) => updateFormData({ budgetAllocation })}
             updateTripType={(tripType) => updateFormData({ tripType })}
             onContinue={() => handleStepComplete('context')}
             onBack={() => navigate('/start')}
