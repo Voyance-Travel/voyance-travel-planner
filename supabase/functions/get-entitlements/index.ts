@@ -22,6 +22,14 @@ const PRICE_TO_PLAN: Record<string, { plan: string; type: 'subscription' | 'paym
   'price_1RpYWpFYxIg9jcJUPrSLmFsu': { plan: 'yearly', type: 'subscription' },
 };
 
+// Credit costs in cents - must match src/config/pricing.ts
+const CREDIT_COSTS: Record<string, number> = {
+  build_day: 399,          // $3.99
+  build_full_trip: 999,    // $9.99
+  route_optimize: 199,     // $1.99
+  group_budget_setup: 299, // $2.99
+};
+
 // Plan features configuration
 const PLAN_LIMITS = {
   free: {
@@ -128,6 +136,8 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
+    const creditBalance = credits?.balance_cents || 0;
+
     // Get user usage for free tier tracking
     const { data: usage } = await supabaseAdmin
       .from('user_usage')
@@ -167,9 +177,18 @@ serve(async (req) => {
       ? Math.max(0, limits.fullBuilds - freeBuildsUsed)
       : -1; // Unlimited for paid
 
+    // Build credit-based feature availability
+    const creditFeatures: Record<string, { cost: number; can_afford: boolean }> = {};
+    for (const [key, cost] of Object.entries(CREDIT_COSTS)) {
+      creditFeatures[key] = {
+        cost,
+        can_afford: creditBalance >= cost,
+      };
+    }
+
     logStep("Resolved entitlements", { 
       plan: activePlan, 
-      credits: credits?.balance_cents || 0,
+      credits: creditBalance,
       draftTrips: draftTripsCount,
       unlockedTrips: unlockedTrips.length,
     });
@@ -183,7 +202,10 @@ serve(async (req) => {
       subscription_price_id: subscriptionPriceId,
       
       // Credits/wallet
-      credits_balance_cents: credits?.balance_cents || 0,
+      credits_balance_cents: creditBalance,
+      
+      // Credit-based feature availability (for pay-per-use)
+      credit_features: creditFeatures,
       
       // Usage
       usage: usageMap,
@@ -202,11 +224,13 @@ serve(async (req) => {
       unlocked_trips: unlockedTrips,
       
       // Feature flags (quick boolean checks)
-      can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0,
+      // Paid users always have access; free users can use credits for some features
+      can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0 || creditBalance >= CREDIT_COSTS.build_full_trip,
+      can_build_day: activePlan !== 'free' || creditBalance >= CREDIT_COSTS.build_day,
       can_use_flight_hotel_optimization: limits.flightHotelOptimization,
-      can_use_group_budgeting: limits.groupBudgeting,
+      can_use_group_budgeting: limits.groupBudgeting || creditBalance >= CREDIT_COSTS.group_budget_setup,
       can_co_edit: limits.coEditCollaboration,
-      can_optimize_routes: limits.routeOptimization,
+      can_optimize_routes: limits.routeOptimization || creditBalance >= CREDIT_COSTS.route_optimize,
     };
 
     return new Response(JSON.stringify(response), {
