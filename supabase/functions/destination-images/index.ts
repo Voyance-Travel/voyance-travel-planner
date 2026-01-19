@@ -113,6 +113,79 @@ async function checkCuratedCache(
 // =============================================================================
 // TIER 2: GOOGLE PLACES PHOTOS (New Places API v1)
 // =============================================================================
+// =============================================================================
+// GUARDRAILS & MATCHING HELPERS
+// =============================================================================
+
+// Tokens we consider "noise" (articles, prepositions, etc.)
+const NOISE_WORDS = new Set(['the', 'a', 'an', 'of', 'at', 'in', 'to', 'for', 'and', 'or', 'on', 'by', 'with']);
+
+// Bad place types that should never match
+const BAD_PLACE_TYPES = new Set([
+  'airport', 'transit_station', 'train_station', 'bus_station', 'light_rail_station',
+  'subway_station', 'taxi_stand', 'car_rental', 'gas_station', 'parking', 'atm',
+  'bank', 'hospital', 'pharmacy', 'police', 'post_office', 'courthouse', 'embassy',
+  'local_government_office', 'insurance_agency', 'real_estate_agency'
+]);
+
+// Keywords in display name / address that indicate a bad match
+const BAD_KEYWORDS = [
+  'airport', 'terminal', 'arrivals', 'departures', 'gate ', 'concourse',
+  'train station', 'bus station', 'metro station', 'subway', 'parking lot',
+  'gas station', 'petrol', 'atm', 'bank branch'
+];
+
+function tokenize(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((t) => t.length >= 3 && !NOISE_WORDS.has(t));
+}
+
+function isBadPlaceByType(types: string[]): boolean {
+  const joined = types.join(' ').toLowerCase();
+  for (const bad of BAD_PLACE_TYPES) {
+    if (joined.includes(bad)) return true;
+  }
+  return false;
+}
+
+function isBadPlaceByKeyword(displayName: string, address?: string): boolean {
+  const combined = `${displayName} ${address || ''}`.toLowerCase();
+  for (const kw of BAD_KEYWORDS) {
+    if (combined.includes(kw)) return true;
+  }
+  return false;
+}
+
+/**
+ * Calculate a similarity score between venue query and Google result.
+ * Returns 0-1 where higher is better.
+ */
+function calculateMatchScore(venueTokens: Set<string>, displayName: string): number {
+  const nameTokens = tokenize(displayName);
+  if (nameTokens.length === 0 || venueTokens.size === 0) return 0.5; // neutral if can't compare
+
+  let matches = 0;
+  for (const t of nameTokens) {
+    if (venueTokens.has(t)) matches++;
+  }
+
+  // Score based on how many query tokens appear in the result
+  const coverage = matches / venueTokens.size;
+
+  // Bonus if the result also contains most of its own tokens in the query
+  const reverseMatches = nameTokens.filter(t => venueTokens.has(t)).length;
+  const reverseCoverage = reverseMatches / nameTokens.length;
+
+  return (coverage * 0.7) + (reverseCoverage * 0.3);
+}
+
+// =============================================================================
+// TIER 2: GOOGLE PLACES PHOTOS (New Places API v1) - HARDENED
+// =============================================================================
 async function getGooglePlacesPhoto(
   venueName: string,
   destination: string,
@@ -121,53 +194,33 @@ async function getGooglePlacesPhoto(
 ): Promise<DestinationImage | null> {
   try {
     const cat = (category || '').toLowerCase();
-    const hint = (
-      cat.includes('dining') || cat.includes('lunch') || cat.includes('dinner') || cat.includes('breakfast') || cat.includes('cafe')
-        ? 'restaurant'
-        : cat.includes('museum') || cat.includes('cultural')
-          ? 'museum'
-          : cat.includes('sightseeing')
-            ? 'landmark'
-            : cat.includes('spa') || cat.includes('relaxation') || cat.includes('recharge')
-              ? 'spa'
-              : ''
-    );
 
+    // For dining, use "restaurant" hint; for landmarks, use "landmark" etc.
+    const isDining = cat.includes('dining') || cat.includes('lunch') || cat.includes('dinner') ||
+                     cat.includes('breakfast') || cat.includes('brunch') || cat.includes('cafe') ||
+                     cat.includes('restaurant') || cat.includes('food');
+    const isMuseum = cat.includes('museum') || cat.includes('cultural') || cat.includes('gallery');
+    const isSpa = cat.includes('spa') || cat.includes('relaxation') || cat.includes('recharge') || cat.includes('wellness');
+    const isSightseeing = cat.includes('sightseeing') || cat.includes('landmark') || cat.includes('attraction');
+
+    const hint = isDining ? 'restaurant' : isMuseum ? 'museum' : isSpa ? 'spa wellness' : isSightseeing ? 'landmark attraction' : '';
+
+    // Build query: for dining we want "Restaurant Name restaurant Rome" to bias toward food
     const textQuery = hint
       ? `${venueName} ${hint} ${destination}`
       : `${venueName} ${destination}`;
 
-    console.log("[Images] Searching Google Places (v1) for:", textQuery);
+    console.log("[Images] Searching Google Places (v1) for:", textQuery, `[category=${category}]`);
 
-    // Use AbortController for 3-second timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-    const tokenize = (s: string) =>
-      s
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(Boolean)
-        .filter((t) => t.length >= 4);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
     const venueTokens = new Set(tokenize(venueName));
 
-    const isBadPlace = (p: any) => {
-      const types: string[] = Array.isArray(p?.types) ? p.types : [];
-      const joined = types.join(' ').toLowerCase();
-      if (joined.includes('airport') || joined.includes('transit') || joined.includes('train_station') || joined.includes('bus_station')) return true;
-      return false;
-    };
-
-    const tokenOverlapOk = (displayName: string) => {
-      const nameTokens = tokenize(displayName);
-      if (!nameTokens.length || !venueTokens.size) return true; // if we can't compare, don't block
-      return nameTokens.some((t) => venueTokens.has(t));
-    };
+    // Minimum match threshold (0-1): require at least 40% token overlap
+    const MIN_MATCH_SCORE = 0.4;
 
     try {
-      // Step 1: Search for place using new Places API v1
       const searchResponse = await fetch(
         "https://places.googleapis.com/v1/places:searchText",
         {
@@ -175,11 +228,11 @@ async function getGooglePlacesPhoto(
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": apiKey,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.photos,places.types",
+            "X-Goog-FieldMask": "places.id,places.displayName,places.photos,places.types,places.formattedAddress",
           },
           body: JSON.stringify({
             textQuery,
-            maxResultCount: 5,
+            maxResultCount: 8, // request more so we can filter
           }),
           signal: controller.signal,
         }
@@ -196,50 +249,83 @@ async function getGooglePlacesPhoto(
       const searchData = await searchResponse.json();
       const places = searchData.places || [];
 
-      console.log("[Images] Google Places v1 results:", places.length);
+      console.log("[Images] Google Places v1 returned", places.length, "results");
 
       if (places.length === 0) {
         console.log("[Images] No Google Places v1 results for:", textQuery);
         return null;
       }
 
-      // Find first place with photos that passes our guardrails
-      const placeWithPhotos = places.find((p: any) => {
-        if (!p?.photos?.length) return false;
-        if (isBadPlace(p)) return false;
-        const dn = p?.displayName?.text || '';
-        return tokenOverlapOk(dn);
-      });
+      // Score and filter candidates
+      type ScoredPlace = { place: any; score: number };
+      const scored: ScoredPlace[] = [];
 
-      if (!placeWithPhotos) {
-        console.log("[Images] No suitable photos in Google Places v1 results for:", textQuery);
+      for (const p of places) {
+        if (!p?.photos?.length) continue;
+
+        const types: string[] = Array.isArray(p?.types) ? p.types : [];
+        const displayName = p?.displayName?.text || '';
+        const address = p?.formattedAddress || '';
+
+        // Hard reject bad place types
+        if (isBadPlaceByType(types)) {
+          console.log("[Images] Rejecting (bad type):", displayName);
+          continue;
+        }
+
+        // Hard reject bad keywords
+        if (isBadPlaceByKeyword(displayName, address)) {
+          console.log("[Images] Rejecting (bad keyword):", displayName);
+          continue;
+        }
+
+        // Calculate match score
+        const score = calculateMatchScore(venueTokens, displayName);
+
+        if (score < MIN_MATCH_SCORE) {
+          console.log(`[Images] Rejecting (low score ${score.toFixed(2)}):`, displayName);
+          continue;
+        }
+
+        // Bonus for matching category type
+        let typeBonus = 0;
+        const typesJoined = types.join(' ').toLowerCase();
+        if (isDining && typesJoined.includes('restaurant')) typeBonus = 0.15;
+        if (isMuseum && typesJoined.includes('museum')) typeBonus = 0.15;
+        if (isSpa && (typesJoined.includes('spa') || typesJoined.includes('beauty'))) typeBonus = 0.15;
+
+        scored.push({ place: p, score: score + typeBonus });
+      }
+
+      if (scored.length === 0) {
+        console.log("[Images] No suitable photos after filtering for:", textQuery);
         return null;
       }
 
-      // Step 2: Get photo URL using the photo resource name
-      // Format: places/{place_id}/photos/{photo_reference}
-      const photoResource = placeWithPhotos.photos[0].name;
+      // Sort by score descending and pick best
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored[0];
 
-      // New API uses different photo URL format
+      console.log(`[Images] ✅ Best match (score ${best.score.toFixed(2)}):`, best.place.displayName?.text);
+
+      const photoResource = best.place.photos[0].name;
       const photoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
 
-      console.log("[Images] ✅ Found Google Places v1 photo for:", venueName);
-
       return {
-        id: `google-${placeWithPhotos.id}`,
+        id: `google-${best.place.id}`,
         url: photoUrl,
-        alt: `${placeWithPhotos.displayName?.text || venueName} - Photo`,
+        alt: `${best.place.displayName?.text || venueName} - Photo`,
         type: "activity",
         source: "google_places",
         width: 1200,
         height: 800,
-        placeId: placeWithPhotos.id,
+        placeId: best.place.id,
         photoReference: photoResource,
       };
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
-        console.log("[Images] Google Places v1 timeout (3s) for:", textQuery);
+        console.log("[Images] Google Places v1 timeout (4s) for:", textQuery);
       } else {
         console.error("[Images] Google Places v1 fetch error:", fetchError);
       }
@@ -544,10 +630,15 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
     /^(hotel\s+check[\-\s]?(in|out)|check[\-\s]?(in|out)\s+at)/i,
     /^(arrival|departure|transfer|airport)/i,
     /^(pack|unpack|settle\s+in)/i,
-    /^(breakfast|lunch|dinner)\s+(break|time)$/i, // Just "Lunch break" not "Lunch at Café X"
-    // Generic meal descriptors without a venue name tend to return terrible images; use category fallback instead.
-    /^(?:organic|vegetarian|vegan|local|seasonal|farm\-to\-table|tasting|traditional|street)\b.*\b(?:breakfast|brunch|lunch|dinner|meal)\b/i,
-    /^(?:breakfast|brunch|lunch|dinner|meal)\b(?!.*\b(?:at|@)\b).*/i,
+    /^(breakfast|lunch|dinner|brunch)\s+(break|time)$/i, // Just "Lunch break" not "Lunch at Café X"
+    // Generic meal descriptors without a venue name tend to return terrible images
+    /^(?:organic|vegetarian|vegan|local|seasonal|farm[\-\s]?to[\-\s]?table|tasting|traditional|street|authentic|gourmet|artisan|homemade|rustic|contemporary|modern|classic|regional|coastal)\b.*\b(?:breakfast|brunch|lunch|dinner|meal|cuisine|food|fare)\b/i,
+    /^(?:breakfast|brunch|lunch|dinner|meal)\b(?!.*\b(?:at|@|:)\b).*/i,
+    // Catch more generic patterns
+    /^(?:morning|afternoon|evening|late|early)\s+(?:breakfast|brunch|lunch|dinner|meal|snack)/i,
+    /^(?:quick|light|leisurely|relaxed|casual|formal)\s+(?:breakfast|brunch|lunch|dinner|meal)/i,
+    // Things like "Roman Cuisine Experience" with no venue name
+    /^[A-Z][a-z]+\s+(?:cuisine|culinary|gastronomy|food)\s+(?:experience|adventure|exploration|journey|tour)/i,
   ];
   
   for (const pattern of skipPatterns) {
