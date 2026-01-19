@@ -2012,10 +2012,12 @@ Generate 4-6 activities with full details including addresses, costs, and transp
     }
 
     // ==========================================================================
-    // ACTION: get-trip
+    // ACTION: get-trip (with ownership verification)
     // ==========================================================================
     if (action === 'get-trip') {
       const { tripId } = params;
+      
+      // Use authenticated client to enforce RLS, or verify ownership with service role
       const { data: trip, error } = await supabase
         .from('trips')
         .select('*')
@@ -2026,6 +2028,28 @@ Generate 4-6 activities with full details including addresses, costs, and transp
         return new Response(
           JSON.stringify({ error: "Trip not found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Verify ownership - user must be the trip owner or a collaborator
+      const isOwner = trip.user_id === authResult.userId;
+      
+      // Check if user is a collaborator via direct query
+      const { data: collab } = await supabase
+        .from('trip_collaborators')
+        .select('id')
+        .eq('trip_id', tripId)
+        .eq('user_id', authResult.userId)
+        .not('accepted_at', 'is', null)
+        .maybeSingle();
+      
+      const isCollaborator = !!collab;
+      
+      if (!isOwner && !isCollaborator) {
+        console.error(`[get-trip] Unauthorized access attempt by ${authResult.userId} for trip ${tripId}`);
+        return new Response(
+          JSON.stringify({ error: "Trip not found or access denied" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -2048,10 +2072,46 @@ Generate 4-6 activities with full details including addresses, costs, and transp
     }
 
     // ==========================================================================
-    // ACTION: save-itinerary
+    // ACTION: save-itinerary (with ownership verification)
     // ==========================================================================
     if (action === 'save-itinerary') {
       const { tripId, itinerary } = params;
+
+      // First verify the user has access to this trip
+      const { data: trip, error: tripError } = await supabase
+        .from('trips')
+        .select('user_id')
+        .eq('id', tripId)
+        .single();
+
+      if (tripError || !trip) {
+        return new Response(
+          JSON.stringify({ error: "Trip not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Verify ownership or edit permission
+      const isOwner = trip.user_id === authResult.userId;
+      
+      // Check if user is a collaborator with edit permission
+      const { data: collab } = await supabase
+        .from('trip_collaborators')
+        .select('id, permission')
+        .eq('trip_id', tripId)
+        .eq('user_id', authResult.userId)
+        .not('accepted_at', 'is', null)
+        .maybeSingle();
+      
+      const hasEditPermission = collab && (collab.permission === 'edit' || collab.permission === 'admin');
+      
+      if (!isOwner && !hasEditPermission) {
+        console.error(`[save-itinerary] Unauthorized save attempt by ${authResult.userId} for trip ${tripId}`);
+        return new Response(
+          JSON.stringify({ error: "Access denied. You don't have permission to modify this trip." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const { error } = await supabase
         .from('trips')
@@ -2077,14 +2137,14 @@ Generate 4-6 activities with full details including addresses, costs, and transp
     }
 
     // ==========================================================================
-    // ACTION: get-itinerary
+    // ACTION: get-itinerary (with ownership verification)
     // ==========================================================================
     if (action === 'get-itinerary') {
       const { tripId } = params;
 
       const { data: trip, error } = await supabase
         .from('trips')
-        .select('id, destination, destination_country, start_date, end_date, travelers, itinerary_data, itinerary_status')
+        .select('id, user_id, destination, destination_country, start_date, end_date, travelers, itinerary_data, itinerary_status')
         .eq('id', tripId)
         .single();
 
@@ -2092,6 +2152,28 @@ Generate 4-6 activities with full details including addresses, costs, and transp
         return new Response(
           JSON.stringify({ error: "Trip not found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Verify ownership or collaboration
+      const isOwner = trip.user_id === authResult.userId;
+      
+      // Check if user is a collaborator
+      const { data: collab } = await supabase
+        .from('trip_collaborators')
+        .select('id')
+        .eq('trip_id', tripId)
+        .eq('user_id', authResult.userId)
+        .not('accepted_at', 'is', null)
+        .maybeSingle();
+      
+      const isCollaborator = !!collab;
+      
+      if (!isOwner && !isCollaborator) {
+        console.error(`[get-itinerary] Unauthorized access attempt by ${authResult.userId} for trip ${tripId}`);
+        return new Response(
+          JSON.stringify({ error: "Trip not found or access denied" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
