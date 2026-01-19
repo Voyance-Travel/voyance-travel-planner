@@ -1748,6 +1748,7 @@ export type Database = {
       }
       trips: {
         Row: {
+          abandoned_at: string | null
           budget_tier: string | null
           created_at: string
           destination: string
@@ -1760,6 +1761,7 @@ export type Database = {
           itinerary_status:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          last_activity_at: string | null
           metadata: Json | null
           name: string
           origin_city: string | null
@@ -1774,6 +1776,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          abandoned_at?: string | null
           budget_tier?: string | null
           created_at?: string
           destination: string
@@ -1786,6 +1789,7 @@ export type Database = {
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          last_activity_at?: string | null
           metadata?: Json | null
           name: string
           origin_city?: string | null
@@ -1800,6 +1804,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          abandoned_at?: string | null
           budget_tier?: string | null
           created_at?: string
           destination?: string
@@ -1812,6 +1817,7 @@ export type Database = {
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          last_activity_at?: string | null
           metadata?: Json | null
           name?: string
           origin_city?: string | null
