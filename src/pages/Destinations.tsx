@@ -62,7 +62,7 @@ const popularDestinations = [
     id: 'barcelona',
     city: 'Barcelona',
     country: 'Spain',
-    image: 'https://images.unsplash.com/photo-1583422409516-2895a77efed6?w=400&q=80',
+    image: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400&q=80',
     trending: false,
   },
   {
