@@ -610,7 +610,8 @@ export default function TripDetail() {
           hideOverlayText
           className="!rounded-none"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+        {/* Subtle bottom fade for content transition - avoid washing out the image */}
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
       </div>
       
       <section className="pb-16 -mt-8 relative z-10">
