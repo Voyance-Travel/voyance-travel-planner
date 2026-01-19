@@ -19,21 +19,30 @@ serve(async (req) => {
   try {
     log("Function started");
 
-    const supabase = createClient(
+    const { sessionId, tripId, itemId } = await req.json();
+
+    const serviceSupabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Authenticate user
+    // Try to authenticate user (optional for session verification)
+    let userId: string | null = null;
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header");
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) throw new Error("User not authenticated");
-    log("User authenticated", { userId: user.id });
-
-    const { sessionId, tripId, itemId } = await req.json();
+    if (authHeader) {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      );
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (!authError && user) {
+        userId = user.id;
+        log("User authenticated", { userId });
+      } else {
+        log("User not authenticated, will verify by session ID only");
+      }
+    }
 
     if (!sessionId && !tripId) {
       throw new Error("Either sessionId or tripId is required");
@@ -44,11 +53,6 @@ serve(async (req) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
-    const serviceSupabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
-
     // If sessionId provided, verify that specific session
     if (sessionId) {
       log("Verifying session", { sessionId });
@@ -57,7 +61,7 @@ serve(async (req) => {
       log("Session status", { status: session.payment_status, paymentIntent: session.payment_intent });
 
       if (session.payment_status === 'paid') {
-        // Update payment record to paid
+        // Update payment record to paid using the session ID (secure because only the checkout initiator has this)
         const { error: updateError } = await serviceSupabase
           .from("trip_payments")
           .update({
@@ -87,13 +91,18 @@ serve(async (req) => {
     }
 
     // If tripId provided, get all payments for the trip
-    log("Fetching payments for trip", { tripId });
+    // This requires authentication
+    if (!userId) {
+      throw new Error("Authentication required to fetch trip payments");
+    }
+
+    log("Fetching payments for trip", { tripId, userId });
 
     const { data: payments, error: paymentsError } = await serviceSupabase
       .from("trip_payments")
       .select("*")
       .eq("trip_id", tripId)
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     if (paymentsError) {
       throw new Error(`Failed to fetch payments: ${paymentsError.message}`);
