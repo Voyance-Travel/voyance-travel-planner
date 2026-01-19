@@ -102,10 +102,6 @@ export default function TrendingDestinationsEnhanced() {
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                  <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 bg-white/90 backdrop-blur-sm rounded-full text-xs font-medium">
-                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    {destination.rating}
-                  </div>
                   <div className="absolute bottom-3 left-3">
                     <span className="px-2 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs text-white">
                       {destination.category}
