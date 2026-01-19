@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LiveItineraryView } from '@/components/itinerary/LiveItineraryView';
 import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
+import { ItineraryEditor } from '@/components/itinerary/ItineraryEditor';
 import { supabase } from '@/integrations/supabase/client';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
-import type { GeneratedDay } from '@/hooks/useItineraryGeneration';
+import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -297,13 +298,17 @@ export default function TripDetail() {
   })();
 
   // Handle itinerary generation complete
-  const handleGenerationComplete = useCallback((generatedDays: GeneratedDay[]) => {
+  const handleGenerationComplete = useCallback((generatedDays: GeneratedDay[], generatedOverview?: TripOverview) => {
     // Update local trip state with the new itinerary
     setTrip(prev => {
       if (!prev) return prev;
       return {
         ...prev,
-        itinerary_data: JSON.parse(JSON.stringify({ days: generatedDays })),
+        itinerary_data: JSON.parse(JSON.stringify({ 
+          days: generatedDays,
+          overview: generatedOverview,
+          status: 'ready'
+        })),
         itinerary_status: 'ready' as const,
       };
     });
@@ -502,82 +507,66 @@ export default function TripDetail() {
               </div>
             </div>
           ) : (
-            /* Static view for non-active trips with itinerary */
-            <div className="space-y-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="text-3xl font-serif font-bold">{trip.name}</h1>
-                  <div className="flex items-center gap-2 text-muted-foreground mt-2">
-                    <MapPin className="w-4 h-4" />
-                    <span>{trip.destination}</span>
-                    {trip.destination_country && (
-                      <span className="text-muted-foreground/60">• {trip.destination_country}</span>
-                    )}
-                  </div>
-                </div>
-                
-                <Button variant="outline" size="sm" onClick={() => setShowGenerator(true)} className="gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  Regenerate
-                </Button>
-              </div>
+            /* Interactive Itinerary Editor for non-active trips with itinerary */
+            (() => {
+              // Transform the itinerary data into the expected format
+              const metadata = trip.itinerary_data as Record<string, unknown> | null;
+              const rawDays = (metadata?.days as unknown[]) || [];
+              const overview = metadata?.overview as TripOverview | undefined;
+              
+              const editorDays: GeneratedDay[] = rawDays.map((day: unknown, idx: number) => {
+                const d = day as Record<string, unknown>;
+                const activities = (d.activities as unknown[]) || [];
+                return {
+                  dayNumber: (d.dayNumber as number) || idx + 1,
+                  date: (d.date as string) || calculateDayDate(trip.start_date, idx),
+                  title: (d.title as string) || (d.theme as string) || `Day ${idx + 1}`,
+                  theme: d.theme as string | undefined,
+                  activities: activities.map((act: unknown, actIdx: number) => {
+                    const a = act as Record<string, unknown>;
+                    const loc = a.location as Record<string, unknown> | string | undefined;
+                    return {
+                      id: (a.id as string) || `act-${idx}-${actIdx}`,
+                      title: (a.title as string) || (a.name as string) || 'Activity',
+                      description: (a.description as string) || '',
+                      category: (a.category as string) || 'activity',
+                      startTime: (a.startTime as string) || (a.start_time as string) || '09:00',
+                      endTime: (a.endTime as string) || (a.end_time as string) || '10:00',
+                      location: typeof loc === 'object' && loc !== null 
+                        ? { name: loc.name as string, address: loc.address as string } 
+                        : { name: String(loc || ''), address: '' },
+                      cost: a.cost as { amount: number; currency: string } || { amount: 0, currency: 'USD' },
+                      bookingRequired: (a.bookingRequired as boolean) || false,
+                      tags: (a.tags as string[]) || [],
+                      transportation: a.transportation as { method: string; duration: string; estimatedCost: { amount: number; currency: string }; instructions: string } || {
+                        method: 'walk',
+                        duration: '10 min',
+                        estimatedCost: { amount: 0, currency: 'USD' },
+                        instructions: ''
+                      },
+                      isLocked: (a.isLocked as boolean) || false,
+                    };
+                  }),
+                  metadata: d.metadata as { theme?: string; totalEstimatedCost?: number; mealsIncluded?: number; pacingLevel?: 'relaxed' | 'moderate' | 'packed' } | undefined
+                };
+              });
 
-              {/* Itinerary display */}
-              <div className="space-y-4">
-                {itineraryDays.map((day) => (
-                  <div key={day.dayNumber} className="bg-card border border-border rounded-xl overflow-hidden">
-                    <div className="px-5 py-4 bg-muted/30 border-b border-border">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary">Day {day.dayNumber}</Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {format(parseISO(day.date), 'EEEE, MMM d')}
-                        </span>
-                        {day.theme && (
-                          <span className="text-sm font-medium text-foreground ml-auto">
-                            {day.theme}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="p-4">
-                      {day.activities.length > 0 ? (
-                        <div className="space-y-3">
-                          {day.activities.map((activity, idx) => (
-                            <div key={activity.id || idx} className="flex items-start gap-4 p-3 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
-                              <div className="text-sm text-muted-foreground w-14 flex-shrink-0 font-mono">
-                                {activity.startTime || '--:--'}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium">{activity.name}</p>
-                                {activity.description && (
-                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                    {activity.description}
-                                  </p>
-                                )}
-                                {activity.location?.name && (
-                                  <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                                    <MapPin className="h-3 w-3" />
-                                    {activity.location.name}
-                                  </div>
-                                )}
-                              </div>
-                              {activity.category && (
-                                <Badge variant="outline" className="text-xs capitalize shrink-0">
-                                  {activity.category}
-                                </Badge>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground text-center py-4">No activities planned</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+              return (
+                <ItineraryEditor
+                  tripId={trip.id}
+                  destination={trip.destination}
+                  destinationCountry={trip.destination_country || undefined}
+                  startDate={trip.start_date}
+                  endDate={trip.end_date}
+                  travelers={trip.travelers || 1}
+                  budgetTier={trip.budget_tier || undefined}
+                  days={editorDays}
+                  overview={overview}
+                  flightSelection={trip.flight_selection as Record<string, unknown> | null}
+                  hotelSelection={trip.hotel_selection as Record<string, unknown> | null}
+                />
+              );
+            })()
           )}
         </div>
       </section>
