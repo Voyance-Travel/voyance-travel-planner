@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { buildRoute } from '@/config/routes';
 import { Skeleton } from '@/components/ui/skeleton';
 
+import barcelonaThumb from '@/assets/destinations/barcelona.jpg';
+
 // Hardcoded featured destinations with pre-loaded images
 const featuredDestinations = [
   {
@@ -62,7 +64,7 @@ const popularDestinations = [
     id: 'barcelona',
     city: 'Barcelona',
     country: 'Spain',
-    image: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400&q=80',
+    image: barcelonaThumb,
     trending: false,
   },
   {
