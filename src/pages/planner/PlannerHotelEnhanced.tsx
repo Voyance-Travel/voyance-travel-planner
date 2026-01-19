@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, ArrowRight, Sparkles } from 'lucide-react';
+import { Building2, ArrowRight, Sparkles, SkipForward } from 'lucide-react';
 import { toast } from 'sonner';
 
 import MainLayout from '@/components/layout/MainLayout';
@@ -29,6 +29,7 @@ import EditorialProgressTracker from '@/components/planner/shared/EditorialProgr
 import LoadingInterlude from '@/components/planner/shared/LoadingInterlude';
 import HotelFilters, { type HotelFiltersState } from '@/components/planner/hotel/HotelFilters';
 import EnhancedHotelCard, { type EnhancedHotelOption } from '@/components/planner/hotel/EnhancedHotelCard';
+import { ManualBookingModal, type ManualHotelData } from '@/components/planner/ManualBookingModal';
 
 // User hotel preferences type
 interface UserHotelPreferences {
@@ -136,6 +137,7 @@ export default function PlannerHotelEnhanced() {
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(plannerState.hotel?.id || null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [holdingHotelId, setHoldingHotelId] = useState<string | null>(null);
+  const [showSkipModal, setShowSkipModal] = useState(false);
   
   // User preferences state
   const [userPreferences, setUserPreferences] = useState<UserHotelPreferences | null>(null);
@@ -466,6 +468,16 @@ export default function PlannerHotelEnhanced() {
     }
   };
 
+  const getNavigationParams = () => {
+    const params = new URLSearchParams(searchParams);
+    params.set('destination', destination);
+    params.set('origin', origin);
+    params.set('startDate', startDate);
+    params.set('endDate', endDate);
+    params.set('travelers', String(travelers));
+    return params;
+  };
+
   const handleContinue = async () => {
     if (!plannerState.hotel?.id) {
       toast.error('Please select a hotel and room first');
@@ -483,13 +495,41 @@ export default function PlannerHotelEnhanced() {
       // Continue navigation even if save fails - data is still in context
     }
 
-    const params = new URLSearchParams(searchParams);
-    params.set('destination', destination);
-    params.set('origin', origin);
-    params.set('startDate', startDate);
-    params.set('endDate', endDate);
-    params.set('travelers', String(travelers));
+    navigate(`/planner/summary?${getNavigationParams().toString()}`);
+  };
 
+  const handleSkipHotel = () => {
+    setShowSkipModal(true);
+  };
+
+  const handleManualHotelSubmit = async (data: { hotel?: ManualHotelData }) => {
+    if (data.hotel) {
+      // Store manual hotel as a special selection
+      setHotel({
+        id: 'manual',
+        name: data.hotel.name || 'Manual Entry',
+        location: data.hotel.neighborhood || destination,
+        address: data.hotel.address,
+        neighborhood: data.hotel.neighborhood,
+        rating: 0,
+        pricePerNight: 0,
+        roomType: 'Standard',
+        amenities: [],
+        checkIn: data.hotel.checkInTime,
+        checkOut: data.hotel.checkOutTime,
+      });
+      toast.success('Hotel details saved');
+    }
+    
+    const params = getNavigationParams();
+    params.set('skippedHotel', 'true');
+    if (data.hotel) params.set('manualHotel', 'true');
+    navigate(`/planner/summary?${params.toString()}`);
+  };
+
+  const handleSkipWithoutDetails = () => {
+    const params = getNavigationParams();
+    params.set('skippedHotel', 'true');
     navigate(`/planner/summary?${params.toString()}`);
   };
 
@@ -589,10 +629,16 @@ export default function PlannerHotelEnhanced() {
                 <Button variant="outline" onClick={() => navigate(-1)}>
                   Back
                 </Button>
-                <Button onClick={handleContinue} disabled={!plannerState.hotel?.id} size="lg">
-                  Continue to Trip Summary
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
+                <div className="flex gap-3">
+                  <Button variant="ghost" onClick={handleSkipHotel} className="text-muted-foreground">
+                    <SkipForward className="h-4 w-4 mr-2" />
+                    Skip & Add Later
+                  </Button>
+                  <Button onClick={handleContinue} disabled={!plannerState.hotel?.id} size="lg">
+                    Continue to Trip Summary
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
               </motion.div>
             </div>
 
@@ -631,6 +677,15 @@ export default function PlannerHotelEnhanced() {
           </div>
         </div>
       </section>
+
+      {/* Skip Hotel Modal */}
+      <ManualBookingModal
+        open={showSkipModal}
+        onClose={() => setShowSkipModal(false)}
+        onSubmit={handleManualHotelSubmit}
+        type="hotel"
+        onSkip={handleSkipWithoutDetails}
+      />
     </MainLayout>
   );
 }
