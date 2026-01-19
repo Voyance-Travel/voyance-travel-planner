@@ -1339,24 +1339,100 @@ serve(async (req) => {
         totalActivitiesOptimized += activities.length;
       }
 
-      // Step 7: Calculate real transportation between activities
+      // Step 7: Calculate transportation between activities
+      // NOTE: Transportation is attached to the *current* activity, representing how to get to the NEXT activity.
+      // This matches the frontend rendering which shows "Transportation to next" under the current row.
       if (enableRealTransport) {
-        for (let i = 1; i < activities.length; i++) {
-          const prev = activities[i - 1];
-          const curr = activities[i];
+        const stableHash = (input: string): number => {
+          let hash = 0;
+          for (let i = 0; i < input.length; i++) {
+            hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+          }
+          return hash;
+        };
 
-          // Skip downtime blocks
-          if (curr.timeBlockType === 'downtime') continue;
+        const hashRange = (seed: string, min: number, max: number): number => {
+          const span = Math.max(1, max - min + 1);
+          return min + (stableHash(seed) % span);
+        };
 
-          const originCoords = getCoordinates(prev.location);
-          const destCoords = getCoordinates(curr.location);
+        const estimateNoCoords = (from: Activity, to: Activity, seed: string): TransportData => {
+          const fromCat = (from.category || from.type || '').toLowerCase();
+          const toCat = (to.category || to.type || '').toLowerCase();
+
+          // Defaults: reasonable, but not identical for every leg
+          let method: 'walk' | 'metro' | 'uber' = 'walk';
+          let durationMins = hashRange(seed, 8, 18);
+          let cost = 0;
+          let instructions = `Walk to ${to.location?.name || to.title}`;
+
+          const isMajor = (c: string) => ['sightseeing', 'cultural', 'museum'].includes(c);
+          const isDiningish = (c: string) => ['dining', 'cafe', 'coffee', 'breakfast', 'lunch', 'dinner', 'relaxation'].includes(c);
+
+          // Dining/relaxation tends to be nearby
+          if (isDiningish(fromCat) || isDiningish(toCat)) {
+            method = 'walk';
+            durationMins = hashRange(seed, 5, 14);
+            instructions = `Short walk to ${to.location?.name || to.title}`;
+          }
+          // Between major attractions: assume public transit more often
+          else if (isMajor(fromCat) && isMajor(toCat)) {
+            method = 'metro';
+            durationMins = hashRange(seed, 12, 28);
+            cost = 3;
+            instructions = `Take public transit to ${to.location?.name || to.title}`;
+          }
+          // Late-night / farther hops: occasional rideshare
+          else if (['nightlife', 'entertainment'].includes(fromCat) || ['nightlife', 'entertainment'].includes(toCat)) {
+            method = 'uber';
+            durationMins = hashRange(seed, 10, 22);
+            cost = Math.round(8 + durationMins * 0.6);
+            instructions = `Take a rideshare to ${to.location?.name || to.title}`;
+          }
+
+          // Convert duration -> distance using mode-specific speeds
+          const speedMetersPerMin = method === 'walk' ? 80 : method === 'metro' ? 400 : 650;
+          const distanceMeters = durationMins * speedMetersPerMin;
+          const distanceText = distanceMeters < 1000
+            ? `${distanceMeters}m`
+            : `${(distanceMeters / 1000).toFixed(1)}km`;
+
+          return {
+            method,
+            duration: `${durationMins} min`,
+            durationMinutes: durationMins,
+            distance: distanceText,
+            distanceMeters,
+            estimatedCost: { amount: cost, currency: 'USD' },
+            instructions,
+          };
+        };
+
+        for (let i = 0; i < activities.length - 1; i++) {
+          const from = activities[i];
+
+          // Don't attach transport to downtime blocks
+          if (from.timeBlockType === 'downtime') continue;
+
+          // Find next non-downtime activity (so transport doesn't point to "Flexible")
+          let nextIndex = i + 1;
+          while (nextIndex < activities.length && activities[nextIndex].timeBlockType === 'downtime') {
+            nextIndex++;
+          }
+          if (nextIndex >= activities.length) continue;
+
+          const to = activities[nextIndex];
+
+          const originCoords = getCoordinates(from.location);
+          const destCoords = getCoordinates(to.location);
+
+          const seed = `${tripId}|day:${day.dayNumber}|from:${from.id}|to:${to.id}`;
 
           if (originCoords && destCoords) {
-            // We have coordinates - calculate real transport
-            const transport = await getOptimalTransport(originCoords, destCoords, curr.location?.name || curr.title);
+            const transport = await getOptimalTransport(originCoords, destCoords, to.location?.name || to.title);
 
             activities[i] = {
-              ...curr,
+              ...from,
               transportation: {
                 method: transport.method,
                 duration: transport.duration,
@@ -1369,51 +1445,12 @@ serve(async (req) => {
             };
             transportCalculated++;
           } else {
-            // No coordinates - provide smart estimation based on activity category
-            const prevCategory = (prev.category || prev.type || '').toLowerCase();
-            const currCategory = (curr.category || curr.type || '').toLowerCase();
-            
-            // Estimate transport based on common patterns
-            let method = 'walk';
-            let durationMins = 15;
-            let cost = 0;
-            let instructions = '';
-            
-            // If previous was dining/relaxation and next is activity, likely nearby
-            if (['dining', 'relaxation', 'cafe'].includes(prevCategory)) {
-              method = 'walk';
-              durationMins = 10;
-              instructions = `Short walk to ${curr.location?.name || curr.title}`;
-            }
-            // If moving between major attractions, might need transport
-            else if (['sightseeing', 'cultural', 'museum'].includes(prevCategory) && 
-                     ['sightseeing', 'cultural', 'museum'].includes(currCategory)) {
-              method = 'metro';
-              durationMins = 20;
-              cost = 3;
-              instructions = `Take public transit to ${curr.location?.name || curr.title}`;
-            }
-            // Default reasonable estimate
-            else {
-              method = 'walk';
-              durationMins = 15;
-              instructions = `Walk to ${curr.location?.name || curr.title}`;
-            }
-            
             activities[i] = {
-              ...curr,
-              transportation: {
-                method,
-                duration: `${durationMins} min`,
-                durationMinutes: durationMins,
-                distance: method === 'walk' ? `${durationMins * 80}m` : `${(durationMins * 0.4).toFixed(1)}km`,
-                distanceMeters: method === 'walk' ? durationMins * 80 : durationMins * 400,
-                estimatedCost: { amount: cost, currency: 'USD' },
-                instructions,
-              },
+              ...from,
+              transportation: estimateNoCoords(from, to, seed),
             };
             transportCalculated++;
-            console.log(`[optimize-itinerary] No coords for "${curr.title}", using estimated transport`);
+            console.log(`[optimize-itinerary] No coords for leg "${from.title}" → "${to.title}", using estimated transport`);
           }
         }
       }

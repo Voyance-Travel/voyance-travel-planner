@@ -63,6 +63,7 @@ export interface EditorialActivity {
     estimatedCost?: { amount: number; currency: string };
     instructions?: string;
   };
+  timeBlockType?: string;
   isLocked?: boolean;
   website?: string;
 }
@@ -1271,7 +1272,7 @@ function ActivityRow({
               </div>
             )}
             {/* Transportation to next */}
-            {activity.transportation && !isLast && (
+            {activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
               <div className="flex flex-col gap-1 mt-2 p-2 bg-secondary/30 rounded border-l-2 border-primary/30">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Car className="h-3 w-3" />
