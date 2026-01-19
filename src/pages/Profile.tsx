@@ -38,6 +38,9 @@ import RotatingCoverPhoto from '@/components/profile/RotatingCoverPhoto';
 import FriendsSection from '@/components/profile/FriendsSection';
 import MemoryLane from '@/components/profile/MemoryLane';
 import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
+import { AddCreditsModal } from '@/components/checkout';
+import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
+import { Wallet } from 'lucide-react';
 
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences';
 
@@ -138,7 +141,8 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [trips, setTrips] = useState<DisplayTrip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
-  
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const { data: userCredits, refetch: refetchCredits } = useUserCredits();
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -187,8 +191,13 @@ export default function Profile() {
       checkSubscription();
     } else if (searchParams.get('canceled') === 'true') {
       toast.info('Checkout canceled');
+    } else if (searchParams.get('credits_added') === 'true') {
+      const amount = searchParams.get('amount');
+      toast.success(amount ? `$${(parseInt(amount) / 100).toFixed(2)} added to your wallet!` : 'Credits added!');
+      setActiveTab('subscription');
+      refetchCredits();
     }
-  }, [searchParams]);
+  }, [searchParams, refetchCredits]);
 
   // Check subscription status
   const checkSubscription = async () => {
@@ -705,6 +714,41 @@ export default function Profile() {
               </div>
             )}
 
+            {/* Credit Wallet Card */}
+            <div className="relative">
+              <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-accent/50 via-primary/30 to-transparent" />
+              <div className="pl-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Wallet className="h-4 w-4 text-accent" />
+                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                    Credit Wallet
+                  </span>
+                </div>
+                
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
+                      <p className="text-3xl font-serif font-medium text-foreground">
+                        {formatCredits(userCredits?.balance_cents ?? 0)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Use credits for route optimization, day builds, and more
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => setShowCreditsModal(true)}
+                      variant="outline"
+                      className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Credits
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* One-Time AI Purchase - Editorial Feature Card */}
             <div className="relative">
               <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-primary/50 via-accent/30 to-transparent" />
@@ -950,6 +994,12 @@ export default function Profile() {
       </main>
 
       <Footer />
+
+      <AddCreditsModal
+        isOpen={showCreditsModal}
+        onClose={() => setShowCreditsModal(false)}
+        currentBalance={userCredits?.balance_cents ?? 0}
+      />
     </div>
   );
 }
