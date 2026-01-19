@@ -124,7 +124,8 @@ export default function EnhancedFlightCard({
   showBudgetWarnings = true,
 }: EnhancedFlightCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [selectedCabinIndex, setSelectedCabinIndex] = useState(0);
+  // Track locally selected cabin index for preview (doesn't trigger selection)
+  const [previewCabinIndex, setPreviewCabinIndex] = useState(0);
 
   const primarySegment = flight.segments[0];
   const lastSegment = flight.segments[flight.segments.length - 1];
@@ -156,18 +157,26 @@ export default function EnhancedFlightCard({
       .join(' · ')}`;
   }, [flight.layovers, flight.stops]);
 
-  const handleCabinSelect = (index: number) => {
-    setSelectedCabinIndex(index);
-    onSelect(flight.cabinOptions[index].cabin);
+  // Preview cabin (for highlighting) - doesn't trigger selection
+  const handleCabinPreview = (index: number) => {
+    setPreviewCabinIndex(index);
   };
 
+  // Actually select the flight with the chosen cabin
+  const handleSelectFlight = () => {
+    onSelect(flight.cabinOptions[activeCabin].cabin);
+  };
+
+  // Determine which cabin is active for display purposes
   const activeCabin = useMemo(() => {
-    if (selectedCabin) {
+    // If this flight is selected and we have a selectedCabin, use it
+    if (isSelected && selectedCabin) {
       const idx = flight.cabinOptions.findIndex((c) => c.cabin === selectedCabin);
       if (idx >= 0) return idx;
     }
-    return selectedCabinIndex;
-  }, [flight.cabinOptions, selectedCabin, selectedCabinIndex]);
+    // Otherwise use the preview index
+    return previewCabinIndex;
+  }, [flight.cabinOptions, selectedCabin, previewCabinIndex, isSelected]);
 
   return (
     <motion.div
@@ -253,7 +262,7 @@ export default function EnhancedFlightCard({
                 <button
                   key={option.cabin}
                   type="button"
-                  onClick={() => handleCabinSelect(index)}
+                  onClick={() => handleCabinPreview(index)}
                   className={cn(
                     'min-w-[80px] max-w-[110px] p-1.5 rounded-lg border transition-all text-left',
                     activeCabin === index ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
@@ -261,7 +270,7 @@ export default function EnhancedFlightCard({
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-[11px]">{formatCabinClass(option.cabin)}</span>
-                    {activeCabin === index && <Check className="h-3 w-3 text-primary" />}
+                    {activeCabin === index && <div className="w-2 h-2 rounded-full bg-primary" />}
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold">${option.price}</span>
@@ -275,7 +284,7 @@ export default function EnhancedFlightCard({
           </div>
 
           <Button
-            onClick={() => onSelect(flight.cabinOptions[activeCabin].cabin)}
+            onClick={handleSelectFlight}
             disabled={isLoading}
             variant={isSelected ? 'default' : 'outline'}
             size="default"
