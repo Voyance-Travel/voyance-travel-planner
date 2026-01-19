@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.send-price-alerts]
 verify_jwt = false
+
+[functions.delete-my-account]
+verify_jwt = false

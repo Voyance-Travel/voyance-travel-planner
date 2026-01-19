@@ -213,27 +213,26 @@ export default function Settings() {
     }
   };
 
-  // Account deletion handler
+  // Account deletion handler - calls edge function to fully delete auth user
   const handleDeleteAccount = async () => {
     if (!user?.id) return;
     
     setDeletingAccount(true);
     try {
-      // Delete user data from various tables
-      const deletePromises = [
-        supabase.from('trips').delete().eq('user_id', user.id),
-        supabase.from('user_preferences').delete().eq('user_id', user.id),
-        supabase.from('profiles').delete().eq('id', user.id),
-        supabase.from('quiz_responses').delete().eq('user_id', user.id),
-        supabase.from('saved_items').delete().eq('user_id', user.id),
-      ];
+      // Call the self-service deletion edge function
+      // This deletes the auth user, which cascades to all related data
+      const { error } = await supabase.functions.invoke('delete-my-account');
       
-      await Promise.all(deletePromises);
+      if (error) {
+        console.error('Delete account error:', error);
+        toast.error(error.message || 'Failed to delete account. Please contact support.');
+        return;
+      }
       
-      // Sign out the user
+      // Sign out locally (session is already invalidated server-side)
       await supabase.auth.signOut();
       
-      toast.success('Your account has been deleted');
+      toast.success('Your account has been permanently deleted');
       navigate(ROUTES.HOME);
     } catch (err) {
       console.error('Delete account error:', err);

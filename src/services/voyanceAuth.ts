@@ -98,15 +98,22 @@ export async function getAuthHeader(): Promise<Record<string, string>> {
 // Auth Operations
 // ============================================================================
 
-export async function signUp(email: string, password: string, name?: string): Promise<AuthResponse> {
+export async function signUp(email: string, password: string, name?: string | { firstName: string; lastName: string }): Promise<AuthResponse> {
   try {
+    // Support both legacy string name and new object format
+    const firstName = typeof name === 'object' ? name.firstName : name || email.split('@')[0];
+    const lastName = typeof name === 'object' ? name.lastName : '';
+    const fullName = typeof name === 'object' ? `${name.firstName} ${name.lastName}` : name || email.split('@')[0];
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          name: name || email.split('@')[0],
-          display_name: name || email.split('@')[0],
+          first_name: firstName,
+          last_name: lastName,
+          name: fullName,
+          display_name: fullName,
         },
       },
     });
