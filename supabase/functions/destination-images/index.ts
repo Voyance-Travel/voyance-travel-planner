@@ -533,13 +533,19 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
 const CATEGORY_FALLBACKS: Record<string, string> = {
   dining: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80", // Elegant restaurant
   restaurant: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80",
+  breakfast: "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=1200&q=80", // Breakfast
+  lunch: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1200&q=80", // Lunch
+  dinner: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=80", // Dinner
+  cafe: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=1200&q=80", // Cafe
+  coffee: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=1200&q=80", // Coffee
   food: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", // Food plate
   sightseeing: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80", // Scenic view
   cultural: "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=1200&q=80", // Museum interior
   museum: "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=1200&q=80",
   shopping: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&q=80", // Shopping street
-  relaxation: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=1200&q=80", // Spa/wellness
-  spa: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=1200&q=80",
+  relaxation: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=80", // Spa face mask
+  recharge: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=80", // Spa face mask
+  spa: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=80", // Spa face mask
   accommodation: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80", // Hotel room
   hotel: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80",
   transport: "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=1200&q=80", // Travel transport
