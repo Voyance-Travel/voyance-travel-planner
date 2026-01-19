@@ -413,9 +413,9 @@ async function getCollaboratorPreferences(supabase: any, tripId: string): Promis
 
     const userIds = collaborators.map((c: { user_id: string }) => c.user_id);
     
-    // Fetch their preferences
+    // Fetch their preferences using the SAFE view (excludes PII like phone_number)
     const { data: preferences, error: prefError } = await supabase
-      .from('user_preferences')
+      .from('user_preferences_safe')
       .select('*')
       .in('user_id', userIds);
 
