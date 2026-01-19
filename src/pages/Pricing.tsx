@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, ArrowRight, Loader2 } from 'lucide-react';
+import { Check, ArrowRight, Loader2, Sparkles, MapPin, Calendar, Users, Route, Edit3, Wallet } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -11,6 +11,7 @@ import { PLAN_FEATURES, STRIPE_PRODUCTS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
+import pricingHero from '@/assets/pricing-hero.jpg';
 
 interface CheckoutConfig {
   priceId: string;
@@ -28,12 +29,12 @@ export default function Pricing() {
 
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      toast({ title: "Purchase successful!", description: "Your subscription is now active." });
+      toast({ title: "Welcome aboard!", description: "Your plan is now active." });
       searchParams.delete('success');
       setSearchParams(searchParams);
     }
     if (searchParams.get('canceled') === 'true') {
-      toast({ title: "Checkout canceled", description: "You can try again whenever you're ready." });
+      toast({ title: "No worries", description: "You can upgrade whenever you're ready." });
       searchParams.delete('canceled');
       setSearchParams(searchParams);
     }
@@ -44,13 +45,13 @@ export default function Pricing() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast({ title: "Sign in required", description: "Please sign in to subscribe." });
+        toast({ title: "Sign in first", description: "Create an account to get started." });
         navigate('/signin?redirect=/pricing');
         return;
       }
       setCheckoutConfig({ priceId, mode, productName: productDisplayName, returnPath: '/payment-success' });
     } catch (error) {
-      toast({ title: "Checkout failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
       setLoadingPlan(null);
     }
@@ -58,129 +59,287 @@ export default function Pricing() {
 
   return (
     <MainLayout>
-      <Head title="Pricing | Voyance" description="Simple, transparent pricing. Your first trip is free." />
+      <Head title="Pricing | Voyance" description="Travel planning that fits your style. Start free, upgrade when you're ready." />
       
-      {/* Hero */}
-      <section className="pt-32 pb-16">
-        <div className="max-w-2xl mx-auto px-4 text-center">
+      {/* Hero with Image */}
+      <section className="relative min-h-[50vh] flex items-center justify-center overflow-hidden">
+        {/* Background Image */}
+        <div className="absolute inset-0">
+          <img 
+            src={pricingHero} 
+            alt="Travel planning inspiration" 
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/60 to-background" />
+        </div>
+        
+        <div className="relative z-10 max-w-3xl mx-auto px-4 text-center py-20">
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-sm font-medium tracking-widest text-primary uppercase mb-4"
+          >
+            Pricing
+          </motion.p>
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-4 tracking-tight"
+            transition={{ delay: 0.1 }}
+            className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-foreground mb-5 tracking-tight leading-[1.1]"
           >
-            Your first trip is free.
+            Plan trips that feel
+            <br />
+            <span className="italic">effortlessly perfect.</span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-lg text-muted-foreground"
+            transition={{ delay: 0.2 }}
+            className="text-lg text-muted-foreground max-w-xl mx-auto"
           >
-            One complete itinerary per month at full power. Upgrade when you want more.
+            From your first daydream to your final dinner reservation, 
+            Voyance handles the details so you can focus on the adventure.
           </motion.p>
         </div>
       </section>
 
-      {/* Two-Column Plans */}
-      <section className="pb-20">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-6">
-            
-            {/* Left Column: Free + Trip Pass */}
+      {/* What You Get Section */}
+      <section className="py-16 border-b border-border">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">What Voyance builds for you</h2>
+            <p className="text-muted-foreground">Every plan includes AI-powered itinerary generation</p>
+          </motion.div>
+          
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              { icon: Calendar, title: 'Day-by-day itineraries', desc: 'Complete schedules with activities, meals, and timing that actually makes sense.' },
+              { icon: MapPin, title: 'Local recommendations', desc: 'Hidden gems and neighborhood picks, not just tourist traps.' },
+              { icon: Route, title: 'Smart routing', desc: 'Activities ordered to minimize backtracking and maximize your time.' },
+              { icon: Edit3, title: 'Easy customization', desc: 'Swap activities, adjust timing, lock favorites. Your trip, your way.' },
+              { icon: Users, title: 'Group coordination', desc: 'Split budgets, share itineraries, and plan together in real-time.' },
+              { icon: Wallet, title: 'Budget awareness', desc: 'See estimated costs upfront. No surprises when you get there.' },
+            ].map((item, i) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.05 }}
+                className="text-center"
+              >
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <item.icon className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="font-medium text-foreground mb-1">{item.title}</h3>
+                <p className="text-sm text-muted-foreground">{item.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Cards */}
+      <section className="py-20">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">Choose your pace</h2>
+            <p className="text-muted-foreground">Start free. Upgrade when you need more.</p>
+          </motion.div>
+
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Left: Free + Trip Pass */}
             <div className="space-y-6">
               {/* Free */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card rounded-xl border border-border p-6">
-                <h3 className="text-xl font-serif font-bold text-foreground mb-1">Free</h3>
-                <p className="text-sm text-muted-foreground mb-4">Try Voyance with monthly limits.</p>
-                <div className="mb-5">
-                  <span className="text-3xl font-bold text-foreground">$0</span>
-                  <span className="text-sm text-muted-foreground ml-1">forever</span>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }} 
+                whileInView={{ opacity: 1, y: 0 }} 
+                viewport={{ once: true }}
+                className="bg-card rounded-2xl border border-border p-8"
+              >
+                <div className="flex items-baseline justify-between mb-4">
+                  <div>
+                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.FREE.name}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.FREE.headline}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-3xl font-bold text-foreground">$0</span>
+                  </div>
                 </div>
-                <ul className="space-y-2 mb-6">
+                
+                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
+                  {PLAN_FEATURES.FREE.subheadline}
+                </p>
+                
+                <ul className="space-y-3 mb-8">
                   {PLAN_FEATURES.FREE.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground/80">
+                    <li key={i} className="flex items-start gap-3 text-sm">
                       <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                      {f}
+                      <span className="text-foreground">{f}</span>
                     </li>
                   ))}
                 </ul>
-                <Button asChild variant="outline" className="w-full">
-                  <Link to={ROUTES.QUIZ}>Start Free <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                
+                <Button asChild variant="outline" size="lg" className="w-full">
+                  <Link to={ROUTES.QUIZ}>
+                    Start Free
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
                 </Button>
               </motion.div>
 
               {/* Trip Pass */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="bg-card rounded-xl border border-border p-6">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-xl font-serif font-bold text-foreground">Trip Pass</h3>
-                  <span className="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded">One Trip</span>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }} 
+                whileInView={{ opacity: 1, y: 0 }} 
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 }}
+                className="bg-card rounded-2xl border border-border p-8"
+              >
+                <div className="flex items-baseline justify-between mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.TRIP_PASS.name}</h3>
+                      <span className="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded-full">One-time</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{PLAN_FEATURES.TRIP_PASS.headline}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">Full power for a single trip.</p>
-                <div className="mb-5">
-                  <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
-                  <span className="text-sm text-muted-foreground ml-1">one-time</span>
-                </div>
-                <ul className="space-y-2 mb-6">
+                
+                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
+                  {PLAN_FEATURES.TRIP_PASS.subheadline}
+                </p>
+                
+                <ul className="space-y-3 mb-8">
                   {PLAN_FEATURES.TRIP_PASS.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground/80">
+                    <li key={i} className="flex items-start gap-3 text-sm">
                       <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                      {f}
+                      <span className="text-foreground">{f}</span>
                     </li>
                   ))}
                 </ul>
-                <Button variant="outline" className="w-full" onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Single Trip Pass')} disabled={loadingPlan === 'trip_pass'}>
-                  {loadingPlan === 'trip_pass' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Unlock This Trip <ArrowRight className="ml-2 h-4 w-4" /></>}
+                
+                <Button 
+                  variant="outline" 
+                  size="lg" 
+                  className="w-full" 
+                  onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Trip Pass')} 
+                  disabled={loadingPlan === 'trip_pass'}
+                >
+                  {loadingPlan === 'trip_pass' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Unlock a Trip <ArrowRight className="ml-2 h-4 w-4" /></>}
                 </Button>
               </motion.div>
             </div>
 
-            {/* Right Column: Monthly + Yearly */}
+            {/* Right: Monthly + Yearly */}
             <div className="space-y-6">
-              {/* Monthly */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card rounded-xl border-2 border-primary p-6 relative">
-                <div className="absolute -top-3 left-4">
-                  <span className="text-xs px-2 py-1 bg-primary text-primary-foreground rounded">Most Popular</span>
+              {/* Monthly - Featured */}
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }} 
+                whileInView={{ opacity: 1, y: 0 }} 
+                viewport={{ once: true }}
+                transition={{ delay: 0.15 }}
+                className="bg-card rounded-2xl border-2 border-primary p-8 relative"
+              >
+                <div className="absolute -top-3.5 left-6">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-full">
+                    <Sparkles className="w-3 h-3" />
+                    Most Popular
+                  </span>
                 </div>
-                <h3 className="text-xl font-serif font-bold text-foreground mb-1 mt-1">Monthly</h3>
-                <p className="text-sm text-muted-foreground mb-4">Plan multiple trips at once.</p>
-                <div className="mb-5">
-                  <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
-                  <span className="text-sm text-muted-foreground ml-1">/month</span>
+                
+                <div className="flex items-baseline justify-between mb-4 mt-2">
+                  <div>
+                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.MONTHLY.name}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.MONTHLY.headline}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
+                    <span className="text-sm text-muted-foreground">/mo</span>
+                  </div>
                 </div>
-                <ul className="space-y-2 mb-6">
+                
+                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
+                  {PLAN_FEATURES.MONTHLY.subheadline}
+                </p>
+                
+                <ul className="space-y-3 mb-8">
                   {PLAN_FEATURES.MONTHLY.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground/80">
+                    <li key={i} className="flex items-start gap-3 text-sm">
                       <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                      {f}
+                      <span className="text-foreground">{f}</span>
                     </li>
                   ))}
                 </ul>
-                <Button className="w-full" onClick={() => openCheckout(STRIPE_PRODUCTS.MONTHLY.priceId, 'subscription', 'monthly', 'Voyager Monthly')} disabled={loadingPlan === 'monthly'}>
+                
+                <Button 
+                  size="lg" 
+                  className="w-full" 
+                  onClick={() => openCheckout(STRIPE_PRODUCTS.MONTHLY.priceId, 'subscription', 'monthly', 'Voyager Monthly')} 
+                  disabled={loadingPlan === 'monthly'}
+                >
                   {loadingPlan === 'monthly' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Start Monthly <ArrowRight className="ml-2 h-4 w-4" /></>}
                 </Button>
               </motion.div>
 
               {/* Yearly */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="bg-card rounded-xl border border-border p-6 relative">
-                <div className="absolute -top-3 left-4">
-                  <span className="text-xs px-2 py-1 bg-foreground text-background rounded">Save 48%</span>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }} 
+                whileInView={{ opacity: 1, y: 0 }} 
+                viewport={{ once: true }}
+                transition={{ delay: 0.2 }}
+                className="bg-card rounded-2xl border border-border p-8 relative"
+              >
+                <div className="absolute -top-3.5 left-6">
+                  <span className="inline-flex items-center px-3 py-1 bg-foreground text-background text-xs font-medium rounded-full">
+                    Save 33%
+                  </span>
                 </div>
-                <h3 className="text-xl font-serif font-bold text-foreground mb-1 mt-1">Yearly</h3>
-                <p className="text-sm text-muted-foreground mb-4">Your travel planning home base.</p>
-                <div className="mb-2">
-                  <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.YEARLY.price}</span>
-                  <span className="text-sm text-muted-foreground ml-1">/year</span>
+                
+                <div className="flex items-baseline justify-between mb-4 mt-2">
+                  <div>
+                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.YEARLY.name}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.YEARLY.headline}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.YEARLY.price}</span>
+                    <span className="text-sm text-muted-foreground">/yr</span>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mb-4">Just $8.25 per month</p>
-                <ul className="space-y-2 mb-6">
+                
+                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
+                  {PLAN_FEATURES.YEARLY.subheadline} <span className="text-foreground font-medium">Just $10.75/month.</span>
+                </p>
+                
+                <ul className="space-y-3 mb-8">
                   {PLAN_FEATURES.YEARLY.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground/80">
+                    <li key={i} className="flex items-start gap-3 text-sm">
                       <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                      {f}
+                      <span className="text-foreground">{f}</span>
                     </li>
                   ))}
                 </ul>
-                <Button variant="outline" className="w-full" onClick={() => openCheckout(STRIPE_PRODUCTS.YEARLY.priceId, 'subscription', 'yearly', 'Voyager Yearly')} disabled={loadingPlan === 'yearly'}>
+                
+                <Button 
+                  variant="outline" 
+                  size="lg" 
+                  className="w-full" 
+                  onClick={() => openCheckout(STRIPE_PRODUCTS.YEARLY.priceId, 'subscription', 'yearly', 'Voyager Yearly')} 
+                  disabled={loadingPlan === 'yearly'}
+                >
                   {loadingPlan === 'yearly' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Start Yearly <ArrowRight className="ml-2 h-4 w-4" /></>}
                 </Button>
               </motion.div>
@@ -189,34 +348,90 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* FAQs */}
+      {/* Comparison Callout */}
       <section className="py-16 bg-muted/30">
+        <div className="max-w-3xl mx-auto px-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h2 className="text-xl font-serif font-bold text-foreground mb-4">
+              How much time will you save?
+            </h2>
+            <p className="text-muted-foreground mb-6 leading-relaxed">
+              The average traveler spends 15+ hours researching and planning a week-long trip. 
+              Voyance generates a complete, personalized itinerary in under 2 minutes. 
+              That's 14 hours back for actually enjoying your vacation.
+            </p>
+            <div className="flex flex-wrap justify-center gap-8 text-sm">
+              <div className="text-center">
+                <div className="text-3xl font-serif font-bold text-primary mb-1">15+</div>
+                <div className="text-muted-foreground">Hours saved per trip</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-serif font-bold text-primary mb-1">2 min</div>
+                <div className="text-muted-foreground">To generate itinerary</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-serif font-bold text-primary mb-1">100%</div>
+                <div className="text-muted-foreground">Your preferences</div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-16">
         <div className="max-w-2xl mx-auto px-4">
-          <h2 className="text-2xl font-serif font-bold text-foreground text-center mb-8">Questions</h2>
+          <h2 className="text-2xl font-serif font-bold text-foreground text-center mb-10">Common questions</h2>
           <div className="space-y-4">
             {[
-              { q: "What's included free?", a: "One full itinerary build per month, three route optimizations, and one group budget setup. After that, upgrade or wait until next month." },
-              { q: "What's the Trip Pass?", a: "A one-time purchase that unlocks unlimited rebuilds for a single trip. Best when you're focused on planning one specific trip." },
-              { q: "Can I cancel Monthly or Yearly?", a: "Yes. Cancel anytime from your account. You keep access until the end of your billing period." },
-              { q: "Do you charge booking fees?", a: "No. Flight, hotel, and activity prices are passed through at market rates with no markup." },
+              { q: "What counts as an 'edit'?", a: "Swapping an activity, changing times, or regenerating a single day. Basically any modification to your itinerary after it's generated." },
+              { q: "What's the difference between Free and Trip Pass?", a: "Free gives you limited monthly usage across all trips. Trip Pass removes all limits for one specific trip, forever. Great when you're seriously planning a trip and want to perfect every detail." },
+              { q: "Can I cancel my subscription?", a: "Yes, anytime. You keep access until your billing period ends. No cancellation fees, no awkward phone calls." },
+              { q: "Do you charge fees on bookings?", a: "Never. Flight and hotel prices are passed through at market rates. We make money from subscriptions, not booking commissions." },
+              { q: "What if I need more than 5 drafts?", a: "Yearly plan has unlimited drafts. Or you can delete old drafts to make room for new ones on Monthly." },
             ].map((faq, i) => (
-              <div key={i} className="bg-card rounded-lg p-4 border border-border">
-                <h3 className="font-medium text-foreground text-sm mb-1">{faq.q}</h3>
-                <p className="text-sm text-muted-foreground">{faq.a}</p>
-              </div>
+              <motion.div 
+                key={i} 
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.03 }}
+                className="bg-card rounded-xl p-5 border border-border"
+              >
+                <h3 className="font-medium text-foreground mb-2">{faq.q}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{faq.a}</p>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-16">
-        <div className="max-w-xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-serif font-bold text-foreground mb-3">Ready to plan smarter?</h2>
-          <p className="text-muted-foreground mb-6 text-sm">Start with your free itinerary. No credit card required.</p>
-          <Button asChild size="lg">
-            <Link to={ROUTES.QUIZ}>Start Free <ArrowRight className="ml-2 h-4 w-4" /></Link>
-          </Button>
+      {/* Final CTA */}
+      <section className="py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-t from-primary/5 via-transparent to-transparent" />
+        <div className="relative max-w-xl mx-auto px-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h2 className="text-3xl font-serif font-bold text-foreground mb-4">
+              Your next adventure starts here.
+            </h2>
+            <p className="text-muted-foreground mb-8">
+              Build your first itinerary free. See why thousands of travelers trust Voyance to plan trips that actually feel like them.
+            </p>
+            <Button asChild size="lg">
+              <Link to={ROUTES.QUIZ}>
+                Start Planning Free
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </motion.div>
         </div>
       </section>
 
