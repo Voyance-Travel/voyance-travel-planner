@@ -36,6 +36,7 @@ interface TripContextProps {
   updateBudgetAllocation: (allocation: BudgetAllocation) => void;
   updateTripType: (tripType: string) => void;
   onContinue: () => void;
+  onSkipToItinerary?: () => void;
   onBack: () => void;
 }
 
@@ -252,6 +253,7 @@ export default function TripContext({
   updateBudgetAllocation,
   updateTripType,
   onContinue,
+  onSkipToItinerary,
   onBack,
 }: TripContextProps) {
   const handleCompanionChange = (index: number, updates: Partial<Companion>) => {
@@ -562,9 +564,27 @@ export default function TripContext({
             {/* Next Steps */}
             <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
               <p className="text-sm text-slate-600">
-                <span className="font-medium text-primary">Next up:</span> We'll find the perfect flights for your journey
+                <span className="font-medium text-primary">Next up:</span> Choose flights & hotels, or skip straight to your itinerary
               </p>
             </div>
+
+            {/* Skip to Itinerary Option */}
+            {onSkipToItinerary && (
+              <button
+                onClick={onSkipToItinerary}
+                className="w-full p-4 rounded-xl border border-dashed border-slate-300 hover:border-primary/50 hover:bg-primary/5 transition-all group text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500/20 to-violet-500/10 flex items-center justify-center group-hover:from-violet-500/30 group-hover:to-violet-500/20 transition-colors">
+                    <SkipForward className="w-5 h-5 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900 group-hover:text-primary transition-colors">Just Build My Itinerary</p>
+                    <p className="text-xs text-slate-500">Skip flights & hotels — add them later</p>
+                  </div>
+                </div>
+              </button>
+            )}
           </div>
         </motion.div>
       </div>
