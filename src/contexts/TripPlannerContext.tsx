@@ -39,6 +39,7 @@ export interface TripBasics {
   tripType?: 'solo' | 'couple' | 'family' | 'group';
   originCity?: string;
   budgetTier?: string;
+  budgetAmount?: number; // Optional: actual dollar amount user wants to spend
 }
 
 export interface FlightSelection {

@@ -235,6 +235,10 @@ export default function PlannerFlightEnhanced() {
   const startDate = searchParams.get('startDate') || plannerState.basics.startDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const endDate = searchParams.get('endDate') || plannerState.basics.endDate || new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 1);
+  const tripBudget = Number(searchParams.get('budget')) || plannerState.basics.budgetAmount;
+  
+  // Calculate flight budget (assume ~40% of total budget for flights if budget is set)
+  const flightBudget = tripBudget ? Math.round(tripBudget * 0.4) : undefined;
 
   // Load user flight preferences from database
   useEffect(() => {
@@ -297,12 +301,12 @@ export default function PlannerFlightEnhanced() {
     return {
       directOnly: userPrefs?.directFlightsOnly ?? false,
       airlines: userPrefs?.preferredAirlines ?? [],
-      maxPrice: 5000,
+      maxPrice: flightBudget || 5000,  // Use budget if set
       departureTimeRange: timeRange,
       arrivalTimeRange: [0, 24],
       maxDuration: 1440,
       bagsIncluded: false,
-      sortBy: 'recommended',
+      sortBy: flightBudget ? 'price' : 'recommended', // Sort by price if on budget
     };
   };
 
@@ -319,12 +323,12 @@ export default function PlannerFlightEnhanced() {
   const [outboundFilters, setOutboundFilters] = useState<FlightFiltersState>({
     directOnly: false,
     airlines: [],
-    maxPrice: 5000,
+    maxPrice: flightBudget || 5000,
     departureTimeRange: [0, 24],
     arrivalTimeRange: [0, 24],
     maxDuration: 1440,
     bagsIncluded: false,
-    sortBy: 'recommended',
+    sortBy: flightBudget ? 'price' : 'recommended',
   });
 
   // Apply user preferences when loaded
@@ -341,12 +345,12 @@ export default function PlannerFlightEnhanced() {
   const [returnFilters, setReturnFilters] = useState<FlightFiltersState>({
     directOnly: false,
     airlines: [],
-    maxPrice: 5000,
+    maxPrice: flightBudget || 5000,
     departureTimeRange: [0, 24],
     arrivalTimeRange: [0, 24],
     maxDuration: 1440,
     bagsIncluded: false,
-    sortBy: 'recommended',
+    sortBy: flightBudget ? 'price' : 'recommended',
   });
 
   const outboundParams: FlightSearchParams = useMemo(
@@ -492,6 +496,9 @@ export default function PlannerFlightEnhanced() {
     params.set('startDate', startDate);
     params.set('endDate', endDate);
     params.set('travelers', String(travelers));
+    if (tripBudget) {
+      params.set('budget', String(tripBudget));
+    }
 
     if (selectedOutboundId) params.set('outboundFlightId', selectedOutboundId);
     if (selectedReturnId) params.set('returnFlightId', selectedReturnId);
@@ -527,23 +534,35 @@ export default function PlannerFlightEnhanced() {
                 </p>
                 
                 {/* Show personalization indicator */}
-                {userPrefs && (userPrefs.directFlightsOnly || userPrefs.preferredAirlines?.length > 0) && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <Badge variant="secondary" className="gap-1.5 text-xs">
-                      <Sparkles className="h-3 w-3" />
-                      Personalized for you
-                    </Badge>
-                    {userPrefs.directFlightsOnly && (
+                {(userPrefs && (userPrefs.directFlightsOnly || userPrefs.preferredAirlines?.length > 0)) || tripBudget ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {userPrefs && (userPrefs.directFlightsOnly || userPrefs.preferredAirlines?.length > 0) && (
+                      <Badge variant="secondary" className="gap-1.5 text-xs">
+                        <Sparkles className="h-3 w-3" />
+                        Personalized for you
+                      </Badge>
+                    )}
+                    {tripBudget && (
+                      <Badge variant="outline" className="text-xs bg-primary/5">
+                        Budget: ${tripBudget.toLocaleString()} total
+                      </Badge>
+                    )}
+                    {flightBudget && (
+                      <Badge variant="outline" className="text-xs">
+                        ~${flightBudget.toLocaleString()} for flights
+                      </Badge>
+                    )}
+                    {userPrefs?.directFlightsOnly && (
                       <Badge variant="outline" className="text-xs">Non-stop preferred</Badge>
                     )}
-                    {userPrefs.preferredAirlines?.length > 0 && (
+                    {userPrefs?.preferredAirlines && userPrefs.preferredAirlines.length > 0 && (
                       <Badge variant="outline" className="text-xs">
                         {userPrefs.preferredAirlines.slice(0, 2).join(', ')}
                         {userPrefs.preferredAirlines.length > 2 && ` +${userPrefs.preferredAirlines.length - 2}`}
                       </Badge>
                     )}
                   </div>
-                )}
+                ) : null}
               </motion.div>
 
               <Tabs defaultValue="outbound" className="w-full">
