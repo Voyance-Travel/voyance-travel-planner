@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO, isAfter, isBefore, differenceInDays } from 'date-fns';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
@@ -15,6 +15,7 @@ import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
 import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
+import { enrichHotel } from '@/services/hotelAPI';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -58,6 +59,84 @@ export default function TripDetail() {
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
+  const hotelEnrichmentAttempted = useRef(false);
+
+  // =========================================================================
+  // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
+  // =========================================================================
+  const enrichHotelIfNeeded = useCallback(async () => {
+    if (!trip || hotelEnrichmentAttempted.current) return;
+    
+    const hotelSel = trip.hotel_selection as Record<string, unknown> | null;
+    if (!hotelSel?.name) return; // No hotel selected
+    
+    // Check if enrichment is needed
+    const hasAddress = !!hotelSel.address;
+    const hasWebsite = !!hotelSel.website || !!hotelSel.googleMapsUrl;
+    const hasPhotos = Array.isArray(hotelSel.images) && hotelSel.images.length > 0;
+    
+    if (hasAddress && hasWebsite && hasPhotos) {
+      console.log('[TripDetail] Hotel already enriched, skipping');
+      return;
+    }
+    
+    hotelEnrichmentAttempted.current = true;
+    console.log('[TripDetail] Enriching hotel:', hotelSel.name);
+    
+    // Normalize destination (strip IATA codes)
+    const cleanDestination = (trip.destination || '')
+      .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+      .trim();
+    
+    const enrichment = await enrichHotel(hotelSel.name as string, cleanDestination);
+    
+    if (!enrichment) {
+      console.log('[TripDetail] Hotel enrichment returned no data');
+      return;
+    }
+    
+    // Merge enrichment data into hotel selection
+    const enrichedHotel = {
+      ...hotelSel,
+      address: enrichment.address || hotelSel.address,
+      website: enrichment.website || hotelSel.website,
+      googleMapsUrl: enrichment.googleMapsUrl || hotelSel.googleMapsUrl,
+      images: (enrichment.photos && enrichment.photos.length > 0) 
+        ? enrichment.photos 
+        : hotelSel.images,
+      placeId: enrichment.placeId || hotelSel.placeId,
+    };
+    
+    console.log('[TripDetail] Enriched hotel data:', enrichedHotel);
+    
+    // Update local state
+    setTrip(prev => prev ? { ...prev, hotel_selection: enrichedHotel as any } : prev);
+    
+    // Persist to backend
+    if (tripId) {
+      try {
+        const { error } = await supabase
+          .from('trips')
+          .update({ hotel_selection: enrichedHotel as any, updated_at: new Date().toISOString() })
+          .eq('id', tripId);
+        
+        if (error) {
+          console.error('[TripDetail] Failed to persist enriched hotel:', error);
+        } else {
+          console.log('[TripDetail] Enriched hotel persisted successfully');
+        }
+      } catch (err) {
+        console.error('[TripDetail] Error persisting enriched hotel:', err);
+      }
+    }
+  }, [trip, tripId]);
+
+  // Trigger hotel enrichment when trip loads
+  useEffect(() => {
+    if (trip && !loading) {
+      enrichHotelIfNeeded();
+    }
+  }, [trip, loading, enrichHotelIfNeeded]);
 
   // Sync local trip to database before generating itinerary
   const syncTripToDatabase = async (localTrip: Trip): Promise<boolean> => {
