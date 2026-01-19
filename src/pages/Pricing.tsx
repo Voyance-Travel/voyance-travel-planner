@@ -6,7 +6,8 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 
-const plans = [
+// Subscription plans (shown at top)
+const subscriptionPlans = [
   {
     name: 'Explorer',
     tagline: 'Start your journey',
@@ -21,21 +22,22 @@ const plans = [
       'Personalized destination recommendations',
       'Browse curated travel guides',
       'Save up to 3 trips',
-      'Basic itinerary generation',
+      'Basic itinerary generation (2/month)',
       'Community access',
     ],
     cta: 'Get Started Free',
     ctaLink: ROUTES.QUIZ,
   },
   {
-    name: 'Voyager',
+    name: 'Voyage',
     tagline: 'Most popular',
-    price: '$12',
-    priceDetail: 'per trip',
-    description: 'Full-featured trip planning with AI-powered itineraries and booking assistance.',
+    price: '$15.99',
+    priceDetail: 'per month',
+    description: 'Full-featured trip planning with unlimited AI-powered itineraries and booking assistance.',
     icon: Sparkles,
     color: 'from-primary to-primary/80',
     popular: true,
+    stripePriceId: 'price_1RpYVWFYxIg9jcJU4t3JVCy0',
     features: [
       'Everything in Explorer, plus:',
       'Unlimited AI itinerary generation',
@@ -46,53 +48,76 @@ const plans = [
       'Export & share itineraries',
       'Priority email support',
     ],
-    cta: 'Plan Your Trip',
+    cta: 'Start Voyage',
     ctaLink: ROUTES.START,
   },
   {
-    name: 'Concierge',
-    tagline: 'White-glove service',
-    price: '$49',
-    priceDetail: 'per trip',
-    description: 'Premium planning with expert curation and exclusive experiences for discerning travelers.',
+    name: 'Wanderlust',
+    tagline: 'For frequent travelers',
+    price: '$119.99',
+    priceDetail: 'per month',
+    description: 'Premium planning with deep venue enrichment, live updates, and exclusive features for power travelers.',
     icon: Crown,
     color: 'from-amber-500 to-orange-500',
     popular: false,
+    stripePriceId: 'price_1RpYWpFYxIg9jcJUPrSLmFsu',
     features: [
-      'Everything in Voyager, plus:',
-      'Hand-curated by travel experts',
-      'Access to exclusive experiences',
-      'Restaurant reservation assistance',
-      'VIP upgrades when available',
-      '72-hour price lock',
-      'Dedicated trip coordinator',
-      '24/7 priority support',
+      'Everything in Voyage, plus:',
+      'VoyagerMaps deep venue data',
+      'Live refresh & real-time updates',
+      'Aggregated reviews & photos',
+      'Unlimited venue enrichment',
+      'Priority AI processing',
+      'Dedicated support channel',
+      'Early access to new features',
     ],
-    cta: 'Get Concierge',
+    cta: 'Go Wanderlust',
     ctaLink: ROUTES.START,
   },
 ];
 
+// Single trip option (shown at bottom)
+const singleTripPlan = {
+  name: 'Single Trip Unlock',
+  price: '$29.99',
+  priceDetail: 'one-time',
+  description: 'Not ready for a subscription? Unlock all Voyage features for a single trip.',
+  stripePriceId: 'price_1RpYXMFYxIg9jcJUxDiyEFp5',
+  features: [
+    'All Voyage features for one trip',
+    'AI-powered itinerary generation',
+    'Flight & hotel search',
+    '48-hour price lock',
+    'Export & share your itinerary',
+  ],
+  cta: 'Unlock One Trip',
+  ctaLink: ROUTES.START,
+};
+
 const faqs = [
   {
     question: 'How does pricing work?',
-    answer: 'Explorer is completely free. For Voyager and Concierge, you only pay when you\'re ready to finalize and book a trip. No subscription, no hidden fees—just pay per trip.',
+    answer: 'Explorer is free forever. Voyage and Wanderlust are monthly subscriptions that unlock unlimited features. Or, grab a Single Trip Unlock for one-time access.',
   },
   {
     question: 'What\'s included in the price lock guarantee?',
-    answer: 'When you lock in prices with Voyager (48 hours) or Concierge (72 hours), we guarantee the flight and hotel prices shown. If prices drop, we\'ll automatically apply the lower rate.',
+    answer: 'When you lock in prices with a paid plan, we guarantee the flight and hotel prices shown for 48 hours. If prices drop, we\'ll automatically apply the lower rate.',
   },
   {
     question: 'Can I try before I buy?',
-    answer: 'Absolutely! Start with Explorer for free. Take the quiz, explore destinations, and generate basic itineraries. Upgrade to Voyager or Concierge when you\'re ready to book.',
+    answer: 'Absolutely! Start with Explorer for free. Take the quiz, explore destinations, and generate up to 2 itineraries per month. Upgrade when you\'re ready for more.',
   },
   {
-    question: 'What if I need to change my trip?',
-    answer: 'Itinerary modifications are unlimited before booking. After booking, standard airline and hotel cancellation policies apply. Concierge members get priority rebooking assistance.',
+    question: 'What\'s the difference between Voyage and Wanderlust?',
+    answer: 'Voyage gives you unlimited itineraries and full booking features. Wanderlust adds deep venue data, live updates, aggregated reviews, and priority support—perfect for frequent travelers.',
+  },
+  {
+    question: 'Can I cancel my subscription?',
+    answer: 'Yes, cancel anytime from your account settings. You\'ll keep access until the end of your billing period. No cancellation fees.',
   },
   {
     question: 'Do you charge booking fees?',
-    answer: 'No booking fees. The trip price includes our planning service. Flight, hotel, and activity prices are passed through at market rates with no markup.',
+    answer: 'No booking fees. The subscription price covers our planning service. Flight, hotel, and activity prices are passed through at market rates with no markup.',
   },
 ];
 
@@ -101,19 +126,19 @@ const testimonials = [
     quote: "Voyance planned our honeymoon in Paris better than any travel agent could. Every restaurant, every activity was perfectly us.",
     author: "Sarah & James",
     trip: "Paris, France",
-    plan: "Voyager",
+    plan: "Voyage",
   },
   {
-    quote: "The Concierge service got us into a fully-booked restaurant and upgraded our hotel room. Worth every penny.",
+    quote: "The Wanderlust plan is perfect for my lifestyle. I travel monthly and having unlimited everything is a game-changer.",
     author: "Michael T.",
     trip: "Tokyo, Japan",
-    plan: "Concierge",
+    plan: "Wanderlust",
   },
   {
     quote: "I was skeptical about AI planning, but the itinerary knew I hate mornings and love street food. It just got me.",
     author: "Priya K.",
     trip: "Barcelona, Spain",
-    plan: "Voyager",
+    plan: "Voyage",
   },
 ];
 
@@ -151,8 +176,8 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="text-xl text-muted-foreground max-w-2xl mx-auto"
           >
-            No subscriptions, no commitments. Start exploring for free, 
-            and only pay when you're ready to bring your dream trip to life.
+            Choose a monthly plan for unlimited trip planning, 
+            or unlock a single trip when you're ready.
           </motion.p>
         </div>
       </section>
@@ -161,7 +186,7 @@ export default function Pricing() {
       <section className="py-20 -mt-8 relative z-10">
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-            {plans.map((plan, index) => (
+            {subscriptionPlans.map((plan, index) => (
               <motion.div
                 key={plan.name}
                 initial={{ opacity: 0, y: 30 }}
@@ -225,6 +250,46 @@ export default function Pricing() {
               </motion.div>
             ))}
           </div>
+          
+          {/* Single Trip Option */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mt-12 max-w-2xl mx-auto"
+          >
+            <div className="bg-gradient-to-r from-muted/50 to-muted/30 rounded-2xl border border-border p-6 md:p-8">
+              <div className="flex flex-col md:flex-row md:items-center gap-6">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="w-5 h-5 text-primary" />
+                    <h3 className="text-xl font-bold text-foreground">{singleTripPlan.name}</h3>
+                  </div>
+                  <p className="text-muted-foreground text-sm mb-4">{singleTripPlan.description}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {singleTripPlan.features.slice(0, 3).map((feature, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 text-xs bg-background rounded-full px-2.5 py-1 border border-border">
+                        <Check className="w-3 h-3 text-primary" />
+                        {feature}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col items-center md:items-end gap-3">
+                  <div className="text-center md:text-right">
+                    <span className="text-3xl font-bold text-foreground">{singleTripPlan.price}</span>
+                    <span className="text-muted-foreground ml-1">{singleTripPlan.priceDetail}</span>
+                  </div>
+                  <Button asChild size="lg" variant="outline" className="w-full md:w-auto">
+                    <Link to={singleTripPlan.ctaLink}>
+                      {singleTripPlan.cta}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
