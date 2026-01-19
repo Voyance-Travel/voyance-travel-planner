@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { format } from 'date-fns';
-import { Car, MapPin, Calendar, DollarSign, FileText, X, Check } from 'lucide-react';
+import { Car, MapPin, DollarSign, FileText, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
