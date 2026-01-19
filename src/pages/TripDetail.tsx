@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LiveItineraryView } from '@/components/itinerary/LiveItineraryView';
 import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
-import { ItineraryEditor } from '@/components/itinerary/ItineraryEditor';
+import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
+import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { supabase } from '@/integrations/supabase/client';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useAuth } from '@/contexts/AuthContext';
@@ -507,62 +508,55 @@ export default function TripDetail() {
               </div>
             </div>
           ) : (
-            /* Interactive Itinerary Editor for non-active trips with itinerary */
+            /* Editorial Itinerary - Same design as SampleItinerary with editing */
             (() => {
-              // Transform the itinerary data into the expected format
               const metadata = trip.itinerary_data as Record<string, unknown> | null;
               const rawDays = (metadata?.days as unknown[]) || [];
-              const overview = metadata?.overview as TripOverview | undefined;
               
-              const editorDays: GeneratedDay[] = rawDays.map((day: unknown, idx: number) => {
+              const editorDays: EditorialDay[] = rawDays.map((day: unknown, idx: number) => {
                 const d = day as Record<string, unknown>;
                 const activities = (d.activities as unknown[]) || [];
                 return {
                   dayNumber: (d.dayNumber as number) || idx + 1,
                   date: (d.date as string) || calculateDayDate(trip.start_date, idx),
-                  title: (d.title as string) || (d.theme as string) || `Day ${idx + 1}`,
+                  title: (d.title as string) || (d.theme as string) || undefined,
                   theme: d.theme as string | undefined,
+                  description: d.description as string | undefined,
+                  estimatedWalkingTime: d.estimatedWalkingTime as string | undefined,
+                  estimatedDistance: d.estimatedDistance as string | undefined,
+                  weather: d.weather as { condition?: string; high?: number; low?: number } | undefined,
                   activities: activities.map((act: unknown, actIdx: number) => {
                     const a = act as Record<string, unknown>;
                     const loc = a.location as Record<string, unknown> | string | undefined;
                     return {
                       id: (a.id as string) || `act-${idx}-${actIdx}`,
                       title: (a.title as string) || (a.name as string) || 'Activity',
-                      description: (a.description as string) || '',
+                      description: (a.description as string) || undefined,
                       category: (a.category as string) || 'activity',
-                      startTime: (a.startTime as string) || (a.start_time as string) || '09:00',
-                      endTime: (a.endTime as string) || (a.end_time as string) || '10:00',
+                      startTime: (a.startTime as string) || (a.start_time as string) || undefined,
+                      endTime: (a.endTime as string) || (a.end_time as string) || undefined,
+                      time: a.time as string | undefined,
+                      duration: a.duration as string | undefined,
                       durationMinutes: a.durationMinutes as number | undefined,
                       location: typeof loc === 'object' && loc !== null 
-                        ? { name: loc.name as string, address: loc.address as string, coordinates: loc.coordinates as { lat: number; lng: number } | undefined } 
-                        : { name: String(loc || ''), address: '' },
-                      cost: a.cost as { amount: number; currency: string; formatted?: string } || { amount: 0, currency: 'USD' },
+                        ? { name: loc.name as string, address: loc.address as string }
+                        : { name: String(loc || '') },
+                      cost: a.cost as { amount: number; currency: string } | undefined,
                       bookingRequired: (a.bookingRequired as boolean) || false,
                       tags: (a.tags as string[]) || [],
-                      transportation: a.transportation as { method: string; duration: string; estimatedCost: { amount: number; currency: string }; instructions: string } || {
-                        method: 'walk',
-                        duration: '10 min',
-                        estimatedCost: { amount: 0, currency: 'USD' },
-                        instructions: ''
-                      },
+                      transportation: a.transportation as { method: string; duration: string; estimatedCost?: { amount: number; currency: string }; instructions?: string } | undefined,
                       isLocked: (a.isLocked as boolean) || false,
-                      // Preserve new venue detail fields
-                      rating: a.rating as { value: number; totalReviews: number } | undefined,
+                      rating: a.rating as { value: number; totalReviews: number } | number | undefined,
                       website: a.website as string | undefined,
-                      phoneNumber: a.phoneNumber as string | undefined,
-                      priceLevel: a.priceLevel as number | undefined,
-                      googleMapsUrl: a.googleMapsUrl as string | undefined,
-                      reviewHighlights: a.reviewHighlights as string[] | undefined,
                       tips: a.tips as string | undefined,
-                      photos: a.photos as Array<{ url: string; photographer?: string; alt?: string }> | undefined,
+                      photos: a.photos as Array<{ url: string } | string> | undefined,
                     };
                   }),
-                  metadata: d.metadata as { theme?: string; totalEstimatedCost?: number; mealsIncluded?: number; pacingLevel?: 'relaxed' | 'moderate' | 'packed' } | undefined
                 };
               });
 
               return (
-                <ItineraryEditor
+                <EditorialItinerary
                   tripId={trip.id}
                   destination={trip.destination}
                   destinationCountry={trip.destination_country || undefined}
@@ -571,9 +565,9 @@ export default function TripDetail() {
                   travelers={trip.travelers || 1}
                   budgetTier={trip.budget_tier || undefined}
                   days={editorDays}
-                  overview={overview}
                   flightSelection={trip.flight_selection as Record<string, unknown> | null}
                   hotelSelection={trip.hotel_selection as Record<string, unknown> | null}
+                  isEditable={true}
                 />
               );
             })()
