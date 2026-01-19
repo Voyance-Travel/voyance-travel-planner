@@ -11,7 +11,7 @@
  * - Save changes
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronUp, ChevronDown, MapPin, Clock, Star, Save,
@@ -32,6 +32,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
 import type { ActivityType, WeatherCondition } from '@/types/itinerary';
+import { getActivityPlaceholder } from '@/hooks/useActivityImage';
 
 // =============================================================================
 // TYPES
@@ -755,15 +756,32 @@ export function EditorialItinerary({
 
             {/* Hotel Info */}
             <Card className="bg-card border border-border overflow-hidden">
-              {hotelSelection?.imageUrl && (
-                <div className="relative overflow-hidden h-40">
+              {/* Hotel Image - use provided or placeholder */}
+              <div className="relative overflow-hidden h-40 bg-muted/30">
+                {hotelSelection?.imageUrl ? (
                   <img
                     src={hotelSelection.imageUrl}
+                    alt={hotelSelection.name || 'Hotel'}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { 
+                      e.currentTarget.src = `https://source.unsplash.com/400x200/?hotel,${destination}`;
+                    }}
+                  />
+                ) : hotelSelection?.name ? (
+                  <img
+                    src={`https://source.unsplash.com/400x200/?hotel,${hotelSelection.name.split(' ')[0]},${destination}`}
                     alt={hotelSelection.name}
                     className="w-full h-full object-cover"
+                    onError={(e) => { 
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
-                </div>
-              )}
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Hotel className="h-12 w-12 text-muted-foreground/30" />
+                  </div>
+                )}
+              </div>
               <CardContent className="p-6">
                 <div className="flex items-center gap-2 mb-3">
                   <Hotel className="h-4 w-4 text-primary" />
@@ -1206,9 +1224,27 @@ function ActivityRow({
   const style = activityStyles[activityType] || activityStyles.activity;
   const rating = getActivityRating(activity);
   const cost = getActivityCost(activity, travelers, budgetTier);
-  const photo = getActivityPhoto(activity);
-  const showPhoto = activityType !== 'transportation' && activityType !== 'transport' && photo;
+  const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
+  
+  // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
+  const isDowntime = activity.timeBlockType === 'downtime' || activity.title.toLowerCase().includes('free time');
+  const isTransport = activityType === 'transportation' || activityType === 'transport';
+  const showThumbnail = !isTransport && !isDowntime;
+  
+  // Get thumbnail: existing photo or category-based placeholder
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(existingPhoto);
+  const [thumbnailError, setThumbnailError] = useState(false);
+  
+  useEffect(() => {
+    if (existingPhoto) {
+      setThumbnailUrl(existingPhoto);
+      setThumbnailError(false);
+    } else if (showThumbnail) {
+      // Use Unsplash source for instant category-based placeholder
+      setThumbnailUrl(getActivityPlaceholder(activityType));
+    }
+  }, [existingPhoto, activityType, showThumbnail]);
 
   return (
     <div className={cn("flex items-stretch", !isLast && "border-b border-border")}>
@@ -1223,15 +1259,22 @@ function ActivityRow({
         )}
       </div>
 
-      {/* Photo Column (if available) */}
-      {showPhoto && (
-        <div className="w-24 h-24 shrink-0 border-r border-border">
-          <img
-            src={photo}
-            alt={activity.title}
-            className="w-full h-full object-cover"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
+      {/* Thumbnail Column - Always show for non-transport, non-downtime activities */}
+      {showThumbnail && (
+        <div className="w-20 h-20 shrink-0 border-r border-border bg-muted/30 overflow-hidden">
+          {thumbnailUrl && !thumbnailError ? (
+            <img
+              src={thumbnailUrl}
+              alt={activity.title}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={() => setThumbnailError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+              {style.icon}
+            </div>
+          )}
         </div>
       )}
 
