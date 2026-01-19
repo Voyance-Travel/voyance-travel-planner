@@ -341,7 +341,7 @@ export default function HowItWorks() {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-emerald-400" />
-              <span>Cancel anytime with full refund</span>
+              <span>Flexible booking options available</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-emerald-400" />

@@ -357,7 +357,7 @@ export default function PlannerBooking() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CheckCircle className="h-4 w-4" />
-                  <span>Free cancellation 24h before</span>
+                  <span>Review policies before booking</span>
                 </div>
               </motion.div>
             </div>
