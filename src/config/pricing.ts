@@ -28,24 +28,32 @@ export const STRIPE_PRODUCTS = {
   },
 } as const;
 
-// Top-up products for free users
+// Top-up products (pay-per-action) for free users
+// Minimum top-up: $5
 export const TOPUP_PRODUCTS = {
-  REFINEMENTS_5: {
-    name: '5 Smart Refinements',
-    price: 2.99,
-    description: 'Swap a restaurant, adjust vibe, optimize a block',
-  },
   ROUTE_OPTIMIZATION: {
-    name: '1 Route Optimization',
-    price: 0.99,
+    name: 'Route Optimization',
+    price: 1.99,
     description: 'Reorder your day for less walking and waiting',
   },
-  EXTRA_ITINERARY: {
-    name: '1 Premium Itinerary',
-    price: 4.99,
-    description: 'Build another complete trip this month',
+  BUILD_ONE_DAY: {
+    name: 'Build One Day',
+    price: 3.99,
+    description: 'Generate a single day of activities',
+  },
+  GROUP_BUDGET_SETUP: {
+    name: 'Group Budget Setup',
+    price: 2.99,
+    description: 'Split expenses and track payments with companions',
+  },
+  BUILD_ENTIRE_TRIP: {
+    name: 'Build Entire Trip',
+    price: 9.99,
+    description: 'Generate a complete multi-day itinerary',
   },
 } as const;
+
+export const TOPUP_MINIMUM = 5; // Minimum add: $5
 
 // Plan feature definitions with monthly usage limits
 // NOTE: "Smart Refinements" = AI-powered changes (swap a restaurant, adjust vibe, optimize a block)
