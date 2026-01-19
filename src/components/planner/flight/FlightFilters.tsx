@@ -48,20 +48,63 @@ interface FlightFiltersProps {
   priceRange: [number, number];
 }
 
-const popularAirlines = [
-  'Delta',
-  'United',
-  'American',
-  'Southwest',
-  'JetBlue',
-  'Alaska',
-  'Spirit',
-  'Frontier',
-  'British Airways',
-  'Lufthansa',
-  'Air France',
-  'Emirates',
-];
+// Comprehensive airline code to name mapping
+const airlineCodeToName: Record<string, string> = {
+  AA: 'American Airlines',
+  DL: 'Delta Air Lines',
+  UA: 'United Airlines',
+  WN: 'Southwest Airlines',
+  B6: 'JetBlue Airways',
+  AS: 'Alaska Airlines',
+  NK: 'Spirit Airlines',
+  F9: 'Frontier Airlines',
+  G4: 'Allegiant Air',
+  HA: 'Hawaiian Airlines',
+  BA: 'British Airways',
+  AF: 'Air France',
+  LH: 'Lufthansa',
+  KL: 'KLM Royal Dutch',
+  LX: 'Swiss International',
+  AZ: 'ITA Airways',
+  IB: 'Iberia',
+  EK: 'Emirates',
+  QR: 'Qatar Airways',
+  EY: 'Etihad Airways',
+  TK: 'Turkish Airlines',
+  SQ: 'Singapore Airlines',
+  CX: 'Cathay Pacific',
+  JL: 'Japan Airlines',
+  NH: 'All Nippon Airways',
+  QF: 'Qantas',
+  AC: 'Air Canada',
+  AM: 'Aeromexico',
+  VS: 'Virgin Atlantic',
+  LA: 'LATAM Airlines',
+  AV: 'Avianca',
+  CM: 'Copa Airlines',
+  SK: 'SAS Scandinavian',
+  AY: 'Finnair',
+  OS: 'Austrian Airlines',
+  SN: 'Brussels Airlines',
+  TP: 'TAP Portugal',
+  EI: 'Aer Lingus',
+  RY: 'Ryanair',
+  U2: 'easyJet',
+  W6: 'Wizz Air',
+  VY: 'Vueling',
+  FR: 'Ryanair',
+};
+
+// Get display name for airline (handles both codes and full names)
+function getAirlineDisplayName(airline: string): string {
+  // Check if it's a 2-letter code
+  const upper = airline.toUpperCase().trim();
+  if (airlineCodeToName[upper]) {
+    return airlineCodeToName[upper];
+  }
+  // Already a name or unknown code
+  return airline;
+}
 
 function formatTimeRange(hours: number): string {
   const h = Math.floor(hours);
@@ -187,63 +230,69 @@ export default function FlightFilters({
             </div>
 
             {/* Price */}
-            <div>
-              <h4 className="font-medium mb-3">
-                Max Price: ${filters.maxPrice}
-              </h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Max Price</h4>
+                <span className="text-sm font-medium text-primary">${filters.maxPrice}</span>
+              </div>
               <Slider
                 value={[filters.maxPrice]}
                 onValueChange={([value]) => updateFilter('maxPrice', value)}
                 min={priceRange[0]}
                 max={priceRange[1]}
                 step={50}
+                className="py-1"
               />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>${priceRange[0]}</span>
-                <span>${priceRange[1]}</span>
+                <span>${priceRange[1]}+</span>
               </div>
             </div>
 
             {/* Departure Time */}
-            <div>
-              <h4 className="font-medium mb-3 flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                Departure Time
-              </h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Departure
+                </h4>
+                <span className="text-sm text-muted-foreground">
+                  {formatTimeRange(filters.departureTimeRange[0])} – {formatTimeRange(filters.departureTimeRange[1])}
+                </span>
+              </div>
               <Slider
                 value={filters.departureTimeRange}
                 onValueChange={(value) => updateFilter('departureTimeRange', value as [number, number])}
                 min={0}
                 max={24}
                 step={1}
+                className="py-1"
               />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>{formatTimeRange(filters.departureTimeRange[0])}</span>
-                <span>{formatTimeRange(filters.departureTimeRange[1])}</span>
-              </div>
             </div>
 
             {/* Arrival Time */}
-            <div>
-              <h4 className="font-medium mb-3">Arrival Time</h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Arrival</h4>
+                <span className="text-sm text-muted-foreground">
+                  {formatTimeRange(filters.arrivalTimeRange[0])} – {formatTimeRange(filters.arrivalTimeRange[1])}
+                </span>
+              </div>
               <Slider
                 value={filters.arrivalTimeRange}
                 onValueChange={(value) => updateFilter('arrivalTimeRange', value as [number, number])}
                 min={0}
                 max={24}
                 step={1}
+                className="py-1"
               />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>{formatTimeRange(filters.arrivalTimeRange[0])}</span>
-                <span>{formatTimeRange(filters.arrivalTimeRange[1])}</span>
-              </div>
             </div>
 
             {/* Airlines */}
             <div>
               <h4 className="font-medium mb-3">Airlines</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {(availableAirlines.length > 0 ? availableAirlines : popularAirlines).map((airline) => (
+              <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto">
+                {availableAirlines.map((airline) => (
                   <div key={airline} className="flex items-center space-x-2">
                     <Checkbox
                       id={`airline-${airline}`}
@@ -252,12 +301,15 @@ export default function FlightFilters({
                     />
                     <Label 
                       htmlFor={`airline-${airline}`}
-                      className="text-sm cursor-pointer"
+                      className="text-sm cursor-pointer leading-tight"
                     >
-                      {airline}
+                      {getAirlineDisplayName(airline)}
                     </Label>
                   </div>
                 ))}
+                {availableAirlines.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No airlines available</p>
+                )}
               </div>
             </div>
 
@@ -291,7 +343,7 @@ export default function FlightFilters({
         <div className="flex flex-wrap gap-1">
           {filters.airlines.map((airline) => (
             <Badge key={airline} variant="secondary" className="gap-1">
-              {airline}
+              {getAirlineDisplayName(airline)}
               <X 
                 className="w-3 h-3 cursor-pointer" 
                 onClick={() => toggleAirline(airline)}
