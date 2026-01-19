@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.suggest-mystery-trips]
 verify_jwt = false
+
+[functions.optimize-itinerary]
+verify_jwt = false
