@@ -1,4 +1,4 @@
-# Preferences System - Lovable Adaptation
+# Preferences System - Lovable Cloud
 
 <!--
 @keywords: preferences, quiz, travel style, budget, interests, accommodation, user settings
@@ -7,12 +7,10 @@
 -->
 
 **Last Updated**: January 2025  
-**Status**: ✅ Core Implemented  
+**Status**: ✅ Fully Implemented  
 **See also**: [SYSTEM_SOT.md](./SYSTEM_SOT.md) | [QUIZ_FLOW_LOVABLE.md](./QUIZ_FLOW_LOVABLE.md) | [INDEX.md](./INDEX.md)
 
-> **Adapted from**: PREFERENCES_RECONCILIATION.md, PREFERENCES_DATA_FIELDS.md, PREFERENCES_SYSTEM_SOT.md
-
-This document describes how preferences work in the Lovable codebase.
+This document describes how preferences work in the Lovable Cloud codebase.
 
 ---
 
@@ -20,36 +18,81 @@ This document describes how preferences work in the Lovable codebase.
 
 <!--
 @section: current
-@keywords: flow, diagram, quiz, save, API
+@keywords: flow, diagram, quiz, save, Supabase
 -->
 
 ### Preferences Flow
 
 ```
-Quiz.tsx
+Quiz.tsx (10 steps)
     │
     ▼
-setPreferences() in AuthContext
+Edge Function: calculate-travel-dna
     │
     ▼
-preferencesApi.update() in neonDb.ts
+supabase.from('user_preferences').upsert()
     │
     ▼
-PUT /neon-db/preferences
-    │
-    ▼
-user_preferences table in Neon
+user_preferences table (PostgreSQL with RLS)
 ```
 
-### Current Fields Captured
+### Also Updated via AuthContext
 
-| Field | Quiz Question | DB Column | Options |
-|-------|--------------|-----------|---------|
-| Style | "What's your travel style?" | `travel_style` | luxury, adventure, cultural, relaxation |
-| Budget | "What's your typical travel budget?" | `budget` | budget, moderate, premium, luxury |
-| Pace | "What pace do you prefer?" | `pace` | slow, moderate, fast |
-| Interests | "What interests you most?" | `interests` (array) | food, nature, art, nightlife, shopping, wellness |
-| Accommodation | "Where do you like to stay?" | `accommodation` | hotel, boutique, airbnb, hostel |
+```
+AuthContext.setPreferences()
+    │
+    ▼
+supabase.from('user_preferences').upsert()
+```
+
+---
+
+## Database Schema
+
+<!--
+@section: schema
+@keywords: SQL, table, columns, user_preferences
+-->
+
+The `user_preferences` table contains extensive travel preferences:
+
+### Core Preferences
+| Column | Type | Description |
+|--------|------|-------------|
+| user_id | UUID | Primary key (FK to auth.users) |
+| travel_style | TEXT | luxury, adventure, cultural, relaxation |
+| budget_tier | TEXT | budget, moderate, premium, luxury |
+| travel_pace | TEXT | slow, moderate, fast |
+| interests | TEXT[] | Array of interests |
+| accommodation_style | TEXT | hotel, boutique, airbnb, hostel |
+
+### Extended Preferences
+| Column | Type | Description |
+|--------|------|-------------|
+| dietary_restrictions | TEXT[] | Food allergies/restrictions |
+| food_likes | TEXT[] | Preferred cuisines |
+| food_dislikes | TEXT[] | Cuisines to avoid |
+| mobility_level | TEXT | Mobility capabilities |
+| mobility_needs | TEXT | Accessibility requirements |
+| climate_preferences | TEXT[] | Preferred weather |
+| preferred_regions | TEXT[] | Favorite regions |
+
+### Flight Preferences
+| Column | Type | Description |
+|--------|------|-------------|
+| home_airport | TEXT | Departure airport (IATA code) |
+| flight_time_preference | TEXT | morning, afternoon, evening |
+| seat_preference | TEXT | window, aisle, middle |
+| direct_flights_only | BOOLEAN | Prefer non-stop |
+| preferred_airlines | TEXT[] | Favorite airlines |
+
+### Activity Preferences
+| Column | Type | Description |
+|--------|------|-------------|
+| activity_level | TEXT | low, moderate, high |
+| max_activities_per_day | INTEGER | 3-8 activities |
+| schedule_flexibility | TEXT | rigid, flexible |
+| daytime_bias | TEXT | morning, evening |
 
 ---
 
@@ -57,33 +100,48 @@ user_preferences table in Neon
 
 <!--
 @section: api-usage
-@keywords: API, get, update, read, write, neonDb
+@keywords: API, Supabase, read, write
 -->
 
 ### Reading Preferences
 
 ```typescript
-import { preferencesApi } from '@/services/neonDb';
+import { supabase } from '@/integrations/supabase/client';
 
-// Get user preferences
-const result = await preferencesApi.get(userId);
-if (result.data?.[0]) {
-  const prefs = result.data[0];
-  // prefs.travel_style, prefs.budget, prefs.pace, prefs.interests, prefs.accommodation
+// Get current user's preferences
+const { data, error } = await supabase
+  .from('user_preferences')
+  .select('*')
+  .eq('user_id', userId)
+  .single();
+
+if (data) {
+  console.log(data.travel_style, data.budget_tier, data.interests);
 }
 ```
 
 ### Writing Preferences
 
 ```typescript
-// From AuthContext
-await preferencesApi.update(userId, {
-  style: 'luxury',      // maps to travel_style
+// Via AuthContext (recommended)
+const { setPreferences } = useAuth();
+await setPreferences({
+  style: 'luxury',
   budget: 'premium',
   pace: 'moderate',
   interests: ['food', 'art', 'nature'],
   accommodation: 'boutique'
 });
+
+// Direct Supabase (full control)
+await supabase.from('user_preferences').upsert({
+  user_id: userId,
+  travel_style: 'adventure',
+  budget_tier: 'moderate',
+  travel_pace: 'fast',
+  interests: ['nature', 'hiking'],
+  dietary_restrictions: ['vegetarian'],
+}, { onConflict: 'user_id' });
 ```
 
 ---
@@ -98,132 +156,73 @@ await preferencesApi.update(userId, {
 Always use optional chaining when accessing preferences:
 
 ```typescript
-// ✅ CORRECT
-const budget = user?.preferences?.budget || 'moderate';
-const interests = user?.preferences?.interests || [];
-const style = user?.preferences?.style ?? 'cultural';
+// ✅ Safe
+const style = user?.preferences?.style || 'relaxation';
+const interests = user?.preferences?.interests ?? [];
 
-// ❌ WRONG - Will crash if null
-const budget = user.preferences.budget;
+// ❌ Unsafe - will crash if preferences is undefined
+const style = user.preferences.style;
 ```
 
 ---
 
-## Type Definitions
+## Views for Limited Exposure
 
 <!--
-@section: types
-@keywords: TypeScript, interface, TravelPreferences
+@section: views
+@keywords: security, views, public, safe
 -->
 
-### Current types in AuthContext:
+### user_preferences_safe View
 
-```typescript
-export interface TravelPreferences {
-  style?: string;        // luxury | adventure | cultural | relaxation
-  budget?: string;       // budget | moderate | premium | luxury
-  pace?: string;         // slow | moderate | fast
-  interests?: string[];  // Array of interest categories
-  accommodation?: string; // hotel | boutique | airbnb | hostel
-}
+For features that need to read preferences without exposing sensitive data:
+
+```sql
+-- Only exposes non-sensitive fields
+SELECT 
+  user_id,
+  travel_pace,
+  budget_tier,
+  activity_level,
+  travel_style,
+  quiz_completed,
+  created_at,
+  updated_at
+FROM public.user_preferences;
 ```
+
+**Not exposed**: dietary_restrictions, mobility_needs, home_airport, phone_number
 
 ---
 
-## Future: Extended Preferences
+## Quiz Integration
 
 <!--
-@section: future
-@keywords: extended, flight, food, mobility, planned, roadmap
+@section: quiz
+@keywords: quiz, steps, travel DNA
 -->
 
-To match the original system, add these tables/endpoints:
+The travel quiz (10 steps) populates preferences via the `calculate-travel-dna` edge function:
 
-### Flight Preferences
-```typescript
-interface FlightPreferences {
-  home_airport: string;           // IATA code (e.g., 'JFK')
-  preferred_airlines: string[];   // e.g., ['Delta', 'United']
-  seat_preference: string;        // economy, premium_economy, business, first
-  direct_flights_only: boolean;
-  flight_time_preference: string; // early_am, midday, afternoon, red_eye
-}
-```
-
-### Food Preferences
-```typescript
-interface FoodPreferences {
-  dietary_restrictions: string[];  // vegan, vegetarian, gluten_free, etc.
-  cuisine_preferences: string[];   // italian, japanese, mexican, etc.
-  spice_tolerance: string;         // mild, medium, spicy, very_spicy
-  price_sensitivity: string;       // budget, moderate, splurge
-}
-```
-
-### Mobility & Accessibility
-```typescript
-interface MobilityPreferences {
-  accessibility_needs: string[];   // wheelchair, elevator, ground_floor, etc.
-  walking_tolerance: string;       // limited, moderate, extensive
-  noise_sensitivity: string;       // not_sensitive, moderate, high
-}
-```
-
-### Full Extended Type (Future)
-```typescript
-export interface FullTravelPreferences {
-  // Core (current)
-  style?: string;
-  budget?: string;
-  pace?: string;
-  interests?: string[];
-  accommodation?: string;
-  
-  // Flight
-  home_airport?: string;
-  preferred_airlines?: string[];
-  seat_preference?: string;
-  direct_flights_only?: boolean;
-  
-  // Food
-  dietary_restrictions?: string[];
-  cuisine_preferences?: string[];
-  
-  // Mobility
-  accessibility_needs?: string[];
-  walking_tolerance?: string;
-  
-  // Travel DNA (calculated)
-  archetype?: string;
-  archetype_confidence?: number;
-  emotional_drivers?: string[];
-}
-```
+1. **Travel Style** → travel_style
+2. **Budget** → budget_tier
+3. **Pace** → travel_pace
+4. **Interests** → interests[]
+5. **Accommodation** → accommodation_style
+6. **Dining** → dining_style, dietary_restrictions
+7. **Activities** → activity_level, activity_weights
+8. **Planning** → schedule_flexibility
+9. **Climate** → climate_preferences, weather_preferences
+10. **Special** → mobility_needs, accessibility_needs
 
 ---
 
-## Migration Path
+## Related Files
 
-<!--
-@section: migration
-@keywords: phases, roadmap, implementation, priority
--->
-
-1. **Phase 1** (Current): Basic 5-field preferences ✅
-2. **Phase 2**: Add flight preferences table + quiz questions
-3. **Phase 3**: Add food preferences table + quiz questions
-4. **Phase 4**: Add mobility preferences + quiz questions
-5. **Phase 5**: Implement Travel DNA calculation on backend
-
----
-
-## Related SOT Documents
-
-| Document | Purpose | Keywords |
-|----------|---------|----------|
-| [PREFERENCES_SYSTEM_SOT.md](./PREFERENCES_SYSTEM_SOT.md) | Full original spec | master, schema |
-| [PREFERENCES_MAPPING_CONTRACT.md](./PREFERENCES_MAPPING_CONTRACT.md) | Field mappings | mapping, contract |
-| [PREFERENCES_FIELD_MAPPING.md](./PREFERENCES_FIELD_MAPPING.md) | UI to DB mapping | UI, database |
-| [PREFERENCES_RECONCILIATION_GUIDE.md](./PREFERENCES_RECONCILIATION_GUIDE.md) | Frontend changes | migration, changes |
-| [TRAVEL_ARCHETYPES.md](./TRAVEL_ARCHETYPES.md) | 25+ travel personalities | DNA, archetype |
-| [QUIZ_FLOW_LOVABLE.md](./QUIZ_FLOW_LOVABLE.md) | Quiz implementation | questions, flow |
+| File | Purpose |
+|------|---------|
+| `src/contexts/AuthContext.tsx` | setPreferences() method |
+| `src/contexts/QuizContext.tsx` | Quiz answer collection |
+| `supabase/functions/calculate-travel-dna/` | Preference processing |
+| `src/services/profileAPI.ts` | updatePreferences() |
+| `src/components/profile/preferences/` | Preference editing UI |
