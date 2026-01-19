@@ -755,25 +755,39 @@ export default function Start() {
                   {/* Quick budget presets */}
                   <div className="flex flex-wrap gap-2">
                     {[
-                      { label: 'Budget', amount: 500, desc: 'Under $500/person' },
-                      { label: 'Moderate', amount: 1500, desc: '$500-$1,500/person' },
-                      { label: 'Premium', amount: 3000, desc: '$1,500-$3,000/person' },
-                      { label: 'Luxury', amount: 5000, desc: '$3,000+/person' },
-                    ].map((preset) => (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => setBudgetAmount(preset.amount)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                          budgetAmount === preset.amount
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "border-border text-muted-foreground hover:border-primary/50"
-                        )}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+                      { label: 'Budget', min: 0, max: 500, display: 'Under $500' },
+                      { label: 'Moderate', min: 500, max: 1500, display: '$500–$1,500' },
+                      { label: 'Premium', min: 1500, max: 3000, display: '$1,500–$3,000' },
+                      { label: 'Luxury', min: 3000, max: 10000, display: '$3,000+' },
+                    ].map((preset) => {
+                      // Check if current budget falls within this range
+                      const isInRange = budgetAmount !== undefined && 
+                        budgetAmount >= preset.min && 
+                        (preset.max === 10000 ? true : budgetAmount <= preset.max);
+                      
+                      // Set midpoint of range when clicked (or min for budget tier)
+                      const targetAmount = preset.label === 'Budget' 
+                        ? 500 
+                        : preset.label === 'Luxury' 
+                          ? 5000 
+                          : Math.round((preset.min + preset.max) / 2);
+                      
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setBudgetAmount(targetAmount)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                            isInRange
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border text-muted-foreground hover:border-primary/50"
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
