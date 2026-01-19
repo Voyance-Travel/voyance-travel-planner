@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { getTrendingStatus, isInSeason } from '@/utils/trending';
+import { isImageCached } from '@/hooks/useImagePreloader';
 
 interface TrendMetrics {
   current: {
@@ -134,7 +135,8 @@ export default function RefinedDestinationCard({
             src={imageUrl}
             alt={`${city}, ${country}`}
             className="w-full h-full object-cover"
-            loading="lazy"
+            loading={isImageCached(imageUrl) ? "eager" : "lazy"}
+            decoding="async"
           />
         </motion.div>
 

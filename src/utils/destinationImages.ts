@@ -288,6 +288,11 @@ export function hasCuratedImages(destination: string): boolean {
   );
 }
 
+export {
+  CURATED_DESTINATION_IMAGES,
+  GENERIC_TRAVEL_IMAGES,
+};
+
 export default {
   getDestinationImage,
   getDestinationImages,
