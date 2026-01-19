@@ -30,10 +30,10 @@ export const STRIPE_PRODUCTS = {
 
 // Top-up products for free users
 export const TOPUP_PRODUCTS = {
-  AI_SWAPS_5: {
-    name: '5 AI Swaps',
+  REFINEMENTS_5: {
+    name: '5 Smart Refinements',
     price: 2.99,
-    description: 'Find better restaurants, activities, or attractions',
+    description: 'Swap a restaurant, adjust vibe, optimize a block',
   },
   ROUTE_OPTIMIZATION: {
     name: '1 Route Optimization',
@@ -41,15 +41,15 @@ export const TOPUP_PRODUCTS = {
     description: 'Reorder your day for less walking and waiting',
   },
   EXTRA_ITINERARY: {
-    name: '1 Extra Itinerary',
+    name: '1 Premium Itinerary',
     price: 4.99,
     description: 'Build another complete trip this month',
   },
 } as const;
 
 // Plan feature definitions with monthly usage limits
-// NOTE: "edits" = AI-powered activity swaps (e.g., "find me another restaurant")
-// Manual changes (rearranging, adding notes, changing times, deleting) are ALWAYS FREE
+// NOTE: "Smart Refinements" = AI-powered changes (swap a restaurant, adjust vibe, optimize a block)
+// Manual changes (move, delete, reorder, notes) are ALWAYS FREE
 export const PLAN_FEATURES = {
   FREE: {
     id: 'free',
@@ -59,16 +59,14 @@ export const PLAN_FEATURES = {
     price: 0,
     priceDetail: 'forever',
     features: [
-      '1 AI-generated itinerary per month',
-      '10 AI activity swaps per month',
-      '3 route optimizations per month',
-      '1 group budget setup per month',
+      '1 Premium AI Itinerary per month',
+      '10 Smart Refinements per month',
       'Unlimited manual edits',
-      'Save 1 draft trip at a time',
+      'No export, offline, or collaboration',
     ],
     limits: {
       fullBuildsPerMonth: 1,
-      aiEditsPerMonth: 10,
+      refinementsPerMonth: 10,
       routeOptimizationsPerMonth: 3,
       groupBudgetSetupsPerMonth: 1,
       draftTrips: 1,
@@ -78,6 +76,7 @@ export const PLAN_FEATURES = {
       canPrint: false,
       canExport: false,
       canDownload: false,
+      canCollaborate: false,
     },
     cta: 'Start Free',
   },
@@ -89,18 +88,18 @@ export const PLAN_FEATURES = {
     price: 12.99,
     priceDetail: 'one-time',
     features: [
-      'Unlimited AI rebuilds for this trip',
-      'Unlimited AI activity swaps',
-      'Unlimited route optimizations',
+      'Unlimited itinerary rebuilds',
+      'Unlimited Smart Refinements',
       'Group budgeting and expense splitting',
       'Co-edit with travel companions',
-      'Print, export, and download',
+      'Export, print, and download',
     ],
     limits: {
       // Unlimited for purchased trip
       canPrint: true,
       canExport: true,
       canDownload: true,
+      canCollaborate: true,
     },
     cta: 'Unlock This Trip',
   },
@@ -112,17 +111,16 @@ export const PLAN_FEATURES = {
     price: 15.99,
     priceDetail: 'per month',
     features: [
-      'Unlimited AI itinerary builds',
-      'Unlimited AI activity swaps',
-      'Unlimited route optimizations',
+      'Unlimited Premium Itineraries',
+      'Unlimited Smart Refinements',
       'Save up to 5 trips at once',
       'Smart flight and hotel picks',
       'Group budgeting on every trip',
-      'Print, export, and download',
+      'Export, print, and download',
     ],
     limits: {
       fullBuildsPerMonth: -1, // Unlimited
-      aiEditsPerMonth: -1,
+      refinementsPerMonth: -1,
       routeOptimizationsPerMonth: -1,
       groupBudgetSetupsPerMonth: -1,
       draftTrips: 5,
@@ -135,6 +133,7 @@ export const PLAN_FEATURES = {
       canPrint: true,
       canExport: true,
       canDownload: true,
+      canCollaborate: true,
     },
     cta: 'Go Monthly',
   },
@@ -155,7 +154,7 @@ export const PLAN_FEATURES = {
     ],
     limits: {
       fullBuildsPerMonth: -1,
-      aiEditsPerMonth: -1,
+      refinementsPerMonth: -1,
       routeOptimizationsPerMonth: -1,
       groupBudgetSetupsPerMonth: -1,
       draftTrips: -1, // Unlimited
@@ -169,6 +168,7 @@ export const PLAN_FEATURES = {
       canPrint: true,
       canExport: true,
       canDownload: true,
+      canCollaborate: true,
     },
     cta: 'Go Yearly',
   },
