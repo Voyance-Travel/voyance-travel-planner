@@ -226,7 +226,7 @@ export default function Pricing() {
             </motion.div>
           </div>
 
-          {/* Top-ups Section */}
+          {/* Pay-Per-Use Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -239,32 +239,38 @@ export default function Pricing() {
                   <Wallet className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-foreground mb-1">Don't want a pass or subscription?</h3>
+                  <h3 className="text-xl font-bold text-foreground mb-1">Pay only for what you use</h3>
                   <p className="text-muted-foreground">
-                    Top up your wallet (min $5) and spend it only when you want Voyance to auto-build a day, 
-                    optimize routes, or complete an itinerary.
+                    No subscription? No problem. Add credits to your wallet and spend them on specific actions—
+                    perfect when you just need help with one day or one route.
                   </p>
                 </div>
               </div>
               
               <div className="grid sm:grid-cols-2 gap-4 mb-6">
                 {CREDIT_MENU.map((item) => (
-                  <div key={item.key} className="flex items-center justify-between bg-background rounded-lg p-3 border border-border">
+                  <div key={item.key} className="flex items-center justify-between bg-background rounded-lg p-4 border border-border hover:border-primary/30 transition-colors">
                     <div>
                       <span className="font-medium text-foreground">{item.label}</span>
-                      <p className="text-xs text-muted-foreground">{item.description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                     </div>
-                    <span className="text-primary font-semibold">${(item.cost / 100).toFixed(2)}</span>
+                    <span className="text-primary font-bold text-lg">${(item.cost / 100).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
               
-              <div className="flex flex-wrap gap-3">
-                {TOPUP_OPTIONS.map((option) => (
-                  <Button key={option.amount} variant="outline" size="sm">
-                    Add {option.label}
-                  </Button>
-                ))}
+              <div className="flex items-center justify-between bg-background/50 rounded-lg p-4 border border-dashed border-border">
+                <div>
+                  <p className="text-sm text-foreground font-medium">Ready to try it?</p>
+                  <p className="text-xs text-muted-foreground">Add funds when you need them (min $5)</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {TOPUP_OPTIONS.slice(0, 3).map((option) => (
+                    <Button key={option.amount} variant="outline" size="sm" className="text-xs">
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>

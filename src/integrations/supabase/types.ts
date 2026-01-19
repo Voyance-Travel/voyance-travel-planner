@@ -317,6 +317,36 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_transactions: {
+        Row: {
+          action_key: string | null
+          amount_cents: number
+          created_at: string
+          id: string
+          metadata: Json | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          action_key?: string | null
+          amount_cents: number
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          action_key?: string | null
+          amount_cents?: number
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       curated_images: {
         Row: {
           alt_text: string | null
@@ -1644,6 +1674,27 @@ export type Database = {
           status?: Database["public"]["Enums"]["trip_status"]
           travelers?: number | null
           trip_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_credits: {
+        Row: {
+          balance_cents: number
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_cents?: number
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_cents?: number
+          created_at?: string
           updated_at?: string
           user_id?: string
         }
