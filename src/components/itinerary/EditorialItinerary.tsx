@@ -1575,7 +1575,187 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
   // Default information for common destinations
   const getDefaultInfo = () => {
     const country = destinationCountry?.toLowerCase() || '';
-    if (country.includes('italy') || destination.toLowerCase().includes('rome')) {
+    const dest = destination.toLowerCase();
+    
+    // UK / London
+    if (country.includes('uk') || country.includes('united kingdom') || country.includes('england') || dest.includes('london')) {
+      return {
+        currency: 'British Pound (£)',
+        currencyTips: [
+          'Contactless payments widely accepted everywhere',
+          'Tipping 10-15% at restaurants is customary',
+          'ATMs available at banks and on high streets',
+          'Most places accept major credit cards'
+        ],
+        language: 'English',
+        languageTips: [
+          'British English differs from American English',
+          '"Cheers" means thanks, goodbye, or a toast',
+          '"Queue" means line - respect the queue!',
+          'Politeness is highly valued'
+        ],
+        timezone: 'GMT (UTC+0) / BST (UTC+1 summer)',
+        timezoneTips: [
+          'Shops typically close 6-7 PM, later in central London',
+          'Pubs traditionally close around 11 PM',
+          'Sunday trading hours are limited'
+        ],
+        tipping: '10-15% at restaurants if service not included',
+        tippingTips: [
+          'Check if service charge is already added',
+          'Round up taxi fares',
+          'Not expected at pubs for bar service',
+          'Hotel porters: £1-2 per bag'
+        ],
+        transit: 'Tube, buses, Overground. Use Oyster or contactless.',
+        transitTips: [
+          'Oyster card or contactless for cheaper fares',
+          'Stand on right on escalators, walk on left',
+          'Buses don\'t accept cash - tap to pay',
+          'Night Tube runs on weekends'
+        ],
+        water: 'Tap water is safe and excellent quality',
+        waterTips: [
+          'Free tap water available at restaurants',
+          'Refill stations at many tube stations',
+          'No need to buy bottled water'
+        ],
+        voltage: '230V, Type G plugs (3-pin)',
+        voltageTips: [
+          'US/EU devices need UK adapters',
+          'Hotels often have shaver sockets',
+          'USB charging works without adapters'
+        ],
+        emergency: '999 (Emergency) / 111 (Non-urgent NHS)',
+        emergencyTips: [
+          '999 for police, fire, ambulance',
+          '111 for non-emergency medical advice',
+          'A&E (Emergency Room) at major hospitals',
+          'Pharmacies can advise on minor issues'
+        ],
+      };
+    }
+    
+    // France / Paris
+    if (country.includes('france') || dest.includes('paris')) {
+      return {
+        currency: 'Euro (€)',
+        currencyTips: [
+          'Cards accepted almost everywhere',
+          'Some small shops prefer cash',
+          'ATMs available at banks and metro stations',
+          'Notify your bank before traveling'
+        ],
+        language: 'French',
+        languageTips: [
+          '"Bonjour" (Hello) - always greet first',
+          '"Merci" (Thank you) - essential',
+          '"Pardon" (Excuse me) - polite interruption',
+          'English widely spoken in tourist areas'
+        ],
+        timezone: 'CET (UTC+1) / CEST (UTC+2 summer)',
+        timezoneTips: [
+          'Many shops close Sundays',
+          'Lunch is typically 12-2 PM',
+          'Dinner starts around 8 PM'
+        ],
+        tipping: 'Service included, rounding up appreciated',
+        tippingTips: [
+          'Service compris (service included) in bill',
+          'Leave small change for good service',
+          'Round up taxi fares',
+          'Not expected at cafes'
+        ],
+        transit: 'Metro, RER, buses. Buy tickets at stations.',
+        transitTips: [
+          'Metro runs 5:30 AM - 1 AM (2 AM weekends)',
+          'Keep ticket until you exit',
+          'Navigo pass for unlimited weekly travel',
+          'Uber and taxis widely available'
+        ],
+        water: 'Tap water is safe to drink',
+        waterTips: [
+          '"Carafe d\'eau" for free tap water at restaurants',
+          'Wallace fountains provide free drinking water',
+          'Bottled water available everywhere'
+        ],
+        voltage: '230V, Type C/E plugs',
+        voltageTips: [
+          'US/UK devices need adapters',
+          'Most hotels have adapters available',
+          'USB charging works without adapters'
+        ],
+        emergency: '112 (EU Emergency) / 15 (Medical) / 17 (Police)',
+        emergencyTips: [
+          '112 works EU-wide from any phone',
+          'Pharmacies (green cross) can advise on minor issues',
+          'SOS Médecins for doctor house calls',
+          'Keep embassy contact handy'
+        ],
+      };
+    }
+    
+    // Spain / Barcelona / Madrid
+    if (country.includes('spain') || dest.includes('barcelona') || dest.includes('madrid')) {
+      return {
+        currency: 'Euro (€)',
+        currencyTips: [
+          'Cards widely accepted',
+          'Cash useful for small purchases',
+          'ATMs available at banks',
+          'Dynamic currency conversion - always pay in EUR'
+        ],
+        language: 'Spanish (Catalan in Barcelona)',
+        languageTips: [
+          '"Hola" (Hello) - friendly greeting',
+          '"Gracias" (Thank you)',
+          '"Por favor" (Please)',
+          'Catalan spoken in Barcelona alongside Spanish'
+        ],
+        timezone: 'CET (UTC+1) / CEST (UTC+2 summer)',
+        timezoneTips: [
+          'Siesta: many shops close 2-5 PM',
+          'Dinner typically starts 9-10 PM',
+          'Nightlife runs very late'
+        ],
+        tipping: '5-10% appreciated but not expected',
+        tippingTips: [
+          'Service charge rarely included',
+          'Round up at casual places',
+          'Leave a few euros at nice restaurants',
+          'Not expected at tapas bars'
+        ],
+        transit: 'Metro, buses, trams. TMB card in Barcelona.',
+        transitTips: [
+          'T-Casual card for 10 trips in Barcelona',
+          'Metro runs until midnight (later weekends)',
+          'Taxis are affordable',
+          'Walking is great in city centers'
+        ],
+        water: 'Tap water is safe but tastes mineral',
+        waterTips: [
+          'Bottled water commonly preferred',
+          'Restaurants may charge for water',
+          '"Agua del grifo" for tap water'
+        ],
+        voltage: '230V, Type C/F plugs',
+        voltageTips: [
+          'Same as rest of Europe',
+          'US/UK devices need adapters',
+          'USB charging works without adapters'
+        ],
+        emergency: '112 (All emergencies)',
+        emergencyTips: [
+          '112 for police, fire, ambulance',
+          'Tourist police in major cities',
+          'Pharmacies have green cross',
+          'Hospitals have 24h emergency'
+        ],
+      };
+    }
+    
+    // Italy / Rome
+    if (country.includes('italy') || dest.includes('rome') || dest.includes('milan') || dest.includes('florence') || dest.includes('venice')) {
       return {
         currency: 'Euro (€)',
         currencyTips: [
@@ -1631,6 +1811,67 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         ],
       };
     }
+    
+    // Germany / Berlin / Munich
+    if (country.includes('germany') || dest.includes('berlin') || dest.includes('munich')) {
+      return {
+        currency: 'Euro (€)',
+        currencyTips: [
+          'Cash is king - many places don\'t accept cards',
+          'Bring enough Euros especially for small purchases',
+          'EC cards (debit) more common than credit',
+          'ATMs at banks and train stations'
+        ],
+        language: 'German',
+        languageTips: [
+          '"Guten Tag" (Hello) - formal greeting',
+          '"Danke" (Thank you)',
+          '"Bitte" (Please/You\'re welcome)',
+          'English widely spoken, especially by young people'
+        ],
+        timezone: 'CET (UTC+1) / CEST (UTC+2 summer)',
+        timezoneTips: [
+          'Shops closed on Sundays (except tourist areas)',
+          'Punctuality is highly valued',
+          'Dinner typically 6-8 PM'
+        ],
+        tipping: '5-10% at restaurants',
+        tippingTips: [
+          'Round up or add 5-10%',
+          'Say the total you want to pay when giving cash',
+          'Not expected at counters',
+          'Cash tips preferred'
+        ],
+        transit: 'U-Bahn, S-Bahn, buses, trams. Honor system.',
+        transitTips: [
+          'Validate ticket before boarding',
+          'Heavy fines for no ticket (€60+)',
+          'Day passes often good value',
+          'Excellent regional train connections'
+        ],
+        water: 'Tap water is excellent quality',
+        waterTips: [
+          'Restaurant water is usually bottled (paid)',
+          'Ask for "Leitungswasser" for tap water',
+          'Sparkling water (Sprudel) very popular'
+        ],
+        voltage: '230V, Type C/F plugs',
+        voltageTips: [
+          'Same as rest of Europe',
+          'US/UK devices need adapters',
+          'USB charging works without adapters'
+        ],
+        emergency: '112 (Emergency) / 110 (Police)',
+        emergencyTips: [
+          '112 for fire and ambulance',
+          '110 for police',
+          'Apotheke (pharmacy) for minor issues',
+          'Most pharmacists speak English'
+        ],
+      };
+    }
+
+    // Default fallback
     return {
       currency: destinationInfo?.currency || 'Local currency',
       currencyTips: ['Check current exchange rates before you go', 'ATMs usually offer best rates', 'Notify your bank of travel plans'],
