@@ -1331,6 +1331,12 @@ export type Database = {
           eco_friendly: boolean | null
           email_notifications: boolean | null
           emotional_drivers: string[] | null
+          enable_cost_lookup: boolean | null
+          enable_gap_filling: boolean | null
+          enable_geocoding: boolean | null
+          enable_real_transport: boolean | null
+          enable_route_optimization: boolean | null
+          enable_venue_verification: boolean | null
           flight_preferences: Json | null
           flight_time_preference: string | null
           food_dislikes: string[] | null
@@ -1342,12 +1348,14 @@ export type Database = {
           interests: string[] | null
           loyalty_programs: string[] | null
           marketing_emails: boolean | null
+          max_activities_per_day: number | null
           mobility_level: string | null
           mobility_needs: string | null
           personal_notes: string | null
           phone_number: string | null
           planning_preference: string | null
           preferred_airlines: string[] | null
+          preferred_downtime_minutes: number | null
           preferred_group_size: string | null
           preferred_regions: string[] | null
           price_alerts: boolean | null
@@ -1392,6 +1400,12 @@ export type Database = {
           eco_friendly?: boolean | null
           email_notifications?: boolean | null
           emotional_drivers?: string[] | null
+          enable_cost_lookup?: boolean | null
+          enable_gap_filling?: boolean | null
+          enable_geocoding?: boolean | null
+          enable_real_transport?: boolean | null
+          enable_route_optimization?: boolean | null
+          enable_venue_verification?: boolean | null
           flight_preferences?: Json | null
           flight_time_preference?: string | null
           food_dislikes?: string[] | null
@@ -1403,12 +1417,14 @@ export type Database = {
           interests?: string[] | null
           loyalty_programs?: string[] | null
           marketing_emails?: boolean | null
+          max_activities_per_day?: number | null
           mobility_level?: string | null
           mobility_needs?: string | null
           personal_notes?: string | null
           phone_number?: string | null
           planning_preference?: string | null
           preferred_airlines?: string[] | null
+          preferred_downtime_minutes?: number | null
           preferred_group_size?: string | null
           preferred_regions?: string[] | null
           price_alerts?: boolean | null
@@ -1453,6 +1469,12 @@ export type Database = {
           eco_friendly?: boolean | null
           email_notifications?: boolean | null
           emotional_drivers?: string[] | null
+          enable_cost_lookup?: boolean | null
+          enable_gap_filling?: boolean | null
+          enable_geocoding?: boolean | null
+          enable_real_transport?: boolean | null
+          enable_route_optimization?: boolean | null
+          enable_venue_verification?: boolean | null
           flight_preferences?: Json | null
           flight_time_preference?: string | null
           food_dislikes?: string[] | null
@@ -1464,12 +1486,14 @@ export type Database = {
           interests?: string[] | null
           loyalty_programs?: string[] | null
           marketing_emails?: boolean | null
+          max_activities_per_day?: number | null
           mobility_level?: string | null
           mobility_needs?: string | null
           personal_notes?: string | null
           phone_number?: string | null
           planning_preference?: string | null
           preferred_airlines?: string[] | null
+          preferred_downtime_minutes?: number | null
           preferred_group_size?: string | null
           preferred_regions?: string[] | null
           price_alerts?: boolean | null
