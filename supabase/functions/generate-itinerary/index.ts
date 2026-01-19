@@ -596,7 +596,8 @@ function buildPreferenceContext(insights: any, prefs: any): string {
     }
 
     if (insights.preferred_pace) {
-      insightItems.push(`Learned pace preference: ${insights.preferred_pace}`);
+      const formattedPace = insights.preferred_pace.replace(/[-_]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+      insightItems.push(`Learned pace preference: ${formattedPace}`);
     }
     
     if (insightItems.length > 0) {
