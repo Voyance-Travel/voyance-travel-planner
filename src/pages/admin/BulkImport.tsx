@@ -1,9 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileText, CheckCircle, XCircle, Loader2, Users, Trash2 } from "lucide-react";
+import { Upload, FileText, CheckCircle, XCircle, Loader2, Users, Trash2, ShieldAlert } from "lucide-react";
 import { readCSVFile, bulkImportCSV } from "@/utils/csvBulkImport";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +19,7 @@ interface ImportStatus {
 }
 
 export default function BulkImport() {
+  const navigate = useNavigate();
   const [table, setTable] = useState<string>("activities");
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -26,6 +29,40 @@ export default function BulkImport() {
   const [userImportResult, setUserImportResult] = useState<any>(null);
   const [deleteResult, setDeleteResult] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check admin role using server-side validation
+  const { data: isAdmin, isLoading: isCheckingAdmin, error: adminError } = useQuery({
+    queryKey: ['admin-check'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      
+      // Check user_roles table for admin role
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Admin check error:', error);
+        return false;
+      }
+      
+      return !!data;
+    },
+    staleTime: 30000, // Cache for 30 seconds
+    retry: 1,
+  });
+
+  // Redirect non-admins
+  useEffect(() => {
+    if (!isCheckingAdmin && !isAdmin) {
+      toast.error("Admin access required");
+      navigate('/');
+    }
+  }, [isCheckingAdmin, isAdmin, navigate]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -139,6 +176,33 @@ export default function BulkImport() {
   const progressPercent = status 
     ? Math.round((status.imported + status.failed) / status.total * 100) 
     : 0;
+
+  // Show loading state while checking admin
+  if (isCheckingAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Verifying admin access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied if not admin
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="pt-6 text-center">
+            <ShieldAlert className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground">You need admin privileges to access this page.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-8">

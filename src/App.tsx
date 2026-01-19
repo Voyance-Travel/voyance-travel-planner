@@ -136,8 +136,12 @@ const App = () => (
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
                 
-                {/* Admin Routes */}
-                <Route path="/admin/bulk-import" element={<BulkImport />} />
+                {/* Admin Routes - Protected */}
+                <Route path="/admin/bulk-import" element={
+                  <ProtectedRoute>
+                    <BulkImport />
+                  </ProtectedRoute>
+                } />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
