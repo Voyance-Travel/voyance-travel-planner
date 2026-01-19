@@ -19,7 +19,8 @@ import {
   Plane, Hotel, Utensils, Camera, ShoppingBag, Palmtree, Car, Trash2,
   Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
-  Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images
+  Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
+  CreditCard
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,8 @@ import type { ActivityType, WeatherCondition } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { WeatherForecast } from './WeatherForecast';
+import { BookingButton } from '@/components/booking/BookingButton';
+import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 
 // =============================================================================
 // TYPES
@@ -373,6 +376,31 @@ export function EditorialItinerary({
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [payments, setPayments] = useState<TripPayment[]>([]);
+
+  // Fetch payments on mount
+  useEffect(() => {
+    async function fetchPayments() {
+      const result = await getTripPayments(tripId);
+      if (result.success && result.payments) {
+        setPayments(result.payments);
+      }
+    }
+    fetchPayments();
+  }, [tripId]);
+
+  // Helper to find payment for an item
+  const getPaymentForItem = useCallback((itemType: 'flight' | 'hotel' | 'activity', itemId: string): TripPayment | undefined => {
+    return payments.find(p => p.item_type === itemType && p.item_id === itemId);
+  }, [payments]);
+
+  // Refresh payments after booking
+  const refreshPayments = useCallback(async () => {
+    const result = await getTripPayments(tripId);
+    if (result.success && result.payments) {
+      setPayments(result.payments);
+    }
+  }, [tripId]);
 
   // Calculate totals with smart estimation
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier), 0);
@@ -840,6 +868,9 @@ export function EditorialItinerary({
                 isExpanded={expandedDays.includes(day.dayNumber)}
                 isRegenerating={regeneratingDay === day.dayNumber}
                 isEditable={isEditable}
+                tripId={tripId}
+                getPaymentForItem={getPaymentForItem}
+                refreshPayments={refreshPayments}
                 onToggle={() => toggleDay(day.dayNumber)}
                 onActivityLock={handleActivityLock}
                 onActivityMove={handleActivityMove}
@@ -982,9 +1013,23 @@ export function EditorialItinerary({
                       </div>
                     )}
 
-                    <div className="pt-3 border-t border-border flex justify-between">
-                      <span className="font-medium">Flight Total</span>
-                      <span className="font-serif text-lg">${flightCost.toLocaleString()}</span>
+                    <div className="pt-3 border-t border-border space-y-3">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Flight Total</span>
+                        <span className="font-serif text-lg">${flightCost.toLocaleString()}</span>
+                      </div>
+                      {flightCost > 0 && (
+                        <BookingButton
+                          tripId={tripId}
+                          itemType="flight"
+                          itemId="flight-selection"
+                          itemName={`${flightSelection.outbound?.airline || 'Flight'} to ${destination}`}
+                          amountCents={flightCost * 100}
+                          existingPayment={getPaymentForItem('flight', 'flight-selection')}
+                          onSuccess={refreshPayments}
+                          className="w-full"
+                        />
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1172,7 +1217,7 @@ export function EditorialItinerary({
                     )}
                     
                     {/* Price Summary */}
-                    <div className="pt-4 border-t border-border">
+                    <div className="pt-4 border-t border-border space-y-3">
                       <div className="flex justify-between items-center">
                         <div>
                           <p className="text-muted-foreground">{hotelSelection.nights || days.length} nights</p>
@@ -1182,6 +1227,18 @@ export function EditorialItinerary({
                         </div>
                         <span className="font-serif text-2xl font-semibold text-primary">${hotelCost.toLocaleString()}</span>
                       </div>
+                      {hotelCost > 0 && (
+                        <BookingButton
+                          tripId={tripId}
+                          itemType="hotel"
+                          itemId="hotel-selection"
+                          itemName={hotelSelection.name || 'Hotel'}
+                          amountCents={hotelCost * 100}
+                          existingPayment={getPaymentForItem('hotel', 'hotel-selection')}
+                          onSuccess={refreshPayments}
+                          className="w-full"
+                        />
+                      )}
                     </div>
                     
                     {/* Website Link */}
