@@ -49,6 +49,7 @@ export interface EditorialActivity {
   category?: string;
   type?: ActivityType;
   cost?: { amount: number; currency: string };
+  estimatedCost?: { amount: number; currency: string }; // Fallback from AI generation
   location?: { name?: string; address?: string; lat?: number; lng?: number };
   rating?: { value: number; totalReviews: number } | number;
   tags?: string[];
@@ -58,6 +59,7 @@ export interface EditorialActivity {
   transportation?: {
     method: string;
     duration: string;
+    distance?: string;
     estimatedCost?: { amount: number; currency: string };
     instructions?: string;
   };
@@ -196,7 +198,7 @@ function formatCurrency(amount: number | null | undefined, showEstimateLabel = t
     return showEstimateLabel ? 'Estimate needed' : '—';
   }
   if (amount === 0) {
-    return 'Included'; // Zero cost means included/bundled, not "free"
+    return 'Free';
   }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -206,7 +208,13 @@ function formatCurrency(amount: number | null | undefined, showEstimateLabel = t
 }
 
 function getActivityCost(activity: EditorialActivity): number | null {
-  if (activity.cost?.amount && activity.cost.amount > 0) return activity.cost.amount;
+  // Check cost.amount first, then estimatedCost.amount as fallback
+  if (activity.cost?.amount !== undefined && activity.cost.amount >= 0) {
+    return activity.cost.amount;
+  }
+  if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount >= 0) {
+    return activity.estimatedCost.amount;
+  }
   return null;
 }
 
@@ -594,6 +602,15 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+            {/* Airport Game Plan - Show before Day 1 */}
+            {flightSelection?.outbound && (
+              <AirportGamePlan 
+                flightSelection={flightSelection} 
+                hotelSelection={hotelSelection}
+                destination={destination}
+              />
+            )}
+            
             {days.map((day, dayIndex) => (
               <DayCard
                 key={day.dayNumber}
@@ -738,6 +755,174 @@ export function EditorialItinerary({
         onClose={() => setAddActivityModal(null)}
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
       />
+    </div>
+  );
+}
+
+// =============================================================================
+// AIRPORT GAME PLAN COMPONENT
+// =============================================================================
+
+interface AirportGamePlanProps {
+  flightSelection: FlightSelection;
+  hotelSelection?: HotelSelection | null;
+  destination: string;
+}
+
+function AirportGamePlan({ flightSelection, hotelSelection, destination }: AirportGamePlanProps) {
+  const outbound = flightSelection.outbound;
+  if (!outbound) return null;
+
+  // Parse arrival time and calculate recommendations
+  const arrivalTime = outbound.arrival?.time || '';
+  const arrivalAirport = outbound.arrival?.airport || '';
+  const departureTime = outbound.departure?.time || '';
+  
+  // Calculate recommended airport arrival (2.5 hours before for international, 2 for domestic)
+  const getRecommendedAirportArrival = () => {
+    if (!departureTime) return null;
+    const match = departureTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!match) return departureTime;
+    
+    let hours = parseInt(match[1], 10);
+    const mins = match[2];
+    const period = match[3]?.toUpperCase();
+    
+    // Convert to 24h if needed
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    
+    // Subtract 2.5 hours for international
+    hours -= 2;
+    let finalMins = parseInt(mins, 10) - 30;
+    if (finalMins < 0) {
+      finalMins += 60;
+      hours -= 1;
+    }
+    if (hours < 0) hours += 24;
+    
+    // Format back
+    const displayHours = hours % 12 || 12;
+    const displayPeriod = hours >= 12 ? 'PM' : 'AM';
+    return `${displayHours}:${String(finalMins).padStart(2, '0')} ${displayPeriod}`;
+  };
+
+  // Determine post-landing recommendation based on arrival time
+  const getPostLandingAdvice = () => {
+    if (!arrivalTime) return { action: 'Check in & explore', reason: 'Get settled and start exploring!' };
+    
+    const match = arrivalTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!match) return { action: 'Check in & explore', reason: 'Get settled and start exploring!' };
+    
+    let hours = parseInt(match[1], 10);
+    const period = match[3]?.toUpperCase();
+    
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    
+    if (hours >= 21 || hours < 6) {
+      return { action: 'Head to hotel & rest', reason: 'Late arrival - get a good night\'s sleep for tomorrow\'s adventures' };
+    } else if (hours >= 18) {
+      return { action: 'Check in, then dinner nearby', reason: 'Evening arrival - perfect for a local dinner experience' };
+    } else if (hours >= 12) {
+      return { action: 'Check in, then lunch & explore', reason: 'Afternoon arrival - grab lunch and explore the neighborhood' };
+    } else {
+      return { action: 'Store luggage, explore immediately', reason: 'Early arrival - make the most of your first day!' };
+    }
+  };
+
+  // Estimate airport to hotel transfer
+  const getTransferEstimate = () => {
+    // Generic estimates - in reality would use Google Maps API
+    return {
+      taxi: { duration: '30-45 min', cost: '$40-60' },
+      shuttle: { duration: '45-60 min', cost: '$15-25' },
+      train: { duration: '40-55 min', cost: '$10-15' },
+      rideshare: { duration: '30-45 min', cost: '$35-55' },
+    };
+  };
+
+  const recommendedArrival = getRecommendedAirportArrival();
+  const postLanding = getPostLandingAdvice();
+  const transfer = getTransferEstimate();
+
+  return (
+    <div className="border border-primary/30 bg-primary/5 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="p-4 border-b border-primary/20 bg-primary/10">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/20 rounded-full">
+            <Plane className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-serif text-lg font-medium">Your Airport Game Plan</h3>
+            <p className="text-sm text-muted-foreground">Everything you need to know for departure day</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* Recommended Airport Arrival */}
+        {recommendedArrival && (
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+              <Clock className="h-4 w-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">Arrive at airport by {recommendedArrival}</p>
+              <p className="text-xs text-muted-foreground">
+                We recommend 2.5 hours before your {departureTime} departure for international flights
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Landing Info */}
+        {arrivalTime && (
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+              <MapPin className="h-4 w-4 text-green-600" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">You land at {arrivalTime} ({arrivalAirport})</p>
+              <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Transfer Options */}
+        {hotelSelection?.name && (
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+              <Hotel className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-sm">Getting to {hotelSelection.name}</p>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div className="text-xs p-2 bg-background rounded border">
+                  <span className="font-medium">🚕 Taxi/Uber</span>
+                  <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
+                </div>
+                <div className="text-xs p-2 bg-background rounded border">
+                  <span className="font-medium">🚆 Train/Metro</span>
+                  <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Post-Landing Action */}
+        <div className="flex items-start gap-3 pt-2 border-t border-primary/20">
+          <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0">
+            <Sparkles className="h-4 w-4 text-purple-600" />
+          </div>
+          <div>
+            <p className="font-medium text-sm">Recommended: {postLanding.action}</p>
+            <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1000,11 +1185,24 @@ function ActivityRow({
             )}
             {/* Transportation to next */}
             {activity.transportation && !isLast && (
-              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                <Car className="h-3 w-3" />
-                <span className="capitalize">{activity.transportation.method}</span>
-                {activity.transportation.duration && (
-                  <span>• {activity.transportation.duration}</span>
+              <div className="flex flex-col gap-1 mt-2 p-2 bg-secondary/30 rounded border-l-2 border-primary/30">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Car className="h-3 w-3" />
+                  <span className="capitalize font-medium">{activity.transportation.method}</span>
+                  {activity.transportation.duration && (
+                    <span>• {activity.transportation.duration}</span>
+                  )}
+                  {activity.transportation.distance && (
+                    <span>• {activity.transportation.distance}</span>
+                  )}
+                  {activity.transportation.estimatedCost?.amount && activity.transportation.estimatedCost.amount > 0 && (
+                    <span>• ~${activity.transportation.estimatedCost.amount}</span>
+                  )}
+                </div>
+                {activity.transportation.instructions && (
+                  <p className="text-xs text-muted-foreground/80 pl-5">
+                    {activity.transportation.instructions}
+                  </p>
                 )}
               </div>
             )}
