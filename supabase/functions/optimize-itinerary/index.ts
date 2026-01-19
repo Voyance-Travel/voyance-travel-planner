@@ -15,6 +15,8 @@ interface ActivityLocation {
   address?: string;
   lat?: number;
   lng?: number;
+  // AI may generate nested coordinates structure
+  coordinates?: { lat: number; lng: number };
 }
 
 interface Activity {
@@ -32,6 +34,27 @@ interface Activity {
   durationMinutes?: number;
   timeBlockType?: string;
   tags?: string[];
+}
+
+// Helper to get coordinates from activity location (handles both flat and nested structures)
+function getCoordinates(location?: ActivityLocation): { lat: number; lng: number } | null {
+  if (!location) return null;
+  
+  // Check flat structure first (location.lat, location.lng)
+  if (typeof location.lat === 'number' && typeof location.lng === 'number') {
+    if (location.lat !== 0 || location.lng !== 0) {
+      return { lat: location.lat, lng: location.lng };
+    }
+  }
+  
+  // Check nested structure (location.coordinates.lat, location.coordinates.lng)
+  if (location.coordinates && typeof location.coordinates.lat === 'number' && typeof location.coordinates.lng === 'number') {
+    if (location.coordinates.lat !== 0 || location.coordinates.lng !== 0) {
+      return { lat: location.coordinates.lat, lng: location.coordinates.lng };
+    }
+  }
+  
+  return null;
 }
 
 interface TransportData {
@@ -683,10 +706,12 @@ function buildDistanceMatrix(activities: Activity[]): number[][] {
       } else {
         const a = activities[i];
         const b = activities[j];
-        if (a.location?.lat && a.location?.lng && b.location?.lat && b.location?.lng) {
+        const coordsA = getCoordinates(a.location);
+        const coordsB = getCoordinates(b.location);
+        if (coordsA && coordsB) {
           matrix[i][j] = getHaversineDistance(
-            a.location.lat, a.location.lng,
-            b.location.lat, b.location.lng
+            coordsA.lat, coordsA.lng,
+            coordsB.lat, coordsB.lng
           );
         } else {
           matrix[i][j] = Infinity; // No coordinates
@@ -709,7 +734,7 @@ function optimizeDayRoute(activities: Activity[]): Activity[] {
   // If ≤1 unlocked activities or no coordinates, return as-is
   if (unlocked.length <= 1) return activities;
 
-  const hasCoords = unlocked.every(a => a.location?.lat && a.location?.lng);
+  const hasCoords = unlocked.every(a => getCoordinates(a.location) !== null);
   if (!hasCoords) {
     console.log("[optimize-itinerary] Missing coordinates, skipping route optimization");
     return activities;
@@ -1323,11 +1348,12 @@ serve(async (req) => {
           // Skip downtime blocks
           if (curr.timeBlockType === 'downtime') continue;
 
-          if (prev.location?.lat && prev.location?.lng && curr.location?.lat && curr.location?.lng) {
-            const origin = { lat: prev.location.lat, lng: prev.location.lng };
-            const dest = { lat: curr.location.lat, lng: curr.location.lng };
+          const originCoords = getCoordinates(prev.location);
+          const destCoords = getCoordinates(curr.location);
 
-            const transport = await getOptimalTransport(origin, dest, curr.location.name || curr.title);
+          if (originCoords && destCoords) {
+            // We have coordinates - calculate real transport
+            const transport = await getOptimalTransport(originCoords, destCoords, curr.location?.name || curr.title);
 
             activities[i] = {
               ...curr,
@@ -1342,6 +1368,52 @@ serve(async (req) => {
               },
             };
             transportCalculated++;
+          } else {
+            // No coordinates - provide smart estimation based on activity category
+            const prevCategory = (prev.category || prev.type || '').toLowerCase();
+            const currCategory = (curr.category || curr.type || '').toLowerCase();
+            
+            // Estimate transport based on common patterns
+            let method = 'walk';
+            let durationMins = 15;
+            let cost = 0;
+            let instructions = '';
+            
+            // If previous was dining/relaxation and next is activity, likely nearby
+            if (['dining', 'relaxation', 'cafe'].includes(prevCategory)) {
+              method = 'walk';
+              durationMins = 10;
+              instructions = `Short walk to ${curr.location?.name || curr.title}`;
+            }
+            // If moving between major attractions, might need transport
+            else if (['sightseeing', 'cultural', 'museum'].includes(prevCategory) && 
+                     ['sightseeing', 'cultural', 'museum'].includes(currCategory)) {
+              method = 'metro';
+              durationMins = 20;
+              cost = 3;
+              instructions = `Take public transit to ${curr.location?.name || curr.title}`;
+            }
+            // Default reasonable estimate
+            else {
+              method = 'walk';
+              durationMins = 15;
+              instructions = `Walk to ${curr.location?.name || curr.title}`;
+            }
+            
+            activities[i] = {
+              ...curr,
+              transportation: {
+                method,
+                duration: `${durationMins} min`,
+                durationMinutes: durationMins,
+                distance: method === 'walk' ? `${durationMins * 80}m` : `${(durationMins * 0.4).toFixed(1)}km`,
+                distanceMeters: method === 'walk' ? durationMins * 80 : durationMins * 400,
+                estimatedCost: { amount: cost, currency: 'USD' },
+                instructions,
+              },
+            };
+            transportCalculated++;
+            console.log(`[optimize-itinerary] No coords for "${curr.title}", using estimated transport`);
           }
         }
       }
