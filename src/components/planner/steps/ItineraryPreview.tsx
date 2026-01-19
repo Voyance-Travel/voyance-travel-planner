@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useState } from 'react';
 import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/hooks/useEntitlements';
 import { useAuth } from '@/contexts/AuthContext';
+import { isQuizCompleted } from '@/utils/quizUtils';
 import { UpgradePrompt } from '@/components/common/UpgradePrompt';
 import { formatWeatherCondition } from '@/utils/textFormatting';
 import { useLovableItinerary, GenerationPreferences } from '@/hooks/useLovableItinerary';
@@ -146,10 +147,13 @@ export default function ItineraryPreview({
   onBack,
   isLoading: isSubmitting,
 }: ItineraryPreviewProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { entitlements, isLoading: isLoadingEntitlements, isPaid } = useEntitlements();
   const consumeUsage = useConsumeUsage();
   const [hasConsumedQuota, setHasConsumedQuota] = useState(false);
+  
+  // Check if user has completed the quiz
+  const hasCompletedQuiz = user?.quizCompleted || isQuizCompleted();
 
   // Check entitlements
   const canGenerate = canUse(entitlements, 'ai.itinerary.generate');
@@ -299,7 +303,7 @@ export default function ItineraryPreview({
         animate={{ opacity: 1, y: 0 }}
         className="max-w-4xl mx-auto"
       >
-        <div className="text-center mb-10">
+        <div className="text-center mb-6">
           <h1 className="text-3xl font-display font-medium text-foreground mb-2">
             Your Trip Preview
           </h1>
@@ -307,6 +311,23 @@ export default function ItineraryPreview({
             Generating itinerary for {tripDetails.destination}
           </p>
         </div>
+
+        {/* Quiz Not Completed Warning - show during generation too */}
+        {!hasCompletedQuiz && (
+          <Card className="border-amber-500/30 bg-amber-500/10 mb-6">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-4">
+                <AlertCircle className="w-6 h-6 text-amber-600 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground">Generating Generic Itinerary</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Since you haven't completed the quiz, this itinerary won't reflect your personal preferences. You can take the quiz later to get more personalized recommendations.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Progress Card */}
         <Card className="mb-6">
@@ -382,7 +403,7 @@ export default function ItineraryPreview({
       animate={{ opacity: 1, y: 0 }}
       className="max-w-4xl mx-auto"
     >
-      <div className="text-center mb-10">
+      <div className="text-center mb-6">
         <h1 className="text-3xl font-display font-medium text-foreground mb-2">
           Your Trip Preview
         </h1>
@@ -390,6 +411,23 @@ export default function ItineraryPreview({
           Review your itinerary for {tripDetails.destination}
         </p>
       </div>
+
+      {/* Quiz Not Completed Warning */}
+      {!hasCompletedQuiz && (
+        <Card className="border-amber-500/30 bg-amber-500/10 mb-6">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="w-6 h-6 text-amber-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-foreground">Generic Itinerary</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  This itinerary is based on general recommendations. Take the <a href="/quiz" className="text-primary hover:underline font-medium">Travel Quiz</a> to get personalized suggestions tailored to your preferences, dietary needs, and travel style.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Success Header */}
       {isReady && (
