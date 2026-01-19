@@ -76,8 +76,21 @@ export default function DestinationDetail() {
   const rating = 4.8;
   const reviewCount = 2847;
 
-  // Best months to visit (mock data based on destination)
-  const bestMonths = ['Mar', 'Apr', 'May', 'Oct', 'Nov'];
+  // Best months to visit - use destination data or fallback
+  const bestMonths = destination.bestMonths || ['Mar', 'Apr', 'May', 'Oct', 'Nov'];
+  
+  // Climate - use destination data or generate contextual fallback
+  const climateText = destination.climate || `Pleasant year-round. Check local weather forecasts before your visit.`;
+  
+  // Getting around - use destination data or fallback
+  const gettingAroundText = destination.gettingAround || `Various transport options available. Walking-friendly in central areas.`;
+  
+  // Local tips - use destination data or generate contextual fallback
+  const localTips = destination.localTips || [
+    `Carry local currency (${destination.currency}) for small purchases`,
+    'Be respectful of local customs and traditions',
+    'Book popular attractions in advance during peak season',
+  ];
 
   return (
     <MainLayout>
@@ -243,7 +256,7 @@ export default function DestinationDetail() {
                       <h3 className="font-medium">Climate</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Mediterranean climate with mild winters and warm, dry summers.
+                      {climateText}
                     </p>
                   </div>
                   
@@ -255,20 +268,25 @@ export default function DestinationDetail() {
                       <h3 className="font-medium">Getting Around</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Excellent public transit. Walking-friendly with bike rental options.
+                      {gettingAroundText}
                     </p>
                   </div>
                   
-                  <div className="p-5 bg-card rounded-xl border border-border">
+                  <div className="p-5 bg-card rounded-xl border border-border sm:col-span-2">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
                         <Info className="h-5 w-5 text-muted-foreground" />
                       </div>
                       <h3 className="font-medium">Local Tips</h3>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Learn a few phrases in the local language. Locals appreciate the effort!
-                    </p>
+                    <ul className="text-sm text-muted-foreground space-y-1.5">
+                      {localTips.map((tip, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-accent mt-1">•</span>
+                          <span>{tip}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
               </section>

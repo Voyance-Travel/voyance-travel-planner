@@ -9,6 +9,10 @@ export interface Destination {
   currency: string;
   imageUrl: string;
   images: string[];
+  climate?: string;
+  localTips?: string[];
+  gettingAround?: string;
+  bestMonths?: string[];
 }
 
 export interface Activity {
@@ -39,6 +43,15 @@ export const destinations: Destination[] = [
       'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=1200&q=80',
       'https://images.unsplash.com/photo-1431274172761-fca41d930114?w=1200&q=80',
     ],
+    climate: 'Oceanic climate with mild winters and warm summers. Rain is possible year-round.',
+    bestMonths: ['Apr', 'May', 'Jun', 'Sep', 'Oct'],
+    gettingAround: 'Excellent metro system reaches most attractions. Walking is the best way to experience neighborhoods.',
+    localTips: [
+      'Greet shopkeepers with "Bonjour" before asking questions',
+      'Avoid restaurants on major tourist plazas',
+      'Museums are less crowded on Wednesday and Friday evenings',
+      'Book Eiffel Tower tickets online weeks in advance',
+    ],
   },
   {
     id: 'santorini',
@@ -54,6 +67,15 @@ export const destinations: Destination[] = [
       'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=1200&q=80',
       'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1200&q=80',
       'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1200&q=80',
+    ],
+    climate: 'Mediterranean climate with hot, dry summers and mild winters. Very little rain May-September.',
+    bestMonths: ['Apr', 'May', 'Jun', 'Sep', 'Oct'],
+    gettingAround: 'Rent an ATV or car. Public buses run between villages but are infrequent. Walking between Fira and Oia takes 3 hours.',
+    localTips: [
+      'Book Oia sunset dinner reservations weeks in advance',
+      'Visit wineries in the afternoon—the volcanic soil produces unique wines',
+      'Swim at Red Beach or Perissa for fewer crowds than Kamari',
+      'Shoulder season has best weather and smaller crowds',
     ],
   },
   {
@@ -71,6 +93,15 @@ export const destinations: Destination[] = [
       'https://images.unsplash.com/photo-1573790387438-4da905039392?w=1200&q=80',
       'https://images.unsplash.com/photo-1552733407-5d5c46c3bb3b?w=1200&q=80',
     ],
+    climate: 'Tropical with wet (Nov-Mar) and dry (Apr-Oct) seasons. Expect humidity year-round.',
+    bestMonths: ['Apr', 'May', 'Jun', 'Sep'],
+    gettingAround: 'Hire a driver for day trips—very affordable. Scooters are common but traffic is chaotic. Grab app works for rides.',
+    localTips: [
+      'Dress respectfully at temples—sarongs required (often provided)',
+      'Ubud offers culture; Seminyak has beaches and nightlife',
+      'Haggling is expected at markets—start at 40% of asking price',
+      'Sunrise at Mount Batur is worth the early wake-up',
+    ],
   },
   {
     id: 'new-york',
@@ -87,6 +118,15 @@ export const destinations: Destination[] = [
       'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=1200&q=80',
       'https://images.unsplash.com/photo-1522083165195-3424ed129620?w=1200&q=80',
     ],
+    climate: 'Humid continental with cold winters and hot, humid summers. All four seasons are distinct.',
+    bestMonths: ['Apr', 'May', 'Sep', 'Oct', 'Dec'],
+    gettingAround: 'Subway is fast and runs 24/7. Walking is the best way to experience neighborhoods. Avoid taxis in rush hour.',
+    localTips: [
+      'Book Broadway tickets through TKTS booth for same-day discounts',
+      'Skip Times Square—locals avoid it',
+      'Explore neighborhoods: West Village, Williamsburg, Harlem each have distinct character',
+      'Pizza by the slice is a cultural experience—fold it and eat while walking',
+    ],
   },
   {
     id: 'kyoto',
@@ -102,6 +142,15 @@ export const destinations: Destination[] = [
       'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200&q=80',
       'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=1200&q=80',
       'https://images.unsplash.com/photo-1624253321171-1be53e12f5f4?w=1200&q=80',
+    ],
+    climate: 'Humid subtropical with hot summers and cool winters. Cherry blossoms in spring, vibrant colors in autumn.',
+    bestMonths: ['Mar', 'Apr', 'May', 'Oct', 'Nov'],
+    gettingAround: 'Buses and trains reach most temples. Rent a bicycle for Arashiyama and Philosopher\'s Path areas.',
+    localTips: [
+      'Visit temples at opening time (7-8am) to avoid crowds',
+      'Reserve kaiseki dinners and tea ceremonies in advance',
+      'Bow when entering temples and remove shoes where indicated',
+      'Cherry blossom dates vary—check forecasts before booking',
     ],
   },
   {
@@ -417,11 +466,20 @@ export const destinations: Destination[] = [
     description: 'A city that celebrates in the street and mourns with brass bands. New Orleans offers jazz that still evolves, Creole flavors that defy simple origin stories, and a relationship with the past that stays present.',
     timezone: 'America/Chicago',
     currency: 'USD',
-    imageUrl: 'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1545128485-c400e7702796?w=1200&q=80',
     images: [
-      'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=1200&q=80',
-      'https://images.unsplash.com/photo-1571893544028-06b07af6dade?w=1200&q=80',
-      'https://images.unsplash.com/photo-1549965738-e1aaf5d1f6b0?w=1200&q=80',
+      'https://images.unsplash.com/photo-1545128485-c400e7702796?w=1200&q=80',
+      'https://images.unsplash.com/photo-1571076371234-4950085dc1d9?w=1200&q=80',
+      'https://images.unsplash.com/photo-1569025743873-ea3a9ber50e7?w=1200&q=80',
+    ],
+    climate: 'Humid subtropical with hot summers and mild winters. Expect afternoon thunderstorms in summer.',
+    bestMonths: ['Feb', 'Mar', 'Apr', 'Oct', 'Nov'],
+    gettingAround: 'Historic streetcars are iconic but slow. Walking is best in French Quarter. Uber/Lyft for longer distances.',
+    localTips: [
+      'Try beignets at Café Du Monde—go early to beat lines',
+      'Skip Bourbon Street for Frenchmen Street for real jazz',
+      'The French Quarter is walkable—wear comfortable shoes',
+      'Reservations are essential at top restaurants like Commander\'s Palace',
     ],
   },
   {
@@ -498,6 +556,14 @@ export const activities: Activity[] = [
   { id: 'copenhagen-4', destinationId: 'copenhagen', title: 'Cycling Tour', category: 'adventure', description: 'Experience Copenhagen as locals do: by bike. Flat terrain and excellent infrastructure make it effortless.', priceTier: 'budget', neighborhood: 'Citywide', duration: '3-4 hours', bestTime: 'Afternoon' },
   { id: 'copenhagen-5', destinationId: 'copenhagen', title: 'Torvehallerne Food Market', category: 'food', description: 'A modern food hall with Nordic specialties, organic produce, and excellent coffee.', priceTier: 'moderate', neighborhood: 'Nørrebro', duration: '1-2 hours', bestTime: 'Late morning' },
   { id: 'copenhagen-6', destinationId: 'copenhagen', title: 'Louisiana Museum Day Trip', category: 'culture', description: 'World-class modern art collection in a stunning seaside setting 35km north of the city.', priceTier: 'moderate', neighborhood: 'Day trip', duration: 'Half day', bestTime: 'Afternoon' },
+
+  // New Orleans activities
+  { id: 'new-orleans-1', destinationId: 'new-orleans', title: 'French Quarter Walking Tour', category: 'culture', description: 'Explore the historic French Quarter with its iconic architecture, jazz clubs, and the legendary Jackson Square.', priceTier: 'budget', neighborhood: 'French Quarter', duration: '2-3 hours', bestTime: 'Morning' },
+  { id: 'new-orleans-2', destinationId: 'new-orleans', title: 'Beignets at Café Du Monde', category: 'food', description: 'The iconic New Orleans experience - powdered sugar-dusted beignets and chicory coffee at this 1862 landmark.', priceTier: 'budget', neighborhood: 'French Quarter', duration: '30-45 minutes', bestTime: 'Morning' },
+  { id: 'new-orleans-3', destinationId: 'new-orleans', title: 'Frenchmen Street Jazz', category: 'nightlife', description: 'Skip Bourbon Street for authentic live jazz on Frenchmen Street where locals actually go.', priceTier: 'budget', neighborhood: 'Marigny', duration: '3-4 hours', bestTime: 'Evening' },
+  { id: 'new-orleans-4', destinationId: 'new-orleans', title: 'Garden District Architecture Walk', category: 'culture', description: 'Stroll past antebellum mansions and centuries-old oak trees in this elegant neighborhood.', priceTier: 'budget', neighborhood: 'Garden District', duration: '2 hours', bestTime: 'Afternoon' },
+  { id: 'new-orleans-5', destinationId: 'new-orleans', title: 'Commander\'s Palace Brunch', category: 'food', description: 'Legendary Creole fine dining with 25-cent martinis at lunch. Jacket required. Reservations essential.', priceTier: 'premium', neighborhood: 'Garden District', duration: '2 hours', bestTime: 'Weekend Brunch' },
+  { id: 'new-orleans-6', destinationId: 'new-orleans', title: 'Swamp Tour', category: 'nature', description: 'Venture into the bayous to see alligators, Spanish moss, and the unique Louisiana wetland ecosystem.', priceTier: 'moderate', neighborhood: 'Day trip', duration: 'Half day', bestTime: 'Morning' },
 
   // Cartagena activities
   { id: 'cartagena-1', destinationId: 'cartagena', title: 'Old Town Evening Walk', category: 'culture', description: 'Wander the walled city when temperatures cool and colonial buildings glow in evening light.', priceTier: 'budget', neighborhood: 'Centro Histórico', duration: '2 hours', bestTime: 'Evening' },
