@@ -91,7 +91,7 @@ async function checkCuratedCache(
 }
 
 // =============================================================================
-// TIER 2: GOOGLE PLACES PHOTOS (Real venue photos)
+// TIER 2: GOOGLE PLACES PHOTOS (New Places API v1)
 // =============================================================================
 async function getGooglePlacesPhoto(
   venueName: string,
@@ -99,58 +99,88 @@ async function getGooglePlacesPhoto(
   apiKey: string
 ): Promise<DestinationImage | null> {
   try {
-    // Precise search: venue name + destination for exact match
-    const query = `${venueName} ${destination}`;
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
+    const textQuery = `${venueName} ${destination}`;
+    console.log("[Images] Searching Google Places (v1) for:", textQuery);
 
-    console.log("[Images] Searching Google Places for:", query);
+    // Use AbortController for 3-second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const searchResponse = await fetch(searchUrl);
-    if (!searchResponse.ok) {
-      console.error("[Images] Google Places search error:", searchResponse.status);
+    try {
+      // Step 1: Search for place using new Places API v1
+      const searchResponse = await fetch(
+        "https://places.googleapis.com/v1/places:searchText",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": "places.id,places.displayName,places.photos",
+          },
+          body: JSON.stringify({
+            textQuery,
+            maxResultCount: 3,
+          }),
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!searchResponse.ok) {
+        const errorText = await searchResponse.text();
+        console.error("[Images] Google Places v1 error:", searchResponse.status, errorText);
+        return null;
+      }
+
+      const searchData = await searchResponse.json();
+      const places = searchData.places || [];
+      
+      console.log("[Images] Google Places v1 results:", places.length);
+
+      if (places.length === 0) {
+        console.log("[Images] No Google Places v1 results for:", textQuery);
+        return null;
+      }
+
+      // Find first place with photos
+      const placeWithPhotos = places.find((p: any) => p.photos?.length > 0);
+      if (!placeWithPhotos) {
+        console.log("[Images] No photos in Google Places v1 results for:", textQuery);
+        return null;
+      }
+
+      // Step 2: Get photo URL using the photo resource name
+      // Format: places/{place_id}/photos/{photo_reference}
+      const photoResource = placeWithPhotos.photos[0].name;
+      
+      // New API uses different photo URL format
+      const photoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
+
+      console.log("[Images] ✅ Found Google Places v1 photo for:", venueName);
+
+      return {
+        id: `google-${placeWithPhotos.id}`,
+        url: photoUrl,
+        alt: `${placeWithPhotos.displayName?.text || venueName} - Photo`,
+        type: "activity",
+        source: "google_places",
+        width: 1200,
+        height: 800,
+        placeId: placeWithPhotos.id,
+        photoReference: photoResource,
+      };
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        console.log("[Images] Google Places v1 timeout (3s) for:", textQuery);
+      } else {
+        console.error("[Images] Google Places v1 fetch error:", fetchError);
+      }
       return null;
     }
-
-    const searchData = await searchResponse.json();
-    console.log("[Images] Google Places status:", searchData.status, "results:", searchData.results?.length || 0);
-
-    if (searchData.status !== "OK" || !searchData.results?.length) {
-      console.log("[Images] No Google Places results for:", query);
-      return null;
-    }
-
-    // Find the best result with photos (prioritize exact name match)
-    let bestResult = searchData.results.find((r: any) => 
-      r.photos?.length > 0 && r.name?.toLowerCase().includes(venueName.toLowerCase().split(' ')[0])
-    );
-    
-    if (!bestResult) {
-      bestResult = searchData.results.find((r: any) => r.photos?.length > 0);
-    }
-    
-    if (!bestResult) {
-      console.log("[Images] No photos in Google Places results for:", query);
-      return null;
-    }
-
-    const photoRef = bestResult.photos[0].photo_reference;
-    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${photoRef}&key=${apiKey}`;
-
-    console.log("[Images] ✅ Found Google Places photo for:", venueName);
-
-    return {
-      id: `google-${bestResult.place_id}`,
-      url: photoUrl,
-      alt: `${bestResult.name || venueName} - Photo`,
-      type: "activity",
-      source: "google_places",
-      width: 1200,
-      height: 800,
-      placeId: bestResult.place_id,
-      photoReference: photoRef,
-    };
   } catch (error) {
-    console.error("[Images] Google Places error:", error);
+    console.error("[Images] Google Places v1 error:", error);
     return null;
   }
 }
