@@ -2167,7 +2167,8 @@ function ActivityRow({
     imageSearchTerm,
     activityType,
     existingPhoto,
-    shouldFetchRealPhoto ? destination : undefined // Only pass destination if we want real photos
+    shouldFetchRealPhoto ? destination : undefined, // Only pass destination if we want real photos
+    activity.id // prevent cache collisions when destination is missing
   );
 
   const thumbnailUrl = fetchedImageUrl;
