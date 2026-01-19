@@ -110,7 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Migrate locally-saved demo/anonymous trips into the authenticated account
   const migrateLocalTripsToAccount = async (supabaseUser: SupabaseUser) => {
     try {
-      const raw = localStorage.getItem('voyance_demo_trips');
+      // Check both possible storage keys for local trips
+      const rawDemo = localStorage.getItem('voyance_demo_trips');
+      const rawLocal = localStorage.getItem('voyance_local_trips');
+      const raw = rawDemo || rawLocal;
       if (!raw) return;
 
       const parsed = JSON.parse(raw) as Record<string, any>;
@@ -147,7 +150,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.from('trips').upsert(toUpsert as any, { onConflict: 'id' });
       if (error) throw error;
 
+      // Clean up both possible storage keys
       localStorage.removeItem('voyance_demo_trips');
+      localStorage.removeItem('voyance_local_trips');
       console.log('[Auth] Migrated local trips into account:', toUpsert.length);
     } catch (error) {
       console.error('[Auth] Failed to migrate local trips:', error);
