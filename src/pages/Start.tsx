@@ -41,35 +41,39 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// Airport Autocomplete - Editorial Style with Metro Area Grouping
+// Airport/Destination Autocomplete - Forces selection of real cities
 function AirportAutocomplete({
   value,
   onChange,
   placeholder,
   icon: Icon = Plane,
+  required = false,
 }: {
   value: string;
   onChange: (selection: LocationSelection) => void;
   placeholder: string;
   icon?: typeof Plane;
+  required?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [loading, setLoading] = useState(false);
   const [metroInfo, setMetroInfo] = useState<{ name: string; codes: string[] } | null>(null);
+  const [hasValidSelection, setHasValidSelection] = useState(!!value);
 
   const debouncedQuery = useDebounce(inputValue, 300);
 
   useEffect(() => {
-    if (value !== inputValue) {
+    if (value !== inputValue && value) {
       setInputValue(value);
+      setHasValidSelection(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   useEffect(() => {
-    if (debouncedQuery.length >= 1) {
+    if (debouncedQuery.length >= 2) {
       setLoading(true);
       import('@/services/locationSearchAPI').then(({ getMetroAreaInfo }) => {
         const metro = getMetroAreaInfo(debouncedQuery);
@@ -86,8 +90,8 @@ function AirportAutocomplete({
 
   const handleSelectMetro = () => {
     if (!metroInfo) return;
-    // Show just the city name in UI, store codes separately
     setInputValue(metroInfo.name);
+    setHasValidSelection(true);
     onChange({
       display: metroInfo.name,
       cityName: metroInfo.name,
@@ -98,9 +102,9 @@ function AirportAutocomplete({
   };
 
   const handleSelect = (airport: Airport) => {
-    // Show city name for destination, show city (CODE) for origin
     const display = `${airport.city} (${airport.code})`;
     setInputValue(display);
+    setHasValidSelection(true);
     onChange({
       display,
       cityName: airport.city,
@@ -110,7 +114,23 @@ function AirportAutocomplete({
     setIsOpen(false);
   };
 
-  const showDropdown = isOpen && inputValue.length >= 1;
+  const handleInputChange = (val: string) => {
+    setInputValue(val);
+    setHasValidSelection(false);
+    // Clear the selection when user types - forces them to pick from dropdown
+    if (val.length === 0) {
+      onChange({
+        display: '',
+        cityName: '',
+        airportCodes: undefined,
+        isMetroArea: false,
+      });
+    }
+    setIsOpen(true);
+  };
+
+  const showDropdown = isOpen && inputValue.length >= 2;
+  const showValidationHint = inputValue.length >= 2 && !hasValidSelection && !isOpen;
 
   return (
     <div className="relative">
@@ -120,26 +140,19 @@ function AirportAutocomplete({
       <Input
         placeholder={placeholder}
         value={inputValue}
-        onChange={(e) => {
-          const val = e.target.value;
-          setInputValue(val);
-          // Only call onChange with partial data when typing (for incremental save)
-          if (val.length > 0) {
-            onChange({
-              display: val,
-              cityName: val,
-              airportCodes: undefined,
-              isMetroArea: false,
-            });
-          }
-          setIsOpen(true);
-        }}
+        onChange={(e) => handleInputChange(e.target.value)}
         onFocus={() => {
-          if (inputValue.length >= 1) setIsOpen(true);
+          if (inputValue.length >= 2) setIsOpen(true);
         }}
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className="h-12 pl-8 text-base bg-transparent border-0 border-b border-border rounded-none focus:border-primary focus:ring-0 font-sans"
+        className={cn(
+          "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
+          showValidationHint ? "border-amber-500" : "border-border focus:border-primary"
+        )}
       />
+      {showValidationHint && (
+        <p className="text-xs text-amber-600 mt-1">Please select a city from the dropdown</p>
+      )}
       {showDropdown && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -149,7 +162,7 @@ function AirportAutocomplete({
           {loading ? (
             <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm font-sans">Searching airports...</span>
+              <span className="text-sm font-sans">Searching...</span>
             </div>
           ) : airports.length > 0 ? (
             <>
@@ -190,9 +203,9 @@ function AirportAutocomplete({
                 </button>
               ))}
             </>
-          ) : inputValue.length >= 1 ? (
+          ) : inputValue.length >= 2 ? (
             <div className="px-4 py-6 text-center text-muted-foreground text-sm font-sans">
-              No airports found
+              No cities or airports found for "{inputValue}"
             </div>
           ) : null}
         </motion.div>
@@ -311,8 +324,9 @@ export default function Start() {
     }
     
     saveTimeoutRef.current = setTimeout(async () => {
-      // Only save if we have minimal data
-      if (destinationSelection.cityName && user) {
+      // Only save if we have a valid destination selection (with airport codes)
+      const hasValidSelection = destinationSelection.cityName && destinationSelection.airportCodes?.length;
+      if (hasValidSelection && user) {
         // Determine budget tier from amount
         const getBudgetTier = (amount?: number): string => {
           if (!amount) return 'moderate';
@@ -391,7 +405,14 @@ export default function Start() {
   }, [plannerState.basics]);
 
   const handleStart = async () => {
-    if (!destinationSelection.cityName || !startDate || !endDate) return;
+    // Validate: destination must be a real selection (has airport codes), not just typed text
+    const hasValidDestination = destinationSelection.cityName && destinationSelection.airportCodes?.length;
+    if (!hasValidDestination || !startDate || !endDate) {
+      if (!hasValidDestination && destinationSelection.display) {
+        toast.error('Please select a destination from the dropdown');
+      }
+      return;
+    }
 
     const start = format(startDate, 'yyyy-MM-dd');
     const end = format(endDate, 'yyyy-MM-dd');
