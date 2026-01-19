@@ -863,6 +863,34 @@ async function fetchImageTiered(
 }
 
 // =============================================================================
+// AUTHENTICATION HELPER
+// =============================================================================
+async function validateAuth(req: Request): Promise<{ userId: string } | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+  
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  
+  const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } }
+  });
+  
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const { data, error } = await authClient.auth.getUser(token);
+    if (error || !data?.user) {
+      return null;
+    }
+    return { userId: data.user.id };
+  } catch {
+    return null;
+  }
+}
+
+// =============================================================================
 // SERVE
 // =============================================================================
 serve(async (req) => {
@@ -871,6 +899,18 @@ serve(async (req) => {
   }
 
   try {
+    // Validate authentication
+    const authResult = await validateAuth(req);
+    if (!authResult) {
+      console.error("[Images] Unauthorized request");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized. Please sign in to fetch images." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log(`[Images] Authenticated user: ${authResult.userId}`);
+
     // Parse params from both query string and body
     const url = new URL(req.url);
     let params: RequestParams = {};
