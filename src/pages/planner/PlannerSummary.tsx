@@ -18,8 +18,16 @@ function calculateNights(startDate?: string, endDate?: string): number {
 export default function PlannerSummary() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { state, setBasics, saveTrip } = useTripPlanner();
+  const { state, setBasics, saveTrip, loadTrip } = useTripPlanner();
   const [activitiesBudget, setActivitiesBudget] = useState(state.basics.budgetAmount || 0);
+
+  // Load trip from tripId in URL if context is empty
+  useEffect(() => {
+    const tripIdFromUrl = searchParams.get('tripId');
+    if (tripIdFromUrl && !state.tripId && !state.basics.destination) {
+      loadTrip(tripIdFromUrl);
+    }
+  }, [searchParams, state.tripId, state.basics.destination, loadTrip]);
 
   // Ensure basics are set even if user refreshes
   useEffect(() => {

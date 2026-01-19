@@ -451,11 +451,12 @@ export default function PlannerFlightEnhanced() {
       return;
     }
 
-    // Save trip to database with flight selection
+    // Save trip to database with flight selection and get the tripId
+    let savedTripId: string | null = null;
     try {
-      const tripId = await saveTrip();
-      if (tripId) {
-        console.log('[PlannerFlight] Trip saved with flight selection:', tripId);
+      savedTripId = await saveTrip();
+      if (savedTripId) {
+        console.log('[PlannerFlight] Trip saved with flight selection:', savedTripId);
       }
     } catch (error) {
       console.error('[PlannerFlight] Failed to save trip:', error);
@@ -463,6 +464,10 @@ export default function PlannerFlightEnhanced() {
     }
 
     const params = getNavigationParams();
+    // CRITICAL: Pass tripId in URL so it persists across navigation/refresh
+    if (savedTripId) {
+      params.set('tripId', savedTripId);
+    }
     if (selectedOutboundId) params.set('outboundFlightId', selectedOutboundId);
     if (selectedReturnId) params.set('returnFlightId', selectedReturnId);
     params.set('outboundCabin', selectedOutboundCabin);

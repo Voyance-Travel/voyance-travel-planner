@@ -133,7 +133,7 @@ export default function PlannerHotelEnhanced() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { state: plannerState, setBasics, setHotel, saveTrip } = useTripPlanner();
+  const { state: plannerState, setBasics, setHotel, saveTrip, loadTrip } = useTripPlanner();
   const { budgetAlertsEnabled } = useBudgetAlerts();
 
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(plannerState.hotel?.id || null);
@@ -195,6 +195,14 @@ export default function PlannerHotelEnhanced() {
     
     loadPreferences();
   }, [user?.id]);
+
+  // Load trip from tripId in URL if context is empty
+  useEffect(() => {
+    const tripIdFromUrl = searchParams.get('tripId');
+    if (tripIdFromUrl && !plannerState.tripId && !plannerState.basics.destination) {
+      loadTrip(tripIdFromUrl);
+    }
+  }, [searchParams, plannerState.tripId, plannerState.basics.destination, loadTrip]);
 
   useEffect(() => {
     if (!plannerState.basics.destination || plannerState.basics.destination !== destination) {
@@ -480,18 +488,24 @@ export default function PlannerHotelEnhanced() {
       return;
     }
 
-    // Save trip to database with hotel selection
+    // Save trip to database with hotel selection and get the tripId
+    let savedTripId: string | null = null;
     try {
-      const tripId = await saveTrip();
-      if (tripId) {
-        console.log('[PlannerHotel] Trip saved with hotel selection:', tripId);
+      savedTripId = await saveTrip();
+      if (savedTripId) {
+        console.log('[PlannerHotel] Trip saved with hotel selection:', savedTripId);
       }
     } catch (error) {
       console.error('[PlannerHotel] Failed to save trip:', error);
       // Continue navigation even if save fails - data is still in context
     }
 
-    navigate(`/planner/summary?${getNavigationParams().toString()}`);
+    const params = getNavigationParams();
+    // CRITICAL: Pass tripId in URL so it persists across navigation/refresh
+    if (savedTripId) {
+      params.set('tripId', savedTripId);
+    }
+    navigate(`/planner/summary?${params.toString()}`);
   };
 
   const handleSkipHotel = () => {
