@@ -18,7 +18,8 @@ import {
   Lock, Unlock, MoveUp, MoveDown, Plus, RefreshCw,
   Plane, Hotel, Utensils, Camera, ShoppingBag, Palmtree, Car, Trash2,
   Sun, Cloud, CloudRain, Snowflake, Edit3, Sparkles, AlertCircle,
-  Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft
+  Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
+  Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -144,8 +145,16 @@ export interface EditorialItineraryProps {
     culturalNotes?: string;
     bestTime?: string;
     currency?: string;
+    currencySymbol?: string;
     language?: string;
     tips?: string;
+    timezone?: string;
+    emergency?: string;
+    tipping?: string;
+    dress?: string;
+    transit?: string;
+    water?: string;
+    voltage?: string;
   };
   heroImageUrl?: string;
   isEditable?: boolean;
@@ -352,7 +361,7 @@ export function EditorialItinerary({
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'overview' | 'tips'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'overview' | 'needtoknow'>('itinerary');
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -649,24 +658,28 @@ export function EditorialItinerary({
         </div>
       </div>
 
+      {/* Destination Photo Carousel */}
+      <DestinationCarousel destination={destination} destinationCountry={destinationCountry} />
+
       {/* Navigation Tabs */}
       <div className="border-b border-border">
         <div className="flex gap-1">
           {[
-            { id: 'itinerary', label: 'Day-by-Day Itinerary' },
-            { id: 'overview', label: 'Flight & Hotel' },
-            ...(destinationInfo?.overview ? [{ id: 'tips', label: 'Tips' }] : []),
+            { id: 'itinerary', label: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
+            { id: 'overview', label: 'Flight & Hotel', icon: <Plane className="h-4 w-4" /> },
+            { id: 'needtoknow', label: 'Need to Know', icon: <Info className="h-4 w-4" /> },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
               className={cn(
-                "px-6 py-3 text-sm font-sans tracking-wide transition-colors relative",
+                "px-6 py-3 text-sm font-sans tracking-wide transition-colors relative flex items-center gap-2",
                 activeTab === tab.id
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
+              {tab.icon}
               {tab.label}
               {activeTab === tab.id && (
                 <motion.div
@@ -982,32 +995,19 @@ export function EditorialItinerary({
           </motion.div>
         )}
 
-        {activeTab === 'tips' && destinationInfo && (
+        {activeTab === 'needtoknow' && (
           <motion.div
-            key="tips"
+            key="needtoknow"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="space-y-8"
+            className="space-y-6"
           >
-            {destinationInfo.overview && (
-              <div>
-                <h2 className="text-3xl font-serif mb-4">About {destination}</h2>
-                <p className="text-muted-foreground font-sans leading-relaxed">{destinationInfo.overview}</p>
-              </div>
-            )}
-            {destinationInfo.culturalNotes && (
-              <div>
-                <h3 className="text-xl font-serif mb-3">Cultural Notes</h3>
-                <p className="text-muted-foreground">{destinationInfo.culturalNotes}</p>
-              </div>
-            )}
-            {destinationInfo.tips && (
-              <div>
-                <h3 className="text-xl font-serif mb-3">Travel Tips</h3>
-                <p className="text-muted-foreground">{destinationInfo.tips}</p>
-              </div>
-            )}
+            <NeedToKnowSection 
+              destination={destination}
+              destinationCountry={destinationCountry}
+              destinationInfo={destinationInfo}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -1018,6 +1018,175 @@ export function EditorialItinerary({
         onClose={() => setAddActivityModal(null)}
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
       />
+    </div>
+  );
+}
+
+// =============================================================================
+// DESTINATION CAROUSEL COMPONENT
+// =============================================================================
+
+interface DestinationCarouselProps {
+  destination: string;
+  destinationCountry?: string;
+}
+
+function DestinationCarousel({ destination, destinationCountry }: DestinationCarouselProps) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  
+  // Generate destination-themed image URLs
+  const images = [
+    `https://source.unsplash.com/800x400/?${destination},landmark`,
+    `https://source.unsplash.com/800x400/?${destination},architecture`,
+    `https://source.unsplash.com/800x400/?${destination},street`,
+    `https://source.unsplash.com/800x400/?${destination},culture`,
+  ];
+
+  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % images.length);
+  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+
+  return (
+    <div className="relative overflow-hidden rounded-xl mb-6">
+      <div className="relative h-48 md:h-64">
+        <img
+          src={images[currentIndex]}
+          alt={`${destination} ${currentIndex + 1}`}
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-serif text-white drop-shadow-lg">{destination}</h2>
+            {destinationCountry && (
+              <p className="text-white/80 text-sm">{destinationCountry}</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="icon" onClick={prevSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
+              <ChevronLeft className="h-4 w-4 text-white" />
+            </Button>
+            <Button variant="secondary" size="icon" onClick={nextSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
+              <ChevronRight className="h-4 w-4 text-white" />
+            </Button>
+          </div>
+        </div>
+        {/* Dots */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+          {images.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrentIndex(idx)}
+              className={cn(
+                "w-2 h-2 rounded-full transition-colors",
+                idx === currentIndex ? "bg-white" : "bg-white/40"
+              )}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// NEED TO KNOW SECTION COMPONENT
+// =============================================================================
+
+interface NeedToKnowSectionProps {
+  destination: string;
+  destinationCountry?: string;
+  destinationInfo?: EditorialItineraryProps['destinationInfo'];
+}
+
+function NeedToKnowSection({ destination, destinationCountry, destinationInfo }: NeedToKnowSectionProps) {
+  // Default information for common destinations
+  const getDefaultInfo = () => {
+    const country = destinationCountry?.toLowerCase() || '';
+    if (country.includes('italy') || destination.toLowerCase().includes('rome')) {
+      return {
+        currency: 'Euro (€)',
+        language: 'Italian',
+        timezone: 'CET (UTC+1)',
+        tipping: '10% at restaurants is appreciated but not required',
+        transit: 'Metro, buses, trams. Buy tickets before boarding.',
+        water: 'Tap water is safe to drink',
+        voltage: '230V, Type C/F plugs',
+        emergency: '112 (EU Emergency), 118 (Ambulance)',
+      };
+    }
+    return {
+      currency: destinationInfo?.currency || 'Local currency',
+      language: destinationInfo?.language || 'Local language',
+      timezone: destinationInfo?.timezone || 'Local time',
+      tipping: destinationInfo?.tipping || 'Varies by location',
+      transit: destinationInfo?.transit || 'Various public transport options available',
+      water: destinationInfo?.water || 'Check local advisories',
+      voltage: destinationInfo?.voltage || 'Check adapter requirements',
+      emergency: destinationInfo?.emergency || 'Contact local authorities',
+    };
+  };
+
+  const info = getDefaultInfo();
+
+  const infoCards = [
+    { icon: <Wallet className="h-5 w-5" />, label: 'Currency', value: info.currency },
+    { icon: <Languages className="h-5 w-5" />, label: 'Language', value: info.language },
+    { icon: <Clock className="h-5 w-5" />, label: 'Timezone', value: info.timezone },
+    { icon: <Train className="h-5 w-5" />, label: 'Transit', value: info.transit },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Globe className="h-6 w-6 text-primary" />
+        <h2 className="text-2xl font-serif">Need to Know: {destination}</h2>
+      </div>
+
+      {/* Quick Info Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {infoCards.map((card, idx) => (
+          <Card key={idx} className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2 text-primary">
+                {card.icon}
+                <span className="text-xs uppercase tracking-wider font-medium">{card.label}</span>
+              </div>
+              <p className="text-sm text-foreground font-medium">{card.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Detailed Info */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-medium mb-2 flex items-center gap-2">
+              <Utensils className="h-4 w-4 text-primary" /> Tipping
+            </h3>
+            <p className="text-sm text-muted-foreground">{info.tipping}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-medium mb-2 flex items-center gap-2">
+              <Info className="h-4 w-4 text-primary" /> Water & Safety
+            </h3>
+            <p className="text-sm text-muted-foreground">{info.water}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {destinationInfo?.culturalNotes && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-medium mb-2 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-primary" /> Cultural Notes
+            </h3>
+            <p className="text-sm text-muted-foreground">{destinationInfo.culturalNotes}</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1409,7 +1578,7 @@ function ActivityRow({
 }: ActivityRowProps) {
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
-  const rating = getActivityRating(activity);
+  const rawRating = getActivityRating(activity);
   const cost = getActivityCost(activity, travelers, budgetTier);
   const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
@@ -1417,7 +1586,16 @@ function ActivityRow({
   // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
   const isDowntime = activity.timeBlockType === 'downtime' || activity.title.toLowerCase().includes('free time');
   const isTransport = activityType === 'transportation' || activityType === 'transport';
+  const isCheckIn = activity.title.toLowerCase().includes('check-in') || activity.title.toLowerCase().includes('check in');
+  const isAirport = activity.title.toLowerCase().includes('airport') || activity.title.toLowerCase().includes('transfer');
+  const isAccommodation = activityType === 'accommodation';
   const showThumbnail = !isTransport && !isDowntime;
+  
+  // Only show ratings for venues that make sense: restaurants, activities, sightseeing, cultural
+  // NOT for: transfers, check-in, free time, airport, accommodation
+  const ratingEligibleTypes = ['dining', 'cultural', 'sightseeing', 'activity', 'shopping', 'entertainment', 'relaxation'];
+  const isRatingEligible = ratingEligibleTypes.includes(activityType) && !isDowntime && !isTransport && !isCheckIn && !isAirport && !isAccommodation;
+  const rating = isRatingEligible ? rawRating : null;
   
   // Get thumbnail: existing photo or category-based placeholder
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(existingPhoto);
