@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ScrollToTop } from "@/components/common/ScrollToTop";
+import { useImagePreloader } from "@/hooks/useImagePreloader";
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -73,12 +74,19 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Component to initialize image preloading
+function ImagePreloaderInit() {
+  useImagePreloader();
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TripPlannerProvider>
         <QuizProvider>
           <TooltipProvider>
+            <ImagePreloaderInit />
             <Toaster />
             <Sonner />
             <BrowserRouter>
