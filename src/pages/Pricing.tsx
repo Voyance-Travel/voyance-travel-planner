@@ -92,7 +92,7 @@ export default function Pricing() {
               </Button>
             </motion.div>
 
-            {/* Trip Pass */}
+            {/* Monthly - BEST VALUE */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -102,12 +102,52 @@ export default function Pricing() {
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-full">
                   <Star className="w-3.5 h-3.5 fill-current" />
-                  Best for One Trip
+                  Best Value
                 </span>
               </div>
               
               <div className="mb-6">
                 <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-white mb-4">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+                <h3 className="text-2xl font-bold text-foreground">Monthly</h3>
+                <p className="text-sm text-muted-foreground">{PLAN_FEATURES.MONTHLY.headline}</p>
+              </div>
+              
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
+                  <span className="text-muted-foreground">/month</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">{PLAN_FEATURES.MONTHLY.subheadline}</p>
+              </div>
+              
+              <ul className="space-y-3 mb-8 flex-1">
+                {PLAN_FEATURES.MONTHLY.features.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm">
+                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-primary" />
+                    <span className="text-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              
+              <Button asChild size="lg" className="w-full">
+                <Link to={ROUTES.START}>
+                  Go Monthly
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </motion.div>
+
+            {/* Trip Pass */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="relative rounded-3xl bg-card border border-border p-6 flex flex-col"
+            >
+              <div className="mb-6">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-500 text-white mb-4">
                   <Zap className="h-6 w-6" />
                 </div>
                 <h3 className="text-2xl font-bold text-foreground">Trip Pass</h3>
@@ -125,13 +165,13 @@ export default function Pricing() {
               <ul className="space-y-3 mb-8 flex-1">
                 {PLAN_FEATURES.TRIP_PASS.features.map((feature, i) => (
                   <li key={i} className="flex items-start gap-3 text-sm">
-                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-primary" />
+                    <Check className="w-5 h-5 flex-shrink-0 mt-0.5 text-muted-foreground" />
                     <span className="text-foreground">{feature}</span>
                   </li>
                 ))}
               </ul>
               
-              <Button asChild size="lg" className="w-full">
+              <Button asChild size="lg" variant="outline" className="w-full">
                 <Link to={ROUTES.START}>
                   Unlock This Trip
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -231,7 +271,7 @@ export default function Pricing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="mt-16 max-w-3xl mx-auto"
+            className="mt-16 max-w-4xl mx-auto"
           >
             <div className="bg-gradient-to-r from-muted/50 to-muted/30 rounded-2xl border border-border p-6 md:p-8">
               <div className="flex items-start gap-4 mb-6">
@@ -241,22 +281,74 @@ export default function Pricing() {
                 <div>
                   <h3 className="text-xl font-bold text-foreground mb-1">Pay only for what you use</h3>
                   <p className="text-muted-foreground">
-                    No subscription? No problem. Add credits to your wallet and spend them on specific actions—
+                    Add credits to your wallet and spend them on specific actions—
                     perfect when you just need help with one day or one route.
                   </p>
                 </div>
               </div>
               
-              <div className="grid sm:grid-cols-2 gap-4 mb-6">
-                {CREDIT_MENU.map((item) => (
-                  <div key={item.key} className="flex items-center justify-between bg-background rounded-lg p-4 border border-border hover:border-primary/30 transition-colors">
-                    <div>
-                      <span className="font-medium text-foreground">{item.label}</span>
-                      <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                    </div>
-                    <span className="text-primary font-bold text-lg">${(item.cost / 100).toFixed(2)}</span>
+              {/* Credit action cards with details */}
+              <div className="space-y-4 mb-6">
+                {/* Build 1 Day */}
+                <div className="bg-background rounded-lg p-4 border border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-foreground">Build 1 day</span>
+                    <span className="text-primary font-bold text-lg">$3.99</span>
                   </div>
-                ))}
+                  <p className="text-sm text-muted-foreground mb-2">AI fills one day with activities based on your preferences</p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="text-green-600">✓ AI suggestions</span> · 
+                    <span className="text-green-600"> ✓ Time blocking</span> · 
+                    <span className="text-red-500/70"> ✗ Route optimization</span> · 
+                    <span className="text-red-500/70"> ✗ Weather alerts</span>
+                  </p>
+                </div>
+
+                {/* Build Full Trip - with upsell */}
+                <div className="bg-background rounded-lg p-4 border border-border relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-foreground">Build full trip</span>
+                    <span className="text-primary font-bold text-lg">$9.99</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">AI generates your complete multi-day itinerary</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    <span className="text-green-600">✓ All days filled</span> · 
+                    <span className="text-green-600"> ✓ AI suggestions</span> · 
+                    <span className="text-red-500/70"> ✗ Unlimited rebuilds</span> · 
+                    <span className="text-red-500/70"> ✗ Group tools</span> · 
+                    <span className="text-red-500/70"> ✗ Co-editing</span>
+                  </p>
+                  <div className="bg-primary/5 border border-primary/20 rounded-md p-3 flex items-center justify-between">
+                    <p className="text-xs text-primary font-medium">
+                      💡 For just $6 more, go Monthly and get unlimited rebuilds + group budgeting + co-editing
+                    </p>
+                    <Button asChild size="sm" variant="outline" className="text-xs border-primary/30 hover:bg-primary/10 ml-3 shrink-0">
+                      <Link to={ROUTES.START}>Go Monthly</Link>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Route & Group - side by side */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="bg-background rounded-lg p-4 border border-border">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-foreground">Route optimization</span>
+                      <span className="text-primary font-bold">$1.99</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Calculate optimal order and transport between activities
+                    </p>
+                  </div>
+                  <div className="bg-background rounded-lg p-4 border border-border">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-foreground">Group budget setup</span>
+                      <span className="text-primary font-bold">$2.99</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Auto-split expenses across trip members
+                    </p>
+                  </div>
+                </div>
               </div>
               
               <div className="flex items-center justify-between bg-background/50 rounded-lg p-4 border border-dashed border-border">
