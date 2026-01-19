@@ -144,9 +144,9 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* Pricing Cards */}
+      {/* Pricing Cards - Horizontal Layout */}
       <section className="py-20">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-6xl mx-auto px-4">
           <motion.div 
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -157,194 +157,201 @@ export default function Pricing() {
             <p className="text-muted-foreground">Start free. Upgrade when you need more.</p>
           </motion.div>
 
-          <div className="grid lg:grid-cols-2 gap-8">
-            {/* Left: Free + Trip Pass */}
-            <div className="space-y-6">
-              {/* Free */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }} 
-                whileInView={{ opacity: 1, y: 0 }} 
-                viewport={{ once: true }}
-                className="bg-card rounded-2xl border border-border p-8"
-              >
-                <div className="flex items-baseline justify-between mb-4">
-                  <div>
-                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.FREE.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.FREE.headline}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-bold text-foreground">$0</span>
-                  </div>
+          {/* Row 1: Free + Trip Pass */}
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
+            {/* Free */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true }}
+              className="bg-card rounded-2xl border border-border p-6 flex flex-col"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.FREE.name}</h3>
+                  <p className="text-sm text-muted-foreground">{PLAN_FEATURES.FREE.headline}</p>
                 </div>
-                
-                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
-                  {PLAN_FEATURES.FREE.subheadline}
-                </p>
-                
-                <ul className="space-y-3 mb-8">
-                  {PLAN_FEATURES.FREE.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm">
-                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                      <span className="text-foreground">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                
-                <Button asChild variant="outline" size="lg" className="w-full">
-                  <Link to={ROUTES.QUIZ}>
-                    Start Free
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </motion.div>
+                <div className="text-right shrink-0 ml-4">
+                  <span className="text-2xl font-bold text-foreground">$0</span>
+                  <span className="text-xs text-muted-foreground block">forever</span>
+                </div>
+              </div>
+              
+              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
+                {PLAN_FEATURES.FREE.subheadline}
+              </p>
+              
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 flex-1">
+                {PLAN_FEATURES.FREE.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-muted-foreground" />
+                    <span className="text-foreground">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              
+              <Button asChild variant="outline" className="w-full mt-auto">
+                <Link to={ROUTES.QUIZ}>
+                  Start Free
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </motion.div>
 
-              {/* Trip Pass */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }} 
-                whileInView={{ opacity: 1, y: 0 }} 
-                viewport={{ once: true }}
-                transition={{ delay: 0.1 }}
-                className="bg-card rounded-2xl border border-border p-8"
+            {/* Trip Pass */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true }}
+              transition={{ delay: 0.05 }}
+              className="bg-card rounded-2xl border border-border p-6 flex flex-col"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.TRIP_PASS.name}</h3>
+                    <span className="text-[10px] px-2 py-0.5 bg-muted text-muted-foreground rounded-full uppercase tracking-wide">One-time</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{PLAN_FEATURES.TRIP_PASS.headline}</p>
+                </div>
+                <div className="text-right shrink-0 ml-4">
+                  <span className="text-2xl font-bold text-foreground">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
+                  <span className="text-xs text-muted-foreground block">per trip</span>
+                </div>
+              </div>
+              
+              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
+                {PLAN_FEATURES.TRIP_PASS.subheadline}
+              </p>
+              
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 flex-1">
+                {PLAN_FEATURES.TRIP_PASS.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-muted-foreground" />
+                    <span className="text-foreground">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              
+              <Button 
+                variant="outline"
+                className="w-full mt-auto" 
+                onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Trip Pass')} 
+                disabled={loadingPlan === 'trip_pass'}
               >
-                <div className="flex items-baseline justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.TRIP_PASS.name}</h3>
-                      <span className="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded-full">One-time</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{PLAN_FEATURES.TRIP_PASS.headline}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
-                  </div>
-                </div>
-                
-                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
-                  {PLAN_FEATURES.TRIP_PASS.subheadline}
-                </p>
-                
-                <ul className="space-y-3 mb-8">
-                  {PLAN_FEATURES.TRIP_PASS.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm">
-                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                      <span className="text-foreground">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                
-                <Button 
-                  variant="outline" 
-                  size="lg" 
-                  className="w-full" 
-                  onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Trip Pass')} 
-                  disabled={loadingPlan === 'trip_pass'}
-                >
-                  {loadingPlan === 'trip_pass' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Unlock a Trip <ArrowRight className="ml-2 h-4 w-4" /></>}
-                </Button>
-              </motion.div>
-            </div>
-
-            {/* Right: Monthly + Yearly */}
-            <div className="space-y-6">
-              {/* Monthly - Featured */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }} 
-                whileInView={{ opacity: 1, y: 0 }} 
-                viewport={{ once: true }}
-                transition={{ delay: 0.15 }}
-                className="bg-card rounded-2xl border-2 border-primary p-8 relative"
-              >
-                <div className="absolute -top-3.5 left-6">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-full">
-                    <Sparkles className="w-3 h-3" />
-                    Most Popular
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline justify-between mb-4 mt-2">
-                  <div>
-                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.MONTHLY.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.MONTHLY.headline}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
-                    <span className="text-sm text-muted-foreground">/mo</span>
-                  </div>
-                </div>
-                
-                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
-                  {PLAN_FEATURES.MONTHLY.subheadline}
-                </p>
-                
-                <ul className="space-y-3 mb-8">
-                  {PLAN_FEATURES.MONTHLY.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm">
-                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                      <span className="text-foreground">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                
-                <Button 
-                  size="lg" 
-                  className="w-full" 
-                  onClick={() => openCheckout(STRIPE_PRODUCTS.MONTHLY.priceId, 'subscription', 'monthly', 'Voyager Monthly')} 
-                  disabled={loadingPlan === 'monthly'}
-                >
-                  {loadingPlan === 'monthly' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Start Monthly <ArrowRight className="ml-2 h-4 w-4" /></>}
-                </Button>
-              </motion.div>
-
-              {/* Yearly */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }} 
-                whileInView={{ opacity: 1, y: 0 }} 
-                viewport={{ once: true }}
-                transition={{ delay: 0.2 }}
-                className="bg-card rounded-2xl border border-border p-8 relative"
-              >
-                <div className="absolute -top-3.5 left-6">
-                  <span className="inline-flex items-center px-3 py-1 bg-foreground text-background text-xs font-medium rounded-full">
-                    Save 33%
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline justify-between mb-4 mt-2">
-                  <div>
-                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.YEARLY.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.YEARLY.headline}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.YEARLY.price}</span>
-                    <span className="text-sm text-muted-foreground">/yr</span>
-                  </div>
-                </div>
-                
-                <p className="text-muted-foreground text-sm mb-6 pb-6 border-b border-border">
-                  {PLAN_FEATURES.YEARLY.subheadline} <span className="text-foreground font-medium">Just $10.75/month.</span>
-                </p>
-                
-                <ul className="space-y-3 mb-8">
-                  {PLAN_FEATURES.YEARLY.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm">
-                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                      <span className="text-foreground">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                
-                <Button 
-                  variant="outline" 
-                  size="lg" 
-                  className="w-full" 
-                  onClick={() => openCheckout(STRIPE_PRODUCTS.YEARLY.priceId, 'subscription', 'yearly', 'Voyager Yearly')} 
-                  disabled={loadingPlan === 'yearly'}
-                >
-                  {loadingPlan === 'yearly' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Start Yearly <ArrowRight className="ml-2 h-4 w-4" /></>}
-                </Button>
-              </motion.div>
-            </div>
+                {loadingPlan === 'trip_pass' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Unlock a Trip <ArrowRight className="ml-2 h-4 w-4" /></>}
+              </Button>
+            </motion.div>
           </div>
+
+          {/* Row 2: Monthly + Yearly */}
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Monthly - Featured */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="bg-card rounded-2xl border-2 border-primary p-6 relative flex flex-col"
+            >
+              <div className="absolute -top-3 left-6">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-full">
+                  <Sparkles className="w-3 h-3" />
+                  Most Popular
+                </span>
+              </div>
+              
+              <div className="flex items-start justify-between mb-4 mt-2">
+                <div>
+                  <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.MONTHLY.name}</h3>
+                  <p className="text-sm text-muted-foreground">{PLAN_FEATURES.MONTHLY.headline}</p>
+                </div>
+                <div className="text-right shrink-0 ml-4">
+                  <span className="text-2xl font-bold text-foreground">${STRIPE_PRODUCTS.MONTHLY.price}</span>
+                  <span className="text-xs text-muted-foreground block">/month</span>
+                </div>
+              </div>
+              
+              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
+                {PLAN_FEATURES.MONTHLY.subheadline}
+              </p>
+              
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 flex-1">
+                {PLAN_FEATURES.MONTHLY.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-primary" />
+                    <span className="text-foreground">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              
+              <Button 
+                className="w-full mt-auto" 
+                onClick={() => openCheckout(STRIPE_PRODUCTS.MONTHLY.priceId, 'subscription', 'monthly', 'Voyager Monthly')} 
+                disabled={loadingPlan === 'monthly'}
+              >
+                {loadingPlan === 'monthly' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Start Monthly <ArrowRight className="ml-2 h-4 w-4" /></>}
+              </Button>
+            </motion.div>
+
+            {/* Yearly */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true }}
+              transition={{ delay: 0.15 }}
+              className="bg-card rounded-2xl border border-border p-6 relative flex flex-col"
+            >
+              <div className="absolute -top-3 left-6">
+                <span className="inline-flex items-center px-3 py-1 bg-foreground text-background text-xs font-medium rounded-full">
+                  Save 33%
+                </span>
+              </div>
+              
+              <div className="flex items-start justify-between mb-4 mt-2">
+                <div>
+                  <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.YEARLY.name}</h3>
+                  <p className="text-sm text-muted-foreground">{PLAN_FEATURES.YEARLY.headline}</p>
+                </div>
+                <div className="text-right shrink-0 ml-4">
+                  <span className="text-2xl font-bold text-foreground">${STRIPE_PRODUCTS.YEARLY.price}</span>
+                  <span className="text-xs text-muted-foreground block">/year</span>
+                </div>
+              </div>
+              
+              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
+                {PLAN_FEATURES.YEARLY.subheadline} <span className="text-foreground font-medium">Just $10.75/month.</span>
+              </p>
+              
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 flex-1">
+                {PLAN_FEATURES.YEARLY.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-muted-foreground" />
+                    <span className="text-foreground">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              
+              <Button 
+                variant="outline"
+                className="w-full mt-auto" 
+                onClick={() => openCheckout(STRIPE_PRODUCTS.YEARLY.priceId, 'subscription', 'yearly', 'Voyager Yearly')} 
+                disabled={loadingPlan === 'yearly'}
+              >
+                {loadingPlan === 'yearly' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Start Yearly <ArrowRight className="ml-2 h-4 w-4" /></>}
+              </Button>
+            </motion.div>
+          </div>
+
+          {/* Always Free Note */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center mt-8 text-sm text-muted-foreground"
+          >
+            <p>Manual edits are always free — rearranging activities, adding notes, adjusting times, and deleting items costs nothing.</p>
+          </motion.div>
         </div>
       </section>
 
@@ -388,11 +395,11 @@ export default function Pricing() {
           <h2 className="text-2xl font-serif font-bold text-foreground text-center mb-10">Common questions</h2>
           <div className="space-y-4">
             {[
-              { q: "What counts as an 'edit'?", a: "Swapping an activity, changing times, or regenerating a single day. Basically any modification to your itinerary after it's generated." },
-              { q: "What's the difference between Free and Trip Pass?", a: "Free gives you limited monthly usage across all trips. Trip Pass removes all limits for one specific trip, forever. Great when you're seriously planning a trip and want to perfect every detail." },
+              { q: "What counts as an AI activity swap?", a: "When you ask Voyance to find you a different restaurant, attraction, or activity — that's an AI swap. It uses AI to search for better alternatives based on your preferences. Manual edits like rearranging, adding notes, or deleting items are always free." },
+              { q: "What's always free?", a: "Rearranging activities, changing times, adding personal notes, deleting items, and reordering days. Anything you do manually without asking AI for help is unlimited and free on every plan." },
+              { q: "What's the difference between Free and Trip Pass?", a: "Free gives you limited AI features each month across all trips. Trip Pass removes all AI limits for one specific trip, forever. Great when you're seriously planning and want to perfect every detail." },
               { q: "Can I cancel my subscription?", a: "Yes, anytime. You keep access until your billing period ends. No cancellation fees, no awkward phone calls." },
               { q: "Do you charge fees on bookings?", a: "Never. Flight and hotel prices are passed through at market rates. We make money from subscriptions, not booking commissions." },
-              { q: "What if I need more than 5 drafts?", a: "Yearly plan has unlimited drafts. Or you can delete old drafts to make room for new ones on Monthly." },
             ].map((faq, i) => (
               <motion.div 
                 key={i} 

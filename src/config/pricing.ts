@@ -29,6 +29,8 @@ export const STRIPE_PRODUCTS = {
 } as const;
 
 // Plan feature definitions with monthly usage limits
+// NOTE: "edits" = AI-powered activity swaps (e.g., "find me another restaurant")
+// Manual changes (rearranging, adding notes, changing times, deleting) are ALWAYS FREE
 export const PLAN_FEATURES = {
   FREE: {
     id: 'free',
@@ -38,16 +40,16 @@ export const PLAN_FEATURES = {
     price: 0,
     priceDetail: 'forever',
     features: [
-      '1 full itinerary build per month',
-      '10 activity edits per month',
+      '1 AI-generated itinerary per month',
+      '10 AI activity swaps per month',
       '3 route optimizations per month',
       '1 group budget setup per month',
+      'Unlimited manual edits',
       'Save 1 draft trip at a time',
-      'Share view-only links',
     ],
     limits: {
       fullBuildsPerMonth: 1,
-      editsPerMonth: 10,
+      aiEditsPerMonth: 10,
       routeOptimizationsPerMonth: 3,
       groupBudgetSetupsPerMonth: 1,
       draftTrips: 1,
@@ -64,8 +66,8 @@ export const PLAN_FEATURES = {
     price: 12.99,
     priceDetail: 'one-time',
     features: [
-      'Unlimited rebuilds for this trip',
-      'Unlimited activity edits',
+      'Unlimited AI rebuilds for this trip',
+      'Unlimited AI activity swaps',
       'Unlimited route optimizations',
       'Group budgeting and expense splitting',
       'Co-edit with travel companions',
@@ -82,8 +84,8 @@ export const PLAN_FEATURES = {
     price: 15.99,
     priceDetail: 'per month',
     features: [
-      'Unlimited itinerary builds',
-      'Unlimited activity edits',
+      'Unlimited AI itinerary builds',
+      'Unlimited AI activity swaps',
       'Unlimited route optimizations',
       'Save up to 5 trips at once',
       'Smart flight and hotel picks',
@@ -92,7 +94,7 @@ export const PLAN_FEATURES = {
     ],
     limits: {
       fullBuildsPerMonth: -1, // Unlimited
-      editsPerMonth: -1,
+      aiEditsPerMonth: -1,
       routeOptimizationsPerMonth: -1,
       groupBudgetSetupsPerMonth: -1,
       draftTrips: 5,
@@ -122,7 +124,7 @@ export const PLAN_FEATURES = {
     ],
     limits: {
       fullBuildsPerMonth: -1,
-      editsPerMonth: -1,
+      aiEditsPerMonth: -1,
       routeOptimizationsPerMonth: -1,
       groupBudgetSetupsPerMonth: -1,
       draftTrips: -1, // Unlimited
