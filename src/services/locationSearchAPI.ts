@@ -35,44 +35,80 @@ export interface Destination {
 }
 
 // Metro area definitions for common multi-airport cities
+// Keys include both city names and common airport code prefixes
 const METRO_AREAS: Record<string, { name: string; codes: string[] }> = {
   // United States
   'nyc': { name: 'New York City', codes: ['JFK', 'EWR', 'LGA'] },
   'new york': { name: 'New York City', codes: ['JFK', 'EWR', 'LGA'] },
   'chicago': { name: 'Chicago', codes: ['ORD', 'MDW'] },
+  'chi': { name: 'Chicago', codes: ['ORD', 'MDW'] },
   'los angeles': { name: 'Los Angeles', codes: ['LAX', 'BUR', 'LGB', 'SNA'] },
   'la': { name: 'Los Angeles', codes: ['LAX', 'BUR', 'LGB', 'SNA'] },
+  'lax': { name: 'Los Angeles', codes: ['LAX', 'BUR', 'LGB', 'SNA'] },
   'san francisco': { name: 'San Francisco Bay Area', codes: ['SFO', 'OAK', 'SJC'] },
   'sf': { name: 'San Francisco Bay Area', codes: ['SFO', 'OAK', 'SJC'] },
+  'sfo': { name: 'San Francisco Bay Area', codes: ['SFO', 'OAK', 'SJC'] },
   'washington': { name: 'Washington D.C.', codes: ['DCA', 'IAD', 'BWI'] },
   'dc': { name: 'Washington D.C.', codes: ['DCA', 'IAD', 'BWI'] },
+  'was': { name: 'Washington D.C.', codes: ['DCA', 'IAD', 'BWI'] },
   'miami': { name: 'Miami', codes: ['MIA', 'FLL', 'PBI'] },
+  'mia': { name: 'Miami', codes: ['MIA', 'FLL', 'PBI'] },
   'dallas': { name: 'Dallas/Fort Worth', codes: ['DFW', 'DAL'] },
+  'dfw': { name: 'Dallas/Fort Worth', codes: ['DFW', 'DAL'] },
   'houston': { name: 'Houston', codes: ['IAH', 'HOU'] },
+  'hou': { name: 'Houston', codes: ['IAH', 'HOU'] },
+  'atlanta': { name: 'Atlanta', codes: ['ATL'] },
+  'atl': { name: 'Atlanta', codes: ['ATL'] },
   
   // Europe
   'london': { name: 'London', codes: ['LHR', 'LGW', 'STN', 'LTN', 'LCY'] },
+  'lon': { name: 'London', codes: ['LHR', 'LGW', 'STN', 'LTN', 'LCY'] },
   'paris': { name: 'Paris', codes: ['CDG', 'ORY'] },
+  'par': { name: 'Paris', codes: ['CDG', 'ORY'] },
   'milan': { name: 'Milan', codes: ['MXP', 'LIN', 'BGY'] },
+  'mil': { name: 'Milan', codes: ['MXP', 'LIN', 'BGY'] },
   'rome': { name: 'Rome', codes: ['FCO', 'CIA'] },
+  'rom': { name: 'Rome', codes: ['FCO', 'CIA'] },
   'berlin': { name: 'Berlin', codes: ['BER', 'SXF'] },
+  'ber': { name: 'Berlin', codes: ['BER', 'SXF'] },
   'moscow': { name: 'Moscow', codes: ['SVO', 'DME', 'VKO'] },
+  'mow': { name: 'Moscow', codes: ['SVO', 'DME', 'VKO'] },
   'stockholm': { name: 'Stockholm', codes: ['ARN', 'BMA', 'NYO'] },
+  'sto': { name: 'Stockholm', codes: ['ARN', 'BMA', 'NYO'] },
+  'amsterdam': { name: 'Amsterdam', codes: ['AMS'] },
+  'ams': { name: 'Amsterdam', codes: ['AMS'] },
   
   // Asia
   'tokyo': { name: 'Tokyo', codes: ['NRT', 'HND'] },
+  'tyo': { name: 'Tokyo', codes: ['NRT', 'HND'] },
   'osaka': { name: 'Osaka', codes: ['KIX', 'ITM'] },
+  'osa': { name: 'Osaka', codes: ['KIX', 'ITM'] },
   'shanghai': { name: 'Shanghai', codes: ['PVG', 'SHA'] },
+  'sha': { name: 'Shanghai', codes: ['PVG', 'SHA'] },
   'beijing': { name: 'Beijing', codes: ['PEK', 'PKX'] },
+  'bjs': { name: 'Beijing', codes: ['PEK', 'PKX'] },
   'seoul': { name: 'Seoul', codes: ['ICN', 'GMP'] },
+  'sel': { name: 'Seoul', codes: ['ICN', 'GMP'] },
   'bangkok': { name: 'Bangkok', codes: ['BKK', 'DMK'] },
+  'bkk': { name: 'Bangkok', codes: ['BKK', 'DMK'] },
+  'singapore': { name: 'Singapore', codes: ['SIN'] },
+  'sin': { name: 'Singapore', codes: ['SIN'] },
+  'hong kong': { name: 'Hong Kong', codes: ['HKG'] },
+  'hkg': { name: 'Hong Kong', codes: ['HKG'] },
   
   // Other
   'sao paulo': { name: 'São Paulo', codes: ['GRU', 'CGH', 'VCP'] },
+  'sao': { name: 'São Paulo', codes: ['GRU', 'CGH', 'VCP'] },
   'buenos aires': { name: 'Buenos Aires', codes: ['EZE', 'AEP'] },
+  'bue': { name: 'Buenos Aires', codes: ['EZE', 'AEP'] },
   'melbourne': { name: 'Melbourne', codes: ['MEL', 'AVV'] },
+  'mel': { name: 'Melbourne', codes: ['MEL', 'AVV'] },
   'sydney': { name: 'Sydney', codes: ['SYD'] },
+  'syd': { name: 'Sydney', codes: ['SYD'] },
   'toronto': { name: 'Toronto', codes: ['YYZ', 'YTZ'] },
+  'yto': { name: 'Toronto', codes: ['YYZ', 'YTZ'] },
+  'dubai': { name: 'Dubai', codes: ['DXB', 'DWC'] },
+  'dxb': { name: 'Dubai', codes: ['DXB', 'DWC'] },
 };
 
 /**
