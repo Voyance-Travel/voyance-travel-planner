@@ -52,46 +52,23 @@ interface WeatherForecastProps {
 const getWeatherIcon = (condition: string, size: 'sm' | 'md' | 'lg' = 'md') => {
   const sizeClass = size === 'sm' ? 'h-5 w-5' : size === 'lg' ? 'h-10 w-10' : 'h-6 w-6';
   const c = condition.toLowerCase();
-  
-  if (c.includes('sunny') || c.includes('clear')) {
-    return <Sun className={cn(sizeClass, 'text-amber-500')} />;
-  }
-  if (c.includes('thunder') || c.includes('storm')) {
-    return <CloudLightning className={cn(sizeClass, 'text-purple-500')} />;
-  }
-  if (c.includes('rain') || c.includes('shower')) {
-    return <CloudRain className={cn(sizeClass, 'text-blue-500')} />;
-  }
-  if (c.includes('snow')) {
-    return <Snowflake className={cn(sizeClass, 'text-blue-300')} />;
-  }
-  if (c.includes('fog') || c.includes('mist')) {
-    return <CloudFog className={cn(sizeClass, 'text-gray-400')} />;
-  }
-  if (c.includes('partly') || c.includes('partial')) {
-    return <CloudSun className={cn(sizeClass, 'text-amber-400')} />;
-  }
-  if (c.includes('cloud') || c.includes('overcast')) {
-    return <Cloud className={cn(sizeClass, 'text-slate-400')} />;
-  }
-  return <CloudSun className={cn(sizeClass, 'text-amber-400')} />;
+
+  // Keep icons on-brand (design tokens only)
+  const iconClass = cn(sizeClass, 'text-primary');
+
+  if (c.includes('sunny') || c.includes('clear')) return <Sun className={iconClass} />;
+  if (c.includes('thunder') || c.includes('storm')) return <CloudLightning className={iconClass} />;
+  if (c.includes('rain') || c.includes('shower')) return <CloudRain className={iconClass} />;
+  if (c.includes('snow')) return <Snowflake className={iconClass} />;
+  if (c.includes('fog') || c.includes('mist')) return <CloudFog className={iconClass} />;
+  if (c.includes('partly') || c.includes('partial')) return <CloudSun className={iconClass} />;
+  if (c.includes('cloud') || c.includes('overcast')) return <Cloud className={iconClass} />;
+  return <CloudSun className={iconClass} />;
 };
 
-const getGradientForCondition = (condition: string): string => {
-  const c = condition.toLowerCase();
-  if (c.includes('sunny') || c.includes('clear')) {
-    return 'from-amber-500/20 via-orange-500/10 to-yellow-500/5';
-  }
-  if (c.includes('rain') || c.includes('shower')) {
-    return 'from-blue-500/20 via-blue-500/10 to-slate-500/5';
-  }
-  if (c.includes('snow')) {
-    return 'from-blue-200/30 via-blue-100/20 to-white/10';
-  }
-  if (c.includes('cloud')) {
-    return 'from-slate-400/20 via-slate-300/10 to-slate-200/5';
-  }
-  return 'from-sky-500/15 via-blue-500/10 to-indigo-500/5';
+const getGradientForCondition = (_condition: string): string => {
+  // Subtle, neutral gradient (avoid rainbowy weather theming)
+  return 'from-primary/10 via-background/60 to-accent/10';
 };
 
 export function WeatherForecast({ destination, startDate, endDate, tripDays }: WeatherForecastProps) {
@@ -183,7 +160,7 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className={cn("overflow-hidden border-2 border-primary/10")}>
+      <Card className={cn("overflow-hidden border border-border")}> 
         <CardContent className={cn("p-0 bg-gradient-to-br", gradient)}>
           {/* Current Weather Header */}
           <div className="p-6 pb-4">
@@ -260,9 +237,9 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
                       <p className="text-xs text-muted-foreground">{day.low}°</p>
                     </div>
                     {day.precipitation > 20 && (
-                      <div className="flex items-center justify-center gap-0.5 mt-1.5">
-                        <Droplets className="h-3 w-3 text-blue-500" />
-                        <span className="text-xs text-blue-600">{day.precipitation}%</span>
+                      <div className="flex items-center justify-center gap-0.5 mt-1.5 text-muted-foreground">
+                        <Droplets className="h-3 w-3" />
+                        <span className="text-xs">{day.precipitation}%</span>
                       </div>
                     )}
                   </motion.div>

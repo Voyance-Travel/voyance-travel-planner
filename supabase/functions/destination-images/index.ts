@@ -54,35 +54,53 @@ async function checkCuratedCache(
   destination?: string
 ): Promise<DestinationImage | null> {
   try {
-    const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
-    
+    const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").slice(0, 100);
+
     let query = supabase
       .from("curated_images")
       .select("*")
       .eq("entity_type", entityType)
       .ilike("entity_key", `%${normalizedKey}%`);
-    
+
     if (destination) {
       query = query.ilike("destination", `%${destination}%`);
     }
-    
-    const { data, error } = await query.limit(1).maybeSingle();
-    
-    if (error || !data) {
+
+    // Prefer higher-quality and newer cache entries
+    query = query
+      .order("quality_score", { ascending: false, nullsFirst: false })
+      .order("updated_at", { ascending: false });
+
+    const { data, error } = await query.limit(5);
+
+    if (error || !data || data.length === 0) {
       return null;
     }
-    
+
+    // Guardrail: avoid returning airport photos for city-level destination lookups
+    const pick = data.find((row: any) => {
+      if (entityType !== "destination") return true;
+      const alt = String(row.alt_text || "").toLowerCase();
+      const key = String(row.entity_key || "").toLowerCase();
+      return !alt.includes("airport") && !key.includes("airport");
+    });
+
+    if (!pick) {
+      console.log(`[Images] Cache entries found for "${entityKey}" but filtered out (airport mismatch)`);
+      return null;
+    }
+
     console.log(`[Images] ✅ Found cached image for: ${entityKey}`);
-    
+
     return {
-      id: data.id,
-      url: data.image_url,
-      alt: data.alt_text || `${entityKey} photo`,
+      id: pick.id,
+      url: pick.image_url,
+      alt: pick.alt_text || `${entityKey} photo`,
       type: entityType === "destination" ? "hero" : "activity",
       source: "curated",
-      attribution: data.attribution,
-      placeId: data.place_id,
-      photoReference: data.photo_reference,
+      attribution: pick.attribution,
+      placeId: pick.place_id,
+      photoReference: pick.photo_reference,
     };
   } catch (e) {
     console.error("[Images] Cache check error:", e);
@@ -771,9 +789,14 @@ serve(async (req) => {
     }
 
     // Determine what we're searching for
-    const searchSubject = venueName || resolvedDestination || "unknown";
+    const searchSubjectRaw = venueName || resolvedDestination || "unknown";
     const entityType = venueName ? "activity" : "destination";
     const contextDestination = resolvedDestination || destination || "";
+
+    // For destination hero/gallery lookups, bias away from airports
+    const searchSubject = entityType === "destination"
+      ? `${searchSubjectRaw} city`
+      : searchSubjectRaw;
 
     console.log(`[Images] Fetching ${entityType} image for: ${searchSubject} in ${contextDestination}`);
 

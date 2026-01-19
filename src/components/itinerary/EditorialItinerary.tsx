@@ -365,7 +365,7 @@ export function EditorialItinerary({
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'overview' | 'needtoknow'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -707,14 +707,6 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            {/* Weather Forecast */}
-            <WeatherForecast
-              destination={destination}
-              startDate={startDate}
-              endDate={endDate}
-              tripDays={days.length}
-            />
-
             {/* Airport Game Plan - Show before Day 1 */}
             {flightSelection?.outbound && (
               <AirportGamePlan 
@@ -744,6 +736,23 @@ export function EditorialItinerary({
                 onAddActivity={() => setAddActivityModal({ dayIndex })}
               />
             ))}
+          </motion.div>
+        )}
+
+        {activeTab === 'weather' && (
+          <motion.div
+            key="weather"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="space-y-6"
+          >
+            <WeatherForecast
+              destination={destination}
+              startDate={startDate}
+              endDate={endDate}
+              tripDays={days.length}
+            />
           </motion.div>
         )}
 
@@ -1132,7 +1141,11 @@ interface DestinationCarouselProps {
 // Helper to normalize destination strings (remove IATA codes like "(FCO)")
 function normalizeDestination(dest: string): string {
   return (dest || '')
+    // Remove trailing IATA codes like "(FCO)"
     .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+    // Remove obvious airport keywords (e.g. "Rome Airport")
+    .replace(/\b(international\s+)?airport\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
@@ -1143,8 +1156,32 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
   
   // Normalize destination (remove airport codes like "Rome (FCO)" -> "Rome")
   const cleanDestination = normalizeDestination(destination);
-  
-  // Fetch real destination images from the backend
+  const queryDestination = destinationCountry ? `${cleanDestination}, ${destinationCountry}` : cleanDestination;
+
+  const generateGradientDataUrl = (label: string): string => {
+    let hash = 0;
+    for (let i = 0; i < label.length; i++) {
+      hash = label.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    const hue1 = Math.abs(hash % 360);
+    const hue2 = (hue1 + 40) % 360;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">
+      <defs>
+        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:hsl(${hue1},60%,40%)"/>
+          <stop offset="100%" style="stop-color:hsl(${hue2},70%,30%)"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#g)"/>
+      <text x="50%" y="50%" font-family="system-ui" font-size="52" fill="white" fill-opacity="0.28" text-anchor="middle" dy=".35em">${label}</text>
+    </svg>`;
+
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
+
+  // Fetch destination images from the backend
   useEffect(() => {
     async function fetchImages() {
       setIsLoading(true);
@@ -1152,7 +1189,7 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
         const { supabase } = await import('@/integrations/supabase/client');
         const { data, error } = await supabase.functions.invoke('destination-images', {
           body: {
-            destination: cleanDestination, // Use normalized destination
+            destination: queryDestination,
             imageType: 'gallery',
             limit: 6,
           },
@@ -1162,21 +1199,11 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
           const urls = data.images.map((img: { url: string }) => img.url);
           setImages(urls);
         } else {
-          // Fallback to curated Unsplash images for the destination
-          setImages([
-            `https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80`, // Rome Colosseum
-            `https://images.unsplash.com/photo-1529260830199-42c24126f198?w=1200&q=80`, // Rome Trevi
-            `https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=1200&q=80`, // Rome Vatican
-            `https://images.unsplash.com/photo-1531572753322-ad063cecc140?w=1200&q=80`, // Rome Pantheon
-          ]);
+          setImages([generateGradientDataUrl(cleanDestination)]);
         }
       } catch (err) {
         console.error('[DestinationCarousel] Failed to fetch images:', err);
-        // Fallback images
-        setImages([
-          `https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80`,
-          `https://images.unsplash.com/photo-1529260830199-42c24126f198?w=1200&q=80`,
-        ]);
+        setImages([generateGradientDataUrl(cleanDestination)]);
       } finally {
         setIsLoading(false);
       }
@@ -1185,7 +1212,7 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
     if (cleanDestination) {
       fetchImages();
     }
-  }, [cleanDestination]);
+  }, [cleanDestination, queryDestination]);
 
   const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % Math.max(1, images.length));
   const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + Math.max(1, images.length)) % Math.max(1, images.length));
@@ -1210,16 +1237,16 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
       <div className="relative h-48 md:h-64">
         <img
           src={images[currentIndex]}
-          alt={`${destination} ${currentIndex + 1}`}
+          alt={`${cleanDestination} photo ${currentIndex + 1}`}
           className="w-full h-full object-cover transition-opacity duration-300"
           onError={(e) => {
-            e.currentTarget.src = `https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80`;
+            e.currentTarget.src = generateGradientDataUrl(cleanDestination);
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
         <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
           <div>
-            <h2 className="text-2xl md:text-3xl font-serif text-white drop-shadow-lg">{destination}</h2>
+            <h2 className="text-2xl md:text-3xl font-serif text-white drop-shadow-lg">{cleanDestination}</h2>
             {destinationCountry && (
               <p className="text-white/80 text-sm">{destinationCountry}</p>
             )}
@@ -1358,77 +1385,61 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
   const info = getDefaultInfo();
 
   const infoCategories = [
-    { 
+    {
       id: 'currency',
-      icon: <Wallet className="h-5 w-5" />, 
-      label: 'Currency & Money', 
+      icon: <Wallet className="h-5 w-5" />,
+      label: 'Currency & Money',
       value: info.currency,
       tips: info.currencyTips,
-      color: 'text-emerald-600 dark:text-emerald-400',
-      bgColor: 'from-emerald-500/10 to-emerald-500/5'
     },
-    { 
+    {
       id: 'language',
-      icon: <Languages className="h-5 w-5" />, 
-      label: 'Language', 
+      icon: <Languages className="h-5 w-5" />,
+      label: 'Language',
       value: info.language,
       tips: info.languageTips,
-      color: 'text-blue-600 dark:text-blue-400',
-      bgColor: 'from-blue-500/10 to-blue-500/5'
     },
-    { 
+    {
       id: 'timezone',
-      icon: <Clock className="h-5 w-5" />, 
-      label: 'Timezone', 
+      icon: <Clock className="h-5 w-5" />,
+      label: 'Timezone',
       value: info.timezone,
       tips: info.timezoneTips,
-      color: 'text-amber-600 dark:text-amber-400',
-      bgColor: 'from-amber-500/10 to-amber-500/5'
     },
-    { 
+    {
       id: 'transit',
-      icon: <Train className="h-5 w-5" />, 
-      label: 'Getting Around', 
+      icon: <Train className="h-5 w-5" />,
+      label: 'Getting Around',
       value: info.transit,
       tips: info.transitTips,
-      color: 'text-purple-600 dark:text-purple-400',
-      bgColor: 'from-purple-500/10 to-purple-500/5'
     },
-    { 
+    {
       id: 'tipping',
-      icon: <Utensils className="h-5 w-5" />, 
-      label: 'Tipping', 
+      icon: <Utensils className="h-5 w-5" />,
+      label: 'Tipping',
       value: info.tipping,
       tips: info.tippingTips,
-      color: 'text-rose-600 dark:text-rose-400',
-      bgColor: 'from-rose-500/10 to-rose-500/5'
     },
-    { 
+    {
       id: 'water',
-      icon: <Info className="h-5 w-5" />, 
-      label: 'Water & Safety', 
+      icon: <Info className="h-5 w-5" />,
+      label: 'Water & Safety',
       value: info.water,
       tips: info.waterTips,
-      color: 'text-cyan-600 dark:text-cyan-400',
-      bgColor: 'from-cyan-500/10 to-cyan-500/5'
     },
-    { 
+    {
       id: 'voltage',
-      icon: <Sparkles className="h-5 w-5" />, 
-      label: 'Electricity', 
+      icon: <Sparkles className="h-5 w-5" />,
+      label: 'Electricity',
       value: info.voltage,
       tips: info.voltageTips,
-      color: 'text-orange-600 dark:text-orange-400',
-      bgColor: 'from-orange-500/10 to-orange-500/5'
     },
-    { 
+    {
       id: 'emergency',
-      icon: <AlertCircle className="h-5 w-5" />, 
-      label: 'Emergency', 
+      icon: <AlertCircle className="h-5 w-5" />,
+      label: 'Emergency',
       value: info.emergency,
       tips: info.emergencyTips,
-      color: 'text-red-600 dark:text-red-400',
-      bgColor: 'from-red-500/10 to-red-500/5'
     },
   ];
 
@@ -1449,25 +1460,25 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         {infoCategories.map((category) => {
           const isExpanded = expandedCards.includes(category.id);
           return (
-            <motion.div key={category.id} layout>
-              <Card 
+            <motion.div key={category.id}>
+              <Card
                 className={cn(
-                  "cursor-pointer transition-all duration-200 overflow-hidden border-2",
-                  isExpanded 
-                    ? "border-primary/30 shadow-lg" 
-                    : "border-transparent hover:border-primary/10 hover:shadow-md"
+                  "cursor-pointer transition-all duration-200 overflow-hidden",
+                  isExpanded
+                    ? "border-primary/30 shadow-md"
+                    : "border-border hover:border-primary/15 hover:shadow-sm"
                 )}
                 onClick={() => toggleCard(category.id)}
               >
-                <CardContent className={cn("p-0 bg-gradient-to-br", category.bgColor)}>
+                <CardContent className="p-0">
                   {/* Header - Always visible */}
                   <div className="p-4 flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1">
-                      <div className={cn("p-2 rounded-lg bg-background/80 shadow-sm", category.color)}>
+                      <div className="p-2 rounded-lg bg-primary/10 text-primary">
                         {category.icon}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={cn("text-xs uppercase tracking-wider font-semibold mb-1", category.color)}>
+                        <p className="text-xs uppercase tracking-wider font-semibold mb-1 text-muted-foreground">
                           {category.label}
                         </p>
                         <p className="text-sm text-foreground font-medium leading-relaxed">
@@ -1478,9 +1489,9 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
                     <motion.div
                       animate={{ rotate: isExpanded ? 180 : 0 }}
                       transition={{ duration: 0.2 }}
-                      className="shrink-0 ml-2"
+                      className={cn("shrink-0 ml-2", isExpanded ? "text-primary" : "text-muted-foreground")}
                     >
-                      <ChevronDown className={cn("h-5 w-5", category.color)} />
+                      <ChevronDown className="h-5 w-5" />
                     </motion.div>
                   </div>
 
@@ -1494,20 +1505,20 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
                         transition={{ duration: 0.2 }}
                       >
                         <div className="px-4 pb-4 pt-0">
-                          <div className="border-t border-border/50 pt-3 mt-1">
+                          <div className="border-t border-border/60 pt-3 mt-1">
                             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2 font-medium">
                               Quick Tips
                             </p>
                             <ul className="space-y-2">
                               {category.tips.map((tip, idx) => (
-                                <motion.li 
+                                <motion.li
                                   key={idx}
                                   initial={{ opacity: 0, x: -10 }}
                                   animate={{ opacity: 1, x: 0 }}
                                   transition={{ delay: idx * 0.05 }}
                                   className="flex items-start gap-2 text-sm text-muted-foreground"
                                 >
-                                  <span className={cn("mt-1.5 h-1.5 w-1.5 rounded-full shrink-0", category.color.replace('text-', 'bg-'))} />
+                                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-primary/40" />
                                   <span>{tip}</span>
                                 </motion.li>
                               ))}
