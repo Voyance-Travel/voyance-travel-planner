@@ -61,6 +61,67 @@ export default function PlannerBooking() {
 
   const travelers = state.basics.travelers || 1;
 
+  const travelerInfoStorageKey = useMemo(() => {
+    return tripId ? `voyance_traveler_info_${tripId}` : null;
+  }, [tripId]);
+
+  // Load persisted traveler info (localStorage first; DB metadata if signed in)
+  useEffect(() => {
+    async function loadTravelerInfo() {
+      if (!tripId) return;
+
+      // 1) Try localStorage (fast)
+      if (travelerInfoStorageKey) {
+        try {
+          const raw = localStorage.getItem(travelerInfoStorageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw) as { travelerNames?: string[]; userIsTraveling?: boolean };
+            if (typeof parsed.userIsTraveling === 'boolean') setUserIsTraveling(parsed.userIsTraveling);
+            if (Array.isArray(parsed.travelerNames)) setTravelerNames(parsed.travelerNames);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // 2) If signed in, try DB metadata
+      if (user?.id) {
+        const { data, error } = await supabase
+          .from('trips')
+          .select('metadata')
+          .eq('id', tripId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!error && data?.metadata && typeof data.metadata === 'object') {
+          const meta = data.metadata as Record<string, unknown>;
+          const travelerInfo = meta.travelerInfo as { travelerNames?: string[]; userIsTraveling?: boolean } | undefined;
+
+          if (travelerInfo) {
+            if (typeof travelerInfo.userIsTraveling === 'boolean') setUserIsTraveling(travelerInfo.userIsTraveling);
+            if (Array.isArray(travelerInfo.travelerNames)) setTravelerNames(travelerInfo.travelerNames);
+          }
+        }
+      }
+    }
+
+    loadTravelerInfo();
+  }, [tripId, travelerInfoStorageKey, user?.id]);
+
+  // Always persist traveler info locally (so refresh/back/forward keeps it)
+  useEffect(() => {
+    if (!travelerInfoStorageKey) return;
+    try {
+      localStorage.setItem(
+        travelerInfoStorageKey,
+        JSON.stringify({ travelerNames, userIsTraveling, savedAt: new Date().toISOString() })
+      );
+    } catch {
+      // ignore
+    }
+  }, [travelerInfoStorageKey, travelerNames, userIsTraveling]);
+
   // Get user's full name from profile for pre-filling
   const userFullName = useMemo(() => {
     if (!user?.name) return '';
@@ -141,6 +202,42 @@ export default function PlannerBooking() {
   const totalTaxes = flightTaxes + hotelTaxes;
   const grandTotal = flightSubtotal + hotelSubtotal + activitiesTotal + totalTaxes + serviceFee;
 
+  const persistTravelerInfoToDb = async (persistTripId: string) => {
+    if (!user?.id) return;
+
+    const travelerInfo = {
+      travelerNames,
+      userIsTraveling,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { data: existing, error: fetchError } = await supabase
+      .from('trips')
+      .select('metadata')
+      .eq('id', persistTripId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    const existingMeta = (existing?.metadata && typeof existing.metadata === 'object')
+      ? (existing.metadata as Record<string, unknown>)
+      : {};
+
+    const nextMeta = {
+      ...existingMeta,
+      travelerInfo,
+    };
+
+    const { error: updateError } = await supabase
+      .from('trips')
+      .update({ metadata: nextMeta, updated_at: new Date().toISOString() })
+      .eq('id', persistTripId)
+      .eq('user_id', user.id);
+
+    if (updateError) throw updateError;
+  };
+
   const handleCheckout = async () => {
     if (!tripId) {
       toast.error('No trip found');
@@ -159,9 +256,18 @@ export default function PlannerBooking() {
     
     // For anonymous users, ensure trip is saved to localStorage before navigating
     if (isAnonymous) {
-      // Save trip to localStorage to ensure it persists
       const savedTripId = await saveTrip();
       console.log('[PlannerBooking] Saved trip before checkout:', savedTripId);
+
+      // Persist traveler info locally
+      try {
+        const key = savedTripId ? `voyance_traveler_info_${savedTripId}` : travelerInfoStorageKey;
+        if (key) {
+          localStorage.setItem(key, JSON.stringify({ travelerNames, userIsTraveling, savedAt: new Date().toISOString() }));
+        }
+      } catch {
+        // ignore
+      }
       
       toast.success('Demo confirmation shown — sign in to run a real payment test.');
       navigate(`/trips/${savedTripId || tripId}/confirmation`, {
@@ -176,12 +282,22 @@ export default function PlannerBooking() {
       });
       return;
     }
-    
+
+    // Authenticated checkout: make sure the trip is actually saved first
+    const ensuredTripId = await saveTrip();
+    if (!ensuredTripId) {
+      toast.error('Unable to save your trip. Please try again.');
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
     try {
+      // Persist traveler info to DB (so it survives refresh/device changes)
+      await persistTravelerInfoToDb(ensuredTripId);
+
       const { data, error } = await supabase.functions.invoke('create-booking-checkout', {
-        body: { tripId, flightTotal, hotelTotal, activitiesTotal },
+        body: { tripId: ensuredTripId, flightTotal, hotelTotal, activitiesTotal },
       });
       if (error) throw error;
       if (data?.url) {
