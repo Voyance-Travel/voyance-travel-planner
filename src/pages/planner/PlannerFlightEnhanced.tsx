@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { prefetchDestinationImages } from '@/utils/imagePrefetch';
 
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 
 import {
   useFlightSearch,
@@ -20,12 +21,22 @@ import {
 } from '@/services/flightAPI';
 
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 // Enhanced components
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
 import EditorialProgressTracker from '@/components/planner/shared/EditorialProgressTracker';
 import FlightFilters, { type FlightFiltersState } from '@/components/planner/flight/FlightFilters';
 import EnhancedFlightCard, { type EnhancedFlightOption } from '@/components/planner/flight/EnhancedFlightCard';
+
+// User preference types
+interface UserFlightPrefs {
+  directFlightsOnly: boolean;
+  preferredAirlines: string[];
+  flightTimePreference: 'morning' | 'afternoon' | 'evening' | 'red-eye' | null;
+  seatPreference: string | null;
+}
 
 function FlightSkeleton() {
   return (
@@ -207,12 +218,15 @@ export default function PlannerFlightEnhanced() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { state: plannerState, setBasics, setFlights, saveTrip } = useTripPlanner();
+  const { user } = useAuth();
 
   const [selectedOutboundId, setSelectedOutboundId] = useState<string | null>(plannerState.flights?.id ? null : null);
   const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
   const [selectedOutboundCabin, setSelectedOutboundCabin] = useState<string>('economy');
   const [selectedReturnCabin, setSelectedReturnCabin] = useState<string>('economy');
   const [holdingFlightId, setHoldingFlightId] = useState<string | null>(null);
+  const [userPrefs, setUserPrefs] = useState<UserFlightPrefs | null>(null);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   const createHold = useCreateFlightHold();
 
@@ -221,6 +235,40 @@ export default function PlannerFlightEnhanced() {
   const startDate = searchParams.get('startDate') || plannerState.basics.startDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const endDate = searchParams.get('endDate') || plannerState.basics.endDate || new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 1);
+
+  // Load user flight preferences from database
+  useEffect(() => {
+    async function loadUserPreferences() {
+      if (!user) {
+        setPrefsLoaded(true);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('user_preferences')
+          .select('direct_flights_only, preferred_airlines, flight_time_preference, seat_preference')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (!error && data) {
+          setUserPrefs({
+            directFlightsOnly: data.direct_flights_only ?? false,
+            preferredAirlines: data.preferred_airlines ?? [],
+            flightTimePreference: data.flight_time_preference as UserFlightPrefs['flightTimePreference'],
+            seatPreference: data.seat_preference,
+          });
+          console.log('[PlannerFlight] Loaded user preferences:', data);
+        }
+      } catch (err) {
+        console.error('[PlannerFlight] Error loading preferences:', err);
+      } finally {
+        setPrefsLoaded(true);
+      }
+    }
+    
+    loadUserPreferences();
+  }, [user]);
 
   // Sync basics for refreshes
   useEffect(() => {
@@ -243,6 +291,31 @@ export default function PlannerFlightEnhanced() {
     }
   }, [destination]);
 
+  // Initialize filters with user preferences when loaded
+  const getInitialFilters = (): FlightFiltersState => {
+    const timeRange = getTimeRangeFromPreference(userPrefs?.flightTimePreference);
+    return {
+      directOnly: userPrefs?.directFlightsOnly ?? false,
+      airlines: userPrefs?.preferredAirlines ?? [],
+      maxPrice: 5000,
+      departureTimeRange: timeRange,
+      arrivalTimeRange: [0, 24],
+      maxDuration: 1440,
+      bagsIncluded: false,
+      sortBy: 'recommended',
+    };
+  };
+
+  function getTimeRangeFromPreference(pref: UserFlightPrefs['flightTimePreference']): [number, number] {
+    switch (pref) {
+      case 'morning': return [5, 12];
+      case 'afternoon': return [12, 18];
+      case 'evening': return [18, 22];
+      case 'red-eye': return [22, 6]; // Note: wraps around midnight
+      default: return [0, 24];
+    }
+  }
+
   const [outboundFilters, setOutboundFilters] = useState<FlightFiltersState>({
     directOnly: false,
     airlines: [],
@@ -253,6 +326,17 @@ export default function PlannerFlightEnhanced() {
     bagsIncluded: false,
     sortBy: 'recommended',
   });
+
+  // Apply user preferences when loaded
+  useEffect(() => {
+    if (prefsLoaded && userPrefs) {
+      const initialFilters = getInitialFilters();
+      setOutboundFilters(initialFilters);
+      setReturnFilters(initialFilters);
+      console.log('[PlannerFlight] Applied user preferences to filters:', initialFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoaded, userPrefs]);
 
   const [returnFilters, setReturnFilters] = useState<FlightFiltersState>({
     directOnly: false,
@@ -273,8 +357,9 @@ export default function PlannerFlightEnhanced() {
       passengers: travelers,
       class: 'economy',
       directOnly: outboundFilters.directOnly,
+      preferredAirlines: userPrefs?.preferredAirlines?.length ? userPrefs.preferredAirlines : undefined,
     }),
-    [origin, destination, startDate, travelers, outboundFilters.directOnly]
+    [origin, destination, startDate, travelers, outboundFilters.directOnly, userPrefs?.preferredAirlines]
   );
 
   const returnParams: FlightSearchParams = useMemo(
@@ -285,8 +370,9 @@ export default function PlannerFlightEnhanced() {
       passengers: travelers,
       class: 'economy',
       directOnly: returnFilters.directOnly,
+      preferredAirlines: userPrefs?.preferredAirlines?.length ? userPrefs.preferredAirlines : undefined,
     }),
-    [origin, destination, endDate, travelers, returnFilters.directOnly]
+    [origin, destination, endDate, travelers, returnFilters.directOnly, userPrefs?.preferredAirlines]
   );
 
   const {
@@ -439,6 +525,25 @@ export default function PlannerFlightEnhanced() {
                 <p className="text-muted-foreground text-lg">
                   {origin} ↔ {destination} · {travelers} traveler{travelers > 1 ? 's' : ''}
                 </p>
+                
+                {/* Show personalization indicator */}
+                {userPrefs && (userPrefs.directFlightsOnly || userPrefs.preferredAirlines?.length > 0) && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <Badge variant="secondary" className="gap-1.5 text-xs">
+                      <Sparkles className="h-3 w-3" />
+                      Personalized for you
+                    </Badge>
+                    {userPrefs.directFlightsOnly && (
+                      <Badge variant="outline" className="text-xs">Non-stop preferred</Badge>
+                    )}
+                    {userPrefs.preferredAirlines?.length > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        {userPrefs.preferredAirlines.slice(0, 2).join(', ')}
+                        {userPrefs.preferredAirlines.length > 2 && ` +${userPrefs.preferredAirlines.length - 2}`}
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </motion.div>
 
               <Tabs defaultValue="outbound" className="w-full">
