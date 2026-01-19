@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useItineraryGeneration, GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { UsageLimitNotice } from '@/components/common/UsageLimitNotice';
 import { format, parseISO } from 'date-fns';
 
 interface ItineraryGeneratorProps {
@@ -57,6 +59,11 @@ export function ItineraryGenerator({
     generateItinerary,
     reset,
   } = useItineraryGeneration();
+
+  // Get entitlements for usage limits
+  const { data: entitlements, isPaid } = useEntitlements();
+  const freeBuildsRemaining = entitlements?.limits?.freeBuildsRemaining ?? 1;
+  const freeBuildsLimit = entitlements?.limits?.fullBuilds ?? 1;
 
   const [hasStarted, setHasStarted] = useState(false);
 
@@ -124,7 +131,7 @@ export function ItineraryGenerator({
             <span className="font-medium text-foreground">{destination}</span>.
           </p>
 
-          <div className="flex flex-wrap gap-2 justify-center mb-8">
+          <div className="flex flex-wrap gap-2 justify-center mb-6">
             <Badge variant="outline" className="gap-1">
               <MapPin className="h-3 w-3" />
               {destination}
@@ -138,9 +145,34 @@ export function ItineraryGenerator({
               {budgetTier || 'Standard'}
             </Badge>
           </div>
+
+          {/* Usage limit notice for free users */}
+          {!isPaid && freeBuildsRemaining > 0 && (
+            <div className="mb-6">
+              <UsageLimitNotice
+                featureName="itinerary build"
+                remaining={freeBuildsRemaining}
+                limit={freeBuildsLimit}
+                isPaid={isPaid}
+              />
+            </div>
+          )}
+
+          {/* No builds remaining warning */}
+          {!isPaid && freeBuildsRemaining <= 0 && (
+            <div className="mb-6 flex items-center gap-2 px-4 py-3 rounded-lg border border-destructive/50 bg-destructive/10 text-destructive text-sm">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>You have used your free itinerary build this month. Upgrade to continue.</span>
+            </div>
+          )}
           
           <div className="flex flex-col gap-3">
-            <Button size="lg" onClick={handleGenerate} className="gap-2">
+            <Button 
+              size="lg" 
+              onClick={handleGenerate} 
+              className="gap-2"
+              disabled={!isPaid && freeBuildsRemaining <= 0}
+            >
               <Sparkles className="h-5 w-5" />
               Generate Itinerary
             </Button>
