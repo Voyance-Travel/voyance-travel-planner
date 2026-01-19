@@ -731,6 +731,29 @@ async function getDestinationName(supabase: any, destinationId: string): Promise
   }
 }
 
+// Get a random iconic POI from destination for better hero images
+async function getDestinationPOI(supabase: any, destinationName: string): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from("destinations")
+      .select("points_of_interest")
+      .ilike("city", destinationName)
+      .single();
+
+    const pois = data?.points_of_interest;
+    if (Array.isArray(pois) && pois.length > 0) {
+      // Pick a random POI from the list
+      const randomIndex = Math.floor(Math.random() * pois.length);
+      console.log(`[Images] Found ${pois.length} POIs for ${destinationName}, using: ${pois[randomIndex]}`);
+      return pois[randomIndex];
+    }
+    return null;
+  } catch (e) {
+    console.log(`[Images] Could not get POIs for ${destinationName}:`, e);
+    return null;
+  }
+}
+
 function generateFallbackGradient(destination: string): DestinationImage {
   let hash = 0;
   for (let i = 0; i < destination.length; i++) {
@@ -994,10 +1017,20 @@ serve(async (req) => {
     const entityType = venueName ? "activity" : "destination";
     const contextDestination = normalizeDestination(resolvedDestination || destination || "");
 
-    // For destination hero/gallery lookups, bias away from airports
-    const searchSubject = entityType === "destination"
-      ? `${searchSubjectRaw} city`
-      : searchSubjectRaw;
+    // For destination hero/gallery lookups, use a known POI for better images
+    let searchSubject = searchSubjectRaw;
+    if (entityType === "destination") {
+      // Try to get an iconic POI from the destination (e.g., "Eiffel Tower" for Paris)
+      const poiName = await getDestinationPOI(supabase, contextDestination);
+      if (poiName) {
+        searchSubject = poiName;
+        console.log(`[Images] Using POI "${poiName}" instead of generic "${searchSubjectRaw}"`);
+      } else {
+        // Fall back to "city landmark" search
+        searchSubject = `${searchSubjectRaw} landmark`;
+        console.log(`[Images] No POIs found, searching for "${searchSubject}"`);
+      }
+    }
 
     console.log(`[Images] Fetching ${entityType} image for: ${searchSubject} in ${contextDestination}`);
 
