@@ -672,14 +672,34 @@ export async function submitQuizComplete(
       });
     }
 
-    // 7. Update profiles table with quiz_completed flag
-    await supabase
-      .from('profiles')
-      .update({ 
-        quiz_completed: true,
-        travel_dna: JSON.parse(JSON.stringify(dna)) as Json,
-      })
-      .eq('id', userId);
+    // 7. Update profiles table with quiz_completed flag and travel_dna
+    try {
+      // Create a clean JSON object for travel_dna
+      const travelDnaJson = {
+        primary_archetype_name: dna.primary_archetype_name || null,
+        secondary_archetype_name: dna.secondary_archetype_name || null,
+        dna_confidence_score: dna.dna_confidence_score || null,
+        dna_rarity: dna.dna_rarity || null,
+        trait_scores: dna.trait_scores || {},
+        tone_tags: dna.tone_tags || [],
+        emotional_drivers: dna.emotional_drivers || [],
+        summary: dna.summary || null,
+      };
+      
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ 
+          quiz_completed: true,
+          travel_dna: travelDnaJson as unknown as Json,
+        })
+        .eq('id', userId);
+        
+      if (profileError) {
+        console.error('Failed to update profile with travel_dna:', profileError);
+      }
+    } catch (profileErr) {
+      console.error('Error updating profile:', profileErr);
+    }
 
     return {
       success: prefSuccess && dnaSuccess,
