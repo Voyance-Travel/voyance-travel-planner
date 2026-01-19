@@ -27,19 +27,87 @@ function getSupabaseAdmin() {
   );
 }
 
+// ============= CITY TO AIRPORT CODE RESOLUTION =============
+// IMPORTANT: Must be defined before cache helpers which use it
+const cityToAirportCode: Record<string, string> = {
+  'new york': 'JFK', 'nyc': 'JFK', 'manhattan': 'JFK',
+  'los angeles': 'LAX', 'la': 'LAX',
+  'chicago': 'ORD', 'houston': 'IAH', 'phoenix': 'PHX',
+  'philadelphia': 'PHL', 'san antonio': 'SAT', 'san diego': 'SAN',
+  'dallas': 'DFW', 'austin': 'AUS', 'san jose': 'SJC',
+  'san francisco': 'SFO', 'sf': 'SFO', 'seattle': 'SEA',
+  'denver': 'DEN', 'boston': 'BOS', 'washington': 'DCA', 'dc': 'DCA',
+  'nashville': 'BNA', 'detroit': 'DTW', 'portland': 'PDX',
+  'las vegas': 'LAS', 'vegas': 'LAS', 'miami': 'MIA',
+  'atlanta': 'ATL', 'orlando': 'MCO', 'minneapolis': 'MSP',
+  'charlotte': 'CLT', 'tampa': 'TPA', 'pittsburgh': 'PIT',
+  'cleveland': 'CLE', 'new orleans': 'MSY', 'honolulu': 'HNL',
+  'london': 'LHR', 'paris': 'CDG', 'amsterdam': 'AMS',
+  'frankfurt': 'FRA', 'munich': 'MUC', 'berlin': 'BER',
+  'rome': 'FCO', 'milan': 'MXP', 'madrid': 'MAD',
+  'barcelona': 'BCN', 'lisbon': 'LIS', 'dublin': 'DUB',
+  'vienna': 'VIE', 'zurich': 'ZRH', 'geneva': 'GVA',
+  'brussels': 'BRU', 'copenhagen': 'CPH', 'stockholm': 'ARN',
+  'oslo': 'OSL', 'helsinki': 'HEL', 'prague': 'PRG',
+  'warsaw': 'WAW', 'budapest': 'BUD', 'athens': 'ATH',
+  'istanbul': 'IST', 'moscow': 'SVO',
+  'tokyo': 'NRT', 'osaka': 'KIX', 'seoul': 'ICN',
+  'beijing': 'PEK', 'shanghai': 'PVG', 'hong kong': 'HKG',
+  'taipei': 'TPE', 'singapore': 'SIN', 'bangkok': 'BKK',
+  'kuala lumpur': 'KUL', 'jakarta': 'CGK', 'manila': 'MNL',
+  'ho chi minh': 'SGN', 'saigon': 'SGN', 'hanoi': 'HAN',
+  'delhi': 'DEL', 'new delhi': 'DEL', 'mumbai': 'BOM', 'bangalore': 'BLR',
+  'dubai': 'DXB', 'abu dhabi': 'AUH', 'doha': 'DOH',
+  'tel aviv': 'TLV', 'riyadh': 'RUH',
+  'sydney': 'SYD', 'melbourne': 'MEL', 'brisbane': 'BNE', 'auckland': 'AKL',
+  'toronto': 'YYZ', 'vancouver': 'YVR', 'montreal': 'YUL',
+  'mexico city': 'MEX', 'cancun': 'CUN',
+  'sao paulo': 'GRU', 'rio de janeiro': 'GIG', 'rio': 'GIG',
+  'buenos aires': 'EZE', 'lima': 'LIM', 'bogota': 'BOG', 'santiago': 'SCL',
+  'cairo': 'CAI', 'cape town': 'CPT', 'johannesburg': 'JNB',
+  'nairobi': 'NBO', 'casablanca': 'CMN', 'marrakech': 'RAK',
+};
+
+function resolveToIataCode(input: string): string {
+  const normalized = input.toLowerCase().trim();
+  
+  // Already an IATA code
+  if (/^[a-z]{3}$/i.test(normalized)) {
+    return normalized.toUpperCase();
+  }
+  
+  // Exact city match
+  if (cityToAirportCode[normalized]) {
+    return cityToAirportCode[normalized];
+  }
+  
+  // Partial match
+  for (const [city, code] of Object.entries(cityToAirportCode)) {
+    if (normalized.includes(city) || city.includes(normalized)) {
+      return code;
+    }
+  }
+  
+  // Fallback: take first 3 chars uppercase
+  return input.toUpperCase().slice(0, 3);
+}
+
 // ============= CACHE HELPERS =============
 const CACHE_TTL_HOURS = 4;
 
 function generateCacheKey(params: FlightSearchParams): string {
+  // Resolve city names to IATA codes for consistent caching
+  const originCode = resolveToIataCode(params.origin || '');
+  const destCode = resolveToIataCode(params.destination || '');
+  
   const normalized = {
-    o: params.origin?.toUpperCase().trim(),
-    d: params.destination?.toUpperCase().trim(),
+    o: originCode,
+    d: destCode,
     dep: params.departureDate,
     ret: params.returnDate || '',
     pax: params.passengers || 1,
     cabin: (params.cabinClass || 'economy').toLowerCase(),
   };
-  // Simple hash - concatenate sorted keys
   return `flight:${normalized.o}:${normalized.d}:${normalized.dep}:${normalized.ret}:${normalized.pax}:${normalized.cabin}`;
 }
 
@@ -186,68 +254,7 @@ function getAirlineName(code: string): string {
   return airlineNames[code] || code;
 }
 
-// ============= CITY TO AIRPORT CODE RESOLUTION =============
-const cityToAirportCode: Record<string, string> = {
-  'new york': 'JFK', 'nyc': 'JFK', 'manhattan': 'JFK',
-  'los angeles': 'LAX', 'la': 'LAX',
-  'chicago': 'ORD', 'houston': 'IAH', 'phoenix': 'PHX',
-  'philadelphia': 'PHL', 'san antonio': 'SAT', 'san diego': 'SAN',
-  'dallas': 'DFW', 'austin': 'AUS', 'san jose': 'SJC',
-  'san francisco': 'SFO', 'sf': 'SFO', 'seattle': 'SEA',
-  'denver': 'DEN', 'boston': 'BOS', 'washington': 'DCA', 'dc': 'DCA',
-  'nashville': 'BNA', 'detroit': 'DTW', 'portland': 'PDX',
-  'las vegas': 'LAS', 'vegas': 'LAS', 'miami': 'MIA',
-  'atlanta': 'ATL', 'orlando': 'MCO', 'minneapolis': 'MSP',
-  'charlotte': 'CLT', 'tampa': 'TPA', 'pittsburgh': 'PIT',
-  'cleveland': 'CLE', 'new orleans': 'MSY', 'honolulu': 'HNL',
-  'london': 'LHR', 'paris': 'CDG', 'amsterdam': 'AMS',
-  'frankfurt': 'FRA', 'munich': 'MUC', 'berlin': 'BER',
-  'rome': 'FCO', 'milan': 'MXP', 'madrid': 'MAD',
-  'barcelona': 'BCN', 'lisbon': 'LIS', 'dublin': 'DUB',
-  'vienna': 'VIE', 'zurich': 'ZRH', 'geneva': 'GVA',
-  'brussels': 'BRU', 'copenhagen': 'CPH', 'stockholm': 'ARN',
-  'oslo': 'OSL', 'helsinki': 'HEL', 'prague': 'PRG',
-  'warsaw': 'WAW', 'budapest': 'BUD', 'athens': 'ATH',
-  'istanbul': 'IST', 'moscow': 'SVO',
-  'tokyo': 'NRT', 'osaka': 'KIX', 'seoul': 'ICN',
-  'beijing': 'PEK', 'shanghai': 'PVG', 'hong kong': 'HKG',
-  'taipei': 'TPE', 'singapore': 'SIN', 'bangkok': 'BKK',
-  'kuala lumpur': 'KUL', 'jakarta': 'CGK', 'manila': 'MNL',
-  'ho chi minh': 'SGN', 'saigon': 'SGN', 'hanoi': 'HAN',
-  'delhi': 'DEL', 'new delhi': 'DEL', 'mumbai': 'BOM', 'bangalore': 'BLR',
-  'dubai': 'DXB', 'abu dhabi': 'AUH', 'doha': 'DOH',
-  'tel aviv': 'TLV', 'riyadh': 'RUH',
-  'sydney': 'SYD', 'melbourne': 'MEL', 'brisbane': 'BNE', 'auckland': 'AKL',
-  'toronto': 'YYZ', 'vancouver': 'YVR', 'montreal': 'YUL',
-  'mexico city': 'MEX', 'cancun': 'CUN',
-  'sao paulo': 'GRU', 'rio de janeiro': 'GIG', 'rio': 'GIG',
-  'buenos aires': 'EZE', 'lima': 'LIM', 'bogota': 'BOG', 'santiago': 'SCL',
-  'cairo': 'CAI', 'cape town': 'CPT', 'johannesburg': 'JNB',
-  'nairobi': 'NBO', 'casablanca': 'CMN', 'marrakech': 'RAK',
-};
-
-function resolveToIataCode(input: string): string {
-  const normalized = input.toLowerCase().trim();
-  
-  if (/^[a-z]{3}$/i.test(normalized)) {
-    return normalized.toUpperCase();
-  }
-  
-  if (cityToAirportCode[normalized]) {
-    console.log(`[Flights] Resolved city "${input}" to "${cityToAirportCode[normalized]}"`);
-    return cityToAirportCode[normalized];
-  }
-  
-  for (const [city, code] of Object.entries(cityToAirportCode)) {
-    if (normalized.includes(city) || city.includes(normalized)) {
-      console.log(`[Flights] Partial match: "${input}" -> "${code}"`);
-      return code;
-    }
-  }
-  
-  console.warn(`[Flights] Could not resolve "${input}" to IATA code`);
-  return input.toUpperCase().slice(0, 3);
-}
+// NOTE: cityToAirportCode and resolveToIataCode moved to top of file (before cache helpers)
 
 // ============= DATA TRANSFORMATION =============
 function transformFlightOffer(offer: any, direction: 'outbound' | 'return' = 'outbound'): any {
