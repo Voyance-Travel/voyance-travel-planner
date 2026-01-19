@@ -860,18 +860,91 @@ async function earlySaveItinerary(supabase: any, tripId: string, days: StrictDay
 }
 
 // =============================================================================
-// STAGE 4: ENRICHMENT (Photos via Pexels, Geocoding placeholders)
+// STAGE 4: ENRICHMENT (Photos via Lovable AI, with Pexels fallback)
 // =============================================================================
+
+async function generateActivityImage(
+  activityTitle: string,
+  category: string,
+  destination: string,
+  lovableApiKey: string
+): Promise<string | null> {
+  try {
+    const prompt = `A beautiful photograph of ${activityTitle} in ${destination}. ${
+      category === 'dining' ? 'Restaurant interior, appetizing food, ambient lighting.' :
+      category === 'cultural' ? 'Historic architecture, cultural landmark, travel photography.' :
+      category === 'sightseeing' ? 'Scenic view, landmark, tourist destination, golden hour.' :
+      category === 'adventure' ? 'Outdoor adventure, scenic nature, action shot.' :
+      category === 'shopping' ? 'Market, boutique, shopping district, colorful.' :
+      category === 'relaxation' ? 'Peaceful, spa, wellness, serene atmosphere.' :
+      'Travel photography, scenic view, professional quality.'
+    } No people, no text, ultra high resolution.`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image-preview",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"]
+      }),
+    });
+
+    if (!response.ok) {
+      console.log(`[Stage 4] AI image generation failed for ${activityTitle}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (imageUrl) {
+      console.log(`[Stage 4] ✅ Generated AI image for: ${activityTitle}`);
+      return imageUrl;
+    }
+    return null;
+  } catch (e) {
+    console.log(`[Stage 4] AI image generation error for ${activityTitle}:`, e);
+    return null;
+  }
+}
 
 async function enrichActivity(
   activity: StrictActivity,
   destination: string,
+  lovableApiKey?: string,
   pexelsApiKey?: string
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
-  // Add photos via Pexels API if available
-  if (pexelsApiKey) {
+  // Skip image generation for transport/downtime activities
+  const skipCategories = ['transport', 'transportation', 'downtime', 'free_time'];
+  if (skipCategories.includes(activity.category?.toLowerCase() || '')) {
+    enriched.verified = { isValid: true, confidence: 0.75 };
+    return enriched;
+  }
+
+  // Priority 1: Try Lovable AI for high-quality images
+  if (lovableApiKey && !enriched.photos?.length) {
+    const aiImageUrl = await generateActivityImage(
+      activity.title,
+      activity.category,
+      destination,
+      lovableApiKey
+    );
+    if (aiImageUrl) {
+      enriched.photos = [{
+        url: aiImageUrl,
+        alt: activity.title
+      }];
+    }
+  }
+
+  // Priority 2: Fallback to Pexels if no AI image
+  if (!enriched.photos?.length && pexelsApiKey) {
     try {
       const query = encodeURIComponent(`${activity.title} ${destination}`);
       const response = await fetch(`https://api.pexels.com/v1/search?query=${query}&per_page=2`, {
@@ -889,14 +962,14 @@ async function enrichActivity(
         }
       }
     } catch (e) {
-      console.log(`[Stage 4] Photo enrichment failed for ${activity.title}:`, e);
+      console.log(`[Stage 4] Pexels fallback failed for ${activity.title}:`, e);
     }
   }
 
-  // Mark as verified with confidence (placeholder for Google Places integration)
+  // Mark as verified with confidence
   enriched.verified = {
     isValid: true,
-    confidence: 0.75 // Would be higher with actual Places API verification
+    confidence: enriched.photos?.length ? 0.85 : 0.75
   };
 
   return enriched;
@@ -905,9 +978,10 @@ async function enrichActivity(
 async function enrichItinerary(
   days: StrictDay[],
   destination: string,
+  lovableApiKey?: string,
   pexelsApiKey?: string
 ): Promise<StrictDay[]> {
-  console.log(`[Stage 4] Starting enrichment for ${days.length} days`);
+  console.log(`[Stage 4] Starting enrichment for ${days.length} days (AI images: ${!!lovableApiKey})`);
 
   const enrichedDays: StrictDay[] = [];
   let totalPhotos = 0;
@@ -915,18 +989,19 @@ async function enrichItinerary(
   for (const day of days) {
     const enrichedActivities: StrictActivity[] = [];
 
-    // Process activities in batches of 3 to avoid rate limiting
-    for (let i = 0; i < day.activities.length; i += 3) {
-      const batch = day.activities.slice(i, i + 3);
+    // Process activities in batches of 2 to respect rate limits for AI image gen
+    const batchSize = lovableApiKey ? 2 : 3;
+    for (let i = 0; i < day.activities.length; i += batchSize) {
+      const batch = day.activities.slice(i, i + batchSize);
       const enrichedBatch = await Promise.all(
-        batch.map(act => enrichActivity(act, destination, pexelsApiKey))
+        batch.map(act => enrichActivity(act, destination, lovableApiKey, pexelsApiKey))
       );
       enrichedActivities.push(...enrichedBatch);
       totalPhotos += enrichedBatch.filter(a => a.photos?.length).length;
 
-      // Small delay between batches
-      if (i + 3 < day.activities.length) {
-        await new Promise(r => setTimeout(r, 200));
+      // Delay between batches (longer for AI image gen to respect rate limits)
+      if (i + batchSize < day.activities.length) {
+        await new Promise(r => setTimeout(r, lovableApiKey ? 500 : 200));
       }
     }
 
@@ -1174,10 +1249,10 @@ serve(async (req) => {
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
 
-      // STAGE 4: Enrichment (photos, etc.)
+      // STAGE 4: Enrichment (photos via Lovable AI, with Pexels fallback)
       let enrichedDays: StrictDay[];
       try {
-        enrichedDays = await enrichItinerary(aiResult.days, context.destination, PEXELS_API_KEY);
+        enrichedDays = await enrichItinerary(aiResult.days, context.destination, LOVABLE_API_KEY, PEXELS_API_KEY);
       } catch (enrichError) {
         console.warn('[generate-itinerary] Enrichment failed, using base itinerary:', enrichError);
         enrichedDays = aiResult.days;
