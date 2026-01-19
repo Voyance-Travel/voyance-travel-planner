@@ -188,20 +188,24 @@ export default function HotelFilters({
 
           <div className="mt-6 space-y-8">
             {/* Price Range */}
-            <div>
-              <h4 className="font-medium mb-3">
-                Price per night: ${filters.priceRange[0]} - ${filters.priceRange[1]}
-              </h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Price per night</h4>
+                <span className="text-sm font-medium text-primary">
+                  ${filters.priceRange[0]} – ${filters.priceRange[1]}
+                </span>
+              </div>
               <Slider
                 value={filters.priceRange}
                 onValueChange={(value) => updateFilter('priceRange', value as [number, number])}
                 min={priceRange[0]}
                 max={priceRange[1]}
                 step={25}
+                className="py-1"
               />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>${priceRange[0]}</span>
-                <span>${priceRange[1]}</span>
+                <span>${priceRange[1]}+</span>
               </div>
             </div>
 
@@ -227,18 +231,22 @@ export default function HotelFilters({
             </div>
 
             {/* Guest Rating */}
-            <div>
-              <h4 className="font-medium mb-3">
-                Minimum Guest Rating: {filters.guestRating > 0 ? `${filters.guestRating}+` : 'Any'}
-              </h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Guest Rating</h4>
+                <span className="text-sm font-medium text-primary">
+                  {filters.guestRating > 0 ? `${filters.guestRating}+` : 'Any'}
+                </span>
+              </div>
               <Slider
                 value={[filters.guestRating]}
                 onValueChange={([value]) => updateFilter('guestRating', value)}
                 min={0}
                 max={9}
                 step={1}
+                className="py-1"
               />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Any</span>
                 <span>9+ Exceptional</span>
               </div>
