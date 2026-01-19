@@ -1635,6 +1635,7 @@ export type Database = {
           metadata: Json | null
           name: string
           origin_city: string | null
+          owner_plan_tier: string | null
           price_lock_expires_at: string | null
           start_date: string
           status: Database["public"]["Enums"]["trip_status"]
@@ -1659,6 +1660,7 @@ export type Database = {
           metadata?: Json | null
           name: string
           origin_city?: string | null
+          owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["trip_status"]
@@ -1683,6 +1685,7 @@ export type Database = {
           metadata?: Json | null
           name?: string
           origin_city?: string | null
+          owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["trip_status"]

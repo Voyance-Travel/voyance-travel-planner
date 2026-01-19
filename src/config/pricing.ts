@@ -70,7 +70,8 @@ export const PLAN_FEATURES = {
       '1 Premium AI Itinerary per month',
       '10 Smart Refinements per month',
       'Unlimited manual edits',
-      'No export, offline, or collaboration',
+      'Share view-only links',
+      'No export or download',
     ],
     limits: {
       fullBuildsPerMonth: 1,
@@ -80,6 +81,7 @@ export const PLAN_FEATURES = {
       draftTrips: 1,
       flightHotelOptimization: false,
       coEditCollaboration: false,
+      viewOnlySharing: true,
       // Free tier restrictions
       canPrint: false,
       canExport: false,
