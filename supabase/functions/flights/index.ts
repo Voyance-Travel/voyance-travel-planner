@@ -112,6 +112,151 @@ function getAirlineName(code: string): string {
   return airlineNames[code] || code;
 }
 
+// ============= CITY TO AIRPORT CODE RESOLUTION =============
+// Map common city names to their primary IATA codes
+const cityToAirportCode: Record<string, string> = {
+  // United States
+  'new york': 'JFK', 'nyc': 'JFK', 'manhattan': 'JFK',
+  'los angeles': 'LAX', 'la': 'LAX',
+  'chicago': 'ORD',
+  'houston': 'IAH',
+  'phoenix': 'PHX',
+  'philadelphia': 'PHL',
+  'san antonio': 'SAT',
+  'san diego': 'SAN',
+  'dallas': 'DFW',
+  'austin': 'AUS',
+  'san jose': 'SJC',
+  'san francisco': 'SFO', 'sf': 'SFO',
+  'seattle': 'SEA',
+  'denver': 'DEN',
+  'boston': 'BOS',
+  'washington': 'DCA', 'dc': 'DCA',
+  'nashville': 'BNA',
+  'detroit': 'DTW',
+  'portland': 'PDX',
+  'las vegas': 'LAS', 'vegas': 'LAS',
+  'miami': 'MIA',
+  'atlanta': 'ATL',
+  'orlando': 'MCO',
+  'minneapolis': 'MSP',
+  'charlotte': 'CLT',
+  'tampa': 'TPA',
+  'pittsburgh': 'PIT',
+  'cleveland': 'CLE',
+  'new orleans': 'MSY',
+  'honolulu': 'HNL',
+  
+  // Europe
+  'london': 'LHR',
+  'paris': 'CDG',
+  'amsterdam': 'AMS',
+  'frankfurt': 'FRA',
+  'munich': 'MUC',
+  'berlin': 'BER',
+  'rome': 'FCO',
+  'milan': 'MXP',
+  'madrid': 'MAD',
+  'barcelona': 'BCN',
+  'lisbon': 'LIS',
+  'dublin': 'DUB',
+  'vienna': 'VIE',
+  'zurich': 'ZRH',
+  'geneva': 'GVA',
+  'brussels': 'BRU',
+  'copenhagen': 'CPH',
+  'stockholm': 'ARN',
+  'oslo': 'OSL',
+  'helsinki': 'HEL',
+  'prague': 'PRG',
+  'warsaw': 'WAW',
+  'budapest': 'BUD',
+  'athens': 'ATH',
+  'istanbul': 'IST',
+  'moscow': 'SVO',
+  
+  // Asia
+  'tokyo': 'NRT',
+  'osaka': 'KIX',
+  'seoul': 'ICN',
+  'beijing': 'PEK',
+  'shanghai': 'PVG',
+  'hong kong': 'HKG',
+  'taipei': 'TPE',
+  'singapore': 'SIN',
+  'bangkok': 'BKK',
+  'kuala lumpur': 'KUL',
+  'jakarta': 'CGK',
+  'manila': 'MNL',
+  'ho chi minh': 'SGN', 'saigon': 'SGN',
+  'hanoi': 'HAN',
+  'delhi': 'DEL', 'new delhi': 'DEL',
+  'mumbai': 'BOM',
+  'bangalore': 'BLR',
+  
+  // Middle East
+  'dubai': 'DXB',
+  'abu dhabi': 'AUH',
+  'doha': 'DOH',
+  'tel aviv': 'TLV',
+  'riyadh': 'RUH',
+  
+  // Oceania
+  'sydney': 'SYD',
+  'melbourne': 'MEL',
+  'brisbane': 'BNE',
+  'auckland': 'AKL',
+  
+  // Americas
+  'toronto': 'YYZ',
+  'vancouver': 'YVR',
+  'montreal': 'YUL',
+  'mexico city': 'MEX',
+  'cancun': 'CUN',
+  'sao paulo': 'GRU',
+  'rio de janeiro': 'GIG', 'rio': 'GIG',
+  'buenos aires': 'EZE',
+  'lima': 'LIM',
+  'bogota': 'BOG',
+  'santiago': 'SCL',
+  
+  // Africa
+  'cairo': 'CAI',
+  'cape town': 'CPT',
+  'johannesburg': 'JNB',
+  'nairobi': 'NBO',
+  'casablanca': 'CMN',
+  'marrakech': 'RAK',
+};
+
+// Resolve city name to IATA code - handles both city names and existing codes
+function resolveToIataCode(input: string): string {
+  const normalized = input.toLowerCase().trim();
+  
+  // If it's already a 3-letter code, return it uppercase
+  if (/^[a-z]{3}$/i.test(normalized)) {
+    return normalized.toUpperCase();
+  }
+  
+  // Check city mapping
+  if (cityToAirportCode[normalized]) {
+    console.log(`[Flights] Resolved city "${input}" to airport code "${cityToAirportCode[normalized]}"`);
+    return cityToAirportCode[normalized];
+  }
+  
+  // Try partial matching for cities with suffixes like "Atlanta, GA"
+  for (const [city, code] of Object.entries(cityToAirportCode)) {
+    if (normalized.includes(city) || city.includes(normalized)) {
+      console.log(`[Flights] Partial match: "${input}" -> "${code}"`);
+      return code;
+    }
+  }
+  
+  // Fallback: return first 3 chars uppercase (will likely fail, but gracefully)
+  console.warn(`[Flights] Could not resolve "${input}" to IATA code, using as-is`);
+  return input.toUpperCase().slice(0, 3);
+}
+
 // ============= DATA TRANSFORMATION =============
 // Transform Amadeus offer to frontend-expected flat structure
 function transformFlightOffer(offer: any, direction: 'outbound' | 'return' = 'outbound'): any {
@@ -227,9 +372,15 @@ async function searchFlights(params: FlightSearchParams): Promise<{ results: any
   try {
     const token = await getAmadeusToken();
     
+    // CRITICAL: Resolve city names to IATA codes
+    const originCode = resolveToIataCode(params.origin);
+    const destinationCode = resolveToIataCode(params.destination);
+    
+    console.log(`[Flights] Resolved: ${params.origin} -> ${originCode}, ${params.destination} -> ${destinationCode}`);
+    
     const searchParams = new URLSearchParams({
-      originLocationCode: params.origin.toUpperCase(),
-      destinationLocationCode: params.destination.toUpperCase(),
+      originLocationCode: originCode,
+      destinationLocationCode: destinationCode,
       departureDate: params.departureDate,
       adults: String(params.passengers || 1),
       max: '20',

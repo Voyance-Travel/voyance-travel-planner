@@ -119,7 +119,9 @@ export default function EditorialTripSummary({
   const hotelSubtotal = data.hotel?.totalPrice || 0;
   const hotelTaxes = hotelSubtotal * 0.15;
   const hotelTotal = hotelSubtotal + hotelTaxes;
-  const serviceFee = 29.99;
+  // Only charge service fee if user has selected flights or hotels
+  const hasSelections = flightSubtotal > 0 || hotelSubtotal > 0;
+  const serviceFee = hasSelections ? 29.99 : 0;
   const grandTotal = flightTotal + hotelTotal + serviceFee;
 
   const handlePrint = () => {
