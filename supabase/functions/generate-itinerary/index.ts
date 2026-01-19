@@ -860,8 +860,115 @@ async function earlySaveItinerary(supabase: any, tripId: string, days: StrictDay
 }
 
 // =============================================================================
-// STAGE 4: ENRICHMENT (Real Photos via Tiered Sources)
+// STAGE 4: ENRICHMENT (Real Photos + Venue Verification via Google Places API v1)
 // =============================================================================
+
+// Google Places API v1 - Verify venue and get rich details
+interface VenueVerification {
+  isValid: boolean;
+  confidence: number;
+  placeId?: string;
+  formattedAddress?: string;
+  coordinates?: { lat: number; lng: number };
+  rating?: { value: number; totalReviews: number };
+  priceLevel?: number;
+  openingHours?: string[];
+  website?: string;
+  googleMapsUrl?: string;
+}
+
+async function verifyVenueWithGooglePlaces(
+  venueName: string,
+  destination: string,
+  GOOGLE_MAPS_API_KEY: string | undefined
+): Promise<VenueVerification | null> {
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.log('[Stage 4] Google Maps API key not configured, skipping venue verification');
+    return null;
+  }
+
+  try {
+    const textQuery = `${venueName} ${destination}`;
+    console.log(`[Stage 4] Verifying venue: ${venueName}`);
+
+    // Use AbortController for 3-second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const response = await fetch(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours,places.websiteUri,places.googleMapsUri",
+        },
+        body: JSON.stringify({
+          textQuery,
+          maxResultCount: 1,
+        }),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[Stage 4] Google Places API error for "${venueName}":`, response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const place = data.places?.[0];
+
+    if (!place) {
+      console.log(`[Stage 4] No place found for: ${venueName}`);
+      return null;
+    }
+
+    // Map price level from new API format
+    const mapPriceLevel = (priceLevel: string): number => {
+      const mapping: Record<string, number> = {
+        PRICE_LEVEL_FREE: 0,
+        PRICE_LEVEL_INEXPENSIVE: 1,
+        PRICE_LEVEL_MODERATE: 2,
+        PRICE_LEVEL_EXPENSIVE: 3,
+        PRICE_LEVEL_VERY_EXPENSIVE: 4,
+      };
+      return mapping[priceLevel] ?? 2;
+    };
+
+    console.log(`[Stage 4] ✅ Verified venue: ${venueName} → ${place.displayName?.text || 'Unknown'}`);
+
+    return {
+      isValid: true,
+      confidence: 0.95,
+      placeId: place.id,
+      formattedAddress: place.formattedAddress,
+      coordinates: place.location ? {
+        lat: place.location.latitude,
+        lng: place.location.longitude,
+      } : undefined,
+      rating: place.rating ? {
+        value: place.rating,
+        totalReviews: place.userRatingCount || 0,
+      } : undefined,
+      priceLevel: place.priceLevel ? mapPriceLevel(place.priceLevel) : undefined,
+      openingHours: place.currentOpeningHours?.weekdayDescriptions,
+      website: place.websiteUri,
+      googleMapsUrl: place.googleMapsUri,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log(`[Stage 4] Venue verification timeout for: ${venueName}`);
+    } else {
+      console.log(`[Stage 4] Venue verification error for "${venueName}":`, error);
+    }
+    return null;
+  }
+}
 
 // Fetch real venue photos using the destination-images edge function
 // Priority: Cache → Google Places → TripAdvisor → Wikimedia → AI (last resort)
@@ -881,6 +988,10 @@ async function fetchActivityImage(
 
     console.log(`[Stage 4] Fetching real photo for: ${activityTitle} in ${destination}`);
 
+    // Use AbortController for 5-second timeout on image fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     // Call the destination-images edge function with venue name
     const response = await fetch(`${supabaseUrl}/functions/v1/destination-images`, {
       method: 'POST',
@@ -894,7 +1005,10 @@ async function fetchActivityImage(
         category: category,
         imageType: 'activity',
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.log(`[Stage 4] Image fetch failed for "${activityTitle}":`, response.status);
@@ -924,44 +1038,80 @@ async function enrichActivity(
   activity: StrictActivity,
   destination: string,
   supabaseUrl: string,
-  supabaseKey: string
+  supabaseKey: string,
+  GOOGLE_MAPS_API_KEY: string | undefined
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
-  // Skip image fetching for transport/downtime activities
+  // Skip enrichment for transport/downtime activities
   const skipCategories = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'];
   if (skipCategories.includes(activity.category?.toLowerCase() || '')) {
     enriched.verified = { isValid: true, confidence: 0.75 };
     return enriched;
   }
 
-  // Fetch real venue photo using tiered approach
-  if (!enriched.photos?.length) {
-    const photoResult = await fetchActivityImage(
-      activity.title,
-      activity.category || 'sightseeing',
-      destination,
-      supabaseUrl,
-      supabaseKey
-    );
+  // Run venue verification and photo fetch in parallel for speed
+  const [venueData, photoResult] = await Promise.all([
+    // Verify venue with Google Places API v1
+    verifyVenueWithGooglePlaces(activity.title, destination, GOOGLE_MAPS_API_KEY),
+    // Fetch real venue photo using tiered approach
+    !enriched.photos?.length 
+      ? fetchActivityImage(activity.title, activity.category || 'sightseeing', destination, supabaseUrl, supabaseKey)
+      : Promise.resolve(null),
+  ]);
 
-    if (photoResult) {
-      enriched.photos = [{
-        url: photoResult.url,
-        alt: `${activity.title} in ${destination}`,
-        photographer: photoResult.attribution || `Source: ${photoResult.source}`,
-      }];
+  // Apply venue verification data (coordinates, ratings, opening hours, etc.)
+  if (venueData) {
+    if (venueData.coordinates) {
+      enriched.location = {
+        ...enriched.location,
+        coordinates: venueData.coordinates,
+      };
+      if (venueData.formattedAddress) {
+        enriched.location.address = venueData.formattedAddress;
+      }
     }
+    if (venueData.rating) {
+      enriched.rating = venueData.rating;
+    }
+    if (venueData.priceLevel !== undefined) {
+      enriched.priceLevel = venueData.priceLevel;
+    }
+    if (venueData.openingHours) {
+      enriched.openingHours = venueData.openingHours;
+    }
+    if (venueData.website) {
+      enriched.website = venueData.website;
+    }
+    if (venueData.googleMapsUrl) {
+      enriched.googleMapsUrl = venueData.googleMapsUrl;
+    }
+    enriched.verified = {
+      isValid: venueData.isValid,
+      confidence: venueData.confidence,
+      placeId: venueData.placeId,
+    };
   }
 
-  // Mark as verified with confidence based on photo source
-  const hasRealPhoto = enriched.photos?.length && 
-    !enriched.photos[0]?.photographer?.includes('AI Generated');
-  
-  enriched.verified = {
-    isValid: true,
-    confidence: hasRealPhoto ? 0.95 : (enriched.photos?.length ? 0.7 : 0.6)
-  };
+  // Apply photo data
+  if (photoResult) {
+    enriched.photos = [{
+      url: photoResult.url,
+      alt: `${activity.title} in ${destination}`,
+      photographer: photoResult.attribution || `Source: ${photoResult.source}`,
+    }];
+  }
+
+  // Set verification confidence based on what we got
+  if (!enriched.verified) {
+    const hasRealPhoto = enriched.photos?.length && 
+      !enriched.photos[0]?.photographer?.includes('AI Generated');
+    
+    enriched.verified = {
+      isValid: true,
+      confidence: hasRealPhoto ? 0.8 : (enriched.photos?.length ? 0.7 : 0.6)
+    };
+  }
 
   return enriched;
 }
@@ -970,28 +1120,33 @@ async function enrichItinerary(
   days: StrictDay[],
   destination: string,
   supabaseUrl: string,
-  supabaseKey: string
+  supabaseKey: string,
+  GOOGLE_MAPS_API_KEY: string | undefined
 ): Promise<StrictDay[]> {
-  console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos`);
+  console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos + venue verification`);
 
   const enrichedDays: StrictDay[] = [];
   let totalPhotos = 0;
+  let verifiedCount = 0;
 
   for (const day of days) {
     const enrichedActivities: StrictActivity[] = [];
 
-    // Process activities in batches of 2 with delays for rate limits
-    for (let i = 0; i < day.activities.length; i += 2) {
-      const batch = day.activities.slice(i, i + 2);
+    // Process activities in batches of 3 with delays for rate limits
+    // (3 activities × 2 API calls each = 6 concurrent requests per batch)
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < day.activities.length; i += BATCH_SIZE) {
+      const batch = day.activities.slice(i, i + BATCH_SIZE);
       const enrichedBatch = await Promise.all(
-        batch.map(act => enrichActivity(act, destination, supabaseUrl, supabaseKey))
+        batch.map(act => enrichActivity(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY))
       );
       enrichedActivities.push(...enrichedBatch);
       totalPhotos += enrichedBatch.filter(a => a.photos?.length).length;
+      verifiedCount += enrichedBatch.filter(a => a.verified?.placeId).length;
 
       // Delay between batches to respect API rate limits
-      if (i + 2 < day.activities.length) {
-        await new Promise(r => setTimeout(r, 300));
+      if (i + BATCH_SIZE < day.activities.length) {
+        await new Promise(r => setTimeout(r, 400));
       }
     }
 
@@ -1012,7 +1167,7 @@ async function enrichItinerary(
     });
   }
 
-  console.log(`[Stage 4] Enrichment complete - ${totalPhotos} real photos added`);
+  console.log(`[Stage 4] Enrichment complete - ${totalPhotos} photos, ${verifiedCount} venues verified`);
   return enrichedDays;
 }
 
@@ -1158,6 +1313,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const GOOGLE_MAPS_API_KEY = Deno.env.get("GOOGLE_MAPS_API_KEY");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
@@ -1238,10 +1394,10 @@ serve(async (req) => {
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
 
-      // STAGE 4: Enrichment (real photos via tiered sources: cache → Google → TripAdvisor → Wikimedia → AI)
+      // STAGE 4: Enrichment (real photos + venue verification via Google Places API v1)
       let enrichedDays: StrictDay[];
       try {
-        enrichedDays = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey);
+        enrichedDays = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY);
       } catch (enrichError) {
         console.warn('[generate-itinerary] Enrichment failed, using base itinerary:', enrichError);
         enrichedDays = aiResult.days;
@@ -1255,14 +1411,20 @@ serve(async (req) => {
       const photosAdded = enrichedDays.reduce(
         (sum, d) => sum + d.activities.filter(a => a.photos?.length).length, 0
       );
+      const verifiedVenues = enrichedDays.reduce(
+        (sum, d) => sum + d.activities.filter(a => a.verified?.placeId).length, 0
+      );
+      const geocodedActivities = enrichedDays.reduce(
+        (sum, d) => sum + d.activities.filter(a => a.location?.coordinates).length, 0
+      );
 
       const enrichedItinerary: EnrichedItinerary = {
         days: enrichedDays,
         overview,
         enrichmentMetadata: {
           enrichedAt: new Date().toISOString(),
-          geocodedActivities: 0, // Would be populated with Google Maps integration
-          verifiedActivities: totalActivities,
+          geocodedActivities,
+          verifiedActivities: verifiedVenues,
           photosAdded,
           totalActivities
         }
