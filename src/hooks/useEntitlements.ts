@@ -85,6 +85,9 @@ export function useEntitlements() {
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
+  // QA MODE: Bypass all payment gates - treat everyone as premium
+  const QA_MODE_PREMIUM = true;
+
   const query = useQuery({
     queryKey: ['entitlements', user?.id],
     queryFn: async (): Promise<EntitlementsResponse> => {
@@ -101,6 +104,38 @@ export function useEntitlements() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['entitlements'] });
   };
+
+  // QA Override: If QA_MODE_PREMIUM is true, override all limits
+  if (QA_MODE_PREMIUM) {
+    return {
+      ...query,
+      refresh,
+      // Force premium status for QA
+      isPaid: true,
+      hasAddon: true,
+      plans: ['monthly'],
+      entitlements: query.data?.entitlements ?? {},
+      usage: query.data?.usage ?? {},
+      // Override data to include premium limits
+      data: query.data ? {
+        ...query.data,
+        is_paid: true,
+        has_addon: true,
+        plans: ['monthly'],
+        can_build_itinerary: true,
+        can_build_day: true,
+        can_use_flight_hotel_optimization: true,
+        can_use_group_budgeting: true,
+        can_co_edit: true,
+        can_optimize_routes: true,
+        limits: {
+          ...query.data.limits,
+          freeBuildsRemaining: 999,
+          draftTripsRemaining: 999,
+        },
+      } : undefined,
+    };
+  }
 
   return {
     ...query,
@@ -209,8 +244,16 @@ export function checkFeatureAccess(
   isLoading: boolean,
   isAuthenticated: boolean
 ): FeatureGateResult {
+  // QA MODE: Allow all features for authenticated users
+  const QA_MODE_PREMIUM = true;
+  
   if (!isAuthenticated) {
     return { allowed: false, reason: 'unauthenticated' };
+  }
+  
+  // QA Override: Always allow for authenticated users
+  if (QA_MODE_PREMIUM) {
+    return { allowed: true, reason: 'enabled', remaining: 999, limit: 999 };
   }
   
   if (isLoading || !entitlements) {

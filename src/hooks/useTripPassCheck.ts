@@ -26,7 +26,22 @@ interface TripPassResult {
 export function useTripPassCheck(tripId: string | null | undefined): TripPassResult {
   const { data, isLoading, isPaid } = useEntitlements();
 
+  // QA MODE: Always allow all features
+  const QA_MODE_PREMIUM = true;
+
   return useMemo(() => {
+    // QA Override: Skip all payment checks
+    if (QA_MODE_PREMIUM) {
+      return {
+        isUnlocked: true,
+        hasSubscription: true,
+        canRegenerate: true,
+        canRebuildDay: true,
+        blockReason: null,
+        isLoading: false,
+      };
+    }
+
     if (isLoading || !data) {
       return {
         isUnlocked: false,
