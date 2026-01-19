@@ -220,7 +220,7 @@ async function fetchOpenMeteo(destination: string, days: number = 7): Promise<We
   if (!geo) return null;
 
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum&timezone=auto&forecast_days=${Math.min(days, 16)}`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum&timezone=auto&forecast_days=${Math.min(days, 16)}&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch`;
 
     console.log('[Weather] Fetching Open-Meteo for:', geo.name);
 
