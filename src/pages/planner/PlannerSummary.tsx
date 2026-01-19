@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ export default function PlannerSummary() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { state, setBasics, saveTrip } = useTripPlanner();
+  const [activitiesBudget, setActivitiesBudget] = useState(state.basics.budgetAmount || 0);
 
   // Ensure basics are set even if user refreshes
   useEffect(() => {
@@ -106,8 +107,15 @@ export default function PlannerSummary() {
         : undefined,
       totalCost,
       tripName: state.basics.destination ? `Trip to ${state.basics.destination}` : 'Your Trip',
+      activitiesBudget,
     };
-  }, [state.basics, state.flights, state.hotel, travelers, nights, totalCost]);
+  }, [state.basics, state.flights, state.hotel, travelers, nights, totalCost, activitiesBudget]);
+
+  const handleActivitiesBudgetChange = (budget: number) => {
+    setActivitiesBudget(budget);
+    // Update the context with the budget for itinerary generation
+    setBasics({ ...state.basics, budgetAmount: budget });
+  };
 
   const ensureTripId = async (): Promise<string | null> => {
     const tripId = await saveTrip();
@@ -132,12 +140,16 @@ export default function PlannerSummary() {
             priceLockExpiry={new Date(Date.now() + 30 * 60 * 1000)}
             isLoading={false}
             onBack={() => navigate(-1)}
+            onActivitiesBudgetChange={handleActivitiesBudgetChange}
             onSave={async () => {
               const tripId = await ensureTripId();
               if (!tripId) return;
               toast.success('Trip saved! Ready to build your itinerary.');
               const params = new URLSearchParams(searchParams);
               params.set('tripId', tripId);
+              if (activitiesBudget > 0) {
+                params.set('activitiesBudget', String(activitiesBudget));
+              }
               navigate(`/planner/itinerary?${params.toString()}`);
             }}
             onBuildItinerary={async () => {
@@ -145,6 +157,9 @@ export default function PlannerSummary() {
               if (!tripId) return;
               const params = new URLSearchParams(searchParams);
               params.set('tripId', tripId);
+              if (activitiesBudget > 0) {
+                params.set('activitiesBudget', String(activitiesBudget));
+              }
               navigate(`/planner/itinerary?${params.toString()}`);
             }}
             onBook={async () => {
