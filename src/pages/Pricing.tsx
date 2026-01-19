@@ -3,15 +3,16 @@ import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, ArrowRight, Loader2, Sparkles, X, Wallet, Route, Layers, Download, Users, Zap } from 'lucide-react';
+import { Check, ArrowRight, Loader2, Sparkles, X, Wallet, Route, Layers, Download, Users, Zap, Plus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
-import { PLAN_FEATURES, STRIPE_PRODUCTS, TOPUP_PRODUCTS, COMPARISON_TABLE } from '@/config/pricing';
+import { PLAN_FEATURES, STRIPE_PRODUCTS, TOPUP_PRODUCTS, COMPARISON_TABLE, TOPUP_MINIMUM } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
+import { EmbeddedCheckoutModal, AddCreditsModal } from '@/components/checkout';
 import pricingHero from '@/assets/pricing-hero.jpg';
+import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
 
 interface CheckoutConfig {
   priceId: string;
@@ -23,9 +24,11 @@ interface CheckoutConfig {
 export default function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutConfig, setCheckoutConfig] = useState<CheckoutConfig | null>(null);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { data: userCredits } = useUserCredits();
 
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
@@ -36,6 +39,16 @@ export default function Pricing() {
     if (searchParams.get('canceled') === 'true') {
       toast({ title: "No worries", description: "You can upgrade whenever you're ready." });
       searchParams.delete('canceled');
+      setSearchParams(searchParams);
+    }
+    if (searchParams.get('credits_added') === 'true') {
+      const amount = searchParams.get('amount');
+      toast({ 
+        title: "Credits added!", 
+        description: amount ? `$${(parseInt(amount) / 100).toFixed(2)} has been added to your wallet.` : "Your credits are ready to use."
+      });
+      searchParams.delete('credits_added');
+      searchParams.delete('amount');
       setSearchParams(searchParams);
     }
   }, [searchParams, setSearchParams, toast]);
@@ -450,9 +463,14 @@ export default function Pricing() {
               Want a little extra instead of a plan?
             </h2>
             <p className="text-muted-foreground">Top up only when you need it.</p>
+            {userCredits && userCredits.balance_cents > 0 && (
+              <p className="text-sm text-primary mt-2">
+                Current balance: {formatCredits(userCredits.balance_cents)}
+              </p>
+            )}
           </motion.div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {Object.values(TOPUP_PRODUCTS).map((item, i) => (
               <motion.div
                 key={item.name}
@@ -468,6 +486,27 @@ export default function Pricing() {
               </motion.div>
             ))}
           </div>
+
+          {/* Add Credits Button */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center"
+          >
+            <Button 
+              size="lg"
+              variant="outline"
+              onClick={() => setShowCreditsModal(true)}
+              className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Credits to Wallet
+            </Button>
+            <p className="text-xs text-muted-foreground mt-3">
+              Minimum ${TOPUP_MINIMUM}. Credits never expire.
+            </p>
+          </motion.div>
 
           <motion.p 
             initial={{ opacity: 0 }}
@@ -543,6 +582,12 @@ export default function Pricing() {
           returnPath={checkoutConfig.returnPath}
         />
       )}
+
+      <AddCreditsModal
+        isOpen={showCreditsModal}
+        onClose={() => setShowCreditsModal(false)}
+        currentBalance={userCredits?.balance_cents ?? 0}
+      />
     </MainLayout>
   );
 }
