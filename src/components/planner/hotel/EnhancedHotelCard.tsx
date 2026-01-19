@@ -18,6 +18,7 @@ import {
   Sparkles,
   Image as ImageIcon,
   MessageSquare,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +76,9 @@ interface EnhancedHotelCardProps {
   onSelect: (roomId: string) => void;
   isLoading?: boolean;
   nights: number;
+  // Budget alert props (optional - only show if both are provided)
+  budgetPerNight?: number;
+  showBudgetWarnings?: boolean;
 }
 
 const amenityIcons: Record<string, typeof Wifi> = {
@@ -112,6 +116,8 @@ export default function EnhancedHotelCard({
   onSelect,
   isLoading,
   nights,
+  budgetPerNight,
+  showBudgetWarnings = true,
 }: EnhancedHotelCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentHeroImageIndex, setCurrentHeroImageIndex] = useState(0);
@@ -129,6 +135,17 @@ export default function EnhancedHotelCard({
     () => Math.min(...hotel.roomOptions.map((r) => r.pricePerNight)),
     [hotel.roomOptions]
   );
+
+  // Check if hotel exceeds budget
+  const isOverBudget = useMemo(() => {
+    if (!budgetPerNight || !showBudgetWarnings) return false;
+    return lowestPrice > budgetPerNight;
+  }, [budgetPerNight, showBudgetWarnings, lowestPrice]);
+
+  const budgetExcessPercent = useMemo(() => {
+    if (!budgetPerNight || lowestPrice <= budgetPerNight) return 0;
+    return Math.round(((lowestPrice - budgetPerNight) / budgetPerNight) * 100);
+  }, [budgetPerNight, lowestPrice]);
 
   const heroImage = hotel.images[currentHeroImageIndex] || hotel.images[0];
 
@@ -292,13 +309,22 @@ export default function EnhancedHotelCard({
 
             <div className="flex items-end justify-between">
               <div>
-                <p className="text-2xl font-bold text-foreground">
+                <p className={cn(
+                  "text-2xl font-bold",
+                  isOverBudget ? "text-amber-600" : "text-foreground"
+                )}>
                   ${lowestPrice}
                   <span className="text-sm font-normal text-muted-foreground">/night</span>
                 </p>
                 <p className="text-sm text-muted-foreground">
                   ${lowestPrice * nights} total for {nights} night{nights > 1 ? 's' : ''}
                 </p>
+                {isOverBudget && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <TrendingUp className="h-3 w-3 text-amber-500" />
+                    <span className="text-xs text-amber-600 font-medium">+{budgetExcessPercent}% over budget</span>
+                  </div>
+                )}
               </div>
 
               <Button

@@ -14,6 +14,7 @@ import {
   UtensilsCrossed,
   Monitor,
   Info,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -68,6 +69,9 @@ interface EnhancedFlightCardProps {
   selectedCabin?: string;
   onSelect: (cabin: string) => void;
   isLoading?: boolean;
+  // Budget alert props (optional - only show if both are provided)
+  budgetAmount?: number;
+  showBudgetWarnings?: boolean;
 }
 
 const cabinLabels: Record<string, string> = {
@@ -116,6 +120,8 @@ export default function EnhancedFlightCard({
   selectedCabin,
   onSelect,
   isLoading,
+  budgetAmount,
+  showBudgetWarnings = true,
 }: EnhancedFlightCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedCabinIndex, setSelectedCabinIndex] = useState(0);
@@ -123,6 +129,17 @@ export default function EnhancedFlightCard({
   const primarySegment = flight.segments[0];
   const lastSegment = flight.segments[flight.segments.length - 1];
   const lowestPrice = Math.min(...flight.cabinOptions.map((c) => c.price));
+  
+  // Check if flight exceeds budget
+  const isOverBudget = useMemo(() => {
+    if (!budgetAmount || !showBudgetWarnings) return false;
+    return lowestPrice > budgetAmount;
+  }, [budgetAmount, showBudgetWarnings, lowestPrice]);
+  
+  const budgetExcessPercent = useMemo(() => {
+    if (!budgetAmount || lowestPrice <= budgetAmount) return 0;
+    return Math.round(((lowestPrice - budgetAmount) / budgetAmount) * 100);
+  }, [budgetAmount, lowestPrice]);
 
   const airlineCode = useMemo(() => extractAirlineCode(primarySegment), [primarySegment]);
   const airlineDisplayName = useMemo(() => {
@@ -209,10 +226,21 @@ export default function EnhancedFlightCard({
             </div>
           </div>
 
-          <div className="text-right lg:w-24 shrink-0 lg:border-l lg:border-border lg:pl-3">
+          <div className="text-right lg:w-28 shrink-0 lg:border-l lg:border-border lg:pl-3">
             <p className="text-[10px] text-muted-foreground">From</p>
-            <p className="text-lg md:text-xl font-bold text-foreground leading-tight">${lowestPrice}</p>
+            <p className={cn(
+              "text-lg md:text-xl font-bold leading-tight",
+              isOverBudget ? "text-amber-600" : "text-foreground"
+            )}>
+              ${lowestPrice}
+            </p>
             <p className="text-[9px] text-muted-foreground">per person</p>
+            {isOverBudget && (
+              <div className="flex items-center justify-end gap-1 mt-0.5">
+                <TrendingUp className="h-2.5 w-2.5 text-amber-500" />
+                <span className="text-[9px] text-amber-600 font-medium">+{budgetExcessPercent}% over</span>
+              </div>
+            )}
           </div>
         </div>
 
