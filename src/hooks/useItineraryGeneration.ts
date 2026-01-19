@@ -37,6 +37,13 @@ export interface GeneratedActivity {
   verified?: { isValid: boolean; confidence: number };
   categoryIcon?: string;
   type?: string;
+  // Venue details for investigation
+  website?: string;
+  phoneNumber?: string;
+  openingHours?: string[];
+  priceLevel?: number; // 1-4 scale ($-$$$$)
+  googleMapsUrl?: string;
+  reviewHighlights?: string[];
 }
 
 export interface GeneratedDay {

@@ -54,6 +54,13 @@ interface StrictActivity {
   verified?: { isValid: boolean; confidence: number; placeId?: string };
   durationMinutes?: number;
   categoryIcon?: string;
+  // New fields for venue details
+  website?: string;
+  phoneNumber?: string;
+  openingHours?: string[];
+  priceLevel?: number; // 1-4 scale
+  googleMapsUrl?: string;
+  reviewHighlights?: string[];
 }
 
 interface StrictDay {
@@ -170,7 +177,23 @@ const STRICT_ITINERARY_TOOL = {
                       },
                       required: ["method", "duration", "estimatedCost", "instructions"]
                     },
-                    tips: { type: "string", description: "Insider tip or recommendation" }
+                    tips: { type: "string", description: "Insider tip or recommendation" },
+                    rating: {
+                      type: "object",
+                      properties: {
+                        value: { type: "number", minimum: 1, maximum: 5 },
+                        totalReviews: { type: "integer", minimum: 0 }
+                      },
+                      required: ["value", "totalReviews"]
+                    },
+                    website: { type: "string", description: "Official website URL if available" },
+                    priceLevel: { type: "integer", minimum: 1, maximum: 4, description: "Price level 1-4 ($ to $$$$)" },
+                    reviewHighlights: { 
+                      type: "array", 
+                      items: { type: "string" }, 
+                      maxItems: 3,
+                      description: "2-3 short review snippets highlighting what visitors love"
+                    }
                   },
                   required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "description", "tags", "bookingRequired", "transportation"]
                 }
@@ -371,7 +394,11 @@ CRITICAL REQUIREMENTS:
 3. Include 4-6 activities per day including meals
 4. Start days around 9:00 AM and end by 9:00-10:00 PM
 5. Account for travel time between activities
-6. Include transportation instructions between each activity`;
+6. Include transportation instructions between each activity
+7. DAY 1 MUST START with airport arrival and transfer to hotel as the FIRST activities
+8. LAST DAY MUST END with hotel checkout and transfer to airport as the LAST activities
+9. Include realistic ratings (1-5 scale) and review counts for venues
+10. Include website URLs for popular venues when known`;
 
   const daysList = [];
   for (let i = 0; i < context.totalDays; i++) {
@@ -389,6 +416,14 @@ TRIP DETAILS:
 - Pace: ${context.pace || 'moderate'}
 ${preferenceContext}
 
+IMPORTANT STRUCTURE:
+- DAY 1: Start with "Arrival at [Airport Name]" as the FIRST activity (category: "transport"), 
+  followed by "Airport Transfer to Hotel" (category: "transport"), 
+  then "Check-in at Hotel" (category: "accommodation")
+- LAST DAY: End with "Hotel Checkout" (category: "accommodation"), 
+  followed by "Transfer to Airport" (category: "transport"), 
+  then "Departure from [Airport Name]" (category: "transport")
+
 Generate activities for these days:
 ${daysList.join('\n')}
 
@@ -398,11 +433,13 @@ For each activity, provide:
 - Realistic cost estimates in ${context.currency || 'USD'}
 - Category (sightseeing, dining, cultural, shopping, relaxation, transport, accommodation, activity)
 - Start and end times in HH:MM format
-- Description (2-3 sentences)
+- Description (2-3 sentences including what makes it special and why it's recommended)
+- Realistic rating (value 3.5-5.0) and totalReviews (100-50000 for popular places, less for hidden gems)
 - At least 2-3 relevant tags
-- Whether booking is required
+- Whether booking is required (true for popular restaurants and attractions)
 - Transportation from previous location (method, duration, cost, instructions)
 - An insider tip
+- Website URL if it's a well-known venue
 
 Create a well-paced, authentic travel experience!`;
 
