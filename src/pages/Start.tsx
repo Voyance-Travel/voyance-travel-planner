@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
@@ -243,6 +244,8 @@ export default function Start() {
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [tripType, setTripType] = useState<string>('leisure');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
+  const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
+  const [showBudget, setShowBudget] = useState(!!plannerState.basics.budgetAmount);
   const today = startOfToday();
 
   // Incremental save - debounced to avoid too many writes
@@ -256,6 +259,15 @@ export default function Start() {
     saveTimeoutRef.current = setTimeout(async () => {
       // Only save if we have minimal data
       if (destinationSelection.cityName && user) {
+        // Determine budget tier from amount
+        const getBudgetTier = (amount?: number): string => {
+          if (!amount) return 'moderate';
+          if (amount < 500) return 'budget';
+          if (amount < 1500) return 'moderate';
+          if (amount < 3000) return 'premium';
+          return 'luxury';
+        };
+        
         const basics = {
           destination: destinationSelection.cityName, // Clean city name for UX
           originCity: originSelection.cityName,
@@ -263,7 +275,8 @@ export default function Start() {
           endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
           travelers,
           tripType: tripType as 'solo' | 'couple' | 'family' | 'group',
-          budgetTier: 'moderate',
+          budgetTier: getBudgetTier(budgetAmount),
+          budgetAmount,
         };
         setBasics(basics);
         
@@ -276,7 +289,7 @@ export default function Start() {
         }
       }
     }, 1500); // Debounce 1.5 seconds
-  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, user, setBasics, saveTrip]);
+  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, budgetAmount, user, setBasics, saveTrip]);
 
   // Trigger incremental save when data changes
   useEffect(() => {
@@ -288,7 +301,7 @@ export default function Start() {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, saveIncrementally]);
+  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, budgetAmount, saveIncrementally]);
 
   useEffect(() => {
     if (plannerState.basics.destination && plannerState.basics.destination !== destinationSelection.cityName) {
@@ -329,6 +342,15 @@ export default function Start() {
     const start = format(startDate, 'yyyy-MM-dd');
     const end = format(endDate, 'yyyy-MM-dd');
 
+    // Determine budget tier from amount
+    const getBudgetTier = (amount?: number): string => {
+      if (!amount) return 'moderate';
+      if (amount < 500) return 'budget';
+      if (amount < 1500) return 'moderate';
+      if (amount < 3000) return 'premium';
+      return 'luxury';
+    };
+
     // Store clean city name for UX, airport codes in metadata for API calls
     setBasics({
       destination: destinationSelection.cityName, // Clean name: "Paris" not "Paris (CDG)"
@@ -336,7 +358,8 @@ export default function Start() {
       endDate: end,
       travelers,
       originCity: originSelection.cityName,
-      budgetTier: 'moderate',
+      budgetTier: getBudgetTier(budgetAmount),
+      budgetAmount,
     });
 
     // Save trip to database before navigating
@@ -345,20 +368,19 @@ export default function Start() {
       if (tripId) {
         console.log('[Start] Trip saved before navigation:', tripId);
         
-        // Store airport codes in trip metadata for flight search
-        if (destinationSelection.airportCodes || originSelection.airportCodes) {
-          try {
-            await supabase.from('trips').update({
-              metadata: {
-                destinationAirportCodes: destinationSelection.airportCodes,
-                originAirportCodes: originSelection.airportCodes,
-                isDestinationMetro: destinationSelection.isMetroArea,
-                isOriginMetro: originSelection.isMetroArea,
-              },
-            }).eq('id', tripId);
-          } catch (err) {
-            console.error('[Start] Error saving airport codes:', err);
-          }
+        // Store airport codes and budget in trip metadata for flight search
+        try {
+          await supabase.from('trips').update({
+            metadata: {
+              destinationAirportCodes: destinationSelection.airportCodes,
+              originAirportCodes: originSelection.airportCodes,
+              isDestinationMetro: destinationSelection.isMetroArea,
+              isOriginMetro: originSelection.isMetroArea,
+              budgetAmount: budgetAmount,
+            },
+          }).eq('id', tripId);
+        } catch (err) {
+          console.error('[Start] Error saving trip metadata:', err);
         }
         
         // Save linked guests as collaborators if we have a trip ID
@@ -397,6 +419,9 @@ export default function Start() {
     params.set('endDate', end);
     params.set('travelers', String(travelers));
     params.set('tripType', tripType);
+    if (budgetAmount) {
+      params.set('budget', String(budgetAmount));
+    }
 
     navigate(`${ROUTES.PLANNER.FLIGHT}?${params.toString()}`);
   };
@@ -632,6 +657,73 @@ export default function Start() {
                 </div>
               </div>
 
+              {/* Optional Budget Section - Collapsible */}
+              <Collapsible open={showBudget} onOpenChange={setShowBudget}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    <span>{showBudget ? 'Hide budget options' : 'Set a budget (optional)'}</span>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4 space-y-3">
+                  <div>
+                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
+                      Total Trip Budget (USD)
+                    </label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        placeholder="e.g. 2000"
+                        value={budgetAmount || ''}
+                        onChange={(e) => setBudgetAmount(e.target.value ? Number(e.target.value) : undefined)}
+                        className="h-12 pl-9 text-base"
+                        min={0}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      This is your total budget for flights + hotel. We'll do our best to find options within this range.
+                    </p>
+                  </div>
+                  
+                  {/* Budget disclaimer for low amounts */}
+                  {budgetAmount && budgetAmount < 500 && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        For budget trips, we'll prioritize the cheapest options which may include layovers, alternative airports, and basic accommodations.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Quick budget presets */}
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: 'Budget', amount: 500, desc: 'Under $500' },
+                      { label: 'Moderate', amount: 1500, desc: '$500-$1,500' },
+                      { label: 'Premium', amount: 3000, desc: '$1,500-$3,000' },
+                      { label: 'Luxury', amount: 5000, desc: '$3,000+' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setBudgetAmount(preset.amount)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                          budgetAmount === preset.amount
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
+                        )}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
 
               {/* CTA Button */}
               <Button

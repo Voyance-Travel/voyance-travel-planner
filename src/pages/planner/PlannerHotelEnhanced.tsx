@@ -158,6 +158,10 @@ export default function PlannerHotelEnhanced() {
     new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 2);
   const origin = searchParams.get('origin') || plannerState.basics.originCity || 'JFK';
+  const tripBudget = Number(searchParams.get('budget')) || plannerState.basics.budgetAmount;
+  
+  // Calculate hotel budget (assume ~60% of total budget for hotels if budget is set)
+  const hotelBudget = tripBudget ? Math.round(tripBudget * 0.6) : undefined;
 
   // Load user preferences for personalization
   useEffect(() => {
@@ -237,13 +241,16 @@ export default function PlannerHotelEnhanced() {
     }
   }, []);
 
+  // Calculate max price per night from hotel budget
+  const maxPricePerNight = hotelBudget && nights > 0 ? Math.round(hotelBudget / nights) : 10000;
+
   const [filters, setFilters] = useState<HotelFiltersState>({
-    priceRange: [0, 10000], // High default to accommodate all currencies
+    priceRange: [0, maxPricePerNight], // Apply budget if set
     starRating: [],
     amenities: [],
     propertyTypes: [],
     guestRating: 0,
-    sortBy: 'recommended',
+    sortBy: hotelBudget ? 'price' : 'recommended', // Sort by price if on budget
     freeCancellation: false,
     breakfastIncluded: false,
   });
@@ -510,12 +517,17 @@ export default function PlannerHotelEnhanced() {
           <div className="grid lg:grid-cols-[1fr_320px] gap-6">
             <div>
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-                <div className="flex items-center gap-3 mb-2">
+                <div className="flex flex-wrap items-center gap-3 mb-2">
                   <h1 className="font-serif text-2xl sm:text-3xl font-bold text-foreground">Select Your Hotel</h1>
                   {hasPersonalizedPreferences && (
                     <Badge variant="secondary" className="gap-1 bg-accent/10 text-accent border-accent/20">
                       <Sparkles className="h-3 w-3" />
                       Personalized for you
+                    </Badge>
+                  )}
+                  {hotelBudget && (
+                    <Badge variant="outline" className="text-xs">
+                      ~${hotelBudget.toLocaleString()} budget
                     </Badge>
                   )}
                 </div>
