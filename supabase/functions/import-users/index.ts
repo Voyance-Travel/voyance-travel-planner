@@ -18,6 +18,9 @@ interface UserImport {
   created_at?: string
 }
 
+// Maximum users allowed per import for rate limiting
+const MAX_USERS_PER_IMPORT = 500
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -25,15 +28,76 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
+    // ========================================
+    // AUTHENTICATION: Require valid JWT token
+    // ========================================
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Verify the user's session using the anon key with auth header
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    })
+    
+    const { data: userData, error: userError } = await authClient.auth.getUser()
+    if (userError || !userData?.user) {
+      console.error('Auth error:', userError?.message)
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid or expired session' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const adminUserId = userData.user.id
+    const adminEmail = userData.user.email
+    console.log(`Authenticated user: ${adminUserId}`)
+
+    // ========================================
+    // AUTHORIZATION: Require admin role
+    // ========================================
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
       }
     })
+    
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', adminUserId)
+      .eq('role', 'admin')
+      .maybeSingle()
 
+    if (roleError) {
+      console.error('Role check error:', roleError.message)
+      return new Response(
+        JSON.stringify({ error: 'Failed to verify permissions' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!roleData) {
+      console.log(`User ${adminUserId} attempted user import without admin role`)
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: Admin access required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`Admin access confirmed for user: ${adminUserId}`)
+
+    // ========================================
+    // VALIDATE REQUEST
+    // ========================================
     const { users } = await req.json() as { users: UserImport[] }
 
     if (!users || !Array.isArray(users)) {
@@ -41,6 +105,25 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: 'users array is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    // Rate limiting: cap the number of users per import
+    if (users.length > MAX_USERS_PER_IMPORT) {
+      return new Response(
+        JSON.stringify({ error: `Too many users. Maximum ${MAX_USERS_PER_IMPORT} users per import allowed.` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Validate email formats
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    for (const user of users) {
+      if (user.email && !emailRegex.test(user.email)) {
+        return new Response(
+          JSON.stringify({ error: `Invalid email format: ${user.email}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     const results = {
@@ -135,6 +218,26 @@ Deno.serve(async (req) => {
           error: err instanceof Error ? err.message : 'Unknown error' 
         })
       }
+    }
+
+    // ========================================
+    // AUDIT LOGGING
+    // ========================================
+    try {
+      await supabase.rpc('insert_audit_log', {
+        p_action: 'admin_import_users',
+        p_user_id: adminUserId,
+        p_actor: adminEmail || adminUserId,
+        p_action_type: 'admin',
+        p_metadata: { 
+          imported: results.success.length, 
+          failed: results.failed.length,
+          skipped: results.skipped.length
+        }
+      })
+    } catch (auditErr) {
+      console.error('Audit log error:', auditErr)
+      // Don't fail the import if audit logging fails
     }
 
     return new Response(
