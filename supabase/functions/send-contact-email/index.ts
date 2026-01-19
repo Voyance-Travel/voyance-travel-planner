@@ -18,6 +18,40 @@ interface ContactRequest {
   type?: "general" | "support" | "feedback" | "bug_report" | "feature_request";
 }
 
+// Simple in-memory rate limiting (resets on function restart)
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const MAX_REQUESTS_PER_WINDOW = 5; // Max 5 submissions per hour per IP/email
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(key);
+  
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  
+  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+    return true;
+  }
+  
+  record.count++;
+  return false;
+}
+
+// Input validation
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 255;
+}
+
+function sanitizeInput(input: string, maxLength: number): string {
+  if (!input || typeof input !== 'string') return '';
+  // Remove any HTML tags and trim
+  return input.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
+}
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -29,7 +63,16 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("SendGrid API key not configured");
     }
 
-    const { name, email, subject, message, type = "general" }: ContactRequest = await req.json();
+    const rawBody = await req.json();
+    
+    // Sanitize and validate inputs
+    const name = sanitizeInput(rawBody.name, 100);
+    const email = sanitizeInput(rawBody.email, 255);
+    const subject = sanitizeInput(rawBody.subject || '', 200);
+    const message = sanitizeInput(rawBody.message, 5000);
+    const type = ['general', 'support', 'feedback', 'bug_report', 'feature_request'].includes(rawBody.type) 
+      ? rawBody.type 
+      : 'general';
 
     // Validate required fields
     if (!name || !email || !message) {
@@ -39,7 +82,61 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Validate email format
+    if (!validateEmail(email)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid email address format" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Check minimum message length
+    if (message.length < 10) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Message must be at least 10 characters" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Rate limiting by email
+    if (isRateLimited(`email:${email}`)) {
+      console.warn(`[send-contact-email] Rate limited: ${email}`);
+      return new Response(
+        JSON.stringify({ success: false, error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Get client IP for additional rate limiting (if available)
+    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                     req.headers.get('cf-connecting-ip') || 
+                     'unknown';
+    
+    if (clientIP !== 'unknown' && isRateLimited(`ip:${clientIP}`)) {
+      console.warn(`[send-contact-email] Rate limited IP: ${clientIP}`);
+      return new Response(
+        JSON.stringify({ success: false, error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log(`[send-contact-email] Processing: type=${type}, from=${email}`);
+
     const emailSubject = subject || `[Voyance ${type}] New message from ${name}`;
+
+    // Escape HTML entities for safe display in email
+    const escapeHtml = (str: string) => str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+    const safeName = escapeHtml(name);
+    const safeEmail = escapeHtml(email);
+    const safeSubject = escapeHtml(subject);
+    const safeMessage = escapeHtml(message);
+    const safeType = escapeHtml(type);
 
     // Send notification to support team
     const supportEmailResponse = await fetch("https://api.sendgrid.com/v3/mail/send", {
@@ -60,14 +157,15 @@ const handler = async (req: Request): Promise<Response> => {
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #1a1a1a;">New Contact Form Submission</h2>
                 <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Name:</strong> ${name}</p>
-                  <p><strong>Email:</strong> ${email}</p>
-                  <p><strong>Type:</strong> ${type}</p>
-                  ${subject ? `<p><strong>Subject:</strong> ${subject}</p>` : ""}
+                  <p><strong>Name:</strong> ${safeName}</p>
+                  <p><strong>Email:</strong> ${safeEmail}</p>
+                  <p><strong>Type:</strong> ${safeType}</p>
+                  ${safeSubject ? `<p><strong>Subject:</strong> ${safeSubject}</p>` : ""}
+                  <p><strong>IP:</strong> ${clientIP}</p>
                 </div>
                 <div style="background: #fff; padding: 20px; border: 1px solid #e5e5e5; border-radius: 8px;">
                   <h3 style="margin-top: 0;">Message:</h3>
-                  <p style="white-space: pre-wrap;">${message}</p>
+                  <p style="white-space: pre-wrap;">${safeMessage}</p>
                 </div>
               </div>
             `,
@@ -98,11 +196,11 @@ const handler = async (req: Request): Promise<Response> => {
             type: "text/html",
             value: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #1a1a1a;">Thank you for reaching out, ${name}!</h2>
+                <h2 style="color: #1a1a1a;">Thank you for reaching out, ${safeName}!</h2>
                 <p>We've received your message and will get back to you as soon as possible, typically within 24-48 hours.</p>
                 <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
                   <h3 style="margin-top: 0;">Your message:</h3>
-                  <p style="white-space: pre-wrap; color: #666;">${message}</p>
+                  <p style="white-space: pre-wrap; color: #666;">${safeMessage}</p>
                 </div>
                 <p>Best regards,<br>The Voyance Team</p>
               </div>

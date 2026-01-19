@@ -1292,6 +1292,27 @@ async function finalSaveItinerary(
 }
 
 // =============================================================================
+// AUTHENTICATION HELPER
+// =============================================================================
+async function validateAuth(req: Request, supabase: any): Promise<{ userId: string } | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data?.user) {
+      return null;
+    }
+    return { userId: data.user.id };
+  } catch {
+    return null;
+  }
+}
+
+// =============================================================================
 // MAIN HANDLER
 // =============================================================================
 
@@ -1313,8 +1334,26 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const GOOGLE_MAPS_API_KEY = Deno.env.get("GOOGLE_MAPS_API_KEY");
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Create auth client for validation
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: req.headers.get('Authorization') || '' } }
+    });
+
+    // Validate authentication
+    const authResult = await validateAuth(req, authClient);
+    if (!authResult) {
+      console.error("[generate-itinerary] Unauthorized request");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized. Please sign in to generate itineraries." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log(`[generate-itinerary] Authenticated user: ${authResult.userId}`);
 
     const body = await req.json();
     const { action, ...params } = body;
