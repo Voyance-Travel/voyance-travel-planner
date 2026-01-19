@@ -114,7 +114,7 @@ const STRICT_ITINERARY_TOOL = {
   type: "function",
   function: {
     name: "create_complete_itinerary",
-    description: "Creates a complete, structured travel itinerary with all required details",
+    description: "Creates a complete, structured travel itinerary with all required details including COORDINATES, COSTS, and COMPREHENSIVE TAGS",
     parameters: {
       type: "object",
       properties: {
@@ -145,20 +145,34 @@ const STRICT_ITINERARY_TOOL = {
                       type: "object",
                       properties: {
                         name: { type: "string", description: "Venue name" },
-                        address: { type: "string", description: "Full street address with city and postal code" }
+                        address: { type: "string", description: "Full street address with city and postal code" },
+                        coordinates: {
+                          type: "object",
+                          properties: {
+                            lat: { type: "number", description: "Latitude (e.g., 48.8584)" },
+                            lng: { type: "number", description: "Longitude (e.g., 2.2945)" }
+                          },
+                          required: ["lat", "lng"],
+                          description: "REQUIRED: Approximate GPS coordinates for the venue"
+                        }
                       },
-                      required: ["name", "address"]
+                      required: ["name", "address", "coordinates"]
                     },
                     cost: {
                       type: "object",
                       properties: {
-                        amount: { type: "number", minimum: 0 },
-                        currency: { type: "string" }
+                        amount: { type: "number", minimum: 0, description: "REQUIRED: Realistic cost per person in local currency. Use 0 for free attractions." },
+                        currency: { type: "string", description: "ISO currency code (USD, EUR, GBP, etc.)" }
                       },
                       required: ["amount", "currency"]
                     },
                     description: { type: "string", description: "Activity description (2-3 sentences)" },
-                    tags: { type: "array", items: { type: "string" }, minItems: 2 },
+                    tags: { 
+                      type: "array", 
+                      items: { type: "string" }, 
+                      minItems: 5,
+                      description: "REQUIRED: 5-8 comprehensive tags for search. Include: category tags (museum, park), experience tags (romantic, family-friendly), time tags (morning, sunset), price tags (free, budget-friendly, premium), mood tags (adventure, relaxation)"
+                    },
                     bookingRequired: { type: "boolean" },
                     transportation: {
                       type: "object",
@@ -598,17 +612,26 @@ MANDATORY PERSONALIZATION RULES:
 5. Match the traveler's PACE preference (relaxed = fewer activities with more downtime, packed = more activities)
 6. Honor LEARNED PREFERENCES from past trips - include activities they've loved, avoid what they disliked
 
-CRITICAL REQUIREMENTS:
-1. EVERY activity MUST have a complete street address (not just venue name)
-2. EVERY activity MUST have realistic cost estimates
-3. Include 4-6 activities per day including meals
-4. Start days around 9:00 AM and end by 9:00-10:00 PM
-5. Account for travel time between activities
-6. Include transportation instructions between each activity
-7. DAY 1 MUST START with airport arrival and transfer to hotel as the FIRST activities
-8. LAST DAY MUST END with hotel checkout and transfer to airport as the LAST activities
-9. Include realistic ratings (1-5 scale) and review counts for venues
-10. Include website URLs for popular venues when known`;
+CRITICAL DATA REQUIREMENTS (REQUIRED FOR EVERY ACTIVITY):
+1. COORDINATES: Provide approximate lat/lng for EVERY venue. You know major landmarks, restaurants, and attractions worldwide. Example: Eiffel Tower = {"lat": 48.8584, "lng": 2.2945}
+2. COSTS: Provide realistic per-person cost estimates for EVERY activity. Use 0 for free attractions. Research typical prices - museum entry ~$15-25, restaurant meal ~$30-80, tours ~$50-100.
+3. TAGS: Generate 5-8 comprehensive tags for EACH activity for searchability:
+   - Category tags: museum, park, restaurant, cafe, landmark, historic, religious
+   - Experience tags: romantic, family-friendly, adventure, relaxation, educational, scenic
+   - Time tags: morning, afternoon, evening, sunset, sunrise, night
+   - Price tags: free, budget-friendly, moderate-price, premium, splurge
+   - Mood tags: photo-op, instagram-worthy, hidden-gem, must-see, local-favorite
+4. ADDRESSES: Complete street addresses with postal codes
+5. RATINGS: Realistic ratings (3.5-5.0) and review counts (100-50000) based on venue popularity
+
+STRUCTURAL REQUIREMENTS:
+1. Include 4-6 activities per day including meals
+2. Start days around 9:00 AM and end by 9:00-10:00 PM
+3. Account for travel time between activities
+4. Include transportation instructions between each activity
+5. DAY 1 MUST START with airport arrival and transfer to hotel
+6. LAST DAY MUST END with hotel checkout and transfer to airport
+7. Include website URLs for popular venues when known`;
 
   const daysList = [];
   for (let i = 0; i < context.totalDays; i++) {
@@ -637,19 +660,32 @@ IMPORTANT STRUCTURE:
 Generate activities for these days:
 ${daysList.join('\n')}
 
-For each activity, provide:
-- A unique ID (format: "day1-act1", "day1-act2", etc.)
-- Specific venue name and FULL street address (including city and postal code)
-- Realistic cost estimates in ${context.currency || 'USD'}
-- Category (sightseeing, dining, cultural, shopping, relaxation, transport, accommodation, activity)
-- Start and end times in HH:MM format
-- Description (2-3 sentences including what makes it special and why it's recommended)
-- Realistic rating (value 3.5-5.0) and totalReviews (100-50000 for popular places, less for hidden gems)
-- At least 2-3 relevant tags
-- Whether booking is required (true for popular restaurants and attractions)
-- Transportation from previous location (method, duration, cost, instructions)
-- An insider tip
-- Website URL if it's a well-known venue
+REQUIRED FOR EACH ACTIVITY (NO EXCEPTIONS):
+1. Unique ID (format: "day1-act1", "day1-act2", etc.)
+2. Specific venue name and FULL street address (including city and postal code)
+3. COORDINATES: lat/lng values (you know these for major venues worldwide!)
+4. COST: Realistic per-person cost in ${context.currency || 'USD'} (0 for free, realistic amounts for paid)
+5. TAGS: 5-8 comprehensive tags covering category, experience type, time of day, price tier, and mood
+6. Category (sightseeing, dining, cultural, shopping, relaxation, transport, accommodation, activity)
+7. Start and end times in HH:MM format
+8. Description (2-3 sentences including what makes it special)
+9. Rating (value 3.5-5.0) and totalReviews (100-50000 for popular, less for hidden gems)
+10. Whether booking is required
+11. Transportation from previous location (method, duration, cost, instructions)
+12. An insider tip
+13. Website URL if well-known venue
+
+COST GUIDELINES (per person):
+- Free attractions: 0
+- Museum entry: 15-30
+- Casual restaurant: 20-40
+- Mid-range restaurant: 40-80
+- Fine dining: 80-200
+- Tours: 40-150
+- Shows/entertainment: 50-150
+
+TAG EXAMPLES for a restaurant:
+["dining", "restaurant", "french-cuisine", "evening", "romantic", "moderate-price", "local-favorite", "dinner"]
 
 Create a well-paced, authentic travel experience!`;
 
