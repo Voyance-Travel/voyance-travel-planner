@@ -692,6 +692,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "friendships_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "friendships_requester_id_fkey"
             columns: ["requester_id"]
             isOneToOne: false
@@ -703,6 +710,13 @@ export type Database = {
             columns: ["requester_id"]
             isOneToOne: false
             referencedRelation: "profiles_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -2154,6 +2168,45 @@ export type Database = {
           display_name?: string | null
           handle?: string | null
           id?: string | null
+        }
+        Relationships: []
+      }
+      profiles_safe: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          display_name: string | null
+          handle: string | null
+          id: string | null
+          preferred_currency: string | null
+          preferred_language: string | null
+          quiz_completed: boolean | null
+          travel_dna: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          handle?: string | null
+          id?: string | null
+          preferred_currency?: string | null
+          preferred_language?: string | null
+          quiz_completed?: boolean | null
+          travel_dna?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          handle?: string | null
+          id?: string | null
+          preferred_currency?: string | null
+          preferred_language?: string | null
+          quiz_completed?: boolean | null
+          travel_dna?: Json | null
+          updated_at?: string | null
         }
         Relationships: []
       }
