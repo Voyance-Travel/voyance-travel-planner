@@ -1,0 +1,100 @@
+import { useState, useCallback } from 'react';
+import { loadStripe } from '@stripe/stripe-js';
+import {
+  EmbeddedCheckoutProvider,
+  EmbeddedCheckout,
+} from '@stripe/react-stripe-js';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2 } from 'lucide-react';
+
+// Initialize Stripe with publishable key
+const stripePromise = loadStripe('pk_test_51SXP3JFYxIg9jcJUJPZOWYLCMbKOdT5MrmM9vEAFzh8TqD12VwxvqJUi0qV8Q7Ua8RLzxw3bLCFmBr7gZfKhWZbZ00aPLT48hG');
+
+interface EmbeddedCheckoutModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  priceId: string;
+  mode: 'subscription' | 'payment';
+  productName: string;
+  returnPath?: string;
+}
+
+export function EmbeddedCheckoutModal({
+  isOpen,
+  onClose,
+  priceId,
+  mode,
+  productName,
+  returnPath = '/profile',
+}: EmbeddedCheckoutModalProps) {
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchClientSecret = useCallback(async () => {
+    try {
+      setError(null);
+      
+      const { data, error: fnError } = await supabase.functions.invoke('create-embedded-checkout', {
+        body: { priceId, mode, returnPath },
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return data.clientSecret;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to initialize checkout';
+      setError(message);
+      throw err;
+    }
+  }, [priceId, mode, returnPath]);
+
+  const options = { fetchClientSecret };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle className="text-xl font-display">
+            Complete your purchase: {productName}
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="p-6 pt-4">
+          {error ? (
+            <div className="text-center py-8">
+              <p className="text-destructive mb-4">{error}</p>
+              <button 
+                onClick={() => setError(null)}
+                className="text-primary hover:underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <div id="checkout" className="min-h-[400px]">
+              <EmbeddedCheckoutProvider stripe={stripePromise} options={options}>
+                <EmbeddedCheckout />
+              </EmbeddedCheckoutProvider>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Loading placeholder for when checkout is initializing
+export function CheckoutLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center py-12">
+      <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+      <p className="text-muted-foreground">Loading secure checkout...</p>
+    </div>
+  );
+}

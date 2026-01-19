@@ -67,6 +67,7 @@ export const ROUTES = {
   PRIVACY: '/privacy',
   TERMS: '/terms',
   PRICING: '/pricing',
+  PAYMENT_SUCCESS: '/payment-success',
 } as const;
 
 // Helper to build dynamic routes
