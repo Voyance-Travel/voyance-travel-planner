@@ -23,7 +23,7 @@ import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
-import { useAuth, isDemoModeEnabled } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -148,7 +148,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [trips, setTrips] = useState<DisplayTrip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
-  const isDemo = isDemoModeEnabled();
+  
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -207,12 +207,6 @@ export default function Profile() {
       return;
     }
     
-    // Skip subscription check in demo mode - no valid session token
-    if (isDemo) {
-      console.log('[Subscription] Skipping check in demo mode');
-      setSubscription({ subscribed: false, product_id: null, price_id: null, subscription_end: null });
-      return;
-    }
     
     setIsLoadingSubscription(true);
     try {
@@ -259,11 +253,6 @@ export default function Profile() {
       return;
     }
     
-    // Check for demo mode - Stripe requires a real account
-    if (isDemoModeEnabled()) {
-      toast.error('Stripe checkout is not available in demo mode. Please sign in with a real account to subscribe.');
-      return;
-    }
     
     setIsCheckingOut(priceId);
     try {
@@ -309,10 +298,6 @@ export default function Profile() {
 
   // Handle manage subscription
   const handleManageSubscription = async () => {
-    if (isDemoModeEnabled()) {
-      toast.error('Billing portal is not available in demo mode.');
-      return;
-    }
     
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -486,8 +471,8 @@ export default function Profile() {
 
             {/* Removed from overview - now in its own tab */}
 
-            {/* Surprise Trip Card - show as premium for demo users */}
-            <SurpriseTripCard isPremium={isDemo || !!subscription?.subscribed} />
+            {/* Surprise Trip Card */}
+            <SurpriseTripCard isPremium={!!subscription?.subscribed} />
 
             {/* Upcoming Trips */}
             {upcomingTrips.length > 0 && (
