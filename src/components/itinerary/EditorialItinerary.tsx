@@ -1375,6 +1375,18 @@ export function EditorialItinerary({
         onClose={() => setAddActivityModal(null)}
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
       />
+
+      {/* Time Edit Modal */}
+      <TimeEditModal
+        isOpen={!!timeEditModal}
+        activity={timeEditModal?.activity || null}
+        onClose={() => setTimeEditModal(null)}
+        onSave={(startTime, endTime) => {
+          if (timeEditModal) {
+            handleUpdateActivityTime(timeEditModal.dayIndex, timeEditModal.activityIndex, startTime, endTime);
+          }
+        }}
+      />
       
       {/* Hotel Gallery Modal */}
       <HotelGalleryModal
