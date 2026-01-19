@@ -16,6 +16,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
 import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
 import { enrichHotel } from '@/services/hotelAPI';
+import { PaymentSummary } from '@/components/booking/PaymentSummary';
+import { usePaymentVerification } from '@/hooks/usePaymentVerification';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -57,9 +59,18 @@ export default function TripDetail() {
   const [error, setError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
+  const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
+
+  // Payment verification on return from Stripe
+  usePaymentVerification({
+    onSuccess: () => {
+      // Refresh payments display
+      setPaymentsRefreshKey(prev => prev + 1);
+    },
+  });
 
   // =========================================================================
   // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
@@ -599,6 +610,9 @@ export default function TripDetail() {
               ) : null}
             </div>
           )}
+
+          {/* Payment Summary - Shows paid vs outstanding */}
+          <PaymentSummary tripId={trip.id} key={paymentsRefreshKey} />
 
           {/* Live Itinerary View for active trips */}
           {isLiveTrip ? (
