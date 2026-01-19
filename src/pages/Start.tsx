@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday } from 'date-fns';
@@ -223,6 +223,10 @@ export default function Start() {
   const { state: plannerState, setBasics, saveTrip } = useTripPlanner();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // Check for destination from query param (from Explore/Destinations pages)
+  const destinationFromQuery = searchParams.get('destination');
   
   // Structured location state - stores both display and data
   const [originSelection, setOriginSelection] = useState<LocationSelection>({
@@ -230,10 +234,14 @@ export default function Start() {
     cityName: plannerState.basics.originCity || '',
     airportCodes: undefined,
   });
-  const [destinationSelection, setDestinationSelection] = useState<LocationSelection>({
-    display: plannerState.basics.destination || '',
-    cityName: plannerState.basics.destination || '',
-    airportCodes: undefined,
+  const [destinationSelection, setDestinationSelection] = useState<LocationSelection>(() => {
+    // Priority: query param > context > empty
+    const initialDestination = destinationFromQuery || plannerState.basics.destination || '';
+    return {
+      display: initialDestination,
+      cityName: initialDestination,
+      airportCodes: undefined,
+    };
   });
   const [startDate, setStartDate] = useState<Date | undefined>(
     plannerState.basics.startDate ? new Date(plannerState.basics.startDate) : undefined
@@ -247,6 +255,51 @@ export default function Start() {
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [showBudget, setShowBudget] = useState(!!plannerState.basics.budgetAmount);
   const today = startOfToday();
+
+  // Prefill origin city from user preferences (home_airport)
+  useEffect(() => {
+    const prefillHomeAirport = async () => {
+      // Don't prefill if already set
+      if (originSelection.cityName || !user) return;
+      
+      try {
+        // First check user_preferences
+        const { data: prefs } = await supabase
+          .from('user_preferences')
+          .select('home_airport')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (prefs?.home_airport) {
+          setOriginSelection({
+            display: prefs.home_airport,
+            cityName: prefs.home_airport,
+            airportCodes: undefined,
+          });
+          return;
+        }
+        
+        // Fallback to profiles table
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('home_airport')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.home_airport) {
+          setOriginSelection({
+            display: profile.home_airport,
+            cityName: profile.home_airport,
+            airportCodes: undefined,
+          });
+        }
+      } catch (err) {
+        console.log('Could not prefill home airport:', err);
+      }
+    };
+    
+    prefillHomeAirport();
+  }, [user, originSelection.cityName]);
 
   // Incremental save - debounced to avoid too many writes
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
