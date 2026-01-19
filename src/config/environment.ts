@@ -28,6 +28,11 @@ export const FRONTEND_CONFIG = {
   STRIPE_PUBLIC_KEY: 'pk_test_51RJaxRFYxIg9jcJUN8zjlbkV6EvhmoOTFSM8AEjOz39tlPqR1LMatSJ3xqhZFspooBLVJP6SpwbVbA3cbp4sLpFE00dmLeI4mG',
   
   // Google Maps (client-restricted key, safe for frontend)
+  // ⚠️ PRE-LAUNCH: Configure referrer restrictions in Google Cloud Console:
+  //    https://console.cloud.google.com/apis/credentials → Restrict key to:
+  //    - voyance-travel-planner.lovable.app/*
+  //    - travelwithvoyance.com/*
+  //    - localhost:* (for dev)
   GOOGLE_MAPS_API_KEY: 'AIzaSyB-IaDfq24xQ1y7hRin3WfmSs_4Iry2DMM',
   
   // Feature Flags
