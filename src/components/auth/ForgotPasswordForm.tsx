@@ -45,8 +45,8 @@ export function ForgotPasswordForm() {
         throw resetError;
       }
 
-      // Log the password reset request
-      await logPasswordResetRequest(data.email);
+      // Log the password reset request (may not log since user isn't authenticated)
+      await logPasswordResetRequest();
 
       setSubmittedEmail(data.email);
       setIsSuccess(true);

@@ -86,7 +86,7 @@ export default function ResetPassword() {
 
       // Log the password reset completion
       if (updateData.user) {
-        await logPasswordResetComplete(updateData.user.id, updateData.user.email || undefined);
+        await logPasswordResetComplete();
       }
 
       setSubmitStatus('success');
