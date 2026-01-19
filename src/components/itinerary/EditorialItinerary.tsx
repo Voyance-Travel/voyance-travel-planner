@@ -17,7 +17,7 @@ import {
   ChevronUp, ChevronDown, MapPin, Clock, Star, Save,
   Lock, Unlock, MoveUp, MoveDown, Plus, RefreshCw,
   Plane, Hotel, Utensils, Camera, ShoppingBag, Palmtree, Car, Trash2,
-  Sun, Cloud, CloudRain, Snowflake, Edit3, Sparkles, AlertCircle,
+  Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images
 } from 'lucide-react';
@@ -671,6 +671,7 @@ export function EditorialItinerary({
         <div className="flex gap-1">
           {[
             { id: 'itinerary', label: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
+            { id: 'weather', label: 'Weather', icon: <CloudSun className="h-4 w-4" /> },
             { id: 'overview', label: 'Flight & Hotel', icon: <Plane className="h-4 w-4" /> },
             { id: 'needtoknow', label: 'Need to Know', icon: <Info className="h-4 w-4" /> },
           ].map((tab) => (

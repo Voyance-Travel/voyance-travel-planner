@@ -788,10 +788,23 @@ serve(async (req) => {
       resolvedDestination = await getDestinationName(supabase, destinationId) || undefined;
     }
 
+    // Normalize destination to strip airport-related keywords
+    function normalizeDestination(dest: string): string {
+      return (dest || '')
+        // Remove trailing IATA codes like "(FCO)"
+        .replace(/\s*\([A-Z]{3}\)\s*/gi, '')
+        // Remove obvious airport keywords
+        .replace(/\b(international\s+)?airport\b/gi, '')
+        // Remove terminal references
+        .replace(/\b(terminal\s*\d?|arrivals?|departures?)\b/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    }
+
     // Determine what we're searching for
-    const searchSubjectRaw = venueName || resolvedDestination || "unknown";
+    const searchSubjectRaw = normalizeDestination(venueName || resolvedDestination || "unknown");
     const entityType = venueName ? "activity" : "destination";
-    const contextDestination = resolvedDestination || destination || "";
+    const contextDestination = normalizeDestination(resolvedDestination || destination || "");
 
     // For destination hero/gallery lookups, bias away from airports
     const searchSubject = entityType === "destination"
