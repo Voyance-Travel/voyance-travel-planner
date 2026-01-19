@@ -427,34 +427,23 @@ export function EditorialItinerary({
             console.error('[EditorialItinerary] Database save failed:', error);
           }
         } else {
-          // Trip is in localStorage - save there
+          // Trip is in localStorage - always persist there so refreshes never re-trigger generation
           const localStorageKey = 'voyance_demo_trips';
           const demoTripsRaw = localStorage.getItem(localStorageKey);
           const demoTrips = demoTripsRaw ? JSON.parse(demoTripsRaw) : {};
-          
-          if (demoTrips[tripId]) {
-            demoTrips[tripId].itinerary_data = itineraryData;
-            demoTrips[tripId].itinerary_status = 'ready';
-            demoTrips[tripId].updated_at = new Date().toISOString();
-            localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
-            setHasChanges(false);
-            setLastSaved(new Date());
-            console.log('[EditorialItinerary] Auto-saved to localStorage');
-          } else {
-            // Try legacy format
-            const legacyKey = `trip_${tripId}`;
-            const legacyRaw = localStorage.getItem(legacyKey);
-            if (legacyRaw) {
-              const legacyTrip = JSON.parse(legacyRaw);
-              legacyTrip.itinerary_data = itineraryData;
-              legacyTrip.itinerary_status = 'ready';
-              legacyTrip.updated_at = new Date().toISOString();
-              localStorage.setItem(legacyKey, JSON.stringify(legacyTrip));
-              setHasChanges(false);
-              setLastSaved(new Date());
-              console.log('[EditorialItinerary] Auto-saved to legacy localStorage');
-            }
-          }
+
+          demoTrips[tripId] = {
+            ...(demoTrips[tripId] || {}),
+            id: tripId,
+            itinerary_data: itineraryData,
+            itinerary_status: 'ready',
+            updated_at: new Date().toISOString(),
+          };
+
+          localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
+          setHasChanges(false);
+          setLastSaved(new Date());
+          console.log('[EditorialItinerary] Auto-saved to localStorage');
         }
       } catch (err) {
         console.error('[EditorialItinerary] Auto-save failed:', err);
@@ -2121,29 +2110,56 @@ function ActivityRow({
   const isRatingEligible = ratingEligibleTypes.includes(activityType) && !isDowntime && !isTransport && !isCheckIn && !isAirport && !isAccommodation;
   const rating = isRatingEligible ? rawRating : null;
   
-  // Determine the best search term for images:
-  // 1. Use location.name (actual venue) if available - best for Google Places
-  // 2. Fall back to activity title
-  const imageSearchTerm = activity.location?.name && activity.location.name.length > 3
-    ? activity.location.name
-    : activity.title;
-  
-  // Use useActivityImage hook for real place photos with deduplication
-  // This fetches from Google Places / TripAdvisor with caching
-  const shouldFetchRealPhoto = showThumbnail && !isCheckIn && !isAirport && !isAccommodation;
-  const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-    imageSearchTerm,
-    activityType,
-    existingPhoto,
-    shouldFetchRealPhoto ? destination : undefined // Only pass destination if we want real photos
-  );
-  
-  const thumbnailUrl = fetchedImageUrl;
-  const [thumbnailError, setThumbnailError] = useState(false);
-  
   // Determine if this is a dining activity that should show venue name prominently
   const isDiningActivity = ['dining', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'].includes(activityType);
-  const venueNameForDining = isDiningActivity && activity.location?.name ? activity.location.name : null;
+
+  const extractVenueFromText = (text?: string | null): string | null => {
+    if (!text) return null;
+
+    const raw = String(text).trim();
+
+    // Prefer explicit patterns
+    const patterns: RegExp[] = [
+      /\b(?:at|@)\s+([^\n,.;]{3,80})/i,
+      /\b(?:restaurant|restaurante|ristorante|trattoria|osteria|cafe|café)\s*[:\-–]\s*([^\n,.;]{3,80})/i,
+      /\b(?:we\s+eat\s+at|lunch\s+at|dinner\s+at|breakfast\s+at)\s+([^\n,.;]{3,80})/i,
+    ];
+
+    for (const p of patterns) {
+      const m = raw.match(p);
+      const candidate = m?.[1]?.trim();
+      if (!candidate) continue;
+
+      // Guardrails against generic matches
+      const lower = candidate.toLowerCase();
+      if (
+        lower.includes('hotel') ||
+        lower.includes('airport') ||
+        lower.includes('your hotel') ||
+        lower === 'the hotel'
+      ) {
+        continue;
+      }
+
+      // Strip trailing quotes/parens
+      return candidate.replace(/["')\]]+$/g, '').trim();
+    }
+
+    return null;
+  };
+
+  const venueNameForDining = isDiningActivity
+    ? (activity.location?.name?.trim() || extractVenueFromText(activity.title) || extractVenueFromText(activity.description) || null)
+    : null;
+
+  // Determine the best search term for images:
+  // 1. Dining venue (from location/title/description) if available
+  // 2. location.name (actual venue) if available
+  // 3. Fall back to activity title
+  const imageSearchTerm = (venueNameForDining && venueNameForDining.length > 3)
+    ? venueNameForDining
+    : (activity.location?.name && activity.location.name.length > 3 ? activity.location.name : activity.title);
+
 
   return (
     <div className={cn(
@@ -2213,30 +2229,50 @@ function ActivityRow({
                 </Badge>
               )}
             </div>
-            {/* For dining: Show restaurant name as the main title, activity title as subtitle */}
-            {venueNameForDining ? (
-              <>
-                <h4 className="font-serif text-lg font-medium text-foreground">{venueNameForDining}</h4>
-                <p className="text-sm text-muted-foreground mt-0.5 italic">{activity.title}</p>
-              </>
-            ) : (
-              <h4 className="font-serif text-lg font-medium text-foreground">{activity.title}</h4>
-            )}
-            {activity.description && !venueNameForDining && (
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
-            )}
-            {/* Show location for non-dining activities */}
-            {activity.location?.name && !venueNameForDining && (
-              <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-                <MapPin className="h-3.5 w-3.5 text-primary/60" />
-                <span>{activity.location.name}</span>
-                {activity.location.address && activity.location.address !== activity.location.name && (
-                  <span className="text-muted-foreground/70 truncate max-w-[200px]">
-                    , {activity.location.address}
-                  </span>
-                )}
-              </div>
-            )}
+            {(() => {
+              const venue = venueNameForDining;
+              const address = activity.location?.address?.trim();
+              const hasAddress = !!address && address.length > 3;
+
+              // For dining: Restaurant name should replace the generic meal label in the most prominent spot
+              if (venue) {
+                return (
+                  <>
+                    <h4 className="font-serif text-lg font-medium text-foreground">{venue}</h4>
+                    <p className="text-sm text-muted-foreground mt-0.5 italic">{activity.title}</p>
+                    {hasAddress && address !== venue && (
+                      <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 text-primary/60 mt-0.5" />
+                        <span className="leading-snug">{address}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  <h4 className="font-serif text-lg font-medium text-foreground">{activity.title}</h4>
+                  {activity.description && (
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
+                  )}
+
+                  {(activity.location?.name || hasAddress) && (
+                    <div className="mt-2">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 text-primary/60" />
+                        <span>{activity.location?.name || address}</span>
+                      </div>
+                      {activity.location?.name && hasAddress && address !== activity.location?.name && (
+                        <div className="pl-5 mt-0.5 text-xs text-muted-foreground/70 leading-snug">
+                          {address}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {/* Tips */}
             {activity.tips && (
               <div className="flex items-start gap-2 mt-2 p-2 bg-primary/5 rounded-md text-xs">

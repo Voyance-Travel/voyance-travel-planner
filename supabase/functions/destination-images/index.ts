@@ -60,9 +60,11 @@ async function checkCuratedCache(
       .from("curated_images")
       .select("*")
       .eq("entity_type", entityType)
-      .ilike("entity_key", `%${normalizedKey}%`);
+      // IMPORTANT: exact match to avoid returning unrelated cached images
+      .eq("entity_key", normalizedKey);
 
     if (destination) {
+      // Keep flexible destination matching (some cached entries may include country)
       query = query.ilike("destination", `%${destination}%`);
     }
 
@@ -114,15 +116,55 @@ async function checkCuratedCache(
 async function getGooglePlacesPhoto(
   venueName: string,
   destination: string,
-  apiKey: string
+  apiKey: string,
+  category?: string
 ): Promise<DestinationImage | null> {
   try {
-    const textQuery = `${venueName} ${destination}`;
+    const cat = (category || '').toLowerCase();
+    const hint = (
+      cat.includes('dining') || cat.includes('lunch') || cat.includes('dinner') || cat.includes('breakfast') || cat.includes('cafe')
+        ? 'restaurant'
+        : cat.includes('museum') || cat.includes('cultural')
+          ? 'museum'
+          : cat.includes('sightseeing')
+            ? 'landmark'
+            : cat.includes('spa') || cat.includes('relaxation') || cat.includes('recharge')
+              ? 'spa'
+              : ''
+    );
+
+    const textQuery = hint
+      ? `${venueName} ${hint} ${destination}`
+      : `${venueName} ${destination}`;
+
     console.log("[Images] Searching Google Places (v1) for:", textQuery);
 
     // Use AbortController for 3-second timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const tokenize = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .filter((t) => t.length >= 4);
+
+    const venueTokens = new Set(tokenize(venueName));
+
+    const isBadPlace = (p: any) => {
+      const types: string[] = Array.isArray(p?.types) ? p.types : [];
+      const joined = types.join(' ').toLowerCase();
+      if (joined.includes('airport') || joined.includes('transit') || joined.includes('train_station') || joined.includes('bus_station')) return true;
+      return false;
+    };
+
+    const tokenOverlapOk = (displayName: string) => {
+      const nameTokens = tokenize(displayName);
+      if (!nameTokens.length || !venueTokens.size) return true; // if we can't compare, don't block
+      return nameTokens.some((t) => venueTokens.has(t));
+    };
 
     try {
       // Step 1: Search for place using new Places API v1
@@ -133,11 +175,11 @@ async function getGooglePlacesPhoto(
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": apiKey,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.photos",
+            "X-Goog-FieldMask": "places.id,places.displayName,places.photos,places.types",
           },
           body: JSON.stringify({
             textQuery,
-            maxResultCount: 3,
+            maxResultCount: 5,
           }),
           signal: controller.signal,
         }
@@ -153,7 +195,7 @@ async function getGooglePlacesPhoto(
 
       const searchData = await searchResponse.json();
       const places = searchData.places || [];
-      
+
       console.log("[Images] Google Places v1 results:", places.length);
 
       if (places.length === 0) {
@@ -161,17 +203,23 @@ async function getGooglePlacesPhoto(
         return null;
       }
 
-      // Find first place with photos
-      const placeWithPhotos = places.find((p: any) => p.photos?.length > 0);
+      // Find first place with photos that passes our guardrails
+      const placeWithPhotos = places.find((p: any) => {
+        if (!p?.photos?.length) return false;
+        if (isBadPlace(p)) return false;
+        const dn = p?.displayName?.text || '';
+        return tokenOverlapOk(dn);
+      });
+
       if (!placeWithPhotos) {
-        console.log("[Images] No photos in Google Places v1 results for:", textQuery);
+        console.log("[Images] No suitable photos in Google Places v1 results for:", textQuery);
         return null;
       }
 
       // Step 2: Get photo URL using the photo resource name
       // Format: places/{place_id}/photos/{photo_reference}
       const photoResource = placeWithPhotos.photos[0].name;
-      
+
       // New API uses different photo URL format
       const photoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
 
@@ -497,6 +545,9 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
     /^(arrival|departure|transfer|airport)/i,
     /^(pack|unpack|settle\s+in)/i,
     /^(breakfast|lunch|dinner)\s+(break|time)$/i, // Just "Lunch break" not "Lunch at Café X"
+    // Generic meal descriptors without a venue name tend to return terrible images; use category fallback instead.
+    /^(?:organic|vegetarian|vegan|local|seasonal|farm\-to\-table|tasting|traditional|street)\b.*\b(?:breakfast|brunch|lunch|dinner|meal)\b/i,
+    /^(?:breakfast|brunch|lunch|dinner|meal)\b(?!.*\b(?:at|@)\b).*/i,
   ];
   
   for (const pattern of skipPatterns) {
@@ -658,7 +709,7 @@ async function fetchImageTiered(
 
   // TIER 2: Google Places (best for real venue photos)
   if (googleApiKey) {
-    const googleImage = await getGooglePlacesPhoto(cleanName, destination, googleApiKey);
+    const googleImage = await getGooglePlacesPhoto(cleanName, destination, googleApiKey, category);
     if (googleImage) {
       candidates.push(googleImage);
     }
