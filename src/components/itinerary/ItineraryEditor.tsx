@@ -5,7 +5,9 @@ import {
   Lock, Unlock, Edit2, Trash2, ArrowUp, ArrowDown, Plus,
   Sun, Cloud, CloudRain, Snowflake, Plane, Hotel,
   Utensils, Camera, ShoppingBag, Palmtree, Car, RefreshCw,
-  DollarSign, Sparkles, Check, GripVertical, AlertCircle
+  DollarSign, Sparkles, Check, GripVertical, AlertCircle,
+  ExternalLink, Globe, Phone, MessageSquare, ThumbsUp,
+  ChevronRight, Info
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -723,6 +726,17 @@ interface ActivityCardProps {
   onRemove: (dayIndex: number, activityId: string) => void;
 }
 
+// Extended activity type with new fields
+interface ExtendedActivity extends GeneratedActivity {
+  rating?: { value: number; totalReviews: number };
+  website?: string;
+  phoneNumber?: string;
+  priceLevel?: number;
+  googleMapsUrl?: string;
+  reviewHighlights?: string[];
+  tips?: string;
+}
+
 function ActivityCard({
   activity,
   dayIndex,
@@ -733,105 +747,274 @@ function ActivityCard({
   onRemove,
 }: ActivityCardProps) {
   const [showActions, setShowActions] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const isLocked = (activity as { isLocked?: boolean }).isLocked;
   const category = activity.category || 'activity';
   const location = getActivityLocation(activity);
+  const extActivity = activity as ExtendedActivity;
+
+  // Helper for price level display
+  const getPriceLevelDisplay = (level?: number) => {
+    if (!level) return null;
+    return '$'.repeat(level);
+  };
+
+  // Generate Google Maps URL from address
+  const getMapsUrl = (loc: { name?: string; address?: string }) => {
+    if (extActivity.googleMapsUrl) return extActivity.googleMapsUrl;
+    const query = encodeURIComponent(`${loc.name || ''} ${loc.address || ''}`);
+    return `https://www.google.com/maps/search/?api=1&query=${query}`;
+  };
 
   return (
-    <div
-      className={cn(
-        'p-4 rounded-lg border transition-all',
-        activityColors[category] || activityColors.activity,
-        isLocked && 'ring-2 ring-primary'
-      )}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-    >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 shrink-0">{activityIcons[category] || activityIcons.activity}</div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-xs font-mono">{formatTime12h(activity.startTime)}</span>
-            <span className="text-xs">→</span>
-            <span className="text-xs font-mono">{formatTime12h(activity.endTime)}</span>
-            {activity.durationMinutes && (
-              <span className="text-xs text-muted-foreground">
-                ({Math.floor(activity.durationMinutes / 60)}h {activity.durationMinutes % 60}m)
-              </span>
-            )}
-          </div>
-          <h4 className="font-medium mb-1">{getActivityName(activity)}</h4>
-          {location.name && (
-            <p className="text-sm flex items-center gap-1 mb-1">
-              <MapPin className="h-3 w-3" />
-              {location.name}
-            </p>
-          )}
-          {activity.description && (
-            <p className="text-sm opacity-80 line-clamp-2">{activity.description}</p>
-          )}
-          {activity.tags && activity.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {activity.tags.slice(0, 3).map((tag, i) => (
-                <Badge key={i} variant="outline" className="text-xs capitalize">
-                  {tag}
-                </Badge>
-              ))}
+    <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+      <div
+        className={cn(
+          'rounded-lg border transition-all overflow-hidden',
+          activityColors[category] || activityColors.activity,
+          isLocked && 'ring-2 ring-primary'
+        )}
+        onMouseEnter={() => setShowActions(true)}
+        onMouseLeave={() => setShowActions(false)}
+      >
+        {/* Main Activity Row */}
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 shrink-0">{activityIcons[category] || activityIcons.activity}</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="text-xs font-mono">{formatTime12h(activity.startTime)}</span>
+                <span className="text-xs">→</span>
+                <span className="text-xs font-mono">{formatTime12h(activity.endTime)}</span>
+                {activity.durationMinutes && (
+                  <span className="text-xs text-muted-foreground">
+                    ({Math.floor(activity.durationMinutes / 60)}h {activity.durationMinutes % 60}m)
+                  </span>
+                )}
+              </div>
+              <h4 className="font-medium mb-1">{getActivityName(activity)}</h4>
+              
+              {/* Rating & Reviews */}
+              {extActivity.rating && (
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-1">
+                    <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                    <span className="text-sm font-medium">{extActivity.rating.value.toFixed(1)}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    ({extActivity.rating.totalReviews.toLocaleString()} reviews)
+                  </span>
+                  {extActivity.priceLevel && (
+                    <span className="text-xs text-muted-foreground">
+                      • {getPriceLevelDisplay(extActivity.priceLevel)}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {location.name && (
+                <p className="text-sm flex items-center gap-1 mb-1">
+                  <MapPin className="h-3 w-3" />
+                  {location.name}
+                </p>
+              )}
+              {activity.description && (
+                <p className="text-sm opacity-80 line-clamp-2">{activity.description}</p>
+              )}
+              {activity.tags && activity.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {activity.tags.slice(0, 3).map((tag, i) => (
+                    <Badge key={i} variant="outline" className="text-xs capitalize">
+                      {tag}
+                    </Badge>
+                  ))}
+                  {activity.bookingRequired && (
+                    <Badge variant="secondary" className="text-xs">
+                      Booking Required
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+            <div className="text-right shrink-0">
+              <span className="font-medium">{formatCurrency(getActivityCost(activity))}</span>
+              
+              {/* Expand Button */}
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 mt-1 gap-1 text-xs"
+                >
+                  <Info className="h-3 w-3" />
+                  {isExpanded ? 'Less' : 'More'}
+                  <ChevronRight className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-90")} />
+                </Button>
+              </CollapsibleTrigger>
+              
+              {/* Action Buttons */}
+              <AnimatePresence>
+                {showActions && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="flex items-center gap-1 mt-2 justify-end"
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => { e.stopPropagation(); onMove(dayIndex, activity.id, 'up'); }}
+                      disabled={activityIndex === 0}
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => { e.stopPropagation(); onMove(dayIndex, activity.id, 'down'); }}
+                      disabled={activityIndex === totalActivities - 1}
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => { e.stopPropagation(); onLock(dayIndex, activity.id); }}
+                    >
+                      {isLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive"
+                      onClick={(e) => { e.stopPropagation(); onRemove(dayIndex, activity.id); }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
         </div>
-        <div className="text-right shrink-0">
-          <span className="font-medium">{formatCurrency(getActivityCost(activity))}</span>
-          
-          {/* Action Buttons */}
-          <AnimatePresence>
-            {showActions && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="flex items-center gap-1 mt-2 justify-end"
-              >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={(e) => { e.stopPropagation(); onMove(dayIndex, activity.id, 'up'); }}
-                  disabled={activityIndex === 0}
-                >
-                  <ArrowUp className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={(e) => { e.stopPropagation(); onMove(dayIndex, activity.id, 'down'); }}
-                  disabled={activityIndex === totalActivities - 1}
-                >
-                  <ArrowDown className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={(e) => { e.stopPropagation(); onLock(dayIndex, activity.id); }}
-                >
-                  {isLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive"
-                  onClick={(e) => { e.stopPropagation(); onRemove(dayIndex, activity.id); }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </motion.div>
+
+        {/* Expanded Details */}
+        <CollapsibleContent>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="px-4 pb-4 pt-2 border-t border-border/50 space-y-3"
+          >
+            {/* Full Address */}
+            {location.address && (
+              <div className="flex items-start gap-2 text-sm">
+                <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="font-medium">{location.address}</p>
+                  <a 
+                    href={getMapsUrl(location)} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline flex items-center gap-1 text-xs mt-1"
+                  >
+                    View on Google Maps
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
             )}
-          </AnimatePresence>
-        </div>
+
+            {/* Quick Links */}
+            <div className="flex flex-wrap gap-2">
+              {extActivity.website && (
+                <a 
+                  href={extActivity.website} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary/50 rounded-md text-xs hover:bg-secondary transition-colors"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  Website
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {extActivity.phoneNumber && (
+                <a 
+                  href={`tel:${extActivity.phoneNumber}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary/50 rounded-md text-xs hover:bg-secondary transition-colors"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  {extActivity.phoneNumber}
+                </a>
+              )}
+              {activity.bookingRequired && (
+                <a 
+                  href={extActivity.website || getMapsUrl(location)} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-md text-xs hover:bg-primary/20 transition-colors font-medium"
+                >
+                  Book Now
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+
+            {/* Review Highlights */}
+            {extActivity.reviewHighlights && extActivity.reviewHighlights.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  What visitors are saying
+                </div>
+                <div className="space-y-1.5">
+                  {extActivity.reviewHighlights.map((review, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-sm bg-secondary/30 rounded-md p-2">
+                      <ThumbsUp className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                      <p className="text-muted-foreground italic">"{review}"</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Insider Tips */}
+            {extActivity.tips && (
+              <div className="flex items-start gap-2 text-sm bg-primary/5 border border-primary/20 rounded-md p-3">
+                <Sparkles className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                <div>
+                  <span className="font-medium text-primary text-xs">Insider Tip</span>
+                  <p className="text-muted-foreground mt-0.5">{extActivity.tips}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Transportation to Next */}
+            {activity.transportation && (
+              <div className="flex items-start gap-2 text-sm">
+                <Car className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-muted-foreground">
+                    <span className="font-medium capitalize">{activity.transportation.method}</span>
+                    {activity.transportation.duration && ` • ${activity.transportation.duration}`}
+                    {activity.transportation.estimatedCost?.amount > 0 && 
+                      ` • ${formatCurrency(activity.transportation.estimatedCost.amount)}`
+                    }
+                  </p>
+                  {activity.transportation.instructions && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{activity.transportation.instructions}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </CollapsibleContent>
       </div>
-    </div>
+    </Collapsible>
   );
 }
 
