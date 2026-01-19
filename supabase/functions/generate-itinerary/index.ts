@@ -107,6 +107,35 @@ interface EnrichedItinerary {
 }
 
 // =============================================================================
+// RATE LIMITING - In-memory store (resets on cold start, but limits abuse)
+// =============================================================================
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMITS = {
+  'generate-full': { maxRequests: 3, windowMs: 300000 }, // 3 full generations per 5 min
+  'generate-day': { maxRequests: 10, windowMs: 60000 },   // 10 day regenerations per min
+  default: { maxRequests: 20, windowMs: 60000 }           // 20 requests per min for other actions
+};
+
+function checkRateLimit(userId: string, action: string): { allowed: boolean; remaining: number } {
+  const now = Date.now();
+  const key = `${userId}:${action}`;
+  const limits = RATE_LIMITS[action as keyof typeof RATE_LIMITS] || RATE_LIMITS.default;
+  const entry = rateLimitStore.get(key);
+  
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + limits.windowMs });
+    return { allowed: true, remaining: limits.maxRequests - 1 };
+  }
+  
+  if (entry.count >= limits.maxRequests) {
+    return { allowed: false, remaining: 0 };
+  }
+  
+  entry.count++;
+  return { allowed: true, remaining: limits.maxRequests - entry.count };
+}
+
+// =============================================================================
 // STRICT SCHEMA FOR AI GENERATION (Tool Definition)
 // =============================================================================
 
@@ -1616,6 +1645,16 @@ serve(async (req) => {
     const { action, ...params } = body;
 
     console.log(`[generate-itinerary] Action: ${action}`);
+
+    // Rate limit check for expensive operations
+    const rateCheck = checkRateLimit(authResult.userId, action);
+    if (!rateCheck.allowed) {
+      console.log(`[generate-itinerary] Rate limit exceeded for ${authResult.userId} on ${action}`);
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please wait a few minutes before trying again." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "X-RateLimit-Remaining": "0" } }
+      );
+    }
 
     // ==========================================================================
     // ACTION: generate-full - Complete 7-stage pipeline

@@ -12,6 +12,29 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-BOOKING-CHECKOUT] ${step}${detailsStr}`);
 };
 
+// =============================================================================
+// RATE LIMITING - In-memory store (resets on cold start, but limits abuse)
+// =============================================================================
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = { maxRequests: 5, windowMs: 60000 }; // 5 requests per minute per user
+
+function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(userId);
+  
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(userId, { count: 1, resetAt: now + RATE_LIMIT.windowMs });
+    return { allowed: true, remaining: RATE_LIMIT.maxRequests - 1 };
+  }
+  
+  if (entry.count >= RATE_LIMIT.maxRequests) {
+    return { allowed: false, remaining: 0 };
+  }
+  
+  entry.count++;
+  return { allowed: true, remaining: RATE_LIMIT.maxRequests - entry.count };
+}
+
 // Single Trip Unlock price
 const SINGLE_TRIP_PRICE_ID = 'price_1RpYXMFYxIg9jcJUxDiyEFp5'; // $29.99 one-time
 
@@ -59,6 +82,16 @@ serve(async (req) => {
     const userId = user.id;
     const userEmail = user.email;
     logStep("User authenticated", { userId, email: userEmail });
+
+    // Rate limit check
+    const rateCheck = checkRateLimit(userId);
+    if (!rateCheck.allowed) {
+      logStep("Rate limit exceeded", { userId });
+      return new Response(JSON.stringify({ error: "Too many requests. Please wait a minute and try again." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-RateLimit-Remaining": "0" },
+        status: 429,
+      });
+    }
 
     // Use service role client for database operations
     const serviceClient = createClient(
