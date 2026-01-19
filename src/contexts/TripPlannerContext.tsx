@@ -216,9 +216,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
       // Determine owner's plan tier (free if not authenticated or no plan data)
       const ownerPlanTier = plans?.[0] || 'free';
 
-      const tripData: Record<string, unknown> = {
-        id: state.tripId || undefined,
-        user_id: user?.id ?? null,
+      const baseTripData: Record<string, unknown> = {
         name: tripName,
         destination: state.basics.destination || 'Unknown',
         destination_country: null,
@@ -246,7 +244,14 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
       // Anonymous user: save to localStorage so the flow can continue
       if (!user) {
-        tripId = saveLocalTrip(tripData);
+        const localTripData: Record<string, unknown> = {
+          ...baseTripData,
+          // localStorage needs an id; backend generates it, but local does not
+          id: tripId || undefined,
+          user_id: null,
+        };
+
+        tripId = saveLocalTrip(localTripData);
         setState(prev => ({
           ...prev,
           tripId,
@@ -256,23 +261,30 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         return tripId;
       }
 
-      // Real mode: save to backend
+      // Backend save for authenticated user
+      const tripPayload: Record<string, unknown> = {
+        ...baseTripData,
+        user_id: user.id,
+      };
+
       if (tripId) {
         const { error } = await supabase
           .from('trips')
-          .update(tripData as any)
+          .update(tripPayload as any)
           .eq('id', tripId)
           .eq('user_id', user.id);
 
         if (error) throw error;
       } else {
+        // IMPORTANT: Do not send an "id" column on insert (backend generates it)
         const { data, error } = await supabase
           .from('trips')
-          .insert([tripData as any])
+          .insert([tripPayload as any])
           .select('id')
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
+        if (!data?.id) throw new Error('Failed to create trip');
         tripId = data.id;
       }
 
