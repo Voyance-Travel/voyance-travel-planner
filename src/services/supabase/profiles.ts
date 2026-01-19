@@ -92,34 +92,17 @@ export async function getProfileById(userId: string): Promise<Profile | null> {
 /**
  * Search profiles by handle or email (for friend search)
  */
+/**
+ * Search profiles by handle or display name (for friend search)
+ * Uses the profiles_public view which only exposes safe fields
+ */
 export async function searchProfilesByHandle(query: string): Promise<ProfileSearchResult[]> {
   if (!query || query.length < 2) return [];
 
-  // Check if query looks like an email
-  const isEmail = query.includes('@');
-  
-  if (isEmail) {
-    // Search by email - need to use auth.users via RPC or check if we have email linked
-    // For now, we'll try to find by exact email match if they've connected it
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, handle, display_name, avatar_url')
-      .limit(10);
-
-    // We can't directly query auth.users email from client
-    // Return all profiles and let client filter (limited approach)
-    // Better approach: create an edge function for email lookup
-    if (error) {
-      console.error('[Profiles] Error searching profiles by email:', error);
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  // Search by handle or display name
+  // Use the public-safe view for friend discovery
+  // This view only exposes: id, handle, display_name, avatar_url
   const { data, error } = await supabase
-    .from('profiles')
+    .from('profiles_public')
     .select('id, handle, display_name, avatar_url')
     .or(`handle.ilike.%${query}%,display_name.ilike.%${query}%`)
     .limit(10);
@@ -134,6 +117,8 @@ export async function searchProfilesByHandle(query: string): Promise<ProfileSear
 
 /**
  * Get profile by exact handle
+ * Note: This returns the full profile, so it will only work for the current user's profile
+ * or if called from an edge function with service role
  */
 export async function getProfileByHandle(handle: string): Promise<Profile | null> {
   const { data, error } = await supabase
@@ -144,6 +129,25 @@ export async function getProfileByHandle(handle: string): Promise<Profile | null
 
   if (error) {
     console.error('[Profiles] Error fetching profile by handle:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Get minimal profile info by handle (for friend requests)
+ * Uses the public view so it works for any user
+ */
+export async function getPublicProfileByHandle(handle: string): Promise<ProfileSearchResult | null> {
+  const { data, error } = await supabase
+    .from('profiles_public')
+    .select('id, handle, display_name, avatar_url')
+    .eq('handle', handle.toLowerCase())
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Profiles] Error fetching public profile by handle:', error);
     throw error;
   }
 
