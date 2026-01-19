@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Heart, Sparkles } from 'lucide-react';
+import { MapPin, Calendar, Heart, Sparkles, Flower2, Sun, Leaf, Snowflake } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface PageHeaderProps {
@@ -19,25 +19,25 @@ const seasonalContent: Record<string, ContentConfig> = {
   spring: {
     title: "Dreaming of Spring?",
     subtitle: "These destinations are perfect for cherry blossoms, outdoor cafés, and unforgettable shoulder-season escapes.",
-    icon: "🌸",
+    icon: <Flower2 className="w-8 h-8 text-pink-500" />,
     gradient: "from-pink-50 to-green-50"
   },
   summer: {
     title: "Endless Summer Awaits",
     subtitle: "Sun-soaked beaches, vibrant festivals, and long golden evenings in the world's most captivating destinations.",
-    icon: "☀️",
+    icon: <Sun className="w-8 h-8 text-amber-500" />,
     gradient: "from-yellow-50 to-blue-50"
   },
   fall: {
     title: "Fall Into Adventure",
     subtitle: "Witness nature's grand finale with autumn foliage, harvest festivals, and cozy mountain retreats.",
-    icon: "🍂",
+    icon: <Leaf className="w-8 h-8 text-orange-500" />,
     gradient: "from-orange-50 to-red-50"
   },
   winter: {
     title: "Winter Wonderlands",
     subtitle: "From snowy escapes to tropical hideaways, discover where to spend the most magical season.",
-    icon: "❄️",
+    icon: <Snowflake className="w-8 h-8 text-sky-500" />,
     gradient: "from-blue-50 to-purple-50"
   }
 };
