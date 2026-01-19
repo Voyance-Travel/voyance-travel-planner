@@ -61,7 +61,9 @@ async function checkCuratedCache(
       .select("*")
       .eq("entity_type", entityType)
       // IMPORTANT: exact match to avoid returning unrelated cached images
-      .eq("entity_key", normalizedKey);
+      .eq("entity_key", normalizedKey)
+      // Only return non-expired entries (or entries without expiry)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
 
     if (destination) {
       // Keep flexible destination matching (some cached entries may include country)
@@ -593,6 +595,9 @@ async function cacheImage(
   try {
     const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
 
+    // Cache images for 90 days (Google Places photos are relatively stable)
+    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
     await supabase.from("curated_images").upsert({
       entity_type: entityType,
       entity_key: normalizedKey,
@@ -605,6 +610,7 @@ async function cacheImage(
       photo_reference: image.photoReference,
       place_id: image.placeId,
       updated_at: new Date().toISOString(),
+      expires_at: expiresAt,
     }, {
       onConflict: 'entity_type,entity_key,destination'
     });

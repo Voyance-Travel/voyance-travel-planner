@@ -433,10 +433,37 @@ interface GeocodingResult {
 
 async function geocodeAddress(
   address: string,
-  destination: string
+  destination: string,
+  supabase?: any
 ): Promise<GeocodingResult | null> {
   const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY") || Deno.env.get("GOOGLE_GEOCODE_API_KEY");
   if (!apiKey) return null;
+
+  // Generate cache key from normalized address + destination
+  const queryKey = `${address.toLowerCase().trim()}|${destination.toLowerCase().trim()}`.replace(/[^a-z0-9|]/g, '');
+
+  // Check cache first
+  if (supabase) {
+    try {
+      const { data: cached } = await supabase
+        .from('geocoding_cache')
+        .select('lat, lng, formatted_address, place_id, expires_at')
+        .eq('query_key', queryKey)
+        .single();
+
+      if (cached && new Date(cached.expires_at) > new Date()) {
+        console.log(`[geocoding] ✅ Cache hit for: ${address}`);
+        return {
+          lat: cached.lat,
+          lng: cached.lng,
+          formattedAddress: cached.formatted_address,
+          placeId: cached.place_id,
+        };
+      }
+    } catch {
+      // Cache miss, continue to API
+    }
+  }
 
   try {
     const searchQuery = encodeURIComponent(`${address}, ${destination}`);
@@ -453,12 +480,33 @@ async function geocodeAddress(
     const result = data.results[0];
     const location = result.geometry.location;
 
-    return {
+    const geocodeResult: GeocodingResult = {
       lat: Math.round(location.lat * 10000) / 10000, // 4 decimal precision
       lng: Math.round(location.lng * 10000) / 10000,
       formattedAddress: result.formatted_address,
       placeId: result.place_id,
     };
+
+    // Cache the result for 90 days
+    if (supabase) {
+      try {
+        await supabase.from('geocoding_cache').upsert({
+          query_key: queryKey,
+          address: address,
+          destination: destination,
+          lat: geocodeResult.lat,
+          lng: geocodeResult.lng,
+          formatted_address: geocodeResult.formattedAddress,
+          place_id: geocodeResult.placeId,
+          expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+        }, { onConflict: 'query_key' });
+        console.log(`[geocoding] Cached result for: ${address}`);
+      } catch (e) {
+        console.warn('[geocoding] Failed to cache:', e);
+      }
+    }
+
+    return geocodeResult;
   } catch (error) {
     console.error(`[geocoding] Error for ${address}:`, error);
     return null;
@@ -1186,13 +1234,14 @@ serve(async (req) => {
       maxActivitiesPerDay,
     } = body;
 
+    // Create supabase client for caching and user preferences
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
     // Fetch user preferences if userId provided
     let userPrefs: UserItineraryPreferences | null = null;
     if (userId) {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
       const { data: prefs } = await supabase
         .from('user_preferences')
         .select('enable_gap_filling, enable_route_optimization, enable_real_transport, enable_geocoding, enable_venue_verification, enable_cost_lookup, preferred_downtime_minutes, max_activities_per_day')
@@ -1292,7 +1341,7 @@ serve(async (req) => {
         for (let i = 0; i < activities.length; i++) {
           const act = activities[i];
           if (!act.location?.lat && act.location?.address) {
-            const geo = await geocodeAddress(act.location.address, destination);
+            const geo = await geocodeAddress(act.location.address, destination, supabase);
             if (geo) {
               activities[i] = {
                 ...act,
@@ -1499,10 +1548,7 @@ serve(async (req) => {
       - Gaps filled: ${gapsInserted}
       - Budget total: $${budgetBreakdown.total}`);
 
-    // Save to database
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Save to database (reuse existing supabase client)
 
     const { data: trip, error: fetchError } = await supabase
       .from('trips')

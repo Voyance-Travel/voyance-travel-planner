@@ -670,6 +670,45 @@ export type Database = {
           },
         ]
       }
+      geocoding_cache: {
+        Row: {
+          address: string
+          created_at: string
+          destination: string | null
+          expires_at: string
+          formatted_address: string | null
+          id: string
+          lat: number
+          lng: number
+          place_id: string | null
+          query_key: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          destination?: string | null
+          expires_at?: string
+          formatted_address?: string | null
+          id?: string
+          lat: number
+          lng: number
+          place_id?: string | null
+          query_key: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          destination?: string | null
+          expires_at?: string
+          formatted_address?: string | null
+          id?: string
+          lat?: number
+          lng?: number
+          place_id?: string | null
+          query_key?: string
+        }
+        Relationships: []
+      }
       guides: {
         Row: {
           author: string | null
