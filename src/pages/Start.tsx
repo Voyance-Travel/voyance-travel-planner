@@ -671,7 +671,7 @@ export default function Start() {
                 <CollapsibleContent className="mt-4 space-y-3">
                   <div>
                     <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
-                      Total Trip Budget (USD)
+                      Budget Per Person (USD)
                     </label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -685,7 +685,7 @@ export default function Start() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      This is your total budget for flights + hotel. We'll do our best to find options within this range.
+                      Your per-person budget for flights + hotel. We'll find options within this range for each traveler.
                     </p>
                   </div>
                   
@@ -702,10 +702,10 @@ export default function Start() {
                   {/* Quick budget presets */}
                   <div className="flex flex-wrap gap-2">
                     {[
-                      { label: 'Budget', amount: 500, desc: 'Under $500' },
-                      { label: 'Moderate', amount: 1500, desc: '$500-$1,500' },
-                      { label: 'Premium', amount: 3000, desc: '$1,500-$3,000' },
-                      { label: 'Luxury', amount: 5000, desc: '$3,000+' },
+                      { label: 'Budget', amount: 500, desc: 'Under $500/person' },
+                      { label: 'Moderate', amount: 1500, desc: '$500-$1,500/person' },
+                      { label: 'Premium', amount: 3000, desc: '$1,500-$3,000/person' },
+                      { label: 'Luxury', amount: 5000, desc: '$3,000+/person' },
                     ].map((preset) => (
                       <button
                         key={preset.label}
