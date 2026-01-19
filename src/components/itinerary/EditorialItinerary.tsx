@@ -2497,17 +2497,36 @@ function ActivityRow({
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
             <span className="font-medium">{formatCurrency(cost)}</span>
-            {/* External booking link for activities that require booking */}
-            {activity.bookingRequired && cost > 0 && (
+            {/* Link options: direct booking URL > venue website > affiliate search (for paid items only) */}
+            {activity.bookingUrl ? (
+              <a
+                href={activity.bookingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Book Now
+              </a>
+            ) : activity.website ? (
+              <a
+                href={activity.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {cost > 0 ? 'View & Book' : 'View Details'}
+              </a>
+            ) : activity.bookingRequired && cost > 0 ? (
               <VendorBookingLink
                 activityName={activity.title}
                 destination={destination}
-                externalBookingUrl={activity.bookingUrl}
                 estimatedPrice={cost}
                 preferredVendor="viator"
                 size="sm"
               />
-            )}
+            ) : null}
             {isEditable && (
               <div className="flex items-center gap-1">
                 <button
