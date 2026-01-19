@@ -284,11 +284,18 @@ export default function PlannerHotelEnhanced() {
       id: hotelId,
       name: hotel.name,
       location: hotel.neighborhood,
+      address: hotel.address || hotel.neighborhood,
+      neighborhood: hotel.neighborhood,
       rating: hotel.rating,
       pricePerNight: room?.pricePerNight || hotel.pricePerNight,
       roomType: room?.name || hotel.roomType || 'Room',
       amenities: hotel.amenities,
       imageUrl: (enhancedHotel?.images?.[0] || hotel.imageUrl) ?? undefined,
+      images: enhancedHotel?.images || (hotel.imageUrl ? [hotel.imageUrl] : []),
+      reviewCount: hotel.reviewCount,
+      description: hotel.description,
+      checkIn: enhancedHotel?.policies?.checkIn || '15:00',
+      checkOut: enhancedHotel?.policies?.checkOut || '11:00',
     });
 
     try {

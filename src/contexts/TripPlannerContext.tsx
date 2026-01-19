@@ -65,11 +65,20 @@ export interface HotelSelection {
   id: string;
   name: string;
   location: string;
+  address?: string;
+  neighborhood?: string;
   rating: number;
   pricePerNight: number;
   roomType: string;
   amenities: string[];
   imageUrl?: string;
+  images?: string[];
+  website?: string;
+  checkIn?: string;
+  checkOut?: string;
+  nights?: number;
+  reviewCount?: number;
+  description?: string;
 }
 
 export interface Activity {
