@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -16,11 +16,14 @@ import {
   Lock,
   Star,
   ArrowRight,
+  UserCircle,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -33,6 +36,7 @@ export default function PlannerBooking() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [travelerNames, setTravelerNames] = useState<string[]>([]);
 
   const tripId = searchParams.get('tripId') || state.tripId;
   const wasCanceled = searchParams.get('canceled') === 'true';
@@ -52,6 +56,37 @@ export default function PlannerBooking() {
   }, [wasCanceled]);
 
   const travelers = state.basics.travelers || 1;
+  
+  // Initialize traveler names array when travelers count changes
+  useEffect(() => {
+    if (travelers > 0 && travelerNames.length !== travelers) {
+      setTravelerNames(prev => {
+        const newNames = [...prev];
+        // Extend or trim array to match travelers count
+        while (newNames.length < travelers) {
+          newNames.push('');
+        }
+        return newNames.slice(0, travelers);
+      });
+    }
+  }, [travelers, travelerNames.length]);
+
+  const updateTravelerName = (index: number, name: string) => {
+    setTravelerNames(prev => {
+      const updated = [...prev];
+      updated[index] = name;
+      return updated;
+    });
+  };
+
+  // Check if all traveler names are filled (required when flights are selected)
+  const hasFlights = !!(state.flights?.departure || state.flights?.return);
+  const allTravelerNamesProvided = useMemo(() => {
+    if (!hasFlights) return true; // Names only required if flights selected
+    return travelerNames.length === travelers && 
+           travelerNames.every(name => name.trim().length >= 2);
+  }, [hasFlights, travelerNames, travelers]);
+
   const outboundFlightBase = (state.flights?.departure?.price || 0) * travelers;
   const returnFlightBase = (state.flights?.return?.price || 0) * travelers;
   const flightSubtotal = outboundFlightBase + returnFlightBase;
@@ -78,6 +113,12 @@ export default function PlannerBooking() {
   const handleCheckout = async () => {
     if (!tripId) {
       toast.error('No trip found');
+      return;
+    }
+
+    // Validate traveler names if flights are selected
+    if (hasFlights && !allTravelerNamesProvided) {
+      toast.error('Please enter names for all travelers (minimum 2 characters each)');
       return;
     }
     
@@ -294,6 +335,53 @@ export default function PlannerBooking() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Traveler Names Section - Required when flights are selected */}
+              {hasFlights && travelers > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.17 }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-accent/50 flex items-center justify-center">
+                      <UserCircle className="w-4 h-4 text-accent-foreground" />
+                    </div>
+                    <h2 className="text-lg font-medium">Traveler Information</h2>
+                    <Badge variant="secondary" className="text-xs">Required</Badge>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {Array.from({ length: travelers }).map((_, index) => (
+                      <div 
+                        key={index}
+                        className="bg-gradient-to-r from-muted/50 to-transparent rounded-xl p-4"
+                      >
+                        <Label className="text-sm font-medium text-muted-foreground mb-2 block">
+                          Traveler {index + 1} {index === 0 && '(Primary)'}
+                        </Label>
+                        <Input
+                          type="text"
+                          placeholder="Full name as it appears on ID"
+                          value={travelerNames[index] || ''}
+                          onChange={(e) => updateTravelerName(index, e.target.value)}
+                          className={`bg-background ${
+                            travelerNames[index]?.trim().length >= 2 
+                              ? 'border-emerald-500/50 focus:border-emerald-500' 
+                              : ''
+                          }`}
+                        />
+                        {travelerNames[index]?.trim().length > 0 && travelerNames[index]?.trim().length < 2 && (
+                          <p className="text-xs text-destructive mt-1">Name must be at least 2 characters</p>
+                        )}
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground">
+                      Enter traveler names exactly as they appear on government-issued ID for flight booking.
+                    </p>
                   </div>
                 </motion.div>
               )}
