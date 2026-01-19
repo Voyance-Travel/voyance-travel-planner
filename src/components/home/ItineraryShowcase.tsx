@@ -135,7 +135,7 @@ export default function ItineraryShowcase() {
           <div className="lg:col-span-5 flex flex-col justify-center py-8">
             <div className="mb-6">
               <span className="text-xs tracking-[0.2em] uppercase text-muted-foreground font-sans">
-                {activeItinerary.duration} — {activeItinerary.country}
+                {activeItinerary.duration} · {activeItinerary.country}
               </span>
             </div>
 

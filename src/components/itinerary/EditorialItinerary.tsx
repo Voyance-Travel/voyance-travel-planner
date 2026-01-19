@@ -224,7 +224,7 @@ function formatTime(time: string | undefined): string {
 
 function formatCurrency(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) {
-    return '—'; // Should never happen with smart estimation
+    return '-'; // Should never happen with smart estimation
   }
   if (amount === 0) {
     return 'Free';

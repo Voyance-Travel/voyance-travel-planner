@@ -209,7 +209,7 @@ export default function TripPlanner() {
                 <div className="bg-card rounded-xl border border-border p-6 space-y-4">
                   <h3 className="font-semibold text-lg">{destination?.city}, {destination?.country}</h3>
                   <div className="grid sm:grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /> {startDate} — {endDate}</div>
+                    <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /> {startDate} to {endDate}</div>
                     <div className="flex items-center gap-2"><Users className="h-4 w-4 text-muted-foreground" /> {travelers} traveler{travelers > 1 ? 's' : ''}</div>
                     <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /> From {departureCity}</div>
                   </div>

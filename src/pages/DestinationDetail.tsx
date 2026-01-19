@@ -74,9 +74,6 @@ export default function DestinationDetail() {
     ? activities 
     : activities.filter(a => a.category === activeCategory);
 
-  // Mock rating data
-  const rating = 4.8;
-  const reviewCount = 2847;
 
   // Best months to visit - use destination data or fallback
   const bestMonths = destination.bestMonths || ['Mar', 'Apr', 'May', 'Oct', 'Nov'];
@@ -168,11 +165,6 @@ export default function DestinationDetail() {
               
               {/* Quick Stats Bar */}
               <div className="flex flex-wrap items-center gap-6 text-white/90">
-                <div className="flex items-center gap-2">
-                  <Star className="h-5 w-5 fill-accent text-accent" />
-                  <span className="font-medium">{rating}</span>
-                  <span className="text-white/60">({reviewCount.toLocaleString()} reviews)</span>
-                </div>
                 <div className="flex items-center gap-2">
                   <Globe className="h-4 w-4" />
                   <span>{destination.timezone}</span>

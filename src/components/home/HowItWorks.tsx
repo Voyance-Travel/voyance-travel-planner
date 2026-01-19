@@ -9,12 +9,12 @@ const STEPS = [
   },
   {
     title: "You set the destination.",
-    description: "We help you plan the trip you actually want — on your terms.",
+    description: "We help you plan the trip you actually want, on your terms.",
     image: "/images/howitworks-step-2.jpg"
   },
   {
     title: "We build the ideal trip.",
-    description: "Flights, stays, and activities — pre-selected to match your vibe.",
+    description: "Flights, stays, and activities pre-selected to match your vibe.",
     image: "/images/howitworks-step-3.jpg"
   },
   {

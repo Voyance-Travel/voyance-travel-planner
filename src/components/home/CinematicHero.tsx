@@ -103,7 +103,7 @@ export default function CinematicHero() {
             transition={{ delay: 1, duration: 0.8 }}
             className="absolute bottom-8 left-8 md:left-16 text-white/40 text-xs tracking-[0.2em] uppercase font-sans"
           >
-            Vol. I — Winter 2026
+            Vol. I · Winter 2026
           </motion.div>
         </motion.div>
       </div>

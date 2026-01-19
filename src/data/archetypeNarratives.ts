@@ -111,7 +111,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Wilderness Pioneer',
     category: 'EXPLORER',
     hookLine: "WiFi is optional, wilderness is essential.",
-    coreDescription: "You measure distance in days from civilization, not kilometers. The further from beaten paths, the closer to yourself. Mountains don't scare you—crowds do.",
+    coreDescription: "You measure distance in days from civilization, not kilometers. The further from beaten paths, the closer to yourself. Mountains don't scare you. Crowds do.",
     whatThisMeans: [
       "You pack light but always bring the right gear",
       "Sunrise is your favorite meeting time",
@@ -161,7 +161,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Culinary Cartographer',
     category: 'CURATOR',
     hookLine: "Your passport is basically a menu.",
-    coreDescription: "You eat your way through every destination. Food isn't fuel—it's the reason you travel. You've planned entire trips around a single restaurant reservation.",
+    coreDescription: "You eat your way through every destination. Food isn't fuel, it's the reason you travel. You've planned entire trips around a single restaurant reservation.",
     whatThisMeans: [
       "You research restaurants before booking flights",
       "Market visits are non-negotiable",
@@ -186,7 +186,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Luxury Luminary',
     category: 'CURATOR',
     hookLine: "Champagne wishes, caviar dreams, economy never.",
-    coreDescription: "You don't travel—you curate experiences. Every detail matters, from thread count to tasting menus. Life's too short for ordinary, and your trips prove it.",
+    coreDescription: "You don't travel, you curate experiences. Every detail matters, from thread count to tasting menus. Life's too short for ordinary, and your trips prove it.",
     whatThisMeans: [
       "You have a preferred suite at hotels worldwide",
       "Concierge staff know your preferences",
