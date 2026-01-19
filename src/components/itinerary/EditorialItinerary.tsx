@@ -43,6 +43,7 @@ import { PaymentsTab } from './PaymentsTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
+import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 
 // =============================================================================
 // TYPES
@@ -168,8 +169,10 @@ export interface EditorialItineraryProps {
   };
   heroImageUrl?: string;
   isEditable?: boolean;
+  originCity?: string;
   onSave?: (days: EditorialDay[]) => Promise<void>;
   onRegenerateDay?: (dayNumber: number) => Promise<EditorialDay | null>;
+  onBookingAdded?: () => void;
 }
 
 // =============================================================================
@@ -366,8 +369,10 @@ export function EditorialItinerary({
   destinationInfo,
   heroImageUrl,
   isEditable = true,
+  originCity,
   onSave,
   onRegenerateDay,
+  onBookingAdded,
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
@@ -1077,7 +1082,15 @@ export function EditorialItinerary({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No flight selected</p>
+                  <AddFlightInline
+                    tripId={tripId}
+                    destination={destination}
+                    startDate={startDate}
+                    endDate={endDate}
+                    travelers={travelers}
+                    origin={originCity}
+                    onFlightAdded={onBookingAdded}
+                  />
                 )}
               </CardContent>
             </Card>
@@ -1301,7 +1314,14 @@ export function EditorialItinerary({
                     )}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No hotel selected</p>
+                  <AddHotelInline
+                    tripId={tripId}
+                    destination={destination}
+                    startDate={startDate}
+                    endDate={endDate}
+                    travelers={travelers}
+                    onHotelAdded={onBookingAdded}
+                  />
                 )}
               </CardContent>
             </Card>

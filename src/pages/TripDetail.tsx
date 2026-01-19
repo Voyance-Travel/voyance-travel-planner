@@ -852,6 +852,7 @@ export default function TripDetail() {
                   flightSelection={normalizedFlight}
                   hotelSelection={trip.hotel_selection as Record<string, unknown> | null}
                   isEditable={true}
+                  onBookingAdded={() => window.location.reload()}
                 />
               );
             })()
