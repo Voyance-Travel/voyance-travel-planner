@@ -36,6 +36,9 @@ verify_jwt = false
 [functions.enrich-itinerary]
 verify_jwt = false
 
+[functions.enrich-preferences]
+verify_jwt = false
+
 [functions.import-users]
 verify_jwt = false
 
@@ -67,4 +70,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.trip-notifications]
+verify_jwt = false
+
+[functions.suggest-mystery-trips]
 verify_jwt = false

@@ -111,19 +111,21 @@ const QUIZ_FIELD_MAP: Record<string, keyof UserPreferencesPayload> = {
   'budget': 'budget_tier',
   'pace': 'travel_pace',
   'planning_style': 'planning_preference',
-  'companions': 'travel_companions',
+  'travel_companions': 'travel_companions',
+  'companions': 'travel_companions', // Alternate ID
   'group_size': 'preferred_group_size',
   'interests': 'interests',
+  'accommodation': 'accommodation_style', // Step 8 hotel type
   'hotel_style': 'hotel_style',
-  'hotel_amenities': 'hotel_style', // Maps to same field as preference
+  'hotel_priorities': 'hotel_style', // Maps priorities to style
   'dining_style': 'dining_style',
   'dietary_restrictions': 'dietary_restrictions',
   'weather_preference': 'climate_preferences', // CRITICAL: climate prefs
   // flight_preferences is multi-select, handled specially in mapQuizAnswersToPreferences
   
-  // ==== LEGACY/ALTERNATE MAPPINGS ====
+  // ==== LEGACY/ALTERNATE MAPPINGS (camelCase versions) ====
   'style': 'travel_style',
-  'accommodation': 'accommodation_style',
+  // 'accommodation' already mapped above
   'travelerType': 'traveler_type',
   'travelVibes': 'travel_vibes',
   'emotionalDrivers': 'emotional_drivers',
