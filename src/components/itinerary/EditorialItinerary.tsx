@@ -18,7 +18,7 @@ import {
   Lock, Unlock, MoveUp, MoveDown, Plus, RefreshCw,
   Plane, Hotel, Utensils, Camera, ShoppingBag, Palmtree, Car, Trash2,
   Sun, Cloud, CloudRain, Snowflake, Edit3, Sparkles, AlertCircle,
-  Calendar, Users, ExternalLink
+  Calendar, Users, ExternalLink, Route
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -191,8 +191,13 @@ function formatTime(time: string | undefined): string {
   return `${displayHours}:${minutes} ${period}`;
 }
 
-function formatCurrency(amount: number | null | undefined): string {
-  if (amount === null || amount === undefined || amount === 0) return 'Free';
+function formatCurrency(amount: number | null | undefined, showEstimateLabel = true): string {
+  if (amount === null || amount === undefined) {
+    return showEstimateLabel ? 'Estimate needed' : '—';
+  }
+  if (amount === 0) {
+    return 'Included'; // Zero cost means included/bundled, not "free"
+  }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -254,6 +259,7 @@ export function EditorialItinerary({
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
   const [activeTab, setActiveTab] = useState<'itinerary' | 'overview' | 'tips'>('itinerary');
   const [isSaving, setIsSaving] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
@@ -306,6 +312,65 @@ export function EditorialItinerary({
       setIsSaving(false);
     }
   }, [days, tripId, onSave]);
+
+  // Optimize itinerary: route optimization, real transport, real costs
+  const handleOptimize = useCallback(async () => {
+    setIsOptimizing(true);
+    try {
+      toast.info('Optimizing routes and fetching real costs...', { duration: 3000 });
+      
+      const { data, error } = await supabase.functions.invoke('optimize-itinerary', {
+        body: {
+          tripId,
+          destination,
+          days: days.map(d => ({
+            dayNumber: d.dayNumber,
+            date: d.date,
+            activities: d.activities.map(a => ({
+              id: a.id,
+              title: a.title,
+              category: a.category || a.type,
+              startTime: a.startTime,
+              endTime: a.endTime,
+              location: a.location,
+              cost: a.cost,
+              isLocked: a.isLocked,
+              transportation: a.transportation,
+            })),
+          })),
+          enableRouteOptimization: true,
+          enableRealTransport: true,
+          enableCostLookup: true,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.days) {
+        // Update days with optimized data
+        setDays(prev => prev.map((day, idx) => {
+          const optimizedDay = data.days[idx];
+          if (!optimizedDay) return day;
+          return {
+            ...day,
+            activities: optimizedDay.activities.map((optAct: EditorialActivity, actIdx: number) => ({
+              ...day.activities[actIdx],
+              ...optAct,
+            })),
+          };
+        }));
+        setHasChanges(true);
+        
+        const meta = data.metadata || {};
+        toast.success(`Optimized! ${meta.transportCalculated || 0} routes calculated, ${meta.costsLookedUp || 0} prices updated`);
+      }
+    } catch (err) {
+      console.error('Optimize error:', err);
+      toast.error('Failed to optimize itinerary');
+    } finally {
+      setIsOptimizing(false);
+    }
+  }, [days, tripId, destination]);
 
   const handleActivityLock = useCallback((dayIndex: number, activityId: string) => {
     setDays(prev => prev.map((day, idx) => {
@@ -469,10 +534,21 @@ export function EditorialItinerary({
               <span className="text-2xl font-serif ml-2">${totalCost.toLocaleString()}</span>
             </div>
             {isEditable && (
-              <Button onClick={handleSave} disabled={isSaving || !hasChanges} className="gap-2">
-                {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {isSaving ? 'Saving...' : 'Save'}
-              </Button>
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={handleOptimize} 
+                  disabled={isOptimizing || days.length === 0} 
+                  className="gap-2"
+                >
+                  {isOptimizing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
+                  {isOptimizing ? 'Optimizing...' : 'Optimize Routes & Prices'}
+                </Button>
+                <Button onClick={handleSave} disabled={isSaving || !hasChanges} className="gap-2">
+                  {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {isSaving ? 'Saving...' : 'Save'}
+                </Button>
+              </>
             )}
           </div>
         </div>

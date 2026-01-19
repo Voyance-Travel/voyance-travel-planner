@@ -141,7 +141,13 @@ function formatTime12h(time: string | undefined | null): string {
   return `${displayHours}:${minutes} ${period}`;
 }
 
-function formatCurrency(amount: number): string {
+function formatCurrency(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) {
+    return 'Estimate needed';
+  }
+  if (amount === 0) {
+    return 'Included'; // Zero cost = bundled, not "free"
+  }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -682,7 +688,7 @@ function DayCard({
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm font-medium">
-            {totalCost > 0 ? formatCurrency(totalCost) : 'Free'}
+            {formatCurrency(totalCost > 0 ? totalCost : null)}
           </span>
           {isExpanded ? (
             <ChevronUp className="h-5 w-5 text-muted-foreground" />
@@ -881,12 +887,10 @@ function ActivityCard({
               )}
             </div>
             <div className="text-right shrink-0">
-              {/* Cost Display - Show "Free" for null, otherwise show amount */}
-              {getActivityCost(activity) !== null ? (
-                <span className="font-medium">{formatCurrency(getActivityCost(activity)!)}</span>
-              ) : (
-                <span className="text-xs text-muted-foreground">Free</span>
-              )}
+              {/* Cost Display - Show "Estimate needed" for null */}
+              <span className={getActivityCost(activity) !== null ? "font-medium" : "text-xs text-muted-foreground italic"}>
+                {formatCurrency(getActivityCost(activity))}
+              </span>
               
               {/* Expand Button */}
               <CollapsibleTrigger asChild>
