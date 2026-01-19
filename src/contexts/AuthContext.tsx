@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { logLogin, logSignup, logLogout, logOAuthLogin } from '@/services/authAuditAPI';
 
 export interface User {
   id: string;
@@ -247,24 +248,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[Auth] Auth state changed:', event);
       
+      // Handle synchronous state updates first
+      setSession(session);
+      setIsLoading(false);
+      
       if (session?.user) {
-        // On sign in, sync profile and claim any locally-saved trips
-        if (event === 'SIGNED_IN') {
-          await syncProfile(session.user);
-          await migrateLocalTripsToAccount(session.user);
-        }
+        // Defer async operations with setTimeout to avoid deadlock
+        setTimeout(async () => {
+          // On sign in, sync profile and claim any locally-saved trips
+          if (event === 'SIGNED_IN') {
+            await syncProfile(session.user);
+            await migrateLocalTripsToAccount(session.user);
+            
+            // Log OAuth logins (email/password logins are logged in login())
+            const provider = session.user.app_metadata?.provider;
+            if (provider && provider !== 'email') {
+              logOAuthLogin(session.user.id, session.user.email || '', provider).catch(console.error);
+            }
+          }
 
-        const { profile, preferences } = await loadUserData(session.user);
-        setUser(transformProfile(session.user, profile, preferences));
+          const { profile, preferences } = await loadUserData(session.user);
+          setUser(transformProfile(session.user, profile, preferences));
+        }, 0);
       } else {
         setUser(null);
       }
-      
-      setSession(session);
-      setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -284,6 +295,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.user) {
       const { profile, preferences } = await loadUserData(data.user);
       setUser(transformProfile(data.user, profile, preferences));
+      
+      // Log login event (don't await to not block login)
+      logLogin(data.user.id, email).catch(console.error);
     }
   };
 
@@ -292,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       options: {
+        emailRedirectTo: `${window.location.origin}/`,
         data: {
           name: name,
           full_name: name,
@@ -311,6 +326,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Profile is created automatically via trigger
     setSession(data.session);
     setUser(transformProfile(data.user, null, null));
+    
+    // Log signup event (don't await to not block signup)
+    if (data.user) {
+      logSignup(data.user.id, email).catch(console.error);
+    }
   };
 
   const logout = async () => {
@@ -318,6 +338,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isDemoMode) {
       toggleDemoMode(false);
       return;
+    }
+    
+    // Log logout before signing out (capture user id while we have it)
+    if (user) {
+      logLogout(user.id, user.email).catch(console.error);
     }
     
     const { error } = await supabase.auth.signOut();

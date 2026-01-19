@@ -9,6 +9,8 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { supabase } from '@/integrations/supabase/client';
+import { logPasswordResetRequest } from '@/services/authAuditAPI';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -35,14 +37,22 @@ export function ForgotPasswordForm() {
     setError('');
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // For demo purposes, always succeed
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(data.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (resetError) {
+        throw resetError;
+      }
+
+      // Log the password reset request
+      await logPasswordResetRequest(data.email);
+
       setSubmittedEmail(data.email);
       setIsSuccess(true);
-    } catch {
-      setError('Something went wrong. Please try again.');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

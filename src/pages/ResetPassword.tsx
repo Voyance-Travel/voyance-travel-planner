@@ -10,6 +10,8 @@ import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { supabase } from '@/integrations/supabase/client';
+import { logPasswordResetComplete } from '@/services/authAuditAPI';
 
 // Validation schema
 const resetPasswordSchema = z.object({
@@ -52,31 +54,46 @@ export default function ResetPassword() {
 
   const newPassword = watch('newPassword');
 
-  // Redirect if missing required URL parameters
+  // Check for valid session from password reset flow
   useEffect(() => {
-    if (!token) {
-      navigate('/signin', { 
-        state: { 
-          message: 'Invalid reset link. Please request a new password reset.' 
-        }
-      });
-    }
-  }, [token, navigate]);
+    // Supabase handles the token verification automatically
+    // when user clicks the reset link, they get a session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        // No valid session - redirect to forgot password
+        navigate('/forgot-password', { 
+          state: { 
+            message: 'Invalid or expired reset link. Please request a new password reset.' 
+          }
+        });
+      }
+    });
+  }, [navigate]);
 
   const onSubmit = async (data: ResetPasswordForm) => {
-    if (!token) return;
-
     setIsSubmitting(true);
     setSubmitStatus('idle');
     setSubmitMessage('');
 
     try {
-      // Mock API call - replace with actual auth service
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Simulate success
+      const { data: updateData, error: updateError } = await supabase.auth.updateUser({
+        password: data.newPassword,
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Log the password reset completion
+      if (updateData.user) {
+        await logPasswordResetComplete(updateData.user.id, updateData.user.email || undefined);
+      }
+
       setSubmitStatus('success');
       setSubmitMessage('Your password has been reset successfully.');
+      
+      // Sign out so user logs in with new password
+      await supabase.auth.signOut();
       
       // Redirect to signin after 3 seconds
       setTimeout(() => {
@@ -86,9 +103,10 @@ export default function ResetPassword() {
           }
         });
       }, 3000);
-    } catch {
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.';
       setSubmitStatus('error');
-      setSubmitMessage('An unexpected error occurred. Please try again.');
+      setSubmitMessage(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
