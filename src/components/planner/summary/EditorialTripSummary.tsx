@@ -20,8 +20,11 @@ import {
   ChevronUp,
   Star,
   ArrowRight,
+  DollarSign,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -68,6 +71,7 @@ interface TripSummaryData {
   hotel?: HotelDetails;
   totalCost: number;
   tripName?: string;
+  activitiesBudget?: number;
 }
 
 interface EditorialTripSummaryProps {
@@ -76,6 +80,7 @@ interface EditorialTripSummaryProps {
   onSave: () => void;
   onBuildItinerary: () => void;
   onBack: () => void;
+  onActivitiesBudgetChange?: (budget: number) => void;
   isLoading?: boolean;
   priceLockExpiry?: Date;
 }
@@ -96,11 +101,14 @@ export default function EditorialTripSummary({
   onSave,
   onBuildItinerary,
   onBack,
+  onActivitiesBudgetChange,
   isLoading,
   priceLockExpiry,
 }: EditorialTripSummaryProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [costExpanded, setCostExpanded] = useState(true);
+  const [activitiesBudget, setActivitiesBudget] = useState(data.activitiesBudget || 0);
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
 
   const nights = Math.ceil(
     (new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24)
@@ -122,7 +130,12 @@ export default function EditorialTripSummary({
   // Only charge service fee if user has selected flights or hotels
   const hasSelections = flightSubtotal > 0 || hotelSubtotal > 0;
   const serviceFee = hasSelections ? 29.99 : 0;
-  const grandTotal = flightTotal + hotelTotal + serviceFee;
+  const grandTotal = flightTotal + hotelTotal + activitiesBudget + serviceFee;
+
+  const handleBudgetChange = (value: number) => {
+    setActivitiesBudget(value);
+    onActivitiesBudgetChange?.(value);
+  };
 
   const handlePrint = () => {
     window.print();
@@ -514,6 +527,47 @@ export default function EditorialTripSummary({
                             </div>
                           </div>
                         )}
+                        
+                        {/* Activities Budget - Editable */}
+                        <div className="pt-2">
+                          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                            <DollarSign className="h-3.5 w-3.5 text-primary" />
+                            Activities & Experiences
+                          </div>
+                          <div className="pl-5">
+                            {isEditingBudget ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground">$</span>
+                                <Input
+                                  type="number"
+                                  value={activitiesBudget || ''}
+                                  onChange={(e) => handleBudgetChange(Number(e.target.value) || 0)}
+                                  onBlur={() => setIsEditingBudget(false)}
+                                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingBudget(false)}
+                                  className="h-8 w-24 text-sm"
+                                  placeholder="0"
+                                  min={0}
+                                  autoFocus
+                                />
+                                <span className="text-xs text-muted-foreground">total budget</span>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setIsEditingBudget(true)}
+                                className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground group transition-colors"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  {activitiesBudget > 0 ? 'Planned spending' : 'Set your activities budget'}
+                                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </span>
+                                <span>{activitiesBudget > 0 ? `$${activitiesBudget.toFixed(0)}` : '—'}</span>
+                              </button>
+                            )}
+                            <p className="text-xs text-muted-foreground/70 mt-1">
+                              Click to set how much you plan to spend on activities
+                            </p>
+                          </div>
+                        </div>
                         
                         <div className="flex justify-between text-sm text-muted-foreground pt-2">
                           <span>Service fee</span>
