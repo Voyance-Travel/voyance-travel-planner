@@ -244,6 +244,10 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
       // Determine owner's plan tier (free if not authenticated or no plan data)
       const ownerPlanTier = plans?.[0] || 'free';
 
+      // Determine trip status based on selections
+      const hasFlightAndHotel = state.flights && state.hotel;
+      const tripStatus = hasFlightAndHotel ? 'booked' : 'draft';
+
       const baseTripData: Record<string, unknown> = {
         name: tripName,
         destination: state.basics.destination || 'Unknown',
@@ -255,7 +259,7 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         origin_city: state.basics.originCity,
         budget_tier: state.basics.budgetTier || 'moderate',
         owner_plan_tier: ownerPlanTier, // Track owner's plan for collaboration rules
-        status: 'draft',
+        status: tripStatus,
         flight_selection: state.flights ? JSON.parse(JSON.stringify(state.flights)) : null,
         hotel_selection: state.hotel ? JSON.parse(JSON.stringify(state.hotel)) : null,
         itinerary_data: state.itinerary.length > 0 ? JSON.parse(JSON.stringify({ days: state.itinerary })) : null,
