@@ -1,22 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, Sparkles, Compass, Crown, Zap, ArrowRight, Shield, Clock, Users, Heart, Star, Wallet, Loader2, CreditCard } from 'lucide-react';
+import { Check, Sparkles, Compass, Crown, Zap, ArrowRight, Shield, Clock, Users, Heart, Star, Wallet, Loader2, CreditCard, CheckCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { PLAN_FEATURES, STRIPE_PRODUCTS, TOPUP_OPTIONS } from '@/config/pricing';
-import { createCheckoutSession } from '@/services/stripeAPI';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
+
+interface CheckoutConfig {
+  priceId: string;
+  mode: 'subscription' | 'payment';
+  productName: string;
+  returnPath: string;
+}
 
 export default function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [checkoutConfig, setCheckoutConfig] = useState<CheckoutConfig | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const handleCheckout = async (priceId: string, mode: 'subscription' | 'payment', planName: string) => {
+  // Handle success/canceled URL params
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast({
+        title: "Purchase successful!",
+        description: "Your subscription is now active.",
+      });
+      // Clean up URL
+      searchParams.delete('success');
+      setSearchParams(searchParams);
+    }
+    if (searchParams.get('canceled') === 'true') {
+      toast({
+        title: "Checkout canceled",
+        description: "You can try again whenever you're ready.",
+        variant: "default",
+      });
+      searchParams.delete('canceled');
+      setSearchParams(searchParams);
+    }
+    if (searchParams.get('credits_added') === 'true') {
+      toast({
+        title: "Credits added!",
+        description: "Your wallet has been topped up.",
+      });
+      searchParams.delete('credits_added');
+      searchParams.delete('amount');
+      setSearchParams(searchParams);
+    }
+  }, [searchParams, setSearchParams, toast]);
+
+  const openCheckout = async (priceId: string, mode: 'subscription' | 'payment', planName: string, productDisplayName: string) => {
     setLoadingPlan(planName);
     
     try {
@@ -29,22 +70,17 @@ export default function Pricing() {
           description: "Please sign in to subscribe to a plan.",
           variant: "default",
         });
-        navigate('/sign-in?redirect=/pricing');
+        navigate('/signin?redirect=/pricing');
         return;
       }
 
-      const result = await createCheckoutSession({
+      // Open embedded checkout modal
+      setCheckoutConfig({
         priceId,
         mode,
+        productName: productDisplayName,
+        returnPath: '/payment-success',
       });
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      if (result.url) {
-        window.open(result.url, '_blank');
-      }
     } catch (error) {
       console.error('Checkout error:', error);
       toast({
@@ -69,7 +105,7 @@ export default function Pricing() {
           description: "Please sign in to add credits.",
           variant: "default",
         });
-        navigate('/sign-in?redirect=/pricing');
+        navigate('/signin?redirect=/pricing');
         return;
       }
 
@@ -214,7 +250,7 @@ export default function Pricing() {
                 size="lg"
                 variant="outline"
                 className="w-full"
-                onClick={() => handleCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass')}
+                onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Single Trip Pass')}
                 disabled={loadingPlan === 'trip_pass'}
               >
                 {loadingPlan === 'trip_pass' ? (
@@ -273,7 +309,7 @@ export default function Pricing() {
               <Button
                 size="lg"
                 className="w-full"
-                onClick={() => handleCheckout(STRIPE_PRODUCTS.MONTHLY.priceId, 'subscription', 'monthly')}
+                onClick={() => openCheckout(STRIPE_PRODUCTS.MONTHLY.priceId, 'subscription', 'monthly', 'Voyager Monthly')}
                 disabled={loadingPlan === 'monthly'}
               >
                 {loadingPlan === 'monthly' ? (
@@ -332,7 +368,7 @@ export default function Pricing() {
                 size="lg"
                 variant="outline"
                 className="w-full border-amber-500/50 hover:bg-amber-500/10"
-                onClick={() => handleCheckout(STRIPE_PRODUCTS.YEARLY.priceId, 'subscription', 'yearly')}
+                onClick={() => openCheckout(STRIPE_PRODUCTS.YEARLY.priceId, 'subscription', 'yearly', 'Voyager Yearly')}
                 disabled={loadingPlan === 'yearly'}
               >
                 {loadingPlan === 'yearly' ? (
@@ -599,6 +635,18 @@ export default function Pricing() {
           </motion.div>
         </div>
       </section>
+
+      {/* Embedded Checkout Modal */}
+      {checkoutConfig && (
+        <EmbeddedCheckoutModal
+          isOpen={!!checkoutConfig}
+          onClose={() => setCheckoutConfig(null)}
+          priceId={checkoutConfig.priceId}
+          mode={checkoutConfig.mode}
+          productName={checkoutConfig.productName}
+          returnPath={checkoutConfig.returnPath}
+        />
+      )}
     </MainLayout>
   );
 }
