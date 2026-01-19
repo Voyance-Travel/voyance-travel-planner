@@ -206,7 +206,7 @@ function formatTime(iso: string): string {
 export default function PlannerFlightEnhanced() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { state: plannerState, setBasics, setFlights } = useTripPlanner();
+  const { state: plannerState, setBasics, setFlights, saveTrip } = useTripPlanner();
 
   const [selectedOutboundId, setSelectedOutboundId] = useState<string | null>(plannerState.flights?.id ? null : null);
   const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
@@ -383,10 +383,21 @@ export default function PlannerFlightEnhanced() {
 
   const canContinue = !!(plannerState.flights?.departure && plannerState.flights?.return);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!canContinue) {
       toast.error('Please select both an outbound and return flight');
       return;
+    }
+
+    // Save trip to database with flight selection
+    try {
+      const tripId = await saveTrip();
+      if (tripId) {
+        console.log('[PlannerFlight] Trip saved with flight selection:', tripId);
+      }
+    } catch (error) {
+      console.error('[PlannerFlight] Failed to save trip:', error);
+      // Continue navigation even if save fails - data is still in context
     }
 
     const params = new URLSearchParams(searchParams);

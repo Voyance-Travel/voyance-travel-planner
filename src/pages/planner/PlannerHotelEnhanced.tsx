@@ -119,7 +119,7 @@ function toEnhancedHotel(hotel: HotelOption, nights: number): EnhancedHotelOptio
 export default function PlannerHotelEnhanced() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { state: plannerState, setBasics, setHotel } = useTripPlanner();
+  const { state: plannerState, setBasics, setHotel, saveTrip } = useTripPlanner();
 
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(plannerState.hotel?.id || null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
@@ -308,10 +308,21 @@ export default function PlannerHotelEnhanced() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!plannerState.hotel?.id) {
       toast.error('Please select a hotel and room first');
       return;
+    }
+
+    // Save trip to database with hotel selection
+    try {
+      const tripId = await saveTrip();
+      if (tripId) {
+        console.log('[PlannerHotel] Trip saved with hotel selection:', tripId);
+      }
+    } catch (error) {
+      console.error('[PlannerHotel] Failed to save trip:', error);
+      // Continue navigation even if save fails - data is still in context
     }
 
     const params = new URLSearchParams(searchParams);
