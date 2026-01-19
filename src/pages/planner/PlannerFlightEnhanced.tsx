@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 
 import {
-  useFlightSearch,
+  useRoundtripFlightSearch,
   useCreateFlightHold,
   type FlightOption,
   type FlightSearchParams,
@@ -360,61 +360,52 @@ export default function PlannerFlightEnhanced() {
     sortBy: flightBudget ? 'price' : 'recommended',
   });
 
-  const outboundParams: FlightSearchParams = useMemo(
+  // Single roundtrip search - fetches both outbound and return in one call
+  const roundtripParams: FlightSearchParams = useMemo(
     () => ({
       origin,
       destination,
       departureDate: startDate,
+      returnDate: endDate, // Include return date for roundtrip search
       passengers: travelers,
       class: 'economy',
-      directOnly: outboundFilters.directOnly,
+      directOnly: outboundFilters.directOnly || returnFilters.directOnly,
       preferredAirlines: userPrefs?.preferredAirlines?.length ? userPrefs.preferredAirlines : undefined,
     }),
-    [origin, destination, startDate, travelers, outboundFilters.directOnly, userPrefs?.preferredAirlines]
-  );
-
-  const returnParams: FlightSearchParams = useMemo(
-    () => ({
-      origin: destination,
-      destination: origin,
-      departureDate: endDate,
-      passengers: travelers,
-      class: 'economy',
-      directOnly: returnFilters.directOnly,
-      preferredAirlines: userPrefs?.preferredAirlines?.length ? userPrefs.preferredAirlines : undefined,
-    }),
-    [origin, destination, endDate, travelers, returnFilters.directOnly, userPrefs?.preferredAirlines]
+    [origin, destination, startDate, endDate, travelers, outboundFilters.directOnly, returnFilters.directOnly, userPrefs?.preferredAirlines]
   );
 
   const {
-    data: outboundFlights,
-    isLoading: outboundLoading,
-    error: outboundError,
-  } = useFlightSearch(outboundParams);
+    data: roundtripData,
+    isLoading: flightsLoading,
+    error: flightsError,
+  } = useRoundtripFlightSearch(roundtripParams);
 
-  const {
-    data: returnFlights,
-    isLoading: returnLoading,
-    error: returnError,
-  } = useFlightSearch(returnParams);
+  // Extract outbound and return flights from roundtrip response
+  const outboundFlights = roundtripData?.outbound || [];
+  const returnFlights = roundtripData?.return || [];
+  const outboundLoading = flightsLoading;
+  const returnLoading = flightsLoading;
+  const outboundError = flightsError;
+  const returnError = flightsError;
 
   const availableAirlinesOutbound = useMemo(() => {
-    if (!outboundFlights) return [];
-    return [...new Set(outboundFlights.map((f) => f.airline))];
+    if (!outboundFlights.length) return [];
+    return [...new Set(outboundFlights.map((f) => f.airline))] as string[];
   }, [outboundFlights]);
 
   const availableAirlinesReturn = useMemo(() => {
-    if (!returnFlights) return [];
-    return [...new Set(returnFlights.map((f) => f.airline))];
+    if (!returnFlights.length) return [];
+    return [...new Set(returnFlights.map((f) => f.airline))] as string[];
   }, [returnFlights]);
 
   const filteredOutbound = useMemo(
-    () => applyFilters(outboundFlights || [], outboundFilters),
+    () => applyFilters(outboundFlights, outboundFilters),
     [outboundFlights, outboundFilters]
   );
 
   const filteredReturn = useMemo(
-    () => applyFilters(returnFlights || [], returnFilters),
+    () => applyFilters(returnFlights, returnFilters),
     [returnFlights, returnFilters]
   );
 

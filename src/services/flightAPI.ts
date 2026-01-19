@@ -259,6 +259,11 @@ function generateMockFlights(params: FlightSearchParams): FlightOption[] {
 /**
  * Search for flights - uses Cloud edge function, falls back to mock
  */
+export interface RoundtripFlightResults {
+  outbound: FlightOption[];
+  return: FlightOption[];
+}
+
 export async function searchFlights(params: FlightSearchParams): Promise<FlightOption[]> {
   try {
     // Normalize passengers
@@ -299,6 +304,89 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
   } catch (error) {
     console.warn('[FlightAPI] Search error, using mock data:', error);
     return generateMockFlights(params);
+  }
+}
+
+/**
+ * Search for roundtrip flights in a single API call
+ * Returns both outbound and return results from the same search
+ */
+export async function searchRoundtripFlights(params: FlightSearchParams): Promise<RoundtripFlightResults> {
+  try {
+    const passengers = typeof params.passengers === 'number' 
+      ? params.passengers
+      : params.passengers?.adults || 1;
+    
+    console.log('[FlightAPI] Searching roundtrip flights:', params.origin, '->', params.destination);
+    
+    const { data, error } = await supabase.functions.invoke('flights', {
+      body: {
+        action: 'search',
+        origin: params.origin,
+        destination: params.destination,
+        departureDate: params.departureDate,
+        returnDate: params.returnDate, // Include return date for roundtrip
+        passengers,
+        cabinClass: params.class || params.cabinClass || 'economy',
+        directOnly: params.directOnly || false,
+        maxStops: params.maxStops ?? 2,
+        preferredAirlines: params.preferredAirlines,
+        budgetMax: params.budgetMax,
+      },
+    });
+    
+    if (error) {
+      console.warn('[FlightAPI] Cloud function error, using mock data:', error);
+      const outbound = generateMockFlights(params);
+      const returnMock = generateMockFlights({
+        ...params,
+        origin: params.destination,
+        destination: params.origin,
+        departureDate: params.returnDate || params.departureDate,
+      });
+      return { outbound, return: returnMock };
+    }
+    
+    // Edge function returns results (outbound) and returnResults (return)
+    const outbound = data?.results || data?.flights || [];
+    const returnFlights = data?.returnResults || [];
+    
+    console.log('[FlightAPI] Roundtrip results:', outbound.length, 'outbound,', returnFlights.length, 'return');
+    
+    // If no real results, use mock data
+    if (outbound.length === 0) {
+      const mockOutbound = generateMockFlights(params);
+      const mockReturn = generateMockFlights({
+        ...params,
+        origin: params.destination,
+        destination: params.origin,
+        departureDate: params.returnDate || params.departureDate,
+      });
+      return { outbound: mockOutbound, return: mockReturn };
+    }
+    
+    // If we have outbound but no return (one-way search or API issue), generate mock return
+    if (returnFlights.length === 0 && params.returnDate) {
+      const mockReturn = generateMockFlights({
+        ...params,
+        origin: params.destination,
+        destination: params.origin,
+        departureDate: params.returnDate,
+      });
+      return { outbound, return: mockReturn };
+    }
+    
+    return { outbound, return: returnFlights };
+  } catch (error) {
+    console.warn('[FlightAPI] Roundtrip search error, using mock data:', error);
+    const outbound = generateMockFlights(params);
+    const returnMock = generateMockFlights({
+      ...params,
+      origin: params.destination,
+      destination: params.origin,
+      departureDate: params.returnDate || params.departureDate,
+    });
+    return { outbound, return: returnMock };
   }
 }
 
@@ -391,6 +479,22 @@ export function useFlightSearch(
     queryKey: ['flights', params],
     queryFn: () => params ? searchFlights(params) : Promise.reject('No params'),
     enabled: options?.enabled !== false && !!params,
+    staleTime: 5 * 60_000, // 5 minutes
+  });
+}
+
+/**
+ * Hook for searching roundtrip flights in a single API call
+ * Returns both outbound and return results from the same query
+ */
+export function useRoundtripFlightSearch(
+  params: FlightSearchParams | null,
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: ['roundtrip-flights', params],
+    queryFn: () => params ? searchRoundtripFlights(params) : Promise.reject('No params'),
+    enabled: options?.enabled !== false && !!params && !!params.returnDate,
     staleTime: 5 * 60_000, // 5 minutes
   });
 }
