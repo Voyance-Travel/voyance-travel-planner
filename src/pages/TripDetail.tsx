@@ -555,6 +555,47 @@ export default function TripDetail() {
                 };
               });
 
+              // Normalize flight_selection: TripPlannerContext saves with 'departure' key, 
+              // but EditorialItinerary expects 'outbound' key
+              const rawFlight = trip.flight_selection as Record<string, unknown> | null;
+              
+              // Helper to safely extract nested properties
+              const getFlightLeg = (source: Record<string, unknown> | undefined) => {
+                if (!source) return undefined;
+                const dep = source.departure as Record<string, unknown> | undefined;
+                const arr = source.arrival as Record<string, unknown> | undefined;
+                return {
+                  airline: source.airline as string | undefined,
+                  flightNumber: source.flightNumber as string | undefined,
+                  departure: {
+                    time: (dep?.time as string) || (source.departureTime as string) || undefined,
+                    airport: dep?.airport as string | undefined,
+                    date: undefined as string | undefined,
+                  },
+                  arrival: {
+                    time: (arr?.time as string) || (source.arrivalTime as string) || undefined,
+                    airport: arr?.airport as string | undefined,
+                  },
+                  price: source.price as number | undefined,
+                };
+              };
+
+              const normalizedFlight = rawFlight ? (() => {
+                const outboundSource = (rawFlight.outbound || rawFlight.departure) as Record<string, unknown> | undefined;
+                const returnSource = rawFlight.return as Record<string, unknown> | undefined;
+                
+                const outbound = getFlightLeg(outboundSource);
+                const returnLeg = getFlightLeg(returnSource);
+                
+                if (outbound) outbound.departure.date = trip.start_date;
+                if (returnLeg) returnLeg.departure.date = trip.end_date;
+                
+                return {
+                  outbound: outboundSource ? outbound : undefined,
+                  return: returnSource ? returnLeg : undefined,
+                };
+              })() : null;
+
               return (
                 <EditorialItinerary
                   tripId={trip.id}
@@ -565,7 +606,7 @@ export default function TripDetail() {
                   travelers={trip.travelers || 1}
                   budgetTier={trip.budget_tier || undefined}
                   days={editorDays}
-                  flightSelection={trip.flight_selection as Record<string, unknown> | null}
+                  flightSelection={normalizedFlight}
                   hotelSelection={trip.hotel_selection as Record<string, unknown> | null}
                   isEditable={true}
                 />
