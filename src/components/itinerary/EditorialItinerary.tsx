@@ -2160,6 +2160,18 @@ function ActivityRow({
     ? venueNameForDining
     : (activity.location?.name && activity.location.name.length > 3 ? activity.location.name : activity.title);
 
+  // Use useActivityImage hook for real place photos with deduplication
+  // This fetches from Google Places / TripAdvisor with caching
+  const shouldFetchRealPhoto = showThumbnail && !isCheckIn && !isAirport && !isAccommodation;
+  const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
+    imageSearchTerm,
+    activityType,
+    existingPhoto,
+    shouldFetchRealPhoto ? destination : undefined // Only pass destination if we want real photos
+  );
+
+  const thumbnailUrl = fetchedImageUrl;
+  const [thumbnailError, setThumbnailError] = useState(false);
 
   return (
     <div className={cn(
