@@ -1,33 +1,77 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { differenceInDays, addDays, format } from 'date-fns';
+
+// =============================================================================
+// TYPES
+// =============================================================================
 
 export interface GeneratedActivity {
   id: string;
-  name: string;
+  title?: string;
+  name?: string; // Legacy support
   description: string;
   category: string;
   startTime: string;
   endTime: string;
-  duration: string;
-  location: string;
-  estimatedCost: { amount: number; currency: string };
+  duration?: string;
+  durationMinutes?: number;
+  location: {
+    name: string;
+    address: string;
+    coordinates?: { lat: number; lng: number };
+  } | string; // Support both formats
+  cost?: { amount: number; currency: string; formatted?: string };
+  estimatedCost?: { amount: number; currency: string }; // Legacy
   bookingRequired: boolean;
   tips?: string;
-  coordinates?: { lat: number; lng: number };
+  tags?: string[];
+  transportation?: {
+    method: string;
+    duration: string;
+    estimatedCost: { amount: number; currency: string };
+    instructions: string;
+  };
+  photos?: Array<{ url: string; photographer?: string; alt?: string }>;
+  rating?: { value: number; totalReviews: number };
+  verified?: { isValid: boolean; confidence: number };
+  categoryIcon?: string;
   type?: string;
 }
 
 export interface GeneratedDay {
   dayNumber: number;
   date: string;
-  theme: string;
+  title?: string;
+  theme?: string;
   activities: GeneratedActivity[];
+  metadata?: {
+    theme?: string;
+    totalEstimatedCost?: number;
+    mealsIncluded?: number;
+    pacingLevel?: 'relaxed' | 'moderate' | 'packed';
+  };
   narrative?: {
     theme: string;
     highlights: string[];
   };
+}
+
+export interface TripOverview {
+  bestTimeToVisit?: string;
+  currency?: string;
+  language?: string;
+  transportationTips?: string;
+  culturalTips?: string;
+  budgetBreakdown?: {
+    accommodations: number;
+    activities: number;
+    food: number;
+    transportation: number;
+    total: number;
+  };
+  highlights?: string[];
+  localTips?: string[];
 }
 
 export interface ItineraryGenerationState {
@@ -36,7 +80,9 @@ export interface ItineraryGenerationState {
   totalDays: number;
   progress: number;
   days: GeneratedDay[];
+  overview?: TripOverview;
   error: string | null;
+  status: 'idle' | 'preparing' | 'generating' | 'enriching' | 'complete' | 'error';
 }
 
 interface TripDetails {
@@ -51,6 +97,10 @@ interface TripDetails {
   userId?: string;
 }
 
+// =============================================================================
+// HOOK
+// =============================================================================
+
 export function useItineraryGeneration() {
   const [state, setState] = useState<ItineraryGenerationState>({
     isGenerating: false,
@@ -58,19 +108,117 @@ export function useItineraryGeneration() {
     totalDays: 0,
     progress: 0,
     days: [],
+    overview: undefined,
     error: null,
+    status: 'idle',
   });
 
-  const generateItinerary = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
-    const totalDays = differenceInDays(new Date(trip.endDate), new Date(trip.startDate)) + 1;
-    
+  /**
+   * Generate complete itinerary using the new 7-stage pipeline
+   * This is the preferred method - generates all days at once with enrichment
+   */
+  const generateFullItinerary = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
+    console.log('[useItineraryGeneration] Starting full generation for:', trip.destination);
+
+    setState({
+      isGenerating: true,
+      currentDay: 0,
+      totalDays: 0,
+      progress: 10,
+      days: [],
+      overview: undefined,
+      error: null,
+      status: 'preparing',
+    });
+
+    try {
+      // Update progress: preparing
+      setState(prev => ({ ...prev, progress: 20, status: 'generating' }));
+
+      // Call the new generate-full action
+      const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+        body: {
+          action: 'generate-full',
+          tripId: trip.tripId,
+          userId: trip.userId,
+        },
+      });
+
+      if (error) {
+        console.error('[useItineraryGeneration] Edge function error:', error);
+        throw new Error(error.message || 'Failed to generate itinerary');
+      }
+
+      if (data?.error) {
+        // Handle specific errors
+        if (data.error.includes('Rate limit')) {
+          toast.error('Rate limit exceeded. Please wait a moment and try again.');
+          throw new Error(data.error);
+        }
+        if (data.error.includes('credits') || data.error.includes('Credits')) {
+          toast.error('AI credits exhausted. Please add credits to continue.');
+          throw new Error(data.error);
+        }
+        throw new Error(data.error);
+      }
+
+      if (!data?.itinerary?.days?.length) {
+        throw new Error('No itinerary data returned');
+      }
+
+      const generatedDays: GeneratedDay[] = data.itinerary.days;
+      const overview: TripOverview | undefined = data.itinerary.overview || data.overview;
+
+      setState({
+        isGenerating: false,
+        currentDay: generatedDays.length,
+        totalDays: generatedDays.length,
+        progress: 100,
+        days: generatedDays,
+        overview,
+        error: null,
+        status: 'complete',
+      });
+
+      console.log('[useItineraryGeneration] Generation complete:', generatedDays.length, 'days');
+      toast.success(`Itinerary generated! ${generatedDays.length} days of adventure await.`);
+
+      return generatedDays;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate itinerary';
+      console.error('[useItineraryGeneration] Error:', errorMessage);
+      
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        error: errorMessage,
+        status: 'error',
+      }));
+      
+      throw err;
+    }
+  }, []);
+
+  /**
+   * Generate itinerary day-by-day (legacy method)
+   * Use for progressive display or when full generation times out
+   */
+  const generateItineraryProgressive = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
+    const startDate = new Date(trip.startDate);
+    const endDate = new Date(trip.endDate);
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    console.log('[useItineraryGeneration] Starting progressive generation:', totalDays, 'days');
+
     setState({
       isGenerating: true,
       currentDay: 0,
       totalDays,
       progress: 0,
       days: [],
+      overview: undefined,
       error: null,
+      status: 'generating',
     });
 
     const generatedDays: GeneratedDay[] = [];
@@ -84,7 +232,9 @@ export function useItineraryGeneration() {
           progress: Math.round(((dayNum - 1) / totalDays) * 100),
         }));
 
-        const dayDate = format(addDays(new Date(trip.startDate), dayNum - 1), 'yyyy-MM-dd');
+        const dayDate = new Date(trip.startDate);
+        dayDate.setDate(dayDate.getDate() + dayNum - 1);
+        const formattedDate = dayDate.toISOString().split('T')[0];
 
         const { data, error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
@@ -94,7 +244,7 @@ export function useItineraryGeneration() {
             totalDays,
             destination: trip.destination,
             destinationCountry: trip.destinationCountry,
-            date: dayDate,
+            date: formattedDate,
             travelers: trip.travelers,
             tripType: trip.tripType,
             budgetTier: trip.budgetTier,
@@ -109,12 +259,11 @@ export function useItineraryGeneration() {
         }
 
         if (data?.error) {
-          // Handle rate limit and payment errors
           if (data.error.includes('Rate limit')) {
             toast.error('Rate limit exceeded. Please wait a moment and try again.');
             throw new Error(data.error);
           }
-          if (data.error.includes('credits') || data.error.includes('Payment')) {
+          if (data.error.includes('credits') || data.error.includes('Credits')) {
             toast.error('AI credits exhausted. Please add credits to continue.');
             throw new Error(data.error);
           }
@@ -130,7 +279,7 @@ export function useItineraryGeneration() {
 
         // Track activities for context in subsequent days
         generatedDay.activities.forEach(act => {
-          previousActivities.push(act.name);
+          previousActivities.push(act.title || act.name || '');
         });
 
         setState(prev => ({
@@ -145,12 +294,17 @@ export function useItineraryGeneration() {
         }
       }
 
+      // Save the complete itinerary
+      await saveItinerary(trip.tripId, generatedDays);
+
       setState(prev => ({
         ...prev,
         isGenerating: false,
         progress: 100,
+        status: 'complete',
       }));
 
+      toast.success(`Itinerary complete! ${totalDays} days of adventure await.`);
       return generatedDays;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate itinerary';
@@ -158,10 +312,29 @@ export function useItineraryGeneration() {
         ...prev,
         isGenerating: false,
         error: errorMessage,
+        status: 'error',
       }));
       throw err;
     }
   }, []);
+
+  /**
+   * Main generate function - uses full generation by default
+   * Falls back to progressive if full fails
+   */
+  const generateItinerary = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
+    try {
+      return await generateFullItinerary(trip);
+    } catch (error) {
+      console.warn('[useItineraryGeneration] Full generation failed, trying progressive:', error);
+      // Only fall back for non-rate-limit/credit errors
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('Rate limit') || message.includes('credits') || message.includes('Credits')) {
+        throw error;
+      }
+      return await generateItineraryProgressive(trip);
+    }
+  }, [generateFullItinerary, generateItineraryProgressive]);
 
   const saveItinerary = useCallback(async (tripId: string, days: GeneratedDay[]): Promise<boolean> => {
     try {
@@ -169,7 +342,11 @@ export function useItineraryGeneration() {
         body: {
           action: 'save-itinerary',
           tripId,
-          itinerary: { days },
+          itinerary: { 
+            days,
+            status: 'ready',
+            generatedAt: new Date().toISOString()
+          },
         },
       });
 
@@ -191,13 +368,17 @@ export function useItineraryGeneration() {
       totalDays: 0,
       progress: 0,
       days: [],
+      overview: undefined,
       error: null,
+      status: 'idle',
     });
   }, []);
 
   return {
     ...state,
     generateItinerary,
+    generateFullItinerary,
+    generateItineraryProgressive,
     saveItinerary,
     reset,
   };
