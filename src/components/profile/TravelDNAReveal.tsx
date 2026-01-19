@@ -22,7 +22,6 @@ import {
 } from '@/data/archetypeNarratives';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { isDemoModeEnabled } from '@/contexts/AuthContext';
 
 interface TravelDNARevealProps {
   userId: string;
@@ -69,17 +68,9 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
   const [dnaData, setDnaData] = useState<TravelDNAData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('identity');
-  const isDemo = isDemoModeEnabled();
 
   useEffect(() => {
     async function loadDNA() {
-      // Use demo data in demo mode
-      if (isDemo || userId === 'demo-user-001') {
-        setDnaData(DEMO_DNA_DATA);
-        setIsLoading(false);
-        return;
-      }
-
       if (!userId) return;
       
       try {
@@ -99,7 +90,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
     }
     
     loadDNA();
-  }, [userId, isDemo]);
+  }, [userId]);
 
   if (isLoading) {
     return (

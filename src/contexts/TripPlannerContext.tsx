@@ -1,10 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth, isDemoModeEnabled } from './AuthContext';
+import { useAuth } from './AuthContext';
 
 // Anonymous session management
 const ANON_SESSION_KEY = 'voyance_anonymous_session';
-const DEMO_TRIPS_KEY = 'voyance_demo_trips';
+const LOCAL_TRIPS_KEY = 'voyance_local_trips';
 
 function getOrCreateAnonymousSession(): string {
   let sessionId = localStorage.getItem(ANON_SESSION_KEY);
@@ -15,18 +15,18 @@ function getOrCreateAnonymousSession(): string {
   return sessionId;
 }
 
-// Demo mode localStorage trip storage
-function saveDemoTrip(tripData: Record<string, unknown>): string {
+// Local localStorage trip storage for anonymous users
+function saveLocalTrip(tripData: Record<string, unknown>): string {
   const tripId = tripData.id as string || crypto.randomUUID();
-  const trips = JSON.parse(localStorage.getItem(DEMO_TRIPS_KEY) || '{}');
+  const trips = JSON.parse(localStorage.getItem(LOCAL_TRIPS_KEY) || '{}');
   trips[tripId] = { ...tripData, id: tripId };
-  localStorage.setItem(DEMO_TRIPS_KEY, JSON.stringify(trips));
-  console.log('[TripPlanner] Demo trip saved to localStorage:', tripId);
+  localStorage.setItem(LOCAL_TRIPS_KEY, JSON.stringify(trips));
+  console.log('[TripPlanner] Local trip saved to localStorage:', tripId);
   return tripId;
 }
 
-function loadDemoTrip(tripId: string): Record<string, unknown> | null {
-  const trips = JSON.parse(localStorage.getItem(DEMO_TRIPS_KEY) || '{}');
+function loadLocalTrip(tripId: string): Record<string, unknown> | null {
+  const trips = JSON.parse(localStorage.getItem(LOCAL_TRIPS_KEY) || '{}');
   return trips[tripId] || null;
 }
 
@@ -238,9 +238,9 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
       let tripId = state.tripId;
 
-      // Demo mode OR anonymous user: save to localStorage so the flow can continue
-      if (isDemoModeEnabled() || !user) {
-        tripId = saveDemoTrip(tripData);
+      // Anonymous user: save to localStorage so the flow can continue
+      if (!user) {
+        tripId = saveLocalTrip(tripData);
         setState(prev => ({
           ...prev,
           tripId,
@@ -295,9 +295,9 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
     try {
       let trip: Record<string, unknown> | null = null;
 
-      // Demo mode OR anonymous user: load from localStorage
-      if (isDemoModeEnabled() || !user) {
-        trip = loadDemoTrip(tripId);
+      // Anonymous user: load from localStorage
+      if (!user) {
+        trip = loadLocalTrip(tripId);
         if (!trip) throw new Error('Trip not found');
       } else {
         // Real mode: load from backend

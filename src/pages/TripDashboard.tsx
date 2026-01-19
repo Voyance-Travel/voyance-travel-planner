@@ -26,7 +26,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
-import { isDemoModeEnabled } from '@/contexts/AuthContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getDestinationImage } from '@/utils/destinationImages';
@@ -330,12 +329,11 @@ export default function TripDashboard() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
-  const demoActive = isDemoModeEnabled();
 
   // Fetch trips directly from Supabase
   useEffect(() => {
     async function loadTrips() {
-      if (!isAuthenticated || demoActive || !user?.id) {
+      if (!isAuthenticated || !user?.id) {
         setTrips([]);
         setIsLoading(false);
         return;
@@ -375,7 +373,7 @@ export default function TripDashboard() {
     }
 
     loadTrips();
-  }, [isAuthenticated, demoActive, user?.id]);
+  }, [isAuthenticated, user?.id]);
 
   const filterTrips = (tab: TabValue): Trip[] => {
     const now = new Date();
