@@ -28,6 +28,25 @@ export const STRIPE_PRODUCTS = {
   },
 } as const;
 
+// Top-up products for free users
+export const TOPUP_PRODUCTS = {
+  AI_SWAPS_5: {
+    name: '5 AI Swaps',
+    price: 2.99,
+    description: 'Find better restaurants, activities, or attractions',
+  },
+  ROUTE_OPTIMIZATION: {
+    name: '1 Route Optimization',
+    price: 0.99,
+    description: 'Reorder your day for less walking and waiting',
+  },
+  EXTRA_ITINERARY: {
+    name: '1 Extra Itinerary',
+    price: 4.99,
+    description: 'Build another complete trip this month',
+  },
+} as const;
+
 // Plan feature definitions with monthly usage limits
 // NOTE: "edits" = AI-powered activity swaps (e.g., "find me another restaurant")
 // Manual changes (rearranging, adding notes, changing times, deleting) are ALWAYS FREE
@@ -55,6 +74,10 @@ export const PLAN_FEATURES = {
       draftTrips: 1,
       flightHotelOptimization: false,
       coEditCollaboration: false,
+      // Free tier restrictions
+      canPrint: false,
+      canExport: false,
+      canDownload: false,
     },
     cta: 'Start Free',
   },
@@ -71,9 +94,14 @@ export const PLAN_FEATURES = {
       'Unlimited route optimizations',
       'Group budgeting and expense splitting',
       'Co-edit with travel companions',
-      'Weather tracking and alerts',
+      'Print, export, and download',
     ],
-    limits: null, // Unlimited for purchased trip
+    limits: {
+      // Unlimited for purchased trip
+      canPrint: true,
+      canExport: true,
+      canDownload: true,
+    },
     cta: 'Unlock This Trip',
   },
   MONTHLY: {
@@ -90,7 +118,7 @@ export const PLAN_FEATURES = {
       'Save up to 5 trips at once',
       'Smart flight and hotel picks',
       'Group budgeting on every trip',
-      'Co-edit collaboration',
+      'Print, export, and download',
     ],
     limits: {
       fullBuildsPerMonth: -1, // Unlimited
@@ -104,6 +132,9 @@ export const PLAN_FEATURES = {
       groupBudgeting: true,
       coEditCollaboration: true,
       mysteryTrips: true,
+      canPrint: true,
+      canExport: true,
+      canDownload: true,
     },
     cta: 'Go Monthly',
   },
@@ -135,6 +166,9 @@ export const PLAN_FEATURES = {
       coEditCollaboration: true,
       preferenceLearning: true,
       mysteryTrips: true,
+      canPrint: true,
+      canExport: true,
+      canDownload: true,
     },
     cta: 'Go Yearly',
   },
