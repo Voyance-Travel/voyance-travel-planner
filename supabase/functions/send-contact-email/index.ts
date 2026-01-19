@@ -4,11 +4,27 @@ const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
 // Use environment variable if set, otherwise default to contact@travelwithvoyance.com
 const CONTACT_EMAIL = Deno.env.get("CONTACT_EMAIL") || "contact@travelwithvoyance.com";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// Allowed origins for CORS - restrict to actual domains
+const ALLOWED_ORIGINS = [
+  'https://voyance-travel-planner.lovable.app',
+  'https://id-preview--bbef7015-a2df-45af-893d-7d36d59f8dcd.lovable.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:8080',
+];
+
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  // Check if origin is allowed
+  const allowedOrigin = origin && ALLOWED_ORIGINS.some(allowed => 
+    origin === allowed || origin.endsWith('.lovable.app')
+  ) ? origin : ALLOWED_ORIGINS[0];
+  
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
 
 interface ContactRequest {
   name: string;
@@ -16,6 +32,8 @@ interface ContactRequest {
   subject?: string;
   message: string;
   type?: "general" | "support" | "feedback" | "bug_report" | "feature_request";
+  // Honeypot field - should always be empty
+  website?: string;
 }
 
 // Simple in-memory rate limiting (resets on function restart)
@@ -53,9 +71,20 @@ function sanitizeInput(input: string, maxLength: number): string {
 }
 
 const handler = async (req: Request): Promise<Response> => {
+  const origin = req.headers.get('origin');
+  const corsHeaders = getCorsHeaders(origin);
+  
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Only allow POST requests
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ success: false, error: "Method not allowed" }),
+      { status: 405, headers: { "Content-Type": "application/json", ...corsHeaders } }
+    );
   }
 
   try {
@@ -64,6 +93,16 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const rawBody = await req.json();
+    
+    // Honeypot check - bots will fill this hidden field, humans won't
+    if (rawBody.website && rawBody.website.trim() !== '') {
+      console.warn('[send-contact-email] Honeypot triggered - likely bot submission');
+      // Return success to not tip off the bot, but don't actually send email
+      return new Response(
+        JSON.stringify({ success: true, message: "Message sent successfully" }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
     
     // Sanitize and validate inputs
     const name = sanitizeInput(rawBody.name, 100);

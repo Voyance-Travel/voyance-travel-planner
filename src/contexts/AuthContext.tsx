@@ -217,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Log OAuth logins (email/password logins are logged in login())
             const provider = session.user.app_metadata?.provider;
             if (provider && provider !== 'email') {
-              logOAuthLogin(session.user.id, session.user.email || '', provider).catch(console.error);
+              logOAuthLogin(provider).catch(console.error);
             }
           }
 
@@ -248,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(transformProfile(data.user, profile, preferences));
       
       // Log login event (don't await to not block login)
-      logLogin(data.user.id, email).catch(console.error);
+      logLogin().catch(console.error);
     }
   };
 
@@ -280,14 +280,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Log signup event (don't await to not block signup)
     if (data.user) {
-      logSignup(data.user.id, email).catch(console.error);
+      logSignup().catch(console.error);
     }
   };
 
   const logout = async () => {
-    // Log logout before signing out (capture user id while we have it)
+    // Log logout before signing out (user is still authenticated)
     if (user) {
-      logLogout(user.id, user.email).catch(console.error);
+      logLogout().catch(console.error);
     }
     
     const { error } = await supabase.auth.signOut();

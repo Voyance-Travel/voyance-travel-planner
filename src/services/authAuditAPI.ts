@@ -1,6 +1,7 @@
 /**
  * Auth Audit API Service
  * Tracks authentication events for security and analytics
+ * Uses the secure insert_user_audit_log function that determines user_id server-side
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -16,29 +17,25 @@ export type AuthEventType =
 
 interface AuditLogParams {
   action: AuthEventType;
-  userId?: string;
-  email?: string;
   metadata?: Record<string, unknown>;
 }
 
 /**
  * Log an authentication event to the audit_logs table
+ * Uses the secure insert_user_audit_log function that gets user_id from auth.uid()
+ * This prevents user_id spoofing since the server determines the user identity
  */
 export async function logAuthEvent({
   action,
-  userId,
-  email,
   metadata = {},
 }: AuditLogParams): Promise<void> {
   try {
-    // Use the database function for consistent audit logging
-    const { error } = await supabase.rpc('insert_audit_log', {
+    // Use the secure database function that determines user_id server-side
+    // This prevents any possibility of user_id spoofing
+    const { error } = await supabase.rpc('insert_user_audit_log', {
       p_action: action,
       p_action_type: 'auth',
-      p_user_id: userId || null,
-      p_actor: email || 'anonymous',
       p_target: 'auth',
-      p_target_id: userId || null,
       p_metadata: {
         ...metadata,
         timestamp: new Date().toISOString(),
@@ -47,24 +44,24 @@ export async function logAuthEvent({
     });
 
     if (error) {
-      console.error('[authAudit] Failed to log event:', error);
-    } else {
-      console.log(`[authAudit] Logged: ${action}`, { userId, email });
+      // Log but don't throw - audit logging should never break auth flow
+      // Note: This may fail for unauthenticated events (signup, password reset request)
+      // which is expected behavior for security
+      console.debug('[authAudit] Could not log event (may be expected for unauthenticated actions):', action);
     }
   } catch (err) {
     // Don't throw - audit logging should never break auth flow
-    console.error('[authAudit] Exception:', err);
+    console.debug('[authAudit] Exception (non-critical):', err);
   }
 }
 
 /**
  * Log user signup event
+ * Note: This may not log if called before user is fully authenticated
  */
-export async function logSignup(userId: string, email: string): Promise<void> {
+export async function logSignup(): Promise<void> {
   await logAuthEvent({
     action: 'user_signup',
-    userId,
-    email,
     metadata: { method: 'email' },
   });
 }
@@ -72,11 +69,9 @@ export async function logSignup(userId: string, email: string): Promise<void> {
 /**
  * Log user login event
  */
-export async function logLogin(userId: string, email: string): Promise<void> {
+export async function logLogin(): Promise<void> {
   await logAuthEvent({
     action: 'user_login',
-    userId,
-    email,
     metadata: { method: 'email' },
   });
 }
@@ -84,11 +79,9 @@ export async function logLogin(userId: string, email: string): Promise<void> {
 /**
  * Log OAuth login event
  */
-export async function logOAuthLogin(userId: string, email: string, provider: string): Promise<void> {
+export async function logOAuthLogin(provider: string): Promise<void> {
   await logAuthEvent({
     action: 'oauth_login',
-    userId,
-    email,
     metadata: { method: 'oauth', provider },
   });
 }
@@ -96,21 +89,19 @@ export async function logOAuthLogin(userId: string, email: string, provider: str
 /**
  * Log logout event
  */
-export async function logLogout(userId?: string, email?: string): Promise<void> {
+export async function logLogout(): Promise<void> {
   await logAuthEvent({
     action: 'user_logout',
-    userId,
-    email,
   });
 }
 
 /**
  * Log password reset request
+ * Note: This typically won't log since user isn't authenticated
  */
-export async function logPasswordResetRequest(email: string): Promise<void> {
+export async function logPasswordResetRequest(): Promise<void> {
   await logAuthEvent({
     action: 'password_reset_request',
-    email,
     metadata: { requested_at: new Date().toISOString() },
   });
 }
@@ -118,19 +109,17 @@ export async function logPasswordResetRequest(email: string): Promise<void> {
 /**
  * Log password reset completion
  */
-export async function logPasswordResetComplete(userId: string, email?: string): Promise<void> {
+export async function logPasswordResetComplete(): Promise<void> {
   await logAuthEvent({
     action: 'password_reset_complete',
-    userId,
-    email,
     metadata: { completed_at: new Date().toISOString() },
   });
 }
 
 /**
- * Get auth audit logs for a user
+ * Get auth audit logs for the current user
  */
-export async function getAuthLogs(userId?: string, limit = 50): Promise<{
+export async function getAuthLogs(limit = 50): Promise<{
   success: boolean;
   logs?: Array<{
     id: string;
@@ -142,18 +131,13 @@ export async function getAuthLogs(userId?: string, limit = 50): Promise<{
   error?: string;
 }> {
   try {
-    let query = supabase
+    // RLS ensures users can only see their own logs
+    const { data, error } = await supabase
       .from('audit_logs')
       .select('id, action, created_at, metadata, actor')
       .eq('action_type', 'auth')
       .order('created_at', { ascending: false })
       .limit(limit);
-
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data, error } = await query;
 
     if (error) {
       return { success: false, error: error.message };

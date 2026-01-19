@@ -1935,6 +1935,16 @@ export type Database = {
         }
         Returns: string
       }
+      insert_user_audit_log: {
+        Args: {
+          p_action: string
+          p_action_type?: string
+          p_metadata?: Json
+          p_target?: string
+          p_target_id?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "user" | "admin" | "moderator"
