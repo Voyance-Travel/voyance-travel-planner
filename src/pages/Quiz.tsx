@@ -572,25 +572,33 @@ export default function Quiz() {
     
     setAnswers(newAnswers);
 
-    // Save response to database in background
+    // Save response to database - properly await and handle errors
     if (user) {
       const question = questions.find(q => q.id === questionId);
       const responseValue = isMultiSelect 
         ? (newAnswers[questionId] as string[])
         : value;
       
-      saveQuizResponse(
-        user.id,
-        sessionId,
-        {
-          questionId: questionId,
-          value: responseValue,
-          displayLabel: question?.options.find(o => o.value === value)?.label,
-          stepId: `step-${currentStep + 1}`,
-          questionPrompt: question?.title || '',
-        },
-        currentStep + 1
-      );
+      try {
+        const success = await saveQuizResponse(
+          user.id,
+          sessionId,
+          {
+            questionId: questionId,
+            value: responseValue,
+            displayLabel: question?.options.find(o => o.value === value)?.label,
+            stepId: `step-${currentStep + 1}`,
+            questionPrompt: question?.title || '',
+          },
+          currentStep + 1
+        );
+        
+        if (!success) {
+          console.warn('[Quiz] Failed to save response for:', questionId);
+        }
+      } catch (error) {
+        console.error('[Quiz] Error saving response:', error);
+      }
     }
   };
 
