@@ -951,6 +951,47 @@ export function EditorialItinerary({
                       </div>
                     )}
                     
+                    {/* Photo Grid - Show first 4 images */}
+                    {hotelSelection.images && hotelSelection.images.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Photos</p>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {hotelSelection.images.slice(0, 4).map((img, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setHotelGalleryOpen(true)}
+                              className="relative aspect-square rounded-md overflow-hidden group"
+                            >
+                              <img
+                                src={img}
+                                alt={`${hotelSelection.name} - Photo ${idx + 1}`}
+                                className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
+                                onError={(e) => {
+                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=100';
+                                }}
+                              />
+                              {/* Dark overlay on last image if more photos exist */}
+                              {idx === 3 && hotelSelection.images && hotelSelection.images.length > 4 && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                  <span className="text-white text-sm font-medium">+{hotelSelection.images.length - 4}</span>
+                                </div>
+                              )}
+                              {/* Hover overlay */}
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200" />
+                            </button>
+                          ))}
+                        </div>
+                        {hotelSelection.images.length > 4 && (
+                          <button
+                            onClick={() => setHotelGalleryOpen(true)}
+                            className="text-xs text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Images className="h-3 w-3" />
+                            View all {hotelSelection.images.length} photos
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {/* Address */}
                     {hotelSelection.address && (
                       <div className="flex items-start gap-2 p-3 bg-secondary/30 rounded-lg">
