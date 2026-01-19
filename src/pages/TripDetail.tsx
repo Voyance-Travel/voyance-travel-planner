@@ -370,23 +370,49 @@ export default function TripDetail() {
     return days.some(d => d.activities.length > 0);
   })();
 
-  // Handle itinerary generation complete
-  const handleGenerationComplete = useCallback((generatedDays: GeneratedDay[], generatedOverview?: TripOverview) => {
+  // Handle itinerary generation complete - also force-save to backend
+  const handleGenerationComplete = useCallback(async (generatedDays: GeneratedDay[], generatedOverview?: TripOverview) => {
+    const itineraryPayload = { 
+      days: generatedDays,
+      overview: generatedOverview,
+      status: 'ready',
+      generatedAt: new Date().toISOString(),
+    };
+    
     // Update local trip state with the new itinerary
     setTrip(prev => {
       if (!prev) return prev;
       return {
         ...prev,
-        itinerary_data: JSON.parse(JSON.stringify({ 
-          days: generatedDays,
-          overview: generatedOverview,
-          status: 'ready'
-        })),
+        itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)),
         itinerary_status: 'ready' as const,
       };
     });
     setShowGenerator(false);
-  }, []);
+    
+    // Force-save to backend so we never regenerate on refresh
+    if (tripId) {
+      try {
+        console.log('[TripDetail] Force-saving itinerary to backend:', tripId);
+        const { error } = await supabase
+          .from('trips')
+          .update({
+            itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)) as any,
+            itinerary_status: 'ready',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', tripId);
+        
+        if (error) {
+          console.error('[TripDetail] Failed to force-save itinerary:', error);
+        } else {
+          console.log('[TripDetail] Itinerary force-saved successfully');
+        }
+      } catch (err) {
+        console.error('[TripDetail] Force-save error:', err);
+      }
+    }
+  }, [tripId]);
 
   const handleActivityComplete = async (activityId: string) => {
     // Update activity status in database
