@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { CONTACT_CONFIG } from '@/config/contact';
 
 /**
  * Voyance Press Kit Generator

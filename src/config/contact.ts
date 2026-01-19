@@ -15,10 +15,10 @@ export const CONTACT_CONFIG = {
   
   // Social media links
   SOCIAL: {
-    FACEBOOK: 'https://facebook.com/voyancetravel',
-    INSTAGRAM: 'https://instagram.com/voyancetravel',
-    X: 'https://x.com/voyancetravel',
-    PINTEREST: 'https://pinterest.com/voyancetravel',
+    FACEBOOK: 'https://facebook.com/Voyance',
+    INSTAGRAM: 'https://instagram.com/Voyancetravel',
+    X: 'https://x.com/Voyancetravel',
+    PINTEREST: 'https://pinterest.com/Voyance',
   },
   
   // Response time expectations
