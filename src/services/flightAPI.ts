@@ -145,7 +145,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
       'Content-Type': 'application/json',
     };
   }
-  
+
   const token = localStorage.getItem('voyance_access_token');
   if (token) {
     return {
@@ -153,13 +153,121 @@ async function getAuthHeader(): Promise<Record<string, string>> {
       'Content-Type': 'application/json',
     };
   }
-  
+
   return { 'Content-Type': 'application/json' };
 }
 
 // ============================================================================
-// Mock Data Generation (Fallback)
+// Normalization (Edge Function -> Frontend Types)
 // ============================================================================
+
+function minutesToIsoDuration(totalMinutes: number): string {
+  const minutes = Math.max(0, Math.round(totalMinutes || 0));
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  // Always valid ISO-ish duration for our parser.
+  if (h === 0 && m === 0) return 'PT0M';
+  return `PT${h ? `${h}H` : ''}${m ? `${m}M` : ''}`;
+}
+
+function isNormalizedFlightOption(f: any): f is FlightOption {
+  return !!f && typeof f === 'object' && typeof f.origin === 'object' && typeof f.origin?.airport === 'string';
+}
+
+function normalizeEdgeFlight(raw: any): FlightOption {
+  // Already in the expected shape (e.g., mock flights)
+  if (isNormalizedFlightOption(raw)) return raw;
+
+  const segmentsRaw: any[] = Array.isArray(raw?.segments) ? raw.segments : [];
+  const firstSeg = segmentsRaw[0];
+  const lastSeg = segmentsRaw[segmentsRaw.length - 1];
+
+  const departure =
+    raw?.departureDateTime ??
+    firstSeg?.departure?.dateTime ??
+    firstSeg?.departure?.time ??
+    raw?.departureTime ??
+    raw?.departure;
+
+  const arrival =
+    raw?.arrivalDateTime ??
+    lastSeg?.arrival?.dateTime ??
+    lastSeg?.arrival?.time ??
+    raw?.arrivalTime ??
+    raw?.arrival;
+
+  const normalizedSegments: FlightSegment[] | undefined = segmentsRaw.length
+    ? segmentsRaw.map((s: any) => ({
+        departure: {
+          airport: s?.departure?.airport ?? s?.departure?.iataCode ?? '',
+          // IMPORTANT: use ISO datetime for downstream calculations
+          time: s?.departure?.dateTime ?? s?.departure?.time ?? '',
+          terminal: s?.departure?.terminal,
+        },
+        arrival: {
+          airport: s?.arrival?.airport ?? s?.arrival?.iataCode ?? '',
+          time: s?.arrival?.dateTime ?? s?.arrival?.time ?? '',
+          terminal: s?.arrival?.terminal,
+        },
+        carrier: s?.airline ?? s?.carrier ?? raw?.airline ?? 'XX',
+        flightNumber: s?.flightNumber ?? '',
+        duration:
+          typeof s?.duration === 'number'
+            ? minutesToIsoDuration(s.duration)
+            : typeof s?.duration === 'string'
+              ? s.duration
+              : 'PT0M',
+        aircraft: s?.aircraft,
+      }))
+    : undefined;
+
+  const airline = raw?.airline ?? 'XX';
+  const flightNumber = raw?.flightNumber ?? `${airline}${raw?.offerId ?? ''}`;
+
+  const originAirport = raw?.origin ?? raw?.originAirport ?? '';
+  const destinationAirport = raw?.destination ?? raw?.destinationAirport ?? '';
+
+  const durationMinutes = typeof raw?.duration === 'number' ? raw.duration : 0;
+  const stops = typeof raw?.stops === 'number' ? raw.stops : Math.max(0, (normalizedSegments?.length || 1) - 1);
+
+  return {
+    id: raw?.id ?? `${airline}-${flightNumber}-${departure ?? ''}`,
+    airline,
+    airlineName: raw?.airlineName,
+    airlineLogo: raw?.airlineLogo,
+    flightNumber,
+    origin: {
+      airport: originAirport,
+      city: raw?.originCity ?? originAirport,
+      terminal: undefined,
+    },
+    destination: {
+      airport: destinationAirport,
+      city: raw?.destinationCity ?? destinationAirport,
+      terminal: undefined,
+    },
+    departure: departure || '',
+    arrival: arrival || '',
+    duration: durationMinutes,
+    stops,
+    stopCities: Array.isArray(raw?.stopLocations) ? raw.stopLocations : undefined,
+    price: raw?.price ?? 0,
+    class: raw?.cabin,
+    cabinClass: raw?.cabinClass ?? raw?.cabin,
+    availableSeats: raw?.seatsAvailable,
+    baggageIncluded: undefined,
+    amenities: undefined,
+    bookingClass: undefined,
+    priceLock: undefined,
+    priceLockId: undefined,
+    bookingDeadline: undefined,
+    isRecommended: raw?.isRecommended,
+    rationale: raw?.rationale,
+    currency: raw?.currency,
+    segments: normalizedSegments,
+  };
+}
+
 
 const AIRLINES = [
   { code: 'DL', name: 'Delta', logo: '✈️' },
@@ -298,9 +406,10 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
       console.warn('[FlightAPI] No flights from API, using mock data');
       return generateMockFlights(params);
     }
-    
-    console.log('[FlightAPI] Got', data.flights.length, 'flights from Cloud');
-    return data.flights;
+
+    const flights = (data.flights as any[]).map(normalizeEdgeFlight);
+    console.log('[FlightAPI] Got', flights.length, 'flights from Cloud');
+    return flights;
   } catch (error) {
     console.warn('[FlightAPI] Search error, using mock data:', error);
     return generateMockFlights(params);
@@ -348,9 +457,12 @@ export async function searchRoundtripFlights(params: FlightSearchParams): Promis
     }
     
     // Edge function returns results (outbound) and returnResults (return)
-    const outbound = data?.results || data?.flights || [];
-    const returnFlights = data?.returnResults || [];
-    
+    const outboundRaw = (data?.results || data?.flights || []) as any[];
+    const returnRaw = (data?.returnResults || []) as any[];
+
+    const outbound = outboundRaw.map(normalizeEdgeFlight);
+    const returnFlights = returnRaw.map(normalizeEdgeFlight);
+
     console.log('[FlightAPI] Roundtrip results:', outbound.length, 'outbound,', returnFlights.length, 'return');
     
     // If no real results, use mock data
