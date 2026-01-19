@@ -17,6 +17,7 @@ import type { Tables } from '@/integrations/supabase/types';
 import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
 import { enrichHotel } from '@/services/hotelAPI';
 import { usePaymentVerification } from '@/hooks/usePaymentVerification';
+import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -566,13 +567,28 @@ export default function TripDetail() {
   return (
     <MainLayout>
       <Head title={`${trip.name} | Voyance`} />
-      <section className="pt-24 pb-16">
+      
+      {/* Hero Destination Image */}
+      <div className="relative h-48 md:h-64 -mt-16">
+        <DynamicDestinationPhotos
+          destination={trip.destination}
+          startDate={trip.start_date}
+          endDate={trip.end_date}
+          travelers={trip.travelers || 1}
+          variant="hero"
+          hideOverlayText
+          className="!rounded-none"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+      </div>
+      
+      <section className="pb-16 -mt-8 relative z-10">
         <div className="max-w-4xl mx-auto px-4">
           {/* Back Button */}
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
-            className="mb-6"
+            className="mb-6 bg-background/80 backdrop-blur-sm"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
