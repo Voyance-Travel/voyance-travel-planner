@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { QuizCompletion } from '@/components/quiz/QuizCompletion';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
-import { scrollToTop } from '@/utils/scrollUtils';
 import { cn } from '@/lib/utils';
 import { 
   submitQuizComplete, 
@@ -685,9 +684,12 @@ export default function Quiz() {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
       
-      // Scroll to top when navigating to next step
-      scrollToTop();
-      
+      // Scroll to top immediately when navigating to next step
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      // Also reset any scrollable container
+      const container = document.querySelector('.quiz-scroll-container');
+      if (container) container.scrollTop = 0;
+
       // Update session progress
       if (sessionId) {
         updateQuizSession(sessionId, {
@@ -729,8 +731,10 @@ export default function Quiz() {
   const handleBack = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
-      // Scroll to top when navigating back
-      scrollToTop();
+      // Scroll to top immediately when navigating back
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      const container = document.querySelector('.quiz-scroll-container');
+      if (container) container.scrollTop = 0;
     }
   };
 
@@ -786,7 +790,7 @@ export default function Quiz() {
               </div>
               
               {/* Questions */}
-              <div className="flex-1 flex items-start justify-center px-4 overflow-y-auto">
+              <div className="quiz-scroll-container flex-1 flex items-start justify-center px-4 overflow-y-auto">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
