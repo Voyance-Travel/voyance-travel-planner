@@ -5,26 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface WeatherStackCurrent {
-  temperature: number;
-  weather_descriptions: string[];
-  weather_icons: string[];
-  humidity: number;
-  wind_speed: number;
-  precip: number;
-  feelslike: number;
-}
-
-interface WeatherStackResponse {
-  success?: boolean;
-  error?: { info: string };
-  current: WeatherStackCurrent;
-  location: {
-    name: string;
-    country: string;
-    localtime: string;
-  };
-}
+// ============================================================================
+// Types
+// ============================================================================
 
 interface WeatherData {
   destination: string;
@@ -45,34 +28,98 @@ interface WeatherData {
     icon: string;
     precipitation: number;
   }>;
-  source: 'weatherstack' | 'fallback';
+  source: 'open-meteo' | 'fallback';
 }
 
-// Seasonal weather patterns by region (fallback when API fails)
-const seasonalPatterns: Record<string, Record<string, { high: number; low: number; condition: string }>> = {
+interface OpenMeteoResponse {
+  current?: {
+    temperature_2m: number;
+    apparent_temperature: number;
+    relative_humidity_2m: number;
+    wind_speed_10m: number;
+    precipitation: number;
+    weather_code: number;
+  };
+  daily?: {
+    time: string[];
+    temperature_2m_max: number[];
+    temperature_2m_min: number[];
+    weather_code: number[];
+    precipitation_sum: number[];
+  };
+}
+
+interface GeocodingResult {
+  results?: Array<{
+    name: string;
+    latitude: number;
+    longitude: number;
+    country: string;
+  }>;
+}
+
+// ============================================================================
+// Weather Code Mapping (WMO codes)
+// ============================================================================
+
+function getConditionFromCode(code: number): string {
+  if (code === 0) return 'Clear sky';
+  if (code === 1) return 'Mainly clear';
+  if (code === 2) return 'Partly cloudy';
+  if (code === 3) return 'Overcast';
+  if (code >= 45 && code <= 48) return 'Fog';
+  if (code >= 51 && code <= 55) return 'Drizzle';
+  if (code >= 56 && code <= 57) return 'Freezing drizzle';
+  if (code >= 61 && code <= 65) return 'Rain';
+  if (code >= 66 && code <= 67) return 'Freezing rain';
+  if (code >= 71 && code <= 77) return 'Snow';
+  if (code >= 80 && code <= 82) return 'Rain showers';
+  if (code >= 85 && code <= 86) return 'Snow showers';
+  if (code >= 95 && code <= 99) return 'Thunderstorm';
+  return 'Unknown';
+}
+
+function getWeatherIcon(code: number): string {
+  if (code === 0 || code === 1) return '☀️';
+  if (code === 2) return '⛅';
+  if (code === 3) return '☁️';
+  if (code >= 45 && code <= 48) return '🌫️';
+  if (code >= 51 && code <= 67) return '🌧️';
+  if (code >= 71 && code <= 77) return '❄️';
+  if (code >= 80 && code <= 82) return '🌧️';
+  if (code >= 85 && code <= 86) return '🌨️';
+  if (code >= 95 && code <= 99) return '⛈️';
+  return '⛅';
+}
+
+// ============================================================================
+// Seasonal Fallback (when geocoding fails)
+// ============================================================================
+
+const seasonalPatterns: Record<string, Record<string, { high: number; low: number; condition: string; code: number }>> = {
   'europe': {
-    'winter': { high: 8, low: 2, condition: 'Cloudy' },
-    'spring': { high: 16, low: 8, condition: 'Partly Cloudy' },
-    'summer': { high: 26, low: 18, condition: 'Sunny' },
-    'fall': { high: 14, low: 7, condition: 'Cloudy' },
+    'winter': { high: 8, low: 2, condition: 'Cloudy', code: 3 },
+    'spring': { high: 16, low: 8, condition: 'Partly cloudy', code: 2 },
+    'summer': { high: 26, low: 18, condition: 'Sunny', code: 0 },
+    'fall': { high: 14, low: 7, condition: 'Cloudy', code: 3 },
   },
   'tropical': {
-    'winter': { high: 30, low: 24, condition: 'Sunny' },
-    'spring': { high: 32, low: 26, condition: 'Humid' },
-    'summer': { high: 33, low: 27, condition: 'Rainy' },
-    'fall': { high: 31, low: 25, condition: 'Partly Cloudy' },
+    'winter': { high: 30, low: 24, condition: 'Sunny', code: 0 },
+    'spring': { high: 32, low: 26, condition: 'Humid', code: 2 },
+    'summer': { high: 33, low: 27, condition: 'Rainy', code: 61 },
+    'fall': { high: 31, low: 25, condition: 'Partly cloudy', code: 2 },
   },
   'mediterranean': {
-    'winter': { high: 14, low: 8, condition: 'Mild' },
-    'spring': { high: 20, low: 12, condition: 'Pleasant' },
-    'summer': { high: 32, low: 22, condition: 'Hot & Sunny' },
-    'fall': { high: 22, low: 14, condition: 'Warm' },
+    'winter': { high: 14, low: 8, condition: 'Mild', code: 2 },
+    'spring': { high: 20, low: 12, condition: 'Pleasant', code: 1 },
+    'summer': { high: 32, low: 22, condition: 'Hot & Sunny', code: 0 },
+    'fall': { high: 22, low: 14, condition: 'Warm', code: 1 },
   },
   'default': {
-    'winter': { high: 10, low: 2, condition: 'Cold' },
-    'spring': { high: 18, low: 10, condition: 'Mild' },
-    'summer': { high: 28, low: 18, condition: 'Warm' },
-    'fall': { high: 16, low: 8, condition: 'Cool' },
+    'winter': { high: 10, low: 2, condition: 'Cold', code: 3 },
+    'spring': { high: 18, low: 10, condition: 'Mild', code: 2 },
+    'summer': { high: 28, low: 18, condition: 'Warm', code: 1 },
+    'fall': { high: 16, low: 8, condition: 'Cool', code: 2 },
   },
 };
 
@@ -99,47 +146,36 @@ function getRegion(destination: string): string {
   return 'default';
 }
 
-function getWeatherIcon(condition: string): string {
-  const c = condition.toLowerCase();
-  if (c.includes('sunny') || c.includes('clear')) return '☀️';
-  if (c.includes('rain') || c.includes('shower')) return '🌧️';
-  if (c.includes('cloud') || c.includes('overcast')) return '☁️';
-  if (c.includes('snow')) return '❄️';
-  if (c.includes('thunder') || c.includes('storm')) return '⛈️';
-  if (c.includes('fog') || c.includes('mist')) return '🌫️';
-  return '⛅';
-}
-
 function generateFallbackForecast(destination: string, startDate: string, days: number = 7): WeatherData {
   const region = getRegion(destination);
   const patterns = seasonalPatterns[region] || seasonalPatterns['default'];
   const start = new Date(startDate);
   const season = getSeason(start);
   const base = patterns[season];
-  
+
   const forecast = [];
   for (let i = 0; i < days; i++) {
     const date = new Date(start);
     date.setDate(date.getDate() + i);
     const variance = Math.random() * 4 - 2;
-    
+
     forecast.push({
       date: date.toISOString().split('T')[0],
       high: Math.round(base.high + variance),
       low: Math.round(base.low + variance),
       condition: base.condition,
-      icon: getWeatherIcon(base.condition),
-      precipitation: base.condition.toLowerCase().includes('rain') ? 60 : 10,
+      icon: getWeatherIcon(base.code),
+      precipitation: base.code >= 51 && base.code <= 82 ? 60 : 10,
     });
   }
-  
+
   return {
     destination,
     current: {
       temp: Math.round(base.high - 3),
       feelsLike: Math.round(base.high - 4),
       condition: base.condition,
-      icon: forecast[0].icon,
+      icon: getWeatherIcon(base.code),
       humidity: 55,
       windSpeed: 12,
       precipitation: forecast[0].precipitation,
@@ -149,93 +185,93 @@ function generateFallbackForecast(destination: string, startDate: string, days: 
   };
 }
 
-async function fetchWeatherStack(destination: string, apiKey: string): Promise<WeatherData | null> {
-  const cleanedKey = (apiKey || '').trim();
-  if (!cleanedKey) {
-    console.error('[Weather] WEATHERSTACK_API_KEY is empty after trimming');
+// ============================================================================
+// Open-Meteo API (Free, no API key required)
+// ============================================================================
+
+async function geocodeDestination(destination: string): Promise<{ lat: number; lon: number; name: string } | null> {
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(destination)}&count=1&language=en&format=json`;
+    console.log('[Weather] Geocoding destination:', destination);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error('[Weather] Geocoding HTTP error:', response.status);
+      return null;
+    }
+
+    const data: GeocodingResult = await response.json();
+    if (!data.results || data.results.length === 0) {
+      console.warn('[Weather] No geocoding results for:', destination);
+      return null;
+    }
+
+    const result = data.results[0];
+    console.log('[Weather] Geocoded to:', result.name, result.latitude, result.longitude);
+    return { lat: result.latitude, lon: result.longitude, name: result.name };
+  } catch (error) {
+    console.error('[Weather] Geocoding error:', error);
     return null;
   }
-
-  const query = encodeURIComponent(destination);
-  const endpoints = [
-    `https://api.weatherstack.com/current?access_key=${cleanedKey}&query=${query}&units=m`,
-    `http://api.weatherstack.com/current?access_key=${cleanedKey}&query=${query}&units=m`,
-  ];
-
-  for (const url of endpoints) {
-    const protocol = url.startsWith('https') ? 'https' : 'http';
-
-    try {
-      console.log(`[Weather] Fetching from Weatherstack (${protocol}) for:`, destination);
-
-      const response = await fetch(url, {
-        headers: {
-          // Some API gateways behave differently without a UA.
-          'User-Agent': 'voyance-weather/1.0',
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        console.error(
-          '[Weather] Weatherstack HTTP error:',
-          response.status,
-          text ? `| body: ${text.slice(0, 300)}` : ''
-        );
-        continue;
-      }
-
-      const data: WeatherStackResponse = await response.json();
-
-      if (data.error) {
-        console.error('[Weather] Weatherstack API error:', data.error.info);
-        continue;
-      }
-
-      const current = data.current;
-      const condition = current.weather_descriptions?.[0] || 'Unknown';
-
-      // Generate forecast based on current conditions (Weatherstack free tier only has current)
-      const baseTemp = current.temperature;
-      const forecast = [];
-      for (let i = 0; i < 7; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() + i);
-        const variance = Math.random() * 6 - 3;
-
-        forecast.push({
-          date: date.toISOString().split('T')[0],
-          high: Math.round(baseTemp + 3 + variance),
-          low: Math.round(baseTemp - 5 + variance),
-          condition: i === 0 ? condition : 'Similar conditions',
-          icon: getWeatherIcon(condition),
-          precipitation: current.precip || 0,
-        });
-      }
-
-      return {
-        destination: data.location?.name || destination,
-        current: {
-          temp: current.temperature,
-          feelsLike: current.feelslike,
-          condition,
-          icon: getWeatherIcon(condition),
-          humidity: current.humidity,
-          windSpeed: current.wind_speed,
-          precipitation: current.precip || 0,
-        },
-        forecast,
-        source: 'weatherstack',
-      };
-    } catch (error) {
-      console.error(`[Weather] Weatherstack fetch error (${protocol}):`, error);
-      // try next endpoint
-    }
-  }
-
-  return null;
 }
+
+async function fetchOpenMeteo(destination: string, days: number = 7): Promise<WeatherData | null> {
+  const geo = await geocodeDestination(destination);
+  if (!geo) return null;
+
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum&timezone=auto&forecast_days=${Math.min(days, 16)}`;
+
+    console.log('[Weather] Fetching Open-Meteo for:', geo.name);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error('[Weather] Open-Meteo HTTP error:', response.status);
+      return null;
+    }
+
+    const data: OpenMeteoResponse = await response.json();
+
+    if (!data.current || !data.daily) {
+      console.error('[Weather] Open-Meteo missing data');
+      return null;
+    }
+
+    const current = data.current;
+    const daily = data.daily;
+
+    const forecast = daily.time.map((date, i) => ({
+      date,
+      high: Math.round(daily.temperature_2m_max[i]),
+      low: Math.round(daily.temperature_2m_min[i]),
+      condition: getConditionFromCode(daily.weather_code[i]),
+      icon: getWeatherIcon(daily.weather_code[i]),
+      precipitation: Math.round(daily.precipitation_sum[i] || 0),
+    }));
+
+    return {
+      destination: geo.name,
+      current: {
+        temp: Math.round(current.temperature_2m),
+        feelsLike: Math.round(current.apparent_temperature),
+        condition: getConditionFromCode(current.weather_code),
+        icon: getWeatherIcon(current.weather_code),
+        humidity: current.relative_humidity_2m,
+        windSpeed: Math.round(current.wind_speed_10m),
+        precipitation: Math.round(current.precipitation || 0),
+      },
+      forecast,
+      source: 'open-meteo',
+    };
+  } catch (error) {
+    console.error('[Weather] Open-Meteo fetch error:', error);
+    return null;
+  }
+}
+
+// ============================================================================
+// Main Handler
+// ============================================================================
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -245,7 +281,7 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const { destination, startDate, days } = body;
-    
+
     if (!destination) {
       return new Response(
         JSON.stringify({ error: 'Destination is required' }),
@@ -253,29 +289,20 @@ serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get('WEATHERSTACK_API_KEY');
     let weather: WeatherData;
-    
-    if (apiKey) {
-      const realWeather = await fetchWeatherStack(destination, apiKey);
-      if (realWeather) {
-        weather = realWeather;
-        console.log('[Weather] Using Weatherstack data for:', destination);
-      } else {
-        weather = generateFallbackForecast(
-          destination, 
-          startDate || new Date().toISOString().split('T')[0],
-          days || 7
-        );
-        console.log('[Weather] Weatherstack failed, using fallback for:', destination);
-      }
+
+    // Try Open-Meteo (free, no API key)
+    const realWeather = await fetchOpenMeteo(destination, days || 7);
+    if (realWeather) {
+      weather = realWeather;
+      console.log('[Weather] ✅ Using Open-Meteo data for:', destination);
     } else {
       weather = generateFallbackForecast(
-        destination, 
+        destination,
         startDate || new Date().toISOString().split('T')[0],
         days || 7
       );
-      console.log('[Weather] No API key, using fallback for:', destination);
+      console.log('[Weather] ⚠️ Open-Meteo failed, using fallback for:', destination);
     }
 
     return new Response(JSON.stringify({ weather, success: true }), {
