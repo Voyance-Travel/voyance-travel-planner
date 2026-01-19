@@ -1,6 +1,28 @@
 /**
  * Travel Archetype Narratives - Horoscope-style emotional copy
  * Based on docs/TRAVEL_ARCHETYPES.md
+ * 
+ * ARCHETYPE CATEGORIES:
+ * - EXPLORER: Curiosity-driven travelers who seek discovery and adventure
+ * - CONNECTOR: Relationship-focused travelers who prioritize shared experiences
+ * - ACHIEVER: Goal-oriented travelers who collect experiences and accomplishments
+ * - RESTORER: Wellness-focused travelers seeking peace and rejuvenation
+ * - CURATOR: Quality-focused travelers who appreciate refined experiences
+ * - TRANSFORMER: Growth-focused travelers seeking personal development
+ * 
+ * HOW ARCHETYPES ARE DETERMINED:
+ * The Travel DNA engine scores users across 8 core traits based on quiz responses:
+ * - Planning (detailed vs spontaneous)
+ * - Social (solo vs group-oriented)
+ * - Comfort (budget vs luxury)
+ * - Pace (relaxed vs active)
+ * - Authenticity (tourist vs local experience)
+ * - Adventure (safe vs thrill-seeking)
+ * - Budget (cost-conscious vs premium)
+ * - Transformation (routine vs growth-seeking)
+ * 
+ * Each archetype has minimum trait requirements and weights.
+ * The engine matches your trait scores to find your primary and secondary archetypes.
  */
 
 export interface ArchetypeNarrative {
@@ -14,6 +36,8 @@ export interface ArchetypeNarrative {
   growthEdges: string[];
   perfectTripPreview: string;
   emoji: string;
+  /** Lucide icon name for this archetype's category */
+  iconName?: string;
 }
 
 export const CATEGORY_COLORS = {
@@ -22,36 +46,76 @@ export const CATEGORY_COLORS = {
     bg: 'bg-teal-50 dark:bg-teal-950/30',
     text: 'text-teal-700 dark:text-teal-300',
     border: 'border-teal-200 dark:border-teal-800',
+    iconName: 'Compass' as const,
   },
   CONNECTOR: {
     primary: 'from-rose-400 to-amber-400',
     bg: 'bg-rose-50 dark:bg-rose-950/30',
     text: 'text-rose-700 dark:text-rose-300',
     border: 'border-rose-200 dark:border-rose-800',
+    iconName: 'Users' as const,
   },
   ACHIEVER: {
     primary: 'from-purple-500 to-blue-500',
     bg: 'bg-purple-50 dark:bg-purple-950/30',
     text: 'text-purple-700 dark:text-purple-300',
     border: 'border-purple-200 dark:border-purple-800',
+    iconName: 'Trophy' as const,
   },
   RESTORER: {
     primary: 'from-green-400 to-violet-400',
     bg: 'bg-green-50 dark:bg-green-950/30',
     text: 'text-green-700 dark:text-green-300',
     border: 'border-green-200 dark:border-green-800',
+    iconName: 'Leaf' as const,
   },
   CURATOR: {
     primary: 'from-rose-700 to-amber-300',
     bg: 'bg-amber-50 dark:bg-amber-950/30',
     text: 'text-amber-800 dark:text-amber-300',
     border: 'border-amber-200 dark:border-amber-800',
+    iconName: 'Gem' as const,
   },
   TRANSFORMER: {
     primary: 'from-indigo-500 to-orange-400',
     bg: 'bg-indigo-50 dark:bg-indigo-950/30',
     text: 'text-indigo-700 dark:text-indigo-300',
     border: 'border-indigo-200 dark:border-indigo-800',
+    iconName: 'Sparkles' as const,
+  },
+};
+
+/** Category descriptions for the expandable documentation section */
+export const CATEGORY_DESCRIPTIONS = {
+  EXPLORER: {
+    name: 'Explorer',
+    description: 'Curiosity-driven travelers who seek discovery, adventure, and authentic experiences. You thrive when uncovering hidden gems and off-the-beaten-path destinations.',
+    keyTraits: ['High adventure', 'High authenticity', 'Flexible planning'],
+  },
+  CONNECTOR: {
+    name: 'Connector',
+    description: 'Relationship-focused travelers who prioritize shared experiences and building bonds through travel. Every trip is an opportunity to strengthen connections.',
+    keyTraits: ['High social', 'Balanced comfort', 'Group-oriented'],
+  },
+  ACHIEVER: {
+    name: 'Achiever',
+    description: 'Goal-oriented travelers who collect experiences and accomplishments. You approach travel with purpose and love checking destinations off your list.',
+    keyTraits: ['Active pace', 'High adventure', 'Detailed planning'],
+  },
+  RESTORER: {
+    name: 'Restorer',
+    description: 'Wellness-focused travelers seeking peace, rejuvenation, and balance. Travel is your reset button—a way to recharge and return refreshed.',
+    keyTraits: ['Relaxed pace', 'High comfort', 'Wellness-focused'],
+  },
+  CURATOR: {
+    name: 'Curator',
+    description: 'Quality-focused travelers who appreciate refined, curated experiences. You seek excellence in every detail, from accommodations to dining.',
+    keyTraits: ['High comfort', 'Premium budget', 'Detailed planning'],
+  },
+  TRANSFORMER: {
+    name: 'Transformer',
+    description: 'Growth-focused travelers seeking personal development and transformation. You travel to evolve, learn, and return home as a better version of yourself.',
+    keyTraits: ['High transformation', 'High authenticity', 'Open to change'],
   },
 };
 

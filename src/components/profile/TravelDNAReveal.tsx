@@ -2,26 +2,42 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
-  Star, 
   Zap, 
-  Heart, 
   TrendingUp,
   ChevronRight,
+  ChevronDown,
   RefreshCw,
-  Award
+  Compass,
+  Users,
+  Trophy,
+  Leaf,
+  Gem,
+  Info
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ROUTES } from '@/config/routes';
 import { 
   getArchetypeNarrative, 
-  getCategoryColors, 
+  getCategoryColors,
+  CATEGORY_DESCRIPTIONS,
   type ArchetypeNarrative 
 } from '@/data/archetypeNarratives';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+
+/** Map category names to their Lucide icon components */
+const CATEGORY_ICONS = {
+  EXPLORER: Compass,
+  CONNECTOR: Users,
+  ACHIEVER: Trophy,
+  RESTORER: Leaf,
+  CURATOR: Gem,
+  TRANSFORMER: Sparkles,
+} as const;
 
 interface TravelDNARevealProps {
   userId: string;
@@ -167,6 +183,14 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
   const colors = getCategoryColors(narrative.category);
   const confidence = dnaData.dna_confidence_score || 85;
   const rarity = dnaData.dna_rarity || 'Uncommon';
+  
+  // Get the icon component for this category
+  const CategoryIcon = CATEGORY_ICONS[narrative.category] || Compass;
+  const SecondaryIcon = secondaryNarrative 
+    ? CATEGORY_ICONS[secondaryNarrative.category] || Compass
+    : null;
+  const categoryInfo = CATEGORY_DESCRIPTIONS[narrative.category];
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
 
   return (
     <motion.div 
@@ -192,17 +216,34 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         </motion.div>
 
         <div className="flex flex-col md:flex-row md:items-start gap-6">
-          {/* Archetype Icon */}
+          {/* Category Icon - replaces emoji */}
           <motion.div 
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="text-5xl"
+            className={cn(
+              "w-16 h-16 rounded-2xl flex items-center justify-center",
+              "bg-gradient-to-br", colors.primary
+            )}
           >
-            {narrative.emoji}
+            <CategoryIcon className="h-8 w-8 text-white" strokeWidth={1.5} />
           </motion.div>
 
           <div className="flex-1 space-y-3">
+            {/* Category Badge */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.35 }}
+            >
+              <span className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
+                colors.bg, colors.text
+              )}>
+                {categoryInfo.name}
+              </span>
+            </motion.div>
+
             {/* Primary Archetype Name */}
             <motion.h2 
               initial={{ opacity: 0, y: 10 }}
@@ -214,14 +255,14 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
             </motion.h2>
 
             {/* Secondary Archetype */}
-            {secondaryNarrative && (
+            {secondaryNarrative && SecondaryIcon && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.45 }}
                 className="flex items-center gap-2 text-sm text-muted-foreground"
               >
-                <span className="text-lg">{secondaryNarrative.emoji}</span>
+                <SecondaryIcon className="h-4 w-4" />
                 <span>with hints of</span>
                 <span className="font-medium text-foreground">{secondaryNarrative.name}</span>
               </motion.div>
@@ -253,6 +294,100 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
           </div>
         </div>
       </div>
+
+      {/* Expandable: Learn About Your Archetype */}
+      <Collapsible open={isInfoOpen} onOpenChange={setIsInfoOpen}>
+        <CollapsibleTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="w-full justify-between text-muted-foreground hover:text-foreground group"
+          >
+            <span className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              How is my Travel DNA determined?
+            </span>
+            <ChevronDown className={cn(
+              "h-4 w-4 transition-transform duration-200",
+              isInfoOpen && "rotate-180"
+            )} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-4 p-6 rounded-xl bg-muted/30 border border-border space-y-6"
+          >
+            {/* What is this category */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-foreground flex items-center gap-2">
+                <CategoryIcon className="h-4 w-4" />
+                What is a {categoryInfo.name}?
+              </h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {categoryInfo.description}
+              </p>
+            </div>
+
+            {/* Key traits */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+                Key Traits
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {categoryInfo.keyTraits.map((trait, i) => (
+                  <span 
+                    key={i}
+                    className="px-3 py-1 text-sm bg-background border border-border rounded-full"
+                  >
+                    {trait}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* How it's calculated */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+                How It's Calculated
+              </h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Your Travel DNA is calculated by scoring your quiz responses across 8 core traits: 
+                Planning, Social, Comfort, Pace, Authenticity, Adventure, Budget, and Transformation. 
+                Each archetype has specific trait requirements—your responses are matched against these 
+                to find your primary and secondary archetypes.
+              </p>
+            </div>
+
+            {/* The 6 categories */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+                The 6 Traveler Categories
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {Object.entries(CATEGORY_DESCRIPTIONS).map(([key, cat]) => {
+                  const Icon = CATEGORY_ICONS[key as keyof typeof CATEGORY_ICONS];
+                  const catColors = getCategoryColors(key as keyof typeof CATEGORY_DESCRIPTIONS);
+                  const isActive = key === narrative.category;
+                  return (
+                    <div 
+                      key={key}
+                      className={cn(
+                        "flex items-center gap-2 p-2 rounded-lg text-sm transition-colors",
+                        isActive ? cn(catColors.bg, catColors.text, "font-medium") : "text-muted-foreground"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      <span>{cat.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Tabbed Content - Minimal Style */}
       <div>
