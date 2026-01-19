@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { QuizCompletion } from '@/components/quiz/QuizCompletion';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { scrollToTop } from '@/utils/scrollUtils';
 import { cn } from '@/lib/utils';
 import { 
   submitQuizComplete, 
@@ -218,6 +219,10 @@ const questions = [
       { value: 'halal', label: 'Halal', description: 'Follows halal dietary laws' },
       { value: 'none', label: 'No Restrictions', description: 'I eat everything!' },
     ],
+    hasTextInput: true,
+    textInputId: 'food_allergies',
+    textInputLabel: 'Any food allergies or other dietary needs?',
+    textInputPlaceholder: 'e.g., nut allergy, shellfish, lactose intolerant...',
   },
   {
     id: 'weather_preference',
@@ -626,6 +631,9 @@ export default function Quiz() {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
       
+      // Scroll to top when navigating to next step
+      scrollToTop();
+      
       // Update session progress
       if (sessionId) {
         updateQuizSession(sessionId, {
@@ -667,6 +675,8 @@ export default function Quiz() {
   const handleBack = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
+      // Scroll to top when navigating back
+      scrollToTop();
     }
   };
 
@@ -782,6 +792,31 @@ export default function Quiz() {
                             />
                           ))}
                         </div>
+                        
+                        {/* Text input for allergies/custom input */}
+                        {question.hasTextInput && question.textInputId && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="mt-6 pt-6 border-t border-border"
+                          >
+                            <label 
+                              htmlFor={question.textInputId}
+                              className="block text-sm font-medium text-foreground mb-2"
+                            >
+                              {question.textInputLabel}
+                            </label>
+                            <textarea
+                              id={question.textInputId}
+                              value={(answers[question.textInputId] as string) || ''}
+                              onChange={(e) => handleSelect(question.textInputId!, e.target.value, false)}
+                              placeholder={question.textInputPlaceholder}
+                              rows={2}
+                              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+                            />
+                          </motion.div>
+                        )}
                       </div>
                     ))}
                   </motion.div>
