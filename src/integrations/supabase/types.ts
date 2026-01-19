@@ -1328,6 +1328,57 @@ export type Database = {
         }
         Relationships: []
       }
+      user_enrichment: {
+        Row: {
+          created_at: string
+          decline_count: number | null
+          enrichment_type: string
+          entity_id: string | null
+          entity_name: string | null
+          entity_type: string | null
+          feedback_reason: string | null
+          feedback_tags: string[] | null
+          id: string
+          is_permanent_suppress: boolean | null
+          metadata: Json | null
+          suppress_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          decline_count?: number | null
+          enrichment_type: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: string | null
+          feedback_reason?: string | null
+          feedback_tags?: string[] | null
+          id?: string
+          is_permanent_suppress?: boolean | null
+          metadata?: Json | null
+          suppress_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          decline_count?: number | null
+          enrichment_type?: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: string | null
+          feedback_reason?: string | null
+          feedback_tags?: string[] | null
+          id?: string
+          is_permanent_suppress?: boolean | null
+          metadata?: Json | null
+          suppress_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_entitlement_overrides: {
         Row: {
           created_at: string | null

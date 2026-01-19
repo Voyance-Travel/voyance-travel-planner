@@ -24,6 +24,15 @@ interface UserPreferences {
   dining_style: string | null;
 }
 
+interface UserEnrichment {
+  entity_id: string;
+  entity_name: string;
+  feedback_tags: string[] | null;
+  decline_count: number;
+  suppress_until: string | null;
+  is_permanent_suppress: boolean;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -55,8 +64,8 @@ serve(async (req) => {
 
     console.log(`[suggest-mystery-trips] Generating suggestions for user: ${user.id}`);
 
-    // Fetch user data in parallel
-    const [travelDnaResult, preferencesResult, pastTripsResult, destinationsResult] = await Promise.all([
+    // Fetch user data in parallel (including enrichment/feedback data)
+    const [travelDnaResult, preferencesResult, pastTripsResult, destinationsResult, enrichmentResult] = await Promise.all([
       supabase
         .from('travel_dna_profiles')
         .select('primary_archetype_name, secondary_archetype_name, trait_scores, emotional_drivers')
@@ -76,20 +85,66 @@ serve(async (req) => {
         .from('destinations')
         .select('id, city, country, region, description, best_time_to_visit, cost_tier, tags, known_for, stock_image_url')
         .limit(50),
+      // Get user's declined destinations
+      supabase
+        .from('user_enrichment')
+        .select('entity_id, entity_name, feedback_tags, decline_count, suppress_until, is_permanent_suppress')
+        .eq('user_id', user.id)
+        .eq('enrichment_type', 'destination_decline'),
     ]);
 
     const travelDna: TravelDNA | null = travelDnaResult.data;
     const preferences: UserPreferences | null = preferencesResult.data;
     const pastTrips = pastTripsResult.data || [];
     const destinations = destinationsResult.data || [];
+    const enrichmentData: UserEnrichment[] = enrichmentResult.data || [];
 
-    // Build context for AI
+    // Build sets of destinations to exclude
     const pastDestinations = pastTrips.map(t => t.destination?.toLowerCase()).filter(Boolean);
-    const availableDestinations = destinations.filter(d => 
-      !pastDestinations.includes(d.city?.toLowerCase())
-    );
+    
+    // Build suppressed destinations from enrichment data
+    const now = new Date();
+    const suppressedDestinations = enrichmentData
+      .filter(e => {
+        // Permanently suppressed (declined 5+ times)
+        if (e.is_permanent_suppress) return true;
+        // Temporarily suppressed (declined 3+ times, within suppress window)
+        if (e.suppress_until && new Date(e.suppress_until) > now) return true;
+        return false;
+      })
+      .map(e => e.entity_id);
 
-    const userProfile = buildUserProfile(travelDna, preferences);
+    // Build context about user's dislikes from enrichment
+    const userDislikes = enrichmentData
+      .flatMap(e => e.feedback_tags || [])
+      .reduce((acc, tag) => {
+        acc[tag] = (acc[tag] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+    // Sort to find top dislikes
+    const topDislikes = Object.entries(userDislikes)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag]) => tag);
+
+    console.log(`[suggest-mystery-trips] Suppressed destinations: ${suppressedDestinations.length}, Top dislikes: ${topDislikes.join(', ')}`);
+
+    // Filter available destinations
+    const availableDestinations = destinations.filter(d => {
+      const cityLower = d.city?.toLowerCase();
+      const entityId = `${cityLower}_${d.country?.toLowerCase()}`;
+      
+      // Exclude past trips
+      if (pastDestinations.includes(cityLower)) return false;
+      
+      // Exclude suppressed destinations
+      if (suppressedDestinations.includes(entityId)) return false;
+      
+      return true;
+    });
+
+    const userProfile = buildUserProfile(travelDna, preferences, topDislikes);
     const destinationList = availableDestinations.map(d => ({
       city: d.city,
       country: d.country,
@@ -112,6 +167,7 @@ Your task is to suggest exactly 3 destinations that would be PERFECT for this sp
 
 IMPORTANT: 
 - Choose destinations that genuinely match their personality and travel style
+- AVOID destinations that match their known dislikes (listed below)
 - Provide a compelling, personalized reason for each suggestion (2-3 sentences max)
 - The reason should feel personal, like "Based on your love of culture and relaxed pace, you'd thrive in..."
 - Avoid generic descriptions - make it feel like you KNOW this traveler`;
@@ -122,6 +178,9 @@ ${userProfile}
 
 PAST DESTINATIONS TO EXCLUDE (they've been here):
 ${pastDestinations.length > 0 ? pastDestinations.join(', ') : 'None'}
+
+DECLINED DESTINATIONS TO EXCLUDE (they weren't interested):
+${suppressedDestinations.length > 0 ? suppressedDestinations.map(id => id.replace('_', ', ')).join('; ') : 'None'}
 
 AVAILABLE DESTINATIONS TO CHOOSE FROM:
 ${JSON.stringify(destinationList.slice(0, 30), null, 2)}
@@ -244,7 +303,11 @@ Return EXACTLY 3 destinations as JSON.`;
   }
 });
 
-function buildUserProfile(travelDna: TravelDNA | null, preferences: UserPreferences | null): string {
+function buildUserProfile(
+  travelDna: TravelDNA | null, 
+  preferences: UserPreferences | null,
+  topDislikes: string[]
+): string {
   const parts: string[] = [];
 
   if (travelDna?.primary_archetype_name) {
@@ -289,6 +352,21 @@ function buildUserProfile(travelDna: TravelDNA | null, preferences: UserPreferen
 
   if (preferences?.dining_style) {
     parts.push(`🍽️ DINING: ${preferences.dining_style}`);
+  }
+
+  // Add user dislikes from feedback
+  if (topDislikes.length > 0) {
+    const dislikeLabels: Record<string, string> = {
+      'been_there': 'familiar destinations',
+      'not_interested': 'mainstream destinations',
+      'too_expensive': 'expensive destinations',
+      'wrong_climate': 'certain climates',
+      'too_far': 'long-haul destinations',
+      'safety_concerns': 'destinations with safety concerns',
+      'wrong_vibe': 'destinations that don\'t match their style',
+    };
+    const formattedDislikes = topDislikes.map(d => dislikeLabels[d] || d).join(', ');
+    parts.push(`🚫 AVOID: ${formattedDislikes}`);
   }
 
   return parts.length > 0 ? parts.join('\n') : 'No specific preferences on file - suggest diverse options';
