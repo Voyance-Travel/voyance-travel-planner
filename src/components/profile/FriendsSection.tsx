@@ -127,6 +127,29 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
         </p>
       </div>
 
+      {/* Preference Blending Info */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-muted/30 border border-border rounded-lg p-4"
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Users className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-foreground mb-1">
+              Trip Together, Blend Preferences
+            </h4>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              When you plan a trip with friends, Voyance intelligently blends everyone's preferences 
+              using our weighted algorithm. Activities, pace, and budget are balanced so the entire 
+              group enjoys the experience. The more trips you take together, the smarter the blending becomes.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
       {/* Search Bar - Clean and minimal */}
       <div className="relative max-w-md">
         <div className={cn(
@@ -135,7 +158,7 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
         )}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by @handle..."
+            placeholder="Search by @handle or name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setIsSearchFocused(true)}
@@ -146,6 +169,9 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
           )}
         </div>
+        <p className="text-xs text-muted-foreground mt-1.5">
+          Tip: Ask friends to share their @handle from their profile
+        </p>
         
         {/* Search Results Dropdown */}
         <AnimatePresence>

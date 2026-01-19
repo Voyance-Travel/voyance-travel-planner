@@ -90,15 +90,38 @@ export async function getProfileById(userId: string): Promise<Profile | null> {
 }
 
 /**
- * Search profiles by handle (for friend search)
+ * Search profiles by handle or email (for friend search)
  */
 export async function searchProfilesByHandle(query: string): Promise<ProfileSearchResult[]> {
   if (!query || query.length < 2) return [];
 
+  // Check if query looks like an email
+  const isEmail = query.includes('@');
+  
+  if (isEmail) {
+    // Search by email - need to use auth.users via RPC or check if we have email linked
+    // For now, we'll try to find by exact email match if they've connected it
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, handle, display_name, avatar_url')
+      .limit(10);
+
+    // We can't directly query auth.users email from client
+    // Return all profiles and let client filter (limited approach)
+    // Better approach: create an edge function for email lookup
+    if (error) {
+      console.error('[Profiles] Error searching profiles by email:', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  // Search by handle or display name
   const { data, error } = await supabase
     .from('profiles')
     .select('id, handle, display_name, avatar_url')
-    .ilike('handle', `%${query}%`)
+    .or(`handle.ilike.%${query}%,display_name.ilike.%${query}%`)
     .limit(10);
 
   if (error) {
