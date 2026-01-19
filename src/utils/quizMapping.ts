@@ -162,13 +162,20 @@ const QUIZ_FIELD_MAP: Record<string, keyof UserPreferencesPayload> = {
 };
 
 /**
- * Maps travel style to traveler type archetype
+ * Maps quiz traveler_type values to archetype IDs
+ * These match the values sent from the Quiz.tsx options
  */
 const STYLE_TO_ARCHETYPE: Record<string, string> = {
-  'luxury': 'Curated Luxe',
-  'adventure': 'Explorer',
-  'cultural': 'Story Seeker',
-  'relaxation': 'Escape Artist',
+  // Primary quiz values (from Quiz.tsx traveler_type question)
+  'explorer': 'cultural_anthropologist',
+  'escape_artist': 'zen_seeker',
+  'curated_luxe': 'luxury_luminary',
+  'story_seeker': 'story_seeker',
+  // Legacy/alternate values
+  'luxury': 'luxury_luminary',
+  'adventure': 'adrenaline_architect',
+  'cultural': 'cultural_anthropologist',
+  'relaxation': 'escape_artist',
 };
 
 /**
@@ -487,48 +494,117 @@ export function calculateTravelDNA(
 
 function getArchetypeDisplayName(id: string): string {
   const names: Record<string, string> = {
-    explorer: 'The Explorer',
-    escape_artist: 'The Escape Artist',
-    curated_luxe: 'Curated Luxe',
-    story_seeker: 'The Story Seeker',
+    // EXPLORER category
     cultural_anthropologist: 'The Cultural Anthropologist',
-    zen_seeker: 'The Zen Seeker',
-    slow_traveler: 'The Slow Traveler',
+    urban_nomad: 'The Urban Nomad',
+    wilderness_pioneer: 'The Wilderness Pioneer',
+    digital_explorer: 'The Digital Explorer',
+    explorer: 'The Explorer',
+    // CONNECTOR category
+    social_butterfly: 'The Social Butterfly',
+    family_architect: 'The Family Architect',
+    romantic_curator: 'The Romantic Curator',
+    story_seeker: 'The Story Seeker',
+    // ACHIEVER category
+    bucket_list_conqueror: 'The Bucket List Conqueror',
     adrenaline_architect: 'The Adrenaline Architect',
-    luxury_luminary: 'The Luxury Luminary',
+    collection_curator: 'The Collection Curator',
+    status_seeker: 'The Status Seeker',
+    // RESTORER category
+    zen_seeker: 'The Zen Seeker',
+    retreat_regular: 'The Retreat Regular',
+    beach_therapist: 'The Beach Therapist',
+    slow_traveler: 'The Slow Traveler',
+    escape_artist: 'The Escape Artist',
+    // CURATOR category
     culinary_cartographer: 'The Culinary Cartographer',
+    art_aficionado: 'The Art Aficionado',
+    luxury_luminary: 'The Luxury Luminary',
+    eco_ethicist: 'The Eco Ethicist',
+    curated_luxe: 'Curated Luxe',
+    // TRANSFORMER category
+    gap_year_graduate: 'The Gap Year Graduate',
+    midlife_explorer: 'The Midlife Explorer',
+    sabbatical_scholar: 'The Sabbatical Scholar',
+    healing_journeyer: 'The Healing Journeyer',
   };
   return names[id] || 'The Explorer';
 }
 
 function getArchetypeCategory(id: string): string {
   const categories: Record<string, string> = {
-    explorer: 'EXPLORER',
-    escape_artist: 'RESTORER',
-    curated_luxe: 'CURATOR',
-    story_seeker: 'CONNECTOR',
+    // EXPLORER
     cultural_anthropologist: 'EXPLORER',
-    zen_seeker: 'RESTORER',
-    slow_traveler: 'RESTORER',
+    urban_nomad: 'EXPLORER',
+    wilderness_pioneer: 'EXPLORER',
+    digital_explorer: 'EXPLORER',
+    explorer: 'EXPLORER',
+    // CONNECTOR
+    social_butterfly: 'CONNECTOR',
+    family_architect: 'CONNECTOR',
+    romantic_curator: 'CONNECTOR',
+    story_seeker: 'CONNECTOR',
+    // ACHIEVER
+    bucket_list_conqueror: 'ACHIEVER',
     adrenaline_architect: 'ACHIEVER',
-    luxury_luminary: 'CURATOR',
+    collection_curator: 'ACHIEVER',
+    status_seeker: 'ACHIEVER',
+    // RESTORER
+    zen_seeker: 'RESTORER',
+    retreat_regular: 'RESTORER',
+    beach_therapist: 'RESTORER',
+    slow_traveler: 'RESTORER',
+    escape_artist: 'RESTORER',
+    // CURATOR
     culinary_cartographer: 'CURATOR',
+    art_aficionado: 'CURATOR',
+    luxury_luminary: 'CURATOR',
+    eco_ethicist: 'CURATOR',
+    curated_luxe: 'CURATOR',
+    // TRANSFORMER
+    gap_year_graduate: 'TRANSFORMER',
+    midlife_explorer: 'TRANSFORMER',
+    sabbatical_scholar: 'TRANSFORMER',
+    healing_journeyer: 'TRANSFORMER',
   };
   return categories[id] || 'EXPLORER';
 }
 
 function getArchetypeTagline(id: string): string {
   const taglines: Record<string, string> = {
-    explorer: 'The world is your playground.',
-    escape_artist: 'Sometimes you need to leave to find yourself.',
-    curated_luxe: "You don't travel—you orchestrate experiences.",
-    story_seeker: "Every person is a book you haven't read yet.",
+    // EXPLORER
     cultural_anthropologist: "You don't just visit places, you become them.",
-    zen_seeker: 'Breathe in experience, exhale expectation.',
-    slow_traveler: 'Stay long enough to have a favorite café.',
+    urban_nomad: 'Cities speak to you in neon and noise.',
+    wilderness_pioneer: 'WiFi is optional, wilderness is essential.',
+    digital_explorer: 'Your laptop is your passport extension.',
+    explorer: 'The world is your playground.',
+    // CONNECTOR
+    social_butterfly: "Every stranger is a friend you haven't met.",
+    family_architect: 'Making memories that outlive photo albums.',
+    romantic_curator: 'Love is better with a view.',
+    story_seeker: "Every person is a book you haven't read yet.",
+    // ACHIEVER
+    bucket_list_conqueror: 'Life is a checklist of wonders.',
     adrenaline_architect: 'Normal is just a setting on the washing machine.',
-    luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
+    collection_curator: 'Countries collected, stamps earned.',
+    status_seeker: "First class isn't a seat, it's a lifestyle.",
+    // RESTORER
+    zen_seeker: 'Breathe in experience, exhale expectation.',
+    retreat_regular: "Wellness isn't a trend, it's a lifestyle.",
+    beach_therapist: 'Salt water heals everything.',
+    slow_traveler: 'Stay long enough to have a favorite café.',
+    escape_artist: 'Sometimes you need to leave to find yourself.',
+    // CURATOR
     culinary_cartographer: 'Your passport is basically a menu.',
+    art_aficionado: 'Every gallery is a pilgrimage.',
+    luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
+    eco_ethicist: 'Leave nothing but footprints.',
+    curated_luxe: "You don't travel—you orchestrate experiences.",
+    // TRANSFORMER
+    gap_year_graduate: 'The world is the ultimate classroom.',
+    midlife_explorer: "It's never too late to become who you were meant to be.",
+    sabbatical_scholar: 'Taking time off to find time on.',
+    healing_journeyer: 'Travel is the medicine for the soul.',
   };
   return taglines[id] || 'The world awaits your discovery.';
 }
@@ -537,21 +613,50 @@ function extractEmotionalDrivers(answers: Record<string, string | string[]>): st
   const drivers: string[] = [];
   const style = answers.traveler_type as string || answers.style as string;
   
+  // Map quiz traveler_type to emotional drivers
   const driverMap: Record<string, string[]> = {
+    // Primary quiz values
     explorer: ['discovery', 'curiosity', 'growth'],
     escape_artist: ['freedom', 'peace', 'renewal'],
     curated_luxe: ['comfort', 'excellence', 'indulgence'],
     story_seeker: ['connection', 'meaning', 'understanding'],
+    // Extended archetypes
+    cultural_anthropologist: ['discovery', 'authenticity', 'connection'],
+    urban_nomad: ['energy', 'discovery', 'social'],
+    wilderness_pioneer: ['freedom', 'adventure', 'challenge'],
+    digital_explorer: ['flexibility', 'discovery', 'independence'],
+    social_butterfly: ['connection', 'joy', 'community'],
+    family_architect: ['togetherness', 'memories', 'joy'],
+    romantic_curator: ['romance', 'intimacy', 'beauty'],
+    bucket_list_conqueror: ['achievement', 'adventure', 'purpose'],
+    adrenaline_architect: ['thrill', 'challenge', 'excitement'],
+    collection_curator: ['achievement', 'discovery', 'pride'],
+    status_seeker: ['prestige', 'comfort', 'recognition'],
+    zen_seeker: ['peace', 'mindfulness', 'renewal'],
+    retreat_regular: ['wellness', 'balance', 'self-care'],
+    beach_therapist: ['relaxation', 'peace', 'simplicity'],
+    slow_traveler: ['depth', 'authenticity', 'immersion'],
+    culinary_cartographer: ['pleasure', 'discovery', 'culture'],
+    art_aficionado: ['beauty', 'inspiration', 'culture'],
+    luxury_luminary: ['comfort', 'excellence', 'indulgence'],
+    eco_ethicist: ['responsibility', 'authenticity', 'purpose'],
+    gap_year_graduate: ['growth', 'discovery', 'transformation'],
+    midlife_explorer: ['renewal', 'discovery', 'meaning'],
+    sabbatical_scholar: ['learning', 'renewal', 'perspective'],
+    healing_journeyer: ['healing', 'transformation', 'peace'],
   };
   
   if (style && driverMap[style]) {
     drivers.push(...driverMap[style]);
   }
   
+  // Add interest-based drivers
   const interests = answers.interests as string[] || [];
   if (interests.includes('wellness')) drivers.push('restoration');
   if (interests.includes('adventure')) drivers.push('thrill');
   if (interests.includes('culture')) drivers.push('learning');
+  if (interests.includes('food')) drivers.push('pleasure');
+  if (interests.includes('nature')) drivers.push('connection');
   
   return [...new Set(drivers)].slice(0, 5);
 }
