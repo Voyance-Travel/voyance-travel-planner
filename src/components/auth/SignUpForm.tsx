@@ -32,7 +32,8 @@ function getPasswordStrength(password: string): PasswordStrength {
 }
 
 export function SignUpForm() {
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -55,6 +56,11 @@ export function SignUpForm() {
     e.preventDefault();
     setError('');
     
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('Please enter your first and last name');
+      return;
+    }
+    
     if (!email || !password) {
       setError('Please fill in all required fields');
       return;
@@ -68,7 +74,7 @@ export function SignUpForm() {
     setIsLoading(true);
     
     try {
-      await signup(email, password, name);
+      await signup(email, password, { firstName: firstName.trim(), lastName: lastName.trim() });
       navigate(ROUTES.QUIZ);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
@@ -113,17 +119,32 @@ export function SignUpForm() {
           </motion.div>
         )}
         
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-slate-700">Full Name</Label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="firstName" className="text-slate-700">First Name</Label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+              <Input
+                id="firstName"
+                type="text"
+                placeholder="First"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
+                required
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lastName" className="text-slate-700">Last Name</Label>
             <Input
-              id="name"
+              id="lastName"
               type="text"
-              placeholder="Your name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
+              placeholder="Last"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
+              required
             />
           </div>
         </div>

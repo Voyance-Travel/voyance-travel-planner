@@ -33,7 +33,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name?: string) => Promise<void>;
+  signup: (email: string, password: string, name?: { firstName: string; lastName: string }) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
   setPreferences: (preferences: TravelPreferences) => Promise<void>;
@@ -252,15 +252,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (email: string, password: string, name?: string) => {
+  const signup = async (email: string, password: string, name?: { firstName: string; lastName: string }) => {
+    const fullName = name ? `${name.firstName} ${name.lastName}` : undefined;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/`,
         data: {
-          name: name,
-          full_name: name,
+          first_name: name?.firstName,
+          last_name: name?.lastName,
+          name: fullName,
+          full_name: fullName,
         },
       },
     });
