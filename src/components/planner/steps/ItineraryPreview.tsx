@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Plane, Hotel, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle } from 'lucide-react';
+import { Plane, Hotel, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, DollarSign, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { DayItinerary } from '@/types/itinerary';
@@ -14,6 +14,9 @@ import { formatWeatherCondition } from '@/utils/textFormatting';
 import { useLovableItinerary, GenerationPreferences } from '@/hooks/useLovableItinerary';
 import { AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import TripBudgetTracker from '@/components/planner/budget/TripBudgetTracker';
+import TripMembersPanel from '@/components/planner/budget/TripMembersPanel';
 
 interface ItineraryPreviewProps {
   tripId?: string;
@@ -397,6 +400,8 @@ export default function ItineraryPreview({
   }
 
   // Show complete state with itinerary
+  const [activeTab, setActiveTab] = useState('itinerary');
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -413,7 +418,7 @@ export default function ItineraryPreview({
       </div>
 
       {/* Quiz Not Completed Warning */}
-      {!hasCompletedQuiz && (
+      {!hasCompletedQuiz && activeTab === 'itinerary' && (
         <Card className="border-amber-500/30 bg-amber-500/10 mb-6">
           <CardContent className="pt-6">
             <div className="flex items-start gap-4">
@@ -497,31 +502,73 @@ export default function ItineraryPreview({
         </div>
       </div>
 
-      {/* Day-by-Day Itinerary */}
-      <div className="space-y-6 mb-10">
-        {days.length > 0 ? (
-          days.map((day, dayIndex) => (
-            <StreamingDayCard key={day.dayNumber || dayIndex} day={day} isNew={false} />
-          ))
-        ) : (
-          // Fallback if no days yet
-          <div className="text-center py-12 bg-card rounded-xl border border-border">
-            <Sparkles className="w-12 h-12 mx-auto mb-4 text-primary" />
-            <p className="text-muted-foreground mb-4">
-              No itinerary data available yet.
-            </p>
-            <Button 
-              onClick={() => generateItinerary()} 
-              variant="default" 
-              className="gap-2"
-              disabled={loading}
-            >
-              <Sparkles className="w-4 h-4" />
-              Generate Itinerary
-            </Button>
+      {/* Tabbed Content */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-10">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="itinerary" className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            Itinerary
+          </TabsTrigger>
+          <TabsTrigger value="budget" className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            Budget
+          </TabsTrigger>
+          <TabsTrigger value="friends" className="flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Friends
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="itinerary">
+          {/* Day-by-Day Itinerary */}
+          <div className="space-y-6">
+            {days.length > 0 ? (
+              days.map((day, dayIndex) => (
+                <StreamingDayCard key={day.dayNumber || dayIndex} day={day} isNew={false} />
+              ))
+            ) : (
+              // Fallback if no days yet
+              <div className="text-center py-12 bg-card rounded-xl border border-border">
+                <Sparkles className="w-12 h-12 mx-auto mb-4 text-primary" />
+                <p className="text-muted-foreground mb-4">
+                  No itinerary data available yet.
+                </p>
+                <Button 
+                  onClick={() => generateItinerary()} 
+                  variant="default" 
+                  className="gap-2"
+                  disabled={loading}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Generate Itinerary
+                </Button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="budget">
+          {tripId ? (
+            <TripBudgetTracker tripId={tripId} />
+          ) : (
+            <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-lg">
+              <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>Save your trip to enable budget tracking</p>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="friends">
+          {tripId ? (
+            <TripMembersPanel tripId={tripId} currentUserEmail={user?.email} />
+          ) : (
+            <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-lg">
+              <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>Save your trip to invite friends</p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Navigation */}
       <div className="flex justify-between">

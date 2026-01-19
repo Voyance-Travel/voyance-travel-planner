@@ -536,6 +536,57 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_splits: {
+        Row: {
+          amount: number
+          created_at: string
+          expense_id: string
+          id: string
+          is_paid: boolean
+          member_id: string
+          paid_at: string | null
+          percentage: number | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          expense_id: string
+          id?: string
+          is_paid?: boolean
+          member_id: string
+          paid_at?: string | null
+          percentage?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          expense_id?: string
+          id?: string
+          is_paid?: boolean
+          member_id?: string
+          paid_at?: string | null
+          percentage?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_splits_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "trip_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_splits_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feature_flags: {
         Row: {
           category: string
@@ -1205,6 +1256,125 @@ export type Database = {
           },
         ]
       }
+      trip_expenses: {
+        Row: {
+          actual_amount: number | null
+          category: string
+          created_at: string
+          currency: string
+          description: string
+          external_item_id: string | null
+          external_item_type: string | null
+          id: string
+          notes: string | null
+          paid_at: string | null
+          paid_by_member_id: string | null
+          payment_status: Database["public"]["Enums"]["payment_status_enum"]
+          planned_amount: number
+          split_type: Database["public"]["Enums"]["expense_split_type"]
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          actual_amount?: number | null
+          category: string
+          created_at?: string
+          currency?: string
+          description: string
+          external_item_id?: string | null
+          external_item_type?: string | null
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          paid_by_member_id?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status_enum"]
+          planned_amount?: number
+          split_type?: Database["public"]["Enums"]["expense_split_type"]
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          actual_amount?: number | null
+          category?: string
+          created_at?: string
+          currency?: string
+          description?: string
+          external_item_id?: string | null
+          external_item_type?: string | null
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          paid_by_member_id?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status_enum"]
+          planned_amount?: number
+          split_type?: Database["public"]["Enums"]["expense_split_type"]
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_expenses_paid_by_member_id_fkey"
+            columns: ["paid_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_members: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          id: string
+          invited_at: string
+          name: string | null
+          role: Database["public"]["Enums"]["trip_member_role"]
+          trip_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          invited_at?: string
+          name?: string | null
+          role?: Database["public"]["Enums"]["trip_member_role"]
+          trip_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          invited_at?: string
+          name?: string | null
+          role?: Database["public"]["Enums"]["trip_member_role"]
+          trip_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_payments: {
         Row: {
           amount_cents: number
@@ -1269,6 +1439,70 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "trip_payments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_settlements: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          from_member_id: string
+          id: string
+          is_settled: boolean
+          notes: string | null
+          settled_at: string | null
+          to_member_id: string
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          from_member_id: string
+          id?: string
+          is_settled?: boolean
+          notes?: string | null
+          settled_at?: string | null
+          to_member_id: string
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          from_member_id?: string
+          id?: string
+          is_settled?: boolean
+          notes?: string | null
+          settled_at?: string | null
+          to_member_id?: string
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_settlements_from_member_id_fkey"
+            columns: ["from_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_settlements_to_member_id_fkey"
+            columns: ["to_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_settlements_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
@@ -1872,6 +2106,7 @@ export type Database = {
     }
     Enums: {
       app_role: "user" | "admin" | "moderator"
+      expense_split_type: "equal" | "manual" | "percentage"
       friendship_status: "pending" | "accepted" | "declined" | "blocked"
       itinerary_status:
         | "not_started"
@@ -1879,6 +2114,8 @@ export type Database = {
         | "generating"
         | "ready"
         | "failed"
+      payment_status_enum: "pending" | "paid" | "partial"
+      trip_member_role: "primary" | "attendee"
       trip_status:
         | "draft"
         | "planning"
@@ -2014,6 +2251,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["user", "admin", "moderator"],
+      expense_split_type: ["equal", "manual", "percentage"],
       friendship_status: ["pending", "accepted", "declined", "blocked"],
       itinerary_status: [
         "not_started",
@@ -2022,6 +2260,8 @@ export const Constants = {
         "ready",
         "failed",
       ],
+      payment_status_enum: ["pending", "paid", "partial"],
+      trip_member_role: ["primary", "attendee"],
       trip_status: [
         "draft",
         "planning",
