@@ -36,6 +36,7 @@ import { format, parseISO } from 'date-fns';
 import type { ActivityType, WeatherCondition } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
+import { WeatherForecast } from './WeatherForecast';
 
 // =============================================================================
 // TYPES
@@ -706,6 +707,14 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+            {/* Weather Forecast */}
+            <WeatherForecast
+              destination={destination}
+              startDate={startDate}
+              endDate={endDate}
+              tripDays={days.length}
+            />
+
             {/* Airport Game Plan - Show before Day 1 */}
             {flightSelection?.outbound && (
               <AirportGamePlan 
