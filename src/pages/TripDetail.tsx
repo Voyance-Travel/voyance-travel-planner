@@ -532,10 +532,11 @@ export default function TripDetail() {
                       category: (a.category as string) || 'activity',
                       startTime: (a.startTime as string) || (a.start_time as string) || '09:00',
                       endTime: (a.endTime as string) || (a.end_time as string) || '10:00',
+                      durationMinutes: a.durationMinutes as number | undefined,
                       location: typeof loc === 'object' && loc !== null 
-                        ? { name: loc.name as string, address: loc.address as string } 
+                        ? { name: loc.name as string, address: loc.address as string, coordinates: loc.coordinates as { lat: number; lng: number } | undefined } 
                         : { name: String(loc || ''), address: '' },
-                      cost: a.cost as { amount: number; currency: string } || { amount: 0, currency: 'USD' },
+                      cost: a.cost as { amount: number; currency: string; formatted?: string } || { amount: 0, currency: 'USD' },
                       bookingRequired: (a.bookingRequired as boolean) || false,
                       tags: (a.tags as string[]) || [],
                       transportation: a.transportation as { method: string; duration: string; estimatedCost: { amount: number; currency: string }; instructions: string } || {
@@ -545,6 +546,15 @@ export default function TripDetail() {
                         instructions: ''
                       },
                       isLocked: (a.isLocked as boolean) || false,
+                      // Preserve new venue detail fields
+                      rating: a.rating as { value: number; totalReviews: number } | undefined,
+                      website: a.website as string | undefined,
+                      phoneNumber: a.phoneNumber as string | undefined,
+                      priceLevel: a.priceLevel as number | undefined,
+                      googleMapsUrl: a.googleMapsUrl as string | undefined,
+                      reviewHighlights: a.reviewHighlights as string[] | undefined,
+                      tips: a.tips as string | undefined,
+                      photos: a.photos as Array<{ url: string; photographer?: string; alt?: string }> | undefined,
                     };
                   }),
                   metadata: d.metadata as { theme?: string; totalEstimatedCost?: number; mealsIncluded?: number; pacingLevel?: 'relaxed' | 'moderate' | 'packed' } | undefined
