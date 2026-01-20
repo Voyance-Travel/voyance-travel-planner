@@ -92,6 +92,7 @@ import FlightStatusTracker from '@/components/agent/FlightStatusTracker';
 import AgentHotelSearch from '@/components/agent/AgentHotelSearch';
 import { TripCart, TripCartBadge } from '@/components/booking/TripCart';
 import { InventoryDrawer, type InventoryType, type InventoryItem } from '@/components/booking/InventoryDrawer';
+import BookingsTable, { segmentToBookingRow } from '@/components/agent/BookingsTable';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -703,7 +704,7 @@ export default function TripWorkspace() {
             )}
           </TabsContent>
 
-          {/* Bookings Tab */}
+          {/* Bookings Tab - Consolidated Table View */}
           <TabsContent value="bookings">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold">All Bookings</h3>
@@ -737,6 +738,7 @@ export default function TripWorkspace() {
                 </Button>
               </div>
             </div>
+
             {segments.length === 0 ? (
               <Card className="text-center py-12">
                 <CardContent>
@@ -752,93 +754,17 @@ export default function TripWorkspace() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-4">
-                {segments.map(segment => {
-                  const Icon = SEGMENT_ICONS[segment.segment_type] || SEGMENT_ICONS.default;
-                  return (
-                    <Card 
-                      key={segment.id} 
-                      className="cursor-pointer hover:border-primary/50 transition-colors"
-                      onClick={() => {
-                        setEditingSegment(segment);
-                        setBookingSegmentModalOpen(true);
-                      }}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-4">
-                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <Icon className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-medium">
-                                {SEGMENT_TYPE_LABELS[segment.segment_type]}
-                              </h4>
-                              <Badge variant="outline" className={STATUS_COLORS[segment.status || 'pending']}>
-                                {segment.status}
-                              </Badge>
-                            </div>
-                            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mt-3">
-                              {segment.vendor_name && (
-                                <div>
-                                  <p className="text-muted-foreground">Vendor</p>
-                                  <p className="font-medium">{segment.vendor_name}</p>
-                                </div>
-                              )}
-                              {segment.confirmation_number && (
-                                <div>
-                                  <p className="text-muted-foreground">Confirmation</p>
-                                  <p className="font-medium font-mono">{segment.confirmation_number}</p>
-                                </div>
-                              )}
-                              {segment.start_date && (
-                                <div>
-                                  <p className="text-muted-foreground">Date</p>
-                                  <p className="font-medium">
-                                    {format(new Date(segment.start_date), 'MMM d, yyyy')}
-                                  </p>
-                                </div>
-                              )}
-                              {segment.sell_price_cents && (
-                                <div>
-                                  <p className="text-muted-foreground">Price</p>
-                                  <p className="font-medium">{formatCurrency(segment.sell_price_cents)}</p>
-                                </div>
-                              )}
-                            </div>
-                            {segment.segment_type === 'flight' && segment.flight_number && (
-                              <div className="mt-3 pt-3 border-t">
-                                <p className="text-sm">
-                                  <span className="font-medium">{segment.flight_number}</span>
-                                  {segment.origin_code && segment.destination_code && (
-                                    <span className="text-muted-foreground">
-                                      {' '}• {segment.origin_code} → {segment.destination_code}
-                                    </span>
-                                  )}
-                                  {segment.cabin_class && (
-                                    <span className="text-muted-foreground"> • {segment.cabin_class}</span>
-                                  )}
-                                </p>
-                              </div>
-                            )}
-                            {/* Show additional details for non-flight segments */}
-                            {segment.segment_type !== 'flight' && (segment.origin || segment.destination) && (
-                              <div className="mt-3 pt-3 border-t">
-                                <p className="text-sm text-muted-foreground">
-                                  {segment.origin}
-                                  {segment.origin && segment.destination && ' → '}
-                                  {segment.destination}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                          <Edit className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+              <BookingsTable
+                bookings={segments.map(segmentToBookingRow)}
+                currency={trip.currency || 'USD'}
+                onEditBooking={(booking) => {
+                  const segment = segments.find(s => s.id === booking.id);
+                  if (segment) {
+                    setEditingSegment(segment);
+                    setBookingSegmentModalOpen(true);
+                  }
+                }}
+              />
             )}
           </TabsContent>
 
