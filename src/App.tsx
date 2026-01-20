@@ -74,6 +74,9 @@ import BulkImport from "./pages/admin/BulkImport";
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
 import ClientForm from "./pages/agent/ClientForm";
+import AgentTrips from "./pages/agent/AgentTrips";
+import AgentTasks from "./pages/agent/AgentTasks";
+import TripWorkspace from "./pages/agent/TripWorkspace";
 
 // 404
 import NotFound from "./pages/NotFound";
@@ -163,9 +166,13 @@ const App = () => (
                 
                 {/* Agent CRM Routes */}
                 <Route path="/agent" element={<AgentDashboard />} />
+                <Route path="/agent/clients" element={<AgentDashboard />} />
                 <Route path="/agent/clients/new" element={<ClientForm />} />
                 <Route path="/agent/clients/:clientId" element={<ClientForm />} />
                 <Route path="/agent/clients/:clientId/edit" element={<ClientForm />} />
+                <Route path="/agent/trips" element={<AgentTrips />} />
+                <Route path="/agent/trips/:tripId" element={<TripWorkspace />} />
+                <Route path="/agent/tasks" element={<AgentTasks />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
