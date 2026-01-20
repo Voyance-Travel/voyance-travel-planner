@@ -5,7 +5,7 @@ import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { Compass, Sparkles, MapPin, Star, Plane } from 'lucide-react';
+import { Compass } from 'lucide-react';
 
 export default function SignIn() {
   const [searchParams] = useSearchParams();
@@ -83,16 +83,15 @@ export default function SignIn() {
                 className="flex flex-wrap gap-3"
               >
                 {[
-                  { icon: Sparkles, text: 'AI-Powered Itineraries' },
-                  { icon: MapPin, text: 'Personalized Experiences' },
-                  { icon: Plane, text: 'Seamless Booking' },
+                  'AI-Powered Itineraries',
+                  'Personalized Experiences',
+                  'Seamless Booking',
                 ].map((feature) => (
                   <span
-                    key={feature.text}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white/90 text-sm font-medium"
+                    key={feature}
+                    className="inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white/90 text-sm font-medium"
                   >
-                    <feature.icon className="w-4 h-4" />
-                    {feature.text}
+                    {feature}
                   </span>
                 ))}
               </motion.div>
@@ -133,14 +132,6 @@ export default function SignIn() {
               <>
                 {/* Welcome header */}
                 <div className="mb-8">
-                  <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-6"
-                  >
-                    <Star className="w-6 h-6 text-primary" />
-                  </motion.div>
                   
                   {isRedirectedFromProtected ? (
                     <motion.div
