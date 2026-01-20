@@ -1665,6 +1665,59 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_state_log: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json | null
+          new_state: Database["public"]["Enums"]["booking_item_state"]
+          previous_state:
+            | Database["public"]["Enums"]["booking_item_state"]
+            | null
+          trigger_reference: string | null
+          trigger_source: string | null
+          trip_activity_id: string | null
+          trip_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          new_state: Database["public"]["Enums"]["booking_item_state"]
+          previous_state?:
+            | Database["public"]["Enums"]["booking_item_state"]
+            | null
+          trigger_reference?: string | null
+          trigger_source?: string | null
+          trip_activity_id?: string | null
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          new_state?: Database["public"]["Enums"]["booking_item_state"]
+          previous_state?:
+            | Database["public"]["Enums"]["booking_item_state"]
+            | null
+          trigger_reference?: string | null
+          trigger_source?: string | null
+          trip_activity_id?: string | null
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_state_log_trip_activity_id_fkey"
+            columns: ["trip_activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credit_transactions: {
         Row: {
           action_key: string | null
@@ -2904,8 +2957,15 @@ export type Database = {
           added_by_user: boolean | null
           address: string | null
           block_order: number | null
+          booked_at: string | null
           booking_required: boolean | null
+          booking_state:
+            | Database["public"]["Enums"]["booking_item_state"]
+            | null
           booking_status: string | null
+          cancellation_policy: Json | null
+          cancelled_at: string | null
+          confirmation_number: string | null
           cost: number | null
           created_at: string
           currency: string | null
@@ -2920,30 +2980,50 @@ export type Database = {
           locked: boolean | null
           longitude: number | null
           metadata: Json | null
+          modification_policy: Json | null
           operating_hours: Json | null
           payment_status: string | null
           photos: Json | null
           place_id: string | null
+          quote_expires_at: string | null
+          quote_id: string | null
+          quote_locked: boolean | null
+          quote_price_cents: number | null
           rating_count: number | null
           rating_value: number | null
           recommendation_score: number | null
+          refund_amount_cents: number | null
+          refunded_at: string | null
           start_time: string | null
+          state_history: Json | null
           tags: Json | null
           title: string
           transportation: Json | null
+          traveler_data: Json | null
           trip_id: string | null
           type: string
           updated_at: string
+          vendor_booking_id: string | null
+          vendor_name: string | null
           venue_id: string | null
           verification_confidence: number | null
           verified: boolean | null
+          voucher_data: Json | null
+          voucher_url: string | null
         }
         Insert: {
           added_by_user?: boolean | null
           address?: string | null
           block_order?: number | null
+          booked_at?: string | null
           booking_required?: boolean | null
+          booking_state?:
+            | Database["public"]["Enums"]["booking_item_state"]
+            | null
           booking_status?: string | null
+          cancellation_policy?: Json | null
+          cancelled_at?: string | null
+          confirmation_number?: string | null
           cost?: number | null
           created_at?: string
           currency?: string | null
@@ -2958,30 +3038,50 @@ export type Database = {
           locked?: boolean | null
           longitude?: number | null
           metadata?: Json | null
+          modification_policy?: Json | null
           operating_hours?: Json | null
           payment_status?: string | null
           photos?: Json | null
           place_id?: string | null
+          quote_expires_at?: string | null
+          quote_id?: string | null
+          quote_locked?: boolean | null
+          quote_price_cents?: number | null
           rating_count?: number | null
           rating_value?: number | null
           recommendation_score?: number | null
+          refund_amount_cents?: number | null
+          refunded_at?: string | null
           start_time?: string | null
+          state_history?: Json | null
           tags?: Json | null
           title: string
           transportation?: Json | null
+          traveler_data?: Json | null
           trip_id?: string | null
           type?: string
           updated_at?: string
+          vendor_booking_id?: string | null
+          vendor_name?: string | null
           venue_id?: string | null
           verification_confidence?: number | null
           verified?: boolean | null
+          voucher_data?: Json | null
+          voucher_url?: string | null
         }
         Update: {
           added_by_user?: boolean | null
           address?: string | null
           block_order?: number | null
+          booked_at?: string | null
           booking_required?: boolean | null
+          booking_state?:
+            | Database["public"]["Enums"]["booking_item_state"]
+            | null
           booking_status?: string | null
+          cancellation_policy?: Json | null
+          cancelled_at?: string | null
+          confirmation_number?: string | null
           cost?: number | null
           created_at?: string
           currency?: string | null
@@ -2996,23 +3096,36 @@ export type Database = {
           locked?: boolean | null
           longitude?: number | null
           metadata?: Json | null
+          modification_policy?: Json | null
           operating_hours?: Json | null
           payment_status?: string | null
           photos?: Json | null
           place_id?: string | null
+          quote_expires_at?: string | null
+          quote_id?: string | null
+          quote_locked?: boolean | null
+          quote_price_cents?: number | null
           rating_count?: number | null
           rating_value?: number | null
           recommendation_score?: number | null
+          refund_amount_cents?: number | null
+          refunded_at?: string | null
           start_time?: string | null
+          state_history?: Json | null
           tags?: Json | null
           title?: string
           transportation?: Json | null
+          traveler_data?: Json | null
           trip_id?: string | null
           type?: string
           updated_at?: string
+          vendor_booking_id?: string | null
+          vendor_name?: string | null
           venue_id?: string | null
           verification_confidence?: number | null
           verified?: boolean | null
+          voucher_data?: Json | null
+          voucher_url?: string | null
         }
         Relationships: [
           {
@@ -4278,10 +4391,27 @@ export type Database = {
         }
         Returns: Json
       }
+      transition_booking_state: {
+        Args: {
+          p_activity_id: string
+          p_metadata?: Json
+          p_new_state: Database["public"]["Enums"]["booking_item_state"]
+          p_trigger_reference?: string
+          p_trigger_source?: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       agency_account_type: "individual" | "household" | "company"
       app_role: "user" | "admin" | "moderator"
+      booking_item_state:
+        | "not_selected"
+        | "selected_pending"
+        | "booked_confirmed"
+        | "changed"
+        | "cancelled"
+        | "refunded"
       booking_segment_type:
         | "flight"
         | "hotel"
@@ -4505,6 +4635,14 @@ export const Constants = {
     Enums: {
       agency_account_type: ["individual", "household", "company"],
       app_role: ["user", "admin", "moderator"],
+      booking_item_state: [
+        "not_selected",
+        "selected_pending",
+        "booked_confirmed",
+        "changed",
+        "cancelled",
+        "refunded",
+      ],
       booking_segment_type: [
         "flight",
         "hotel",
