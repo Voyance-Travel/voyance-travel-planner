@@ -187,7 +187,7 @@ export default function Destinations() {
     <MainLayout>
       <Head
         title="Destinations | Voyance"
-        description="Discover our handpicked collection of extraordinary destinations. From hidden gems to iconic landmarks, find your next adventure."
+        description="Choose a destination and let our AI build your perfect personalized itinerary. From hidden gems to iconic landmarks."
       />
       
       {/* Hero - Featured Destination */}
@@ -210,11 +210,11 @@ export default function Destinations() {
             >
               <Badge className="mb-4 bg-primary/90">
                 <Sparkles className="h-3 w-3 mr-1" />
-                Editor's Pick
+                AI-Crafted Itineraries Available
               </Badge>
               
               <h1 className="font-display text-4xl md:text-6xl font-bold text-white mb-4">
-                {heroDestination.city}
+                Build Your {heroDestination.city} Itinerary
               </h1>
               
               <div className="flex items-center gap-2 text-white/80 mb-4">
@@ -233,12 +233,12 @@ export default function Destinations() {
                   size="lg" 
                   onClick={() => handleDestinationClick(heroDestination.id)}
                 >
-                  Explore {heroDestination.city}
+                  Plan My Trip
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 <Button size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
                   <Compass className="mr-2 h-4 w-4" />
-                  View All Destinations
+                  Browse All Destinations
                 </Button>
               </div>
             </motion.div>
@@ -255,7 +255,7 @@ export default function Destinations() {
                 Featured Destinations
               </h2>
               <p className="text-muted-foreground">
-                Handpicked places for extraordinary experiences
+                Popular places with AI-crafted itineraries ready to personalize
               </p>
             </div>
           </div>
@@ -281,8 +281,8 @@ export default function Destinations() {
                   
                   <div className="absolute top-4 left-4">
                     <Badge className="bg-primary/90">
-                      <Star className="h-3 w-3 mr-1" />
-                      Featured
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Build Itinerary
                     </Badge>
                   </div>
                   
@@ -395,7 +395,7 @@ export default function Destinations() {
                       {region.name}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Explore destinations
+                      Build your itinerary
                     </p>
                   </div>
                   <ArrowRight className={`h-5 w-5 text-muted-foreground transition-all duration-300 ${hoveredRegion === region.id ? 'translate-x-1 text-primary' : ''}`} />
@@ -415,7 +415,7 @@ export default function Destinations() {
                 All Destinations
               </h2>
               <p className="text-muted-foreground">
-                Explore our complete collection of destinations
+                Every destination is ready for your custom itinerary
               </p>
             </div>
             <Link 

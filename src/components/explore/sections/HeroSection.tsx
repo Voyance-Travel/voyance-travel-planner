@@ -28,13 +28,13 @@ export default function HeroSection({ onFilterToggle, onBrowseClick }: HeroSecti
           animate={{ opacity: 1, y: 0 }}
         >
           <p className="text-sm tracking-[0.25em] uppercase text-white/60 mb-6">
-            Discover
+            Find Your Destination
           </p>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-medium text-white mb-6 leading-tight">
-            Explore the World
+            Where Will We Plan For You?
           </h1>
           <p className="text-lg text-white/70 mb-10 max-w-lg mx-auto font-light">
-            Curated destinations for the discerning traveler. From hidden gems to iconic landmarks.
+            Choose a destination and we'll build a personalized day-by-day itinerary crafted just for you.
           </p>
 
           {/* Search Bar */}
