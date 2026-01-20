@@ -95,6 +95,35 @@ export async function deleteAccount(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function generateIntakeLink(id: string): Promise<{ intake_token: string }> {
+  // Generate token using the database function
+  const { data: tokenData, error: tokenError } = await supabase.rpc('generate_intake_token');
+  if (tokenError) throw tokenError;
+  
+  const intakeToken = tokenData as string;
+  
+  // Update the account with the token and enable intake
+  const { error } = await supabase
+    .from('agency_accounts')
+    .update({ 
+      intake_token: intakeToken, 
+      intake_enabled: true 
+    })
+    .eq('id', id);
+  
+  if (error) throw error;
+  return { intake_token: intakeToken };
+}
+
+export async function toggleIntakeEnabled(id: string, enabled: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('agency_accounts')
+    .update({ intake_enabled: enabled })
+    .eq('id', id);
+  
+  if (error) throw error;
+}
+
 // ============ TRAVELERS ============
 
 export async function getTravelers(accountId?: string): Promise<AgencyTraveler[]> {
