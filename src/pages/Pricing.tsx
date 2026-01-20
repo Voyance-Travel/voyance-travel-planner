@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, ArrowRight, Loader2, Sparkles, X, Wallet, Route, Layers, Download, Users, Zap, Plus } from 'lucide-react';
+import { Check, ArrowRight, Loader2, Sparkles, X, Wallet, Route, Layers, Download, Users, Zap, Plus, Briefcase, FileText, Clock, Mail } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -361,6 +361,140 @@ export default function Pricing() {
               </p>
             </motion.div>
           </div>
+
+          {/* Travel Agent Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-12"
+          >
+            <div className="text-center mb-8">
+              <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 text-primary text-sm font-medium rounded-full mb-4">
+                <Briefcase className="w-4 h-4" />
+                For Professionals
+              </span>
+              <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground">
+                Built for Travel Agents
+              </h2>
+              <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
+                A complete CRM to manage clients, build itineraries, track payments, and grow your agency.
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-card via-card to-primary/5 rounded-2xl border-2 border-primary/30 p-8 relative overflow-hidden">
+              {/* Background decoration */}
+              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+              
+              <div className="relative flex flex-col lg:flex-row gap-8">
+                {/* Left: Header & Price */}
+                <div className="lg:w-1/3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.TRAVEL_AGENT.name}</h3>
+                  </div>
+                  <p className="text-primary font-medium mb-4">{PLAN_FEATURES.TRAVEL_AGENT.headline}</p>
+                  
+                  <div className="mb-4">
+                    <span className="text-4xl font-bold text-foreground">${STRIPE_PRODUCTS.TRAVEL_AGENT.price}</span>
+                    <span className="text-muted-foreground">/month</span>
+                  </div>
+                  
+                  <p className="text-muted-foreground text-sm mb-6">
+                    {PLAN_FEATURES.TRAVEL_AGENT.subheadline}
+                  </p>
+                  
+                  <Button 
+                    size="lg"
+                    className="w-full gap-2" 
+                    onClick={() => openCheckout(STRIPE_PRODUCTS.TRAVEL_AGENT.priceId, 'subscription', 'travel_agent', 'Travel Agent')} 
+                    disabled={loadingPlan === 'travel_agent'}
+                  >
+                    {loadingPlan === 'travel_agent' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Briefcase className="h-4 w-4" />
+                        {PLAN_FEATURES.TRAVEL_AGENT.cta}
+                      </>
+                    )}
+                  </Button>
+                  
+                  <p className="text-xs text-muted-foreground text-center mt-3">
+                    Best for: {PLAN_FEATURES.TRAVEL_AGENT.bestFor}
+                  </p>
+                </div>
+
+                {/* Right: Features Grid */}
+                <div className="lg:w-2/3">
+                  <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3">
+                    {/* CRM Features */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Users className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Client Management</span>
+                      </div>
+                      <ul className="space-y-2">
+                        {['Client & Account Management', 'Traveler Profiles (passport, preferences, loyalty)', 'Trip Pipeline (Inquiry → Completed)', 'Booking Segments (flights, hotels, tours, transfers)'].map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                            <span className="text-foreground">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Quotes & Payments */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileText className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quotes & Payments</span>
+                      </div>
+                      <ul className="space-y-2">
+                        {['Quote Builder with Versioning', 'Client Approvals & Audit Trail', 'Invoice Generation & Payment Tracking', 'Commission & Fee Management'].map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                            <span className="text-foreground">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Deadlines & Docs */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Deadlines & Documents</span>
+                      </div>
+                      <ul className="space-y-2">
+                        {['Deadline Engine (payments, ticketing, visa)', 'Document Storage & Client Portal', 'Automated Reminder Emails'].map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                            <span className="text-foreground">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Plus All Personal */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plus Everything in Yearly</span>
+                      </div>
+                      <ul className="space-y-2">
+                        {['Unlimited Itinerary Builds', 'Unlimited Client Trips', 'Export Itineraries (PDF)', 'Email Templates & Communication Log'].map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                            <span className="text-foreground">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
@@ -447,28 +581,32 @@ export default function Pricing() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  <th className="text-left py-4 px-5 font-medium text-muted-foreground w-[200px]">Feature</th>
-                  <th className="text-center py-4 px-4 font-semibold text-foreground">Free</th>
-                  <th className="text-center py-4 px-4 font-semibold text-foreground">Trip Pass</th>
-                  <th className="text-center py-4 px-4 font-semibold text-primary-foreground bg-primary">Monthly</th>
-                  <th className="text-center py-4 px-4 font-semibold text-foreground">Yearly</th>
+                  <th className="text-left py-4 px-5 font-medium text-muted-foreground w-[180px]">Feature</th>
+                  <th className="text-center py-4 px-3 font-semibold text-foreground">Free</th>
+                  <th className="text-center py-4 px-3 font-semibold text-foreground">Trip Pass</th>
+                  <th className="text-center py-4 px-3 font-semibold text-primary-foreground bg-primary">Monthly</th>
+                  <th className="text-center py-4 px-3 font-semibold text-foreground">Yearly</th>
+                  <th className="text-center py-4 px-3 font-semibold text-foreground bg-primary/10">Agent</th>
                 </tr>
               </thead>
               <tbody>
                 {COMPARISON_TABLE.rows.map((row, i) => (
                   <tr key={row.feature} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}`}>
                     <td className="py-3.5 px-5 text-foreground font-medium">{row.feature}</td>
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-3.5 px-3 text-center">
                       <TableCellContent value={row.free} />
                     </td>
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-3.5 px-3 text-center">
                       <TableCellContent value={row.tripPass} />
                     </td>
-                    <td className="py-3.5 px-4 text-center bg-primary/5">
+                    <td className="py-3.5 px-3 text-center bg-primary/5">
                       <TableCellContent value={row.monthly} highlight />
                     </td>
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-3.5 px-3 text-center">
                       <TableCellContent value={row.yearly} />
+                    </td>
+                    <td className="py-3.5 px-3 text-center bg-primary/5">
+                      <TableCellContent value={(row as { agent?: string }).agent || '—'} highlight />
                     </td>
                   </tr>
                 ))}

@@ -26,6 +26,14 @@ export const STRIPE_PRODUCTS = {
     price: 129,
     mode: 'subscription' as const,
   },
+  // Travel Agent subscription
+  TRAVEL_AGENT: {
+    productId: 'prod_TravelAgent', // TODO: Create in Stripe
+    priceId: 'price_TravelAgent', // TODO: Create in Stripe
+    name: 'Travel Agent',
+    price: 79,
+    mode: 'subscription' as const,
+  },
 } as const;
 
 // Top-up products (pay-per-action)
@@ -199,20 +207,87 @@ export const PLAN_FEATURES = {
     },
     cta: 'Go Yearly',
   },
+  TRAVEL_AGENT: {
+    id: 'travel_agent',
+    name: 'Travel Agent',
+    badge: 'For Professionals',
+    headline: 'Your complete travel agency CRM.',
+    subheadline: 'Manage clients, build itineraries for customers, track payments, and grow your business — all in one platform.',
+    bestFor: 'Travel agents and advisors managing client trips.',
+    price: 79,
+    priceDetail: 'per month',
+    features: [
+      // CRM Features
+      'Client & Account Management',
+      'Traveler Profiles (passport, preferences, loyalty)',
+      'Trip Pipeline (Inquiry → Completed)',
+      'Booking Segments (flights, hotels, tours, transfers)',
+      // Quotes & Payments
+      'Quote Builder with Versioning',
+      'Client Approvals & Audit Trail',
+      'Invoice Generation & Payment Tracking',
+      'Commission & Fee Management',
+      // Deadlines & Documents
+      'Deadline Engine (final payments, ticketing, visa)',
+      'Document Storage & Client Portal',
+      'Automated Reminder Emails',
+      // All Personal Features
+      'Unlimited Itinerary Builds',
+      'Unlimited Client Trips',
+      'Export Itineraries (PDF)',
+      'Email Templates & Communication Log',
+    ],
+    limits: {
+      fullBuildsPerMonth: -1,
+      refinementsPerMonth: -1,
+      routeOptimizationsPerMonth: -1,
+      groupBudgetSetupsPerMonth: -1,
+      draftTrips: -1,
+      mysteryTripDrafts: -1,
+      tripVersions: -1,
+      flightHotelOptimization: true,
+      groupBudgeting: true,
+      coEditCollaboration: true,
+      budgetTracking: true,
+      preferenceLearning: true,
+      mysteryTrips: true,
+      canPrint: true,
+      canExport: true,
+      canDownload: true,
+      canCollaborate: true,
+      // Agent-specific
+      agentCRM: true,
+      clientManagement: true,
+      quoteBuilder: true,
+      invoicing: true,
+      commissionTracking: true,
+      deadlineEngine: true,
+      documentPortal: true,
+      emailTemplates: true,
+      unlimitedClients: true,
+    },
+    cta: 'Start Agent Plan',
+  },
 } as const;
 
 // Comparison table data for visual display
 export const COMPARISON_TABLE = {
-  headers: ['Feature', 'Free', 'Trip Pass', 'Monthly', 'Yearly'],
+  headers: ['Feature', 'Free', 'Trip Pass', 'Monthly', 'Yearly', 'Agent'],
   rows: [
-    { feature: 'Premium Itinerary Build', free: '1/month', tripPass: 'Unlimited (trip)', monthly: 'Unlimited', yearly: 'Unlimited' },
-    { feature: 'Smart Refinements', free: 'Limited', tripPass: 'Unlimited (trip)', monthly: 'Unlimited', yearly: 'Unlimited' },
-    { feature: 'Route + Map Layer', free: 'Preview', tripPass: 'Full', monthly: 'Full', yearly: 'Full' },
-    { feature: 'Budget Tracking', free: '—', tripPass: '✓', monthly: '✓', yearly: '✓' },
-    { feature: 'Trip Versions', free: '—', tripPass: '✓', monthly: 'Up to 4', yearly: 'Unlimited' },
-    { feature: 'Draft Trips', free: '1', tripPass: '1', monthly: '5', yearly: 'Unlimited' },
-    { feature: 'Export (PDF)', free: '—', tripPass: '✓', monthly: '✓', yearly: '✓' },
-    { feature: 'Collaboration', free: '—', tripPass: '✓ (trip)', monthly: '✓', yearly: '✓' },
+    { feature: 'Premium Itinerary Build', free: '1/month', tripPass: 'Unlimited (trip)', monthly: 'Unlimited', yearly: 'Unlimited', agent: 'Unlimited' },
+    { feature: 'Smart Refinements', free: 'Limited', tripPass: 'Unlimited (trip)', monthly: 'Unlimited', yearly: 'Unlimited', agent: 'Unlimited' },
+    { feature: 'Route + Map Layer', free: 'Preview', tripPass: 'Full', monthly: 'Full', yearly: 'Full', agent: 'Full' },
+    { feature: 'Budget Tracking', free: '—', tripPass: '✓', monthly: '✓', yearly: '✓', agent: '✓' },
+    { feature: 'Trip Versions', free: '—', tripPass: '✓', monthly: 'Up to 4', yearly: 'Unlimited', agent: 'Unlimited' },
+    { feature: 'Draft Trips', free: '1', tripPass: '1', monthly: '5', yearly: 'Unlimited', agent: 'Unlimited' },
+    { feature: 'Export (PDF)', free: '—', tripPass: '✓', monthly: '✓', yearly: '✓', agent: '✓' },
+    { feature: 'Collaboration', free: '—', tripPass: '✓ (trip)', monthly: '✓', yearly: '✓', agent: '✓' },
+    { feature: 'Client Management', free: '—', tripPass: '—', monthly: '—', yearly: '—', agent: '✓' },
+    { feature: 'Traveler Profiles', free: '—', tripPass: '—', monthly: '—', yearly: '—', agent: '✓' },
+    { feature: 'Quote Builder', free: '—', tripPass: '—', monthly: '—', yearly: '—', agent: '✓' },
+    { feature: 'Invoicing & Payments', free: '—', tripPass: '—', monthly: '—', yearly: '—', agent: '✓' },
+    { feature: 'Deadline Engine', free: '—', tripPass: '—', monthly: '—', yearly: '—', agent: '✓' },
+    { feature: 'Document Portal', free: '—', tripPass: '—', monthly: '—', yearly: '—', agent: '✓' },
   ],
 } as const;
 
