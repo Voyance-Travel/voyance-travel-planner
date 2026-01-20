@@ -28,7 +28,8 @@ import {
   ArrowRight,
   Send,
   Banknote,
-  Sparkles
+  Sparkles,
+  ShoppingCart
 } from 'lucide-react';
 import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
@@ -89,6 +90,8 @@ import QuickConfirmationCapture from '@/components/agent/QuickConfirmationCaptur
 import BookingSegmentModal from '@/components/agent/BookingSegmentModal';
 import FlightStatusTracker from '@/components/agent/FlightStatusTracker';
 import AgentHotelSearch from '@/components/agent/AgentHotelSearch';
+import { TripCart, TripCartBadge } from '@/components/booking/TripCart';
+import { InventoryDrawer, type InventoryType, type InventoryItem } from '@/components/booking/InventoryDrawer';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -136,6 +139,10 @@ export default function TripWorkspace() {
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [bookingSegmentModalOpen, setBookingSegmentModalOpen] = useState(false);
   const [editingSegment, setEditingSegment] = useState<BookingSegment | null>(null);
+  
+  // Inventory drawer state
+  const [inventoryDrawerOpen, setInventoryDrawerOpen] = useState(false);
+  const [inventoryDrawerType, setInventoryDrawerType] = useState<InventoryType>('activity');
   
   // Notes state
   const [clientNotes, setClientNotes] = useState('');
@@ -285,6 +292,19 @@ export default function TripWorkspace() {
     }
   }, [tripId, trip]);
 
+  // Inventory drawer handlers
+  const openInventoryDrawer = useCallback((type: InventoryType) => {
+    setInventoryDrawerType(type);
+    setInventoryDrawerOpen(true);
+  }, []);
+
+  const handleInventorySelect = useCallback((item: InventoryItem) => {
+    // TODO: Add item to itinerary or create booking segment
+    toast({ title: `Added ${item.title} to trip` });
+    setInventoryDrawerOpen(false);
+    loadTripData();
+  }, [loadTripData]);
+
   // Computed values
   const pendingTasks = tasks.filter(t => t.status !== 'completed');
   const itineraryDays = (trip?.itinerary_data?.days || []) as EditorialDay[];
@@ -382,6 +402,9 @@ export default function TripWorkspace() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Trip Cart Badge */}
+            <TripCartBadge tripId={trip.id} />
+            
             <Button variant="outline" className="gap-2" onClick={() => setShareModalOpen(true)}>
               <Link2 className="h-4 w-4" />
               Share with Client
@@ -519,6 +542,37 @@ export default function TripWorkspace() {
 
           {/* Itinerary Tab */}
           <TabsContent value="itinerary">
+            {/* Quick Add Bar */}
+            <div className="flex items-center gap-2 mb-4">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => openInventoryDrawer('activity')}
+              >
+                <Plus className="h-4 w-4" />
+                Add Activity
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => openInventoryDrawer('hotel')}
+              >
+                <Hotel className="h-4 w-4" />
+                Add Hotel
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => openInventoryDrawer('transfer')}
+              >
+                <Car className="h-4 w-4" />
+                Add Transfer
+              </Button>
+            </div>
+
             {itineraryDays.length === 0 ? (
               <Card className="text-center py-12">
                 <CardContent>
@@ -1194,6 +1248,24 @@ export default function TripWorkspace() {
         tripId={trip.id}
         segment={editingSegment}
         onSuccess={loadTripData}
+      />
+
+      {/* Trip Cart - Floating */}
+      <TripCart
+        tripId={trip.id}
+        onCheckout={() => {
+          toast({ title: 'Checkout flow coming soon' });
+        }}
+      />
+
+      {/* Inventory Drawer */}
+      <InventoryDrawer
+        isOpen={inventoryDrawerOpen}
+        onClose={() => setInventoryDrawerOpen(false)}
+        type={inventoryDrawerType}
+        destination={trip.destination || ''}
+        date={trip.start_date || undefined}
+        onSelectItem={handleInventorySelect}
       />
     </AgentLayout>
   );
