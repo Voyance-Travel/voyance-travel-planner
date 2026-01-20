@@ -158,14 +158,15 @@ export interface AgentProfitSummary {
  * Get ledger entries for a trip
  */
 export async function getTripLedgerEntries(tripId: string): Promise<FinanceLedgerEntry[]> {
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from('finance_ledger_entries')
     .select('*')
     .eq('trip_id', tripId)
     .order('effective_date', { ascending: false });
 
   if (error) throw error;
-  return (data || []) as unknown as FinanceLedgerEntry[];
+  return (data || []) as FinanceLedgerEntry[];
 }
 
 /**
@@ -179,7 +180,8 @@ export async function getLedgerEntries(filters?: {
   endDate?: string;
   limit?: number;
 }): Promise<FinanceLedgerEntry[]> {
-  let query = supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query = (supabase as any)
     .from('finance_ledger_entries')
     .select('*')
     .order('effective_date', { ascending: false });
@@ -193,7 +195,7 @@ export async function getLedgerEntries(filters?: {
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data || []) as unknown as FinanceLedgerEntry[];
+  return (data || []) as FinanceLedgerEntry[];
 }
 
 /**
@@ -221,14 +223,14 @@ export async function createLedgerEntry(entry: Partial<FinanceLedgerEntry>): Pro
   if (entry.metadata) insertData.metadata = entry.metadata;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('finance_ledger_entries')
-    .insert(insertData as any)
+    .insert(insertData)
     .select()
     .single();
 
   if (error) throw error;
-  return data as unknown as FinanceLedgerEntry;
+  return data as FinanceLedgerEntry;
 }
 
 /**
@@ -261,21 +263,23 @@ export async function recordCommissionReceived(params: {
  * Get trip profit summary from the view
  */
 export async function getTripProfitSummary(tripId: string): Promise<TripProfitSummary | null> {
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from('finance_trip_profit_summary')
     .select('*')
     .eq('trip_id', tripId)
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') throw error;
-  return data as unknown as TripProfitSummary | null;
+  if (error) throw error;
+  return data as TripProfitSummary | null;
 }
 
 /**
  * Calculate agent's overall profit summary
  */
 export async function getAgentProfitSummary(): Promise<AgentProfitSummary> {
-  const { data: entries, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: entries, error } = await (supabase as any)
     .from('finance_ledger_entries')
     .select('entry_type, amount_cents');
 
@@ -359,7 +363,8 @@ export async function getAgentProfitSummary(): Promise<AgentProfitSummary> {
  * Get payout runs
  */
 export async function getPayoutRuns(status?: string): Promise<PayoutRun[]> {
-  let query = supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query = (supabase as any)
     .from('finance_payout_runs')
     .select('*')
     .order('created_at', { ascending: false });
@@ -368,21 +373,22 @@ export async function getPayoutRuns(status?: string): Promise<PayoutRun[]> {
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data || []) as unknown as PayoutRun[];
+  return (data || []) as PayoutRun[];
 }
 
 /**
  * Get payout lines for a run
  */
 export async function getPayoutLines(payoutRunId: string): Promise<PayoutLine[]> {
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from('finance_payout_lines')
     .select('*')
     .eq('payout_run_id', payoutRunId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return (data || []) as unknown as PayoutLine[];
+  return (data || []) as PayoutLine[];
 }
 
 // ============================================
@@ -393,13 +399,14 @@ export async function getPayoutLines(payoutRunId: string): Promise<PayoutLine[]>
  * Get commission imports
  */
 export async function getCommissionImports(): Promise<CommissionImport[]> {
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from('finance_commission_imports')
     .select('*')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return (data || []) as unknown as CommissionImport[];
+  return (data || []) as CommissionImport[];
 }
 
 /**
@@ -423,14 +430,15 @@ export async function createCommissionImport(params: {
   if (params.fileName) insertData.file_name = params.fileName;
   if (params.rawData) insertData.raw_data = params.rawData;
 
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from('finance_commission_imports')
-    .insert(insertData as { agent_id: string; source: string; status: string })
+    .insert(insertData)
     .select()
     .single();
 
   if (error) throw error;
-  return data as unknown as CommissionImport;
+  return data as CommissionImport;
 }
 
 /**
@@ -454,8 +462,8 @@ export async function processCommissionImport(
   let unmatched = 0;
   let totalAmount = 0;
 
-  // Update import status to processing
-  await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
     .from('finance_commission_imports')
     .update({ status: 'processing' })
     .eq('id', importId);
@@ -471,7 +479,8 @@ export async function processCommissionImport(
     }
 
     // Create ledger entry for each line
-    await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
       .from('finance_ledger_entries')
       .insert({
         agent_id: user.user.id,
@@ -488,8 +497,8 @@ export async function processCommissionImport(
       });
   }
 
-  // Update import with results
-  await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
     .from('finance_commission_imports')
     .update({
       status: 'completed',

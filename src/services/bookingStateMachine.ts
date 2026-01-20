@@ -294,12 +294,12 @@ export async function transitionBookingState(
   metadata?: Record<string, unknown>
 ): Promise<StateTransitionResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await supabase.rpc('transition_booking_state', {
+  const { data, error } = await (supabase as any).rpc('transition_booking_state', {
     p_activity_id: activityId,
     p_new_state: newState,
     p_trigger_source: triggerSource,
     p_trigger_reference: triggerReference || null,
-    p_metadata: (metadata || null) as any,
+    p_metadata: metadata || null,
   });
 
   if (error) {
@@ -467,7 +467,8 @@ export async function recordRefund(
  * Get bookable activities for a trip
  */
 export async function getBookableActivities(tripId: string): Promise<BookableActivity[]> {
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from('trip_activities')
     .select('*')
     .eq('trip_id', tripId)
@@ -479,7 +480,8 @@ export async function getBookableActivities(tripId: string): Promise<BookableAct
   }
 
   // Map database rows to BookableActivity type
-  return (data || []).map((row): BookableActivity => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data || []).map((row: any): BookableActivity => ({
     id: row.id,
     tripId: row.trip_id || '',
     title: row.title,
@@ -498,14 +500,14 @@ export async function getBookableActivities(tripId: string): Promise<BookableAct
     quoteLocked: row.quote_locked || false,
     confirmationNumber: row.confirmation_number || undefined,
     voucherUrl: row.voucher_url || undefined,
-    voucherData: row.voucher_data as unknown as VoucherData | undefined,
-    cancellationPolicy: row.cancellation_policy as unknown as CancellationPolicy | undefined,
-    modificationPolicy: row.modification_policy as unknown as ModificationPolicy | undefined,
+    voucherData: row.voucher_data as VoucherData | undefined,
+    cancellationPolicy: row.cancellation_policy as CancellationPolicy | undefined,
+    modificationPolicy: row.modification_policy as ModificationPolicy | undefined,
     bookedAt: row.booked_at || undefined,
     cancelledAt: row.cancelled_at || undefined,
     refundedAt: row.refunded_at || undefined,
     refundAmountCents: row.refund_amount_cents || undefined,
-    travelerData: row.traveler_data as unknown as TravelerInfo[] | undefined,
+    travelerData: row.traveler_data as TravelerInfo[] | undefined,
     vendorName: row.vendor_name || undefined,
     vendorBookingId: row.vendor_booking_id || undefined,
     externalBookingUrl: row.external_booking_url || undefined,
