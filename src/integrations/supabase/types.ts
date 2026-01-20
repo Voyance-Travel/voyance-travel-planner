@@ -246,7 +246,9 @@ export type Database = {
           arc_report_number: string | null
           arc_settlement_date: string | null
           arc_submission_date: string | null
+          baggage_allowance: string | null
           booking_reference: string | null
+          booking_source: Database["public"]["Enums"]["booking_source"] | null
           cabin_class: string | null
           cancellation_deadline: string | null
           cancellation_policy: string | null
@@ -266,6 +268,7 @@ export type Database = {
           end_time: string | null
           flight_number: string | null
           id: string
+          is_informational_only: boolean | null
           is_refundable: boolean | null
           net_cost_cents: number | null
           notes: string | null
@@ -288,7 +291,10 @@ export type Database = {
           supplier_id: string | null
           supplier_paid_at: string | null
           supplier_paid_cents: number | null
+          support_instructions: string | null
+          terminal_info: Json | null
           ticketing_deadline: string | null
+          timezone_info: string | null
           travelers_on_segment: string[] | null
           trip_id: string
           updated_at: string
@@ -301,7 +307,9 @@ export type Database = {
           arc_report_number?: string | null
           arc_settlement_date?: string | null
           arc_submission_date?: string | null
+          baggage_allowance?: string | null
           booking_reference?: string | null
+          booking_source?: Database["public"]["Enums"]["booking_source"] | null
           cabin_class?: string | null
           cancellation_deadline?: string | null
           cancellation_policy?: string | null
@@ -321,6 +329,7 @@ export type Database = {
           end_time?: string | null
           flight_number?: string | null
           id?: string
+          is_informational_only?: boolean | null
           is_refundable?: boolean | null
           net_cost_cents?: number | null
           notes?: string | null
@@ -343,7 +352,10 @@ export type Database = {
           supplier_id?: string | null
           supplier_paid_at?: string | null
           supplier_paid_cents?: number | null
+          support_instructions?: string | null
+          terminal_info?: Json | null
           ticketing_deadline?: string | null
+          timezone_info?: string | null
           travelers_on_segment?: string[] | null
           trip_id: string
           updated_at?: string
@@ -356,7 +368,9 @@ export type Database = {
           arc_report_number?: string | null
           arc_settlement_date?: string | null
           arc_submission_date?: string | null
+          baggage_allowance?: string | null
           booking_reference?: string | null
+          booking_source?: Database["public"]["Enums"]["booking_source"] | null
           cabin_class?: string | null
           cancellation_deadline?: string | null
           cancellation_policy?: string | null
@@ -376,6 +390,7 @@ export type Database = {
           end_time?: string | null
           flight_number?: string | null
           id?: string
+          is_informational_only?: boolean | null
           is_refundable?: boolean | null
           net_cost_cents?: number | null
           notes?: string | null
@@ -398,7 +413,10 @@ export type Database = {
           supplier_id?: string | null
           supplier_paid_at?: string | null
           supplier_paid_cents?: number | null
+          support_instructions?: string | null
+          terminal_info?: Json | null
           ticketing_deadline?: string | null
+          timezone_info?: string | null
           travelers_on_segment?: string[] | null
           trip_id?: string
           updated_at?: string
@@ -3882,6 +3900,7 @@ export type Database = {
         | "arc_bsp"
         | "supplier_direct"
         | "commission_track"
+      booking_source: "native_api" | "imported" | "client_booked" | "manual"
       booking_status:
         | "pending"
         | "confirmed"
@@ -4086,6 +4105,7 @@ export const Constants = {
         "supplier_direct",
         "commission_track",
       ],
+      booking_source: ["native_api", "imported", "client_booked", "manual"],
       booking_status: [
         "pending",
         "confirmed",
