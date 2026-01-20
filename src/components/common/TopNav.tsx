@@ -10,7 +10,8 @@ import {
   ChevronDown,
   Plane,
   Calendar,
-  Sparkles
+  Sparkles,
+  Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +32,8 @@ const userMenuItems = [
   { href: ROUTES.TRIP.DASHBOARD, label: 'My Trips', icon: MapPin },
   { href: ROUTES.PROFILE.SETTINGS, label: 'Settings', icon: Settings },
 ];
+
+const agentMenuItem = { href: ROUTES.AGENT.DASHBOARD, label: 'Agent Dashboard', icon: Briefcase };
 
 export default function TopNav() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -206,6 +209,24 @@ export default function TopNav() {
                           </p>
                         </div>
 
+                        {/* Agent Dashboard Link - shown first if agent mode enabled */}
+                        {user?.travelAgentMode && (
+                          <div className="py-2 border-b border-border">
+                            <Link
+                              to={agentMenuItem.href}
+                              className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                                location.pathname.startsWith('/agent')
+                                  ? 'bg-primary/10 text-primary font-medium' 
+                                  : 'text-foreground hover:bg-muted'
+                              }`}
+                              onClick={() => setIsUserMenuOpen(false)}
+                            >
+                              <Briefcase className="h-4 w-4 text-primary" />
+                              {agentMenuItem.label}
+                            </Link>
+                          </div>
+                        )}
+
                         {/* Menu Items */}
                         <div className="py-2">
                           {userMenuItems.map((item) => {
@@ -343,6 +364,20 @@ export default function TopNav() {
               <div className="pt-4 border-t border-border space-y-1">
                 {isAuthenticated ? (
                   <>
+                    {/* Agent Dashboard - shown first if agent mode enabled */}
+                    {user?.travelAgentMode && (
+                      <Link
+                        to={agentMenuItem.href}
+                        className={`flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
+                          location.pathname.startsWith('/agent')
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <Briefcase className="h-4 w-4 text-primary" />
+                        {agentMenuItem.label}
+                      </Link>
+                    )}
                     {userMenuItems.map((item) => {
                       const Icon = item.icon;
                       return (

@@ -68,6 +68,19 @@ export const ROUTES = {
   TERMS: '/terms',
   PRICING: '/pricing',
   PAYMENT_SUCCESS: '/payment-success',
+  
+  // Agent CRM
+  AGENT: {
+    DASHBOARD: '/agent',
+    CLIENTS: '/agent/clients',
+    CLIENT_NEW: '/agent/clients/new',
+    CLIENT_DETAIL: '/agent/clients/:clientId',
+    TRIPS: '/agent/trips',
+    TRIP_NEW: '/agent/trips/new',
+    TRIP_DETAIL: '/agent/trips/:tripId',
+    TASKS: '/agent/tasks',
+    LIBRARY: '/agent/library',
+  },
 } as const;
 
 // Helper to build dynamic routes

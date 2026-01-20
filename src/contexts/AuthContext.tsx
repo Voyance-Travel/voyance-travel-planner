@@ -11,6 +11,7 @@ export interface User {
   homeAirport?: string;
   createdAt: string;
   quizCompleted?: boolean;
+  travelAgentMode?: boolean;
   preferences?: TravelPreferences;
   travelDNA?: {
     type: string;
@@ -46,7 +47,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 function transformProfile(
   supabaseUser: SupabaseUser | null, 
   profile?: { display_name?: string; avatar_url?: string; quiz_completed?: boolean; travel_dna?: unknown } | null,
-  preferences?: { budget_tier?: string; travel_pace?: string; accommodation_style?: string; home_airport?: string } | null
+  preferences?: { budget_tier?: string; travel_pace?: string; accommodation_style?: string; home_airport?: string; travel_agent_mode?: boolean } | null
 ): User | null {
   if (!supabaseUser) return null;
   
@@ -60,6 +61,7 @@ function transformProfile(
     homeAirport: preferences?.home_airport || undefined,
     createdAt: supabaseUser.created_at,
     quizCompleted: profile?.quiz_completed || false,
+    travelAgentMode: preferences?.travel_agent_mode || false,
     preferences: preferences ? {
       style: preferences.accommodation_style,
       budget: preferences.budget_tier,
