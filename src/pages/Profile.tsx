@@ -38,11 +38,12 @@ import RotatingCoverPhoto from '@/components/profile/RotatingCoverPhoto';
 import FriendsSection from '@/components/profile/FriendsSection';
 import MemoryLane from '@/components/profile/MemoryLane';
 import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
+import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
 import { AddCreditsModal } from '@/components/checkout';
 import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
 import { Wallet } from 'lucide-react';
 
-type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences';
+type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
 
 // Use the centralized pricing config from src/config/pricing.ts
 // STRIPE_PRODUCTS contains:
@@ -355,6 +356,7 @@ export default function Profile() {
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'trips' as const, label: 'My Trips' },
+    { id: 'agent' as const, label: 'My Agent' },
     { id: 'friends' as const, label: 'Friends' },
     { id: 'subscription' as const, label: 'Subscription' },
     { id: 'preferences' as const, label: 'Preferences' },
