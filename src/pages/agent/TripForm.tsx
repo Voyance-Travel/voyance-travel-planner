@@ -25,7 +25,7 @@ type FormData = Partial<AgencyTrip>;
 export default function TripForm() {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [accounts, setAccounts] = useState<AgencyAccount[]>([]);
@@ -42,12 +42,13 @@ export default function TripForm() {
   });
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       navigate('/signin');
       return;
     }
     loadData();
-  }, [isAuthenticated, tripId, navigate]);
+  }, [isAuthenticated, authLoading, tripId, navigate]);
 
   const loadData = async () => {
     try {

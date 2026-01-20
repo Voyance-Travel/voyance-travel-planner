@@ -53,7 +53,7 @@ const DIETARY = [
 export default function ClientForm() {
   const navigate = useNavigate();
   const { clientId } = useParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const isEditing = !!clientId;
 
   const [isLoading, setIsLoading] = useState(false);
@@ -72,6 +72,7 @@ export default function ClientForm() {
   const [tags, setTags] = useState<string[]>([]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       navigate('/signin');
       return;
@@ -80,7 +81,7 @@ export default function ClientForm() {
     if (isEditing && clientId) {
       loadClient(clientId);
     }
-  }, [isAuthenticated, clientId, isEditing, navigate]);
+  }, [isAuthenticated, authLoading, clientId, isEditing, navigate]);
 
   const loadClient = async (id: string) => {
     setIsLoading(true);

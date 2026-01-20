@@ -49,19 +49,20 @@ const TASK_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 
 export default function AgentTasks() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [tasks, setTasks] = useState<AgencyTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('pending');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       navigate('/signin');
       return;
     }
     loadTasks();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
   const loadTasks = async () => {
     setIsLoading(true);

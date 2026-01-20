@@ -33,7 +33,7 @@ export default function AgentLibrary() {
       return;
     }
     loadItems();
-  }, [isAuthenticated, authLoading, activeTab]);
+  }, [isAuthenticated, authLoading, activeTab, navigate]);
 
   const loadItems = async () => {
     setIsLoading(true);

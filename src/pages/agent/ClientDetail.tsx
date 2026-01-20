@@ -49,7 +49,7 @@ import IntakeLinkCard from '@/components/agent/IntakeLinkCard';
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   const [account, setAccount] = useState<AgencyAccount | null>(null);
   const [travelers, setTravelers] = useState<AgencyTraveler[]>([]);
@@ -59,12 +59,13 @@ export default function ClientDetail() {
   const [editingTraveler, setEditingTraveler] = useState<AgencyTraveler | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       navigate('/signin');
       return;
     }
     if (clientId) loadData();
-  }, [isAuthenticated, clientId, navigate]);
+  }, [isAuthenticated, authLoading, clientId, navigate]);
 
   const loadData = async () => {
     if (!clientId) return;

@@ -184,6 +184,10 @@ const App = () => (
                 <Route path="/agent/trips/:tripId/edit" element={<TripForm />} />
                 <Route path="/agent/tasks" element={<AgentTasks />} />
                 <Route path="/agent/library" element={<AgentLibrary />} />
+
+                {/* Agent Sidebar Links (aliases) */}
+                <Route path="/agent/settings" element={<Navigate to="/profile/settings" replace />} />
+                <Route path="/agent/documents" element={<Navigate to="/agent/trips" replace />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
