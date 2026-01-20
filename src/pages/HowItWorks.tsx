@@ -363,7 +363,7 @@ export default function HowItWorks() {
               Ready to Plan Your Next Adventure?
             </h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-              Start with our free quiz to discover your Travel DNA—no credit card required.
+              Start with our free quiz to discover your Travel DNA. No credit card required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="text-lg px-8">
