@@ -916,6 +916,7 @@ export type Database = {
           preferred_language: string | null
           quiz_completed: boolean | null
           travel_dna: Json | null
+          travel_dna_overrides: Json | null
           updated_at: string
         }
         Insert: {
@@ -932,6 +933,7 @@ export type Database = {
           preferred_language?: string | null
           quiz_completed?: boolean | null
           travel_dna?: Json | null
+          travel_dna_overrides?: Json | null
           updated_at?: string
         }
         Update: {
@@ -948,6 +950,7 @@ export type Database = {
           preferred_language?: string | null
           quiz_completed?: boolean | null
           travel_dna?: Json | null
+          travel_dna_overrides?: Json | null
           updated_at?: string
         }
         Relationships: []
@@ -1174,10 +1177,12 @@ export type Database = {
       }
       travel_dna_profiles: {
         Row: {
+          archetype_matches: Json | null
           calculated_at: string | null
           created_at: string | null
           dna_confidence_score: number | null
           dna_rarity: string | null
+          dna_version: number | null
           emotional_drivers: string[] | null
           id: string
           primary_archetype_name: string | null
@@ -1185,15 +1190,19 @@ export type Database = {
           session_id: string | null
           summary: string | null
           tone_tags: string[] | null
+          trait_contributions: Json | null
           trait_scores: Json | null
+          travel_dna_v2: Json | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          archetype_matches?: Json | null
           calculated_at?: string | null
           created_at?: string | null
           dna_confidence_score?: number | null
           dna_rarity?: string | null
+          dna_version?: number | null
           emotional_drivers?: string[] | null
           id?: string
           primary_archetype_name?: string | null
@@ -1201,15 +1210,19 @@ export type Database = {
           session_id?: string | null
           summary?: string | null
           tone_tags?: string[] | null
+          trait_contributions?: Json | null
           trait_scores?: Json | null
+          travel_dna_v2?: Json | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          archetype_matches?: Json | null
           calculated_at?: string | null
           created_at?: string | null
           dna_confidence_score?: number | null
           dna_rarity?: string | null
+          dna_version?: number | null
           emotional_drivers?: string[] | null
           id?: string
           primary_archetype_name?: string | null
@@ -1217,7 +1230,9 @@ export type Database = {
           session_id?: string | null
           summary?: string | null
           tone_tags?: string[] | null
+          trait_contributions?: Json | null
           trait_scores?: Json | null
+          travel_dna_v2?: Json | null
           updated_at?: string | null
           user_id?: string
         }
@@ -2284,6 +2299,30 @@ export type Database = {
           metric_key?: string
           period?: string
           updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      voyance_events: {
+        Row: {
+          created_at: string | null
+          event_name: string
+          id: string
+          properties: Json | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          event_name: string
+          id?: string
+          properties?: Json | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          event_name?: string
+          id?: string
+          properties?: Json | null
           user_id?: string
         }
         Relationships: []
