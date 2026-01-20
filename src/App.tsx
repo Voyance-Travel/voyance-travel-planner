@@ -73,8 +73,11 @@ import BulkImport from "./pages/admin/BulkImport";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
-import ClientForm from "./pages/agent/ClientForm";
+import AgentClients from "./pages/agent/AgentClients";
+import ClientDetail from "./pages/agent/ClientDetail";
+import AccountForm from "./pages/agent/AccountForm";
 import AgentTrips from "./pages/agent/AgentTrips";
+import TripForm from "./pages/agent/TripForm";
 import AgentTasks from "./pages/agent/AgentTasks";
 import TripWorkspace from "./pages/agent/TripWorkspace";
 
@@ -166,12 +169,14 @@ const App = () => (
                 
                 {/* Agent CRM Routes */}
                 <Route path="/agent" element={<AgentDashboard />} />
-                <Route path="/agent/clients" element={<AgentDashboard />} />
-                <Route path="/agent/clients/new" element={<ClientForm />} />
-                <Route path="/agent/clients/:clientId" element={<ClientForm />} />
-                <Route path="/agent/clients/:clientId/edit" element={<ClientForm />} />
+                <Route path="/agent/clients" element={<AgentClients />} />
+                <Route path="/agent/clients/new" element={<AccountForm />} />
+                <Route path="/agent/clients/:clientId" element={<ClientDetail />} />
+                <Route path="/agent/clients/:clientId/edit" element={<AccountForm />} />
                 <Route path="/agent/trips" element={<AgentTrips />} />
+                <Route path="/agent/trips/new" element={<TripForm />} />
                 <Route path="/agent/trips/:tripId" element={<TripWorkspace />} />
+                <Route path="/agent/trips/:tripId/edit" element={<TripForm />} />
                 <Route path="/agent/tasks" element={<AgentTasks />} />
                 
                 {/* 404 */}
