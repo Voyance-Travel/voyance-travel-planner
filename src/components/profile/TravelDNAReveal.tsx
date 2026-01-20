@@ -12,7 +12,8 @@ import {
   Trophy,
   Leaf,
   Gem,
-  Info
+  Info,
+  Settings2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +29,9 @@ import {
 } from '@/data/archetypeNarratives';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import TravelDNATransparency from './TravelDNATransparency';
+import DNAAccuracyFeedback from './DNAAccuracyFeedback';
+import TraitOverrideSliders from './TraitOverrideSliders';
 
 /** Map category names to their Lucide icon components */
 const CATEGORY_ICONS = {
@@ -58,6 +62,10 @@ interface TravelDNAData {
   emotional_drivers: string[] | null;
   perfect_trip_preview?: string | null;
   summary: string | null;
+  // V2 fields (typed loosely to accept DB Json)
+  travel_dna_v2?: unknown;
+  archetype_matches?: unknown;
+  dna_version?: number;
 }
 
 // Demo DNA data for preview mode

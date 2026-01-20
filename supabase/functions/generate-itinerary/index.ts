@@ -259,9 +259,35 @@ const STRICT_ITINERARY_TOOL = {
 // GROUP PREFERENCE BLENDING - For multi-traveler trips with linked friends
 // =============================================================================
 
+interface TravelDNAV2 {
+  user_id?: string;
+  dna_version?: number;
+  trait_scores?: Record<string, number>;
+  archetype_matches?: Array<{
+    archetype_id: string;
+    name: string;
+    category?: string;
+    score: number;
+    pct: number;
+    reasons?: Array<{ trait: string; effect: string; amount: number; note?: string }>;
+  }>;
+  confidence?: number;
+  trait_contributions?: Array<{
+    question_id: string;
+    answer_id: string;
+    label?: string;
+    deltas: Record<string, number>;
+    normalized_multiplier: number;
+  }>;
+}
+
 interface TravelDNAProfile {
   user_id: string;
   trait_scores?: Record<string, number>;
+  travel_dna_v2?: TravelDNAV2;
+  archetype_matches?: TravelDNAV2['archetype_matches'];
+  confidence?: number;
+  dna_version?: number;
 }
 
 interface PreferenceProfile {
@@ -625,6 +651,170 @@ async function getUserPreferences(supabase: any, userId: string) {
   } catch {
     return null;
   }
+}
+
+// =============================================================================
+// TRAVEL DNA V2 INTEGRATION - Archetype blend + confidence for persona
+// =============================================================================
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAProfile | null> {
+  try {
+    // First check for Travel DNA v2 data
+    const { data: dnaProfile, error: dnaError } = await supabase
+      .from('travel_dna_profiles')
+      .select('user_id, trait_scores, travel_dna_v2, archetype_matches, dna_version')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (dnaProfile?.travel_dna_v2) {
+      console.log('[TravelDNA] Found v2 profile with archetype blend');
+      return {
+        user_id: dnaProfile.user_id,
+        trait_scores: dnaProfile.travel_dna_v2.trait_scores,
+        travel_dna_v2: dnaProfile.travel_dna_v2,
+        archetype_matches: dnaProfile.travel_dna_v2.archetype_matches,
+        confidence: dnaProfile.travel_dna_v2.confidence,
+        dna_version: 2,
+      };
+    }
+
+    // Fallback to v1 or archetype_matches column
+    if (dnaProfile?.archetype_matches) {
+      console.log('[TravelDNA] Found v1 profile with archetype_matches');
+      return {
+        user_id: dnaProfile.user_id,
+        trait_scores: dnaProfile.trait_scores,
+        archetype_matches: dnaProfile.archetype_matches,
+        dna_version: 1,
+      };
+    }
+
+    // Also check profiles.travel_dna for legacy data
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('travel_dna, travel_dna_overrides')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profile?.travel_dna) {
+      const dna = profile.travel_dna as Record<string, unknown>;
+      console.log('[TravelDNA] Found legacy profile data');
+      return {
+        user_id: userId,
+        trait_scores: dna.trait_scores as Record<string, number>,
+        dna_version: 1,
+      };
+    }
+
+    return null;
+  } catch (e) {
+    console.error('[TravelDNA] Error fetching:', e);
+    return null;
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getTraitOverrides(supabase: any, userId: string): Promise<Record<string, number> | null> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('travel_dna_overrides')
+      .eq('id', userId)
+      .maybeSingle();
+    
+    if (data?.travel_dna_overrides && typeof data.travel_dna_overrides === 'object') {
+      console.log('[TravelDNA] Found trait overrides');
+      return data.travel_dna_overrides as Record<string, number>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build Travel DNA persona context for AI prompt
+ * Includes archetype blend, confidence level, and trait information
+ */
+function buildTravelDNAContext(
+  dna: TravelDNAProfile | null, 
+  overrides: Record<string, number> | null
+): string {
+  if (!dna) return '';
+
+  const sections: string[] = [];
+  
+  // Get effective trait scores (overrides take precedence)
+  const traitScores = overrides 
+    ? { ...dna.trait_scores, ...overrides }
+    : dna.trait_scores;
+  
+  // Archetype blend section
+  const archetypes = dna.travel_dna_v2?.archetype_matches || dna.archetype_matches;
+  const confidence = dna.travel_dna_v2?.confidence ?? dna.confidence ?? 75;
+  
+  if (archetypes && archetypes.length > 0) {
+    const blendParts = archetypes.slice(0, 3).map((a: { name: string; pct: number }) => 
+      `${a.name.replace(/_/g, ' ')} (${Math.round(a.pct)}%)`
+    );
+    
+    const confidenceLabel = confidence >= 80 ? 'High' : confidence >= 60 ? 'Moderate' : 'Uncertain';
+    
+    let personaSection = `\n${'='.repeat(60)}\n🧬 TRAVEL DNA ARCHETYPE BLEND\n${'='.repeat(60)}`;
+    personaSection += `\nArchetype Blend: ${blendParts.join(' + ')}`;
+    personaSection += `\nConfidence: ${Math.round(confidence)}/100 (${confidenceLabel})`;
+    
+    // Add guidance based on confidence
+    if (confidence < 60) {
+      personaSection += `\n\n⚠️ LOW CONFIDENCE NOTICE:`;
+      personaSection += `\n   - This traveler's profile has mixed signals or is still being refined`;
+      personaSection += `\n   - Avoid overly assertive persona-based recommendations`;
+      personaSection += `\n   - Include more variety and let activities speak for themselves`;
+      personaSection += `\n   - Consider offering 2 stylistic alternatives for key decisions`;
+    } else if (confidence >= 80) {
+      personaSection += `\n\n✅ HIGH CONFIDENCE:`;
+      personaSection += `\n   - Lean into the primary archetype's preferences confidently`;
+      personaSection += `\n   - Personalization can be more specific and targeted`;
+    }
+    
+    sections.push(personaSection);
+  }
+  
+  // Trait summary section
+  if (traitScores && Object.keys(traitScores).length > 0) {
+    const traitLabels: Record<string, [string, string]> = {
+      planning: ['Spontaneous', 'Detailed Planner'],
+      social: ['Solo/Intimate', 'Social/Group'],
+      comfort: ['Budget-Conscious', 'Luxury-Seeking'],
+      pace: ['Relaxed', 'Fast-Paced'],
+      authenticity: ['Tourist-Friendly', 'Local/Authentic'],
+      adventure: ['Safe/Comfortable', 'Adventurous'],
+      budget: ['Splurge', 'Frugal'],
+      transformation: ['Leisure', 'Growth-Focused'],
+    };
+    
+    let traitSection = `\n${'='.repeat(60)}\n📊 TRAIT PROFILE\n${'='.repeat(60)}`;
+    
+    for (const [trait, score] of Object.entries(traitScores)) {
+      const labels = traitLabels[trait];
+      if (labels && typeof score === 'number') {
+        const normalized = Math.round(score);
+        const direction = normalized > 0 ? labels[1] : normalized < 0 ? labels[0] : 'Balanced';
+        const intensity = Math.abs(normalized) >= 7 ? 'Strong' : Math.abs(normalized) >= 4 ? 'Moderate' : 'Slight';
+        traitSection += `\n   ${trait}: ${normalized > 0 ? '+' : ''}${normalized}/10 → ${intensity} ${direction}`;
+      }
+    }
+    
+    // Add override notice if applicable
+    if (overrides && Object.keys(overrides).length > 0) {
+      traitSection += `\n\n   ⚙️ User has manually adjusted some traits - respect these preferences.`;
+    }
+    
+    sections.push(traitSection);
+  }
+  
+  return sections.join('\n');
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1828,17 +2018,30 @@ serve(async (req) => {
       }
       
       // =======================================================================
+      // TRAVEL DNA V2 - Archetype blend + trait scores for persona
+      // =======================================================================
+      console.log("[Stage 1.3] Fetching Travel DNA v2...");
+      const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
+      const traitOverrides = userId ? await getTraitOverrides(supabase, userId) : null;
+      const travelDNAContext = buildTravelDNAContext(travelDNA, traitOverrides);
+      
+      if (travelDNA) {
+        const confidence = travelDNA.travel_dna_v2?.confidence ?? travelDNA.confidence ?? 75;
+        console.log(`[Stage 1.3] Travel DNA loaded: v${travelDNA.dna_version}, confidence=${confidence}`);
+      }
+      
+      // =======================================================================
       // FLIGHT & HOTEL CONTEXT - Use booked flight/hotel in itinerary planning
       // =======================================================================
-      console.log("[Stage 1.3] Fetching flight and hotel context...");
+      console.log("[Stage 1.4] Fetching flight and hotel context...");
       const flightHotelResult = await getFlightHotelContext(supabase, tripId);
       if (flightHotelResult.context) {
-        console.log("[Stage 1.3] Flight/hotel context added to AI prompt");
+        console.log("[Stage 1.4] Flight/hotel context added to AI prompt");
         if (flightHotelResult.earliestFirstActivityTime) {
-          console.log(`[Stage 1.3] Day 1 earliest activity: ${flightHotelResult.earliestFirstActivityTime}`);
+          console.log(`[Stage 1.4] Day 1 earliest activity: ${flightHotelResult.earliestFirstActivityTime}`);
         }
         if (flightHotelResult.latestLastActivityTime) {
-          console.log(`[Stage 1.3] Last day latest activity: ${flightHotelResult.latestLastActivityTime}`);
+          console.log(`[Stage 1.4] Last day latest activity: ${flightHotelResult.latestLastActivityTime}`);
         }
       }
       
@@ -1859,7 +2062,8 @@ serve(async (req) => {
       }
       
       // Combine all context for maximum personalization
-      const preferenceContext = rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context;
+      // Order: Travel DNA (archetype/confidence) → raw prefs → enriched prefs → flight/hotel
+      const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context;
 
       // STAGE 2: AI Generation
       let aiResult;
