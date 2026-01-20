@@ -71,6 +71,10 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 // Admin
 import BulkImport from "./pages/admin/BulkImport";
 
+// Agent CRM
+import AgentDashboard from "./pages/agent/AgentDashboard";
+import ClientForm from "./pages/agent/ClientForm";
+
 // 404
 import NotFound from "./pages/NotFound";
 
@@ -156,6 +160,12 @@ const App = () => (
                     <BulkImport />
                   </ProtectedRoute>
                 } />
+                
+                {/* Agent CRM Routes */}
+                <Route path="/agent" element={<AgentDashboard />} />
+                <Route path="/agent/clients/new" element={<ClientForm />} />
+                <Route path="/agent/clients/:clientId" element={<ClientForm />} />
+                <Route path="/agent/clients/:clientId/edit" element={<ClientForm />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />

@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { 
   User, Bell, Shield, Link2,
   ChevronRight, Mail, Smartphone, 
-  LogOut, Trash2, Loader2, KeyRound
+  LogOut, Trash2, Loader2, KeyRound,
+  Briefcase, Users, ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
@@ -61,6 +62,10 @@ export default function Settings() {
   const [priceAlerts, setPriceAlerts] = useState(true);
   const [budgetAlerts, setBudgetAlerts] = useState(true);
   
+  // Travel Agent Mode
+  const [travelAgentMode, setTravelAgentMode] = useState(false);
+  const [agentBusinessName, setAgentBusinessName] = useState('');
+  
   // Phone number
   const [phoneNumber, setPhoneNumber] = useState('');
   const [editingPhone, setEditingPhone] = useState(false);
@@ -89,7 +94,7 @@ export default function Settings() {
       try {
         const { data, error } = await supabase
           .from('user_preferences')
-          .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, budget_alerts, phone_number')
+          .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, budget_alerts, phone_number, travel_agent_mode, agent_business_name')
           .eq('user_id', user.id)
           .maybeSingle();
         
@@ -103,6 +108,8 @@ export default function Settings() {
           setPriceAlerts(data.price_alerts ?? true);
           setBudgetAlerts(data.budget_alerts ?? true);
           setPhoneNumber(data.phone_number ?? '');
+          setTravelAgentMode(data.travel_agent_mode ?? false);
+          setAgentBusinessName(data.agent_business_name ?? '');
         }
       } catch (err) {
         console.error('Failed to load preferences:', err);
@@ -499,6 +506,91 @@ export default function Settings() {
                       disabled={saving}
                     />
                   </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Travel Agent Mode Section */}
+            <motion.div variants={itemVariants}>
+              <Card className="border-primary/20">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Briefcase className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Travel Agent Mode</CardTitle>
+                      <CardDescription>Professional tools for managing client trips</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="travel-agent-mode" className="text-sm font-medium">
+                        Enable Travel Agent Mode
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Access CRM tools to manage clients and build itineraries for them
+                      </p>
+                    </div>
+                    <Switch
+                      id="travel-agent-mode"
+                      checked={travelAgentMode}
+                      onCheckedChange={(checked) => {
+                        setTravelAgentMode(checked);
+                        savePreference('travel_agent_mode', checked);
+                      }}
+                      disabled={saving}
+                    />
+                  </div>
+                  
+                  {travelAgentMode && (
+                    <>
+                      <Separator />
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="agent-business-name" className="text-sm font-medium">
+                            Business Name (optional)
+                          </Label>
+                          <Input
+                            id="agent-business-name"
+                            placeholder="Your Travel Agency"
+                            value={agentBusinessName}
+                            onChange={(e) => setAgentBusinessName(e.target.value)}
+                            onBlur={() => {
+                              if (agentBusinessName !== '') {
+                                savePreference('agent_business_name', agentBusinessName);
+                              }
+                            }}
+                          />
+                        </div>
+                        
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <Button 
+                            onClick={() => navigate('/agent')}
+                            className="gap-2"
+                          >
+                            <Users className="h-4 w-4" />
+                            Open Client Dashboard
+                          </Button>
+                          <Button 
+                            variant="outline"
+                            onClick={() => navigate('/agent/clients/new')}
+                            className="gap-2"
+                          >
+                            Add New Client
+                          </Button>
+                        </div>
+                        
+                        <p className="text-xs text-muted-foreground">
+                          Manage your travel clients, store their preferences, and build custom itineraries. 
+                          Track bookings and revenue to grow your travel business.
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
