@@ -176,6 +176,1122 @@ export type Database = {
           },
         ]
       }
+      agency_accounts: {
+        Row: {
+          account_type: Database["public"]["Enums"]["agency_account_type"]
+          agent_id: string
+          billing_address: Json | null
+          billing_email: string | null
+          billing_phone: string | null
+          company_name: string | null
+          created_at: string
+          id: string
+          lifetime_value_cents: number | null
+          name: string
+          notes: string | null
+          referral_source: string | null
+          tags: string[] | null
+          total_revenue_cents: number | null
+          total_trips: number | null
+          updated_at: string
+        }
+        Insert: {
+          account_type?: Database["public"]["Enums"]["agency_account_type"]
+          agent_id: string
+          billing_address?: Json | null
+          billing_email?: string | null
+          billing_phone?: string | null
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          lifetime_value_cents?: number | null
+          name: string
+          notes?: string | null
+          referral_source?: string | null
+          tags?: string[] | null
+          total_revenue_cents?: number | null
+          total_trips?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account_type?: Database["public"]["Enums"]["agency_account_type"]
+          agent_id?: string
+          billing_address?: Json | null
+          billing_email?: string | null
+          billing_phone?: string | null
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          lifetime_value_cents?: number | null
+          name?: string
+          notes?: string | null
+          referral_source?: string | null
+          tags?: string[] | null
+          total_revenue_cents?: number | null
+          total_trips?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      agency_booking_segments: {
+        Row: {
+          agent_id: string
+          aircraft_type: string | null
+          booking_reference: string | null
+          cabin_class: string | null
+          cancellation_deadline: string | null
+          cancellation_policy: string | null
+          check_in_time: string | null
+          check_out_time: string | null
+          commission_cents: number | null
+          commission_rate: number | null
+          confirmation_number: string | null
+          created_at: string
+          currency: string | null
+          destination: string | null
+          destination_code: string | null
+          end_date: string | null
+          end_time: string | null
+          flight_number: string | null
+          id: string
+          is_refundable: boolean | null
+          net_cost_cents: number | null
+          notes: string | null
+          origin: string | null
+          origin_code: string | null
+          payment_deadline: string | null
+          penalty_amount_cents: number | null
+          room_count: number | null
+          room_type: string | null
+          segment_details: Json | null
+          segment_type: Database["public"]["Enums"]["booking_segment_type"]
+          sell_price_cents: number | null
+          start_date: string | null
+          start_time: string | null
+          status: Database["public"]["Enums"]["booking_status"] | null
+          supplier_contact: string | null
+          supplier_id: string | null
+          ticketing_deadline: string | null
+          travelers_on_segment: string[] | null
+          trip_id: string
+          updated_at: string
+          vendor_code: string | null
+          vendor_name: string | null
+        }
+        Insert: {
+          agent_id: string
+          aircraft_type?: string | null
+          booking_reference?: string | null
+          cabin_class?: string | null
+          cancellation_deadline?: string | null
+          cancellation_policy?: string | null
+          check_in_time?: string | null
+          check_out_time?: string | null
+          commission_cents?: number | null
+          commission_rate?: number | null
+          confirmation_number?: string | null
+          created_at?: string
+          currency?: string | null
+          destination?: string | null
+          destination_code?: string | null
+          end_date?: string | null
+          end_time?: string | null
+          flight_number?: string | null
+          id?: string
+          is_refundable?: boolean | null
+          net_cost_cents?: number | null
+          notes?: string | null
+          origin?: string | null
+          origin_code?: string | null
+          payment_deadline?: string | null
+          penalty_amount_cents?: number | null
+          room_count?: number | null
+          room_type?: string | null
+          segment_details?: Json | null
+          segment_type: Database["public"]["Enums"]["booking_segment_type"]
+          sell_price_cents?: number | null
+          start_date?: string | null
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["booking_status"] | null
+          supplier_contact?: string | null
+          supplier_id?: string | null
+          ticketing_deadline?: string | null
+          travelers_on_segment?: string[] | null
+          trip_id: string
+          updated_at?: string
+          vendor_code?: string | null
+          vendor_name?: string | null
+        }
+        Update: {
+          agent_id?: string
+          aircraft_type?: string | null
+          booking_reference?: string | null
+          cabin_class?: string | null
+          cancellation_deadline?: string | null
+          cancellation_policy?: string | null
+          check_in_time?: string | null
+          check_out_time?: string | null
+          commission_cents?: number | null
+          commission_rate?: number | null
+          confirmation_number?: string | null
+          created_at?: string
+          currency?: string | null
+          destination?: string | null
+          destination_code?: string | null
+          end_date?: string | null
+          end_time?: string | null
+          flight_number?: string | null
+          id?: string
+          is_refundable?: boolean | null
+          net_cost_cents?: number | null
+          notes?: string | null
+          origin?: string | null
+          origin_code?: string | null
+          payment_deadline?: string | null
+          penalty_amount_cents?: number | null
+          room_count?: number | null
+          room_type?: string | null
+          segment_details?: Json | null
+          segment_type?: Database["public"]["Enums"]["booking_segment_type"]
+          sell_price_cents?: number | null
+          start_date?: string | null
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["booking_status"] | null
+          supplier_contact?: string | null
+          supplier_id?: string | null
+          ticketing_deadline?: string | null
+          travelers_on_segment?: string[] | null
+          trip_id?: string
+          updated_at?: string
+          vendor_code?: string | null
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_booking_segments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_communications: {
+        Row: {
+          account_id: string | null
+          agent_id: string
+          approval_response: string | null
+          approved_item_reference: string | null
+          attachments: Json | null
+          body: string | null
+          cc_addresses: string[] | null
+          communication_type: Database["public"]["Enums"]["communication_type"]
+          created_at: string
+          external_message_id: string | null
+          from_address: string | null
+          id: string
+          is_approval: boolean | null
+          is_incoming: boolean | null
+          sent_at: string | null
+          subject: string | null
+          template_used: string | null
+          to_addresses: string[] | null
+          traveler_id: string | null
+          trip_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          agent_id: string
+          approval_response?: string | null
+          approved_item_reference?: string | null
+          attachments?: Json | null
+          body?: string | null
+          cc_addresses?: string[] | null
+          communication_type: Database["public"]["Enums"]["communication_type"]
+          created_at?: string
+          external_message_id?: string | null
+          from_address?: string | null
+          id?: string
+          is_approval?: boolean | null
+          is_incoming?: boolean | null
+          sent_at?: string | null
+          subject?: string | null
+          template_used?: string | null
+          to_addresses?: string[] | null
+          traveler_id?: string | null
+          trip_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          agent_id?: string
+          approval_response?: string | null
+          approved_item_reference?: string | null
+          attachments?: Json | null
+          body?: string | null
+          cc_addresses?: string[] | null
+          communication_type?: Database["public"]["Enums"]["communication_type"]
+          created_at?: string
+          external_message_id?: string | null
+          from_address?: string | null
+          id?: string
+          is_approval?: boolean | null
+          is_incoming?: boolean | null
+          sent_at?: string | null
+          subject?: string | null
+          template_used?: string | null
+          to_addresses?: string[] | null
+          traveler_id?: string | null
+          trip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_communications_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_communications_traveler_id_fkey"
+            columns: ["traveler_id"]
+            isOneToOne: false
+            referencedRelation: "agency_travelers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_communications_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_documents: {
+        Row: {
+          account_id: string | null
+          agent_id: string
+          created_at: string
+          description: string | null
+          document_type: Database["public"]["Enums"]["document_type"]
+          expires_at: string | null
+          file_name: string | null
+          file_size_bytes: number | null
+          file_url: string
+          id: string
+          is_client_visible: boolean | null
+          mime_type: string | null
+          name: string
+          traveler_id: string | null
+          trip_id: string | null
+          uploaded_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          agent_id: string
+          created_at?: string
+          description?: string | null
+          document_type: Database["public"]["Enums"]["document_type"]
+          expires_at?: string | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          file_url: string
+          id?: string
+          is_client_visible?: boolean | null
+          mime_type?: string | null
+          name: string
+          traveler_id?: string | null
+          trip_id?: string | null
+          uploaded_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          agent_id?: string
+          created_at?: string
+          description?: string | null
+          document_type?: Database["public"]["Enums"]["document_type"]
+          expires_at?: string | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          file_url?: string
+          id?: string
+          is_client_visible?: boolean | null
+          mime_type?: string | null
+          name?: string
+          traveler_id?: string | null
+          trip_id?: string | null
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_documents_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_documents_traveler_id_fkey"
+            columns: ["traveler_id"]
+            isOneToOne: false
+            referencedRelation: "agency_travelers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_documents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_invoices: {
+        Row: {
+          account_id: string
+          agency_fee_cents: number | null
+          agent_id: string
+          amount_paid_cents: number | null
+          balance_due_cents: number | null
+          created_at: string
+          currency: string | null
+          discount_cents: number | null
+          due_date: string
+          id: string
+          internal_notes: string | null
+          invoice_number: string
+          issue_date: string
+          line_items: Json | null
+          notes: string | null
+          paid_date: string | null
+          payment_instructions: string | null
+          quote_id: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["invoice_status"] | null
+          stripe_invoice_id: string | null
+          subtotal_cents: number | null
+          tax_cents: number | null
+          total_cents: number | null
+          trip_id: string
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          account_id: string
+          agency_fee_cents?: number | null
+          agent_id: string
+          amount_paid_cents?: number | null
+          balance_due_cents?: number | null
+          created_at?: string
+          currency?: string | null
+          discount_cents?: number | null
+          due_date: string
+          id?: string
+          internal_notes?: string | null
+          invoice_number: string
+          issue_date?: string
+          line_items?: Json | null
+          notes?: string | null
+          paid_date?: string | null
+          payment_instructions?: string | null
+          quote_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"] | null
+          stripe_invoice_id?: string | null
+          subtotal_cents?: number | null
+          tax_cents?: number | null
+          total_cents?: number | null
+          trip_id: string
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          agency_fee_cents?: number | null
+          agent_id?: string
+          amount_paid_cents?: number | null
+          balance_due_cents?: number | null
+          created_at?: string
+          currency?: string | null
+          discount_cents?: number | null
+          due_date?: string
+          id?: string
+          internal_notes?: string | null
+          invoice_number?: string
+          issue_date?: string
+          line_items?: Json | null
+          notes?: string | null
+          paid_date?: string | null
+          payment_instructions?: string | null
+          quote_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"] | null
+          stripe_invoice_id?: string | null
+          subtotal_cents?: number | null
+          tax_cents?: number | null
+          total_cents?: number | null
+          trip_id?: string
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_invoices_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_invoices_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "agency_quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_invoices_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_payment_schedules: {
+        Row: {
+          agent_id: string
+          amount_cents: number
+          created_at: string
+          description: string
+          due_date: string
+          id: string
+          invoice_id: string | null
+          is_paid: boolean | null
+          notes: string | null
+          paid_at: string | null
+          payment_id: string | null
+          reminder_count: number | null
+          reminder_sent_at: string | null
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          amount_cents: number
+          created_at?: string
+          description: string
+          due_date: string
+          id?: string
+          invoice_id?: string | null
+          is_paid?: boolean | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_id?: string | null
+          reminder_count?: number | null
+          reminder_sent_at?: string | null
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          amount_cents?: number
+          created_at?: string
+          description?: string
+          due_date?: string
+          id?: string
+          invoice_id?: string | null
+          is_paid?: boolean | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_id?: string | null
+          reminder_count?: number | null
+          reminder_sent_at?: string | null
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_payment_schedules_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "agency_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_payment_schedules_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "agency_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_payment_schedules_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_payments: {
+        Row: {
+          agent_id: string
+          amount_cents: number
+          created_at: string
+          currency: string | null
+          id: string
+          invoice_id: string
+          notes: string | null
+          payment_date: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          receipt_url: string | null
+          refund_amount_cents: number | null
+          refunded_at: string | null
+          status: string | null
+          stripe_charge_id: string | null
+          stripe_payment_intent_id: string | null
+          transaction_reference: string | null
+          trip_id: string
+        }
+        Insert: {
+          agent_id: string
+          amount_cents: number
+          created_at?: string
+          currency?: string | null
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          payment_date?: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          receipt_url?: string | null
+          refund_amount_cents?: number | null
+          refunded_at?: string | null
+          status?: string | null
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
+          transaction_reference?: string | null
+          trip_id: string
+        }
+        Update: {
+          agent_id?: string
+          amount_cents?: number
+          created_at?: string
+          currency?: string | null
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          receipt_url?: string | null
+          refund_amount_cents?: number | null
+          refunded_at?: string | null
+          status?: string | null
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
+          transaction_reference?: string | null
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "agency_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_payments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_quotes: {
+        Row: {
+          agency_fee_cents: number | null
+          agent_id: string
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          currency: string | null
+          description: string | null
+          discount_cents: number | null
+          expires_at: string | null
+          id: string
+          internal_notes: string | null
+          is_current_version: boolean | null
+          line_items: Json | null
+          name: string | null
+          notes: string | null
+          parent_quote_id: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["quote_status"] | null
+          subtotal_cents: number | null
+          tax_cents: number | null
+          terms_and_conditions: string | null
+          total_cents: number | null
+          trip_id: string
+          updated_at: string
+          version_number: number
+          viewed_at: string | null
+        }
+        Insert: {
+          agency_fee_cents?: number | null
+          agent_id: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          discount_cents?: number | null
+          expires_at?: string | null
+          id?: string
+          internal_notes?: string | null
+          is_current_version?: boolean | null
+          line_items?: Json | null
+          name?: string | null
+          notes?: string | null
+          parent_quote_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["quote_status"] | null
+          subtotal_cents?: number | null
+          tax_cents?: number | null
+          terms_and_conditions?: string | null
+          total_cents?: number | null
+          trip_id: string
+          updated_at?: string
+          version_number?: number
+          viewed_at?: string | null
+        }
+        Update: {
+          agency_fee_cents?: number | null
+          agent_id?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          discount_cents?: number | null
+          expires_at?: string | null
+          id?: string
+          internal_notes?: string | null
+          is_current_version?: boolean | null
+          line_items?: Json | null
+          name?: string | null
+          notes?: string | null
+          parent_quote_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["quote_status"] | null
+          subtotal_cents?: number | null
+          tax_cents?: number | null
+          terms_and_conditions?: string | null
+          total_cents?: number | null
+          trip_id?: string
+          updated_at?: string
+          version_number?: number
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_quotes_parent_quote_id_fkey"
+            columns: ["parent_quote_id"]
+            isOneToOne: false
+            referencedRelation: "agency_quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_quotes_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_suppliers: {
+        Row: {
+          agent_id: string
+          code: string | null
+          created_at: string
+          default_commission_rate: number | null
+          id: string
+          is_preferred: boolean | null
+          name: string
+          notes: string | null
+          payment_terms: string | null
+          primary_contact_email: string | null
+          primary_contact_name: string | null
+          primary_contact_phone: string | null
+          supplier_type: string | null
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          agent_id: string
+          code?: string | null
+          created_at?: string
+          default_commission_rate?: number | null
+          id?: string
+          is_preferred?: boolean | null
+          name: string
+          notes?: string | null
+          payment_terms?: string | null
+          primary_contact_email?: string | null
+          primary_contact_name?: string | null
+          primary_contact_phone?: string | null
+          supplier_type?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          agent_id?: string
+          code?: string | null
+          created_at?: string
+          default_commission_rate?: number | null
+          id?: string
+          is_preferred?: boolean | null
+          name?: string
+          notes?: string | null
+          payment_terms?: string | null
+          primary_contact_email?: string | null
+          primary_contact_name?: string | null
+          primary_contact_phone?: string | null
+          supplier_type?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      agency_tasks: {
+        Row: {
+          account_id: string | null
+          agent_id: string
+          booking_segment_id: string | null
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          due_time: string | null
+          id: string
+          is_system_generated: boolean | null
+          priority: Database["public"]["Enums"]["task_priority"] | null
+          reminder_date: string | null
+          reminder_sent: boolean | null
+          status: Database["public"]["Enums"]["task_status"] | null
+          task_type: string | null
+          title: string
+          traveler_id: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          agent_id: string
+          booking_segment_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          due_time?: string | null
+          id?: string
+          is_system_generated?: boolean | null
+          priority?: Database["public"]["Enums"]["task_priority"] | null
+          reminder_date?: string | null
+          reminder_sent?: boolean | null
+          status?: Database["public"]["Enums"]["task_status"] | null
+          task_type?: string | null
+          title: string
+          traveler_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          agent_id?: string
+          booking_segment_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          due_time?: string | null
+          id?: string
+          is_system_generated?: boolean | null
+          priority?: Database["public"]["Enums"]["task_priority"] | null
+          reminder_date?: string | null
+          reminder_sent?: boolean | null
+          status?: Database["public"]["Enums"]["task_status"] | null
+          task_type?: string | null
+          title?: string
+          traveler_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_tasks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_tasks_booking_segment_id_fkey"
+            columns: ["booking_segment_id"]
+            isOneToOne: false
+            referencedRelation: "agency_booking_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_tasks_traveler_id_fkey"
+            columns: ["traveler_id"]
+            isOneToOne: false
+            referencedRelation: "agency_travelers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_tasks_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_travelers: {
+        Row: {
+          account_id: string
+          agent_id: string
+          airline_loyalty: Json | null
+          allergies: string[] | null
+          created_at: string
+          date_of_birth: string | null
+          dietary_restrictions: string[] | null
+          email: string | null
+          emergency_contact: Json | null
+          gender: string | null
+          global_entry_number: string | null
+          hotel_loyalty: Json | null
+          hotel_preferences: Json | null
+          id: string
+          is_primary_contact: boolean | null
+          known_traveler_number: string | null
+          legal_first_name: string
+          legal_last_name: string
+          legal_middle_name: string | null
+          meal_preference: string | null
+          medical_notes: string | null
+          mobility_needs: string | null
+          notes: string | null
+          passport_country: string | null
+          passport_expiry: string | null
+          passport_number: string | null
+          phone: string | null
+          preferred_name: string | null
+          redress_number: string | null
+          seat_preference: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          agent_id: string
+          airline_loyalty?: Json | null
+          allergies?: string[] | null
+          created_at?: string
+          date_of_birth?: string | null
+          dietary_restrictions?: string[] | null
+          email?: string | null
+          emergency_contact?: Json | null
+          gender?: string | null
+          global_entry_number?: string | null
+          hotel_loyalty?: Json | null
+          hotel_preferences?: Json | null
+          id?: string
+          is_primary_contact?: boolean | null
+          known_traveler_number?: string | null
+          legal_first_name: string
+          legal_last_name: string
+          legal_middle_name?: string | null
+          meal_preference?: string | null
+          medical_notes?: string | null
+          mobility_needs?: string | null
+          notes?: string | null
+          passport_country?: string | null
+          passport_expiry?: string | null
+          passport_number?: string | null
+          phone?: string | null
+          preferred_name?: string | null
+          redress_number?: string | null
+          seat_preference?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          agent_id?: string
+          airline_loyalty?: Json | null
+          allergies?: string[] | null
+          created_at?: string
+          date_of_birth?: string | null
+          dietary_restrictions?: string[] | null
+          email?: string | null
+          emergency_contact?: Json | null
+          gender?: string | null
+          global_entry_number?: string | null
+          hotel_loyalty?: Json | null
+          hotel_preferences?: Json | null
+          id?: string
+          is_primary_contact?: boolean | null
+          known_traveler_number?: string | null
+          legal_first_name?: string
+          legal_last_name?: string
+          legal_middle_name?: string | null
+          meal_preference?: string | null
+          medical_notes?: string | null
+          mobility_needs?: string | null
+          notes?: string | null
+          passport_country?: string | null
+          passport_expiry?: string | null
+          passport_number?: string | null
+          phone?: string | null
+          preferred_name?: string | null
+          redress_number?: string | null
+          seat_preference?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_travelers_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_trip_travelers: {
+        Row: {
+          created_at: string
+          id: string
+          is_lead_traveler: boolean | null
+          traveler_id: string
+          trip_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_lead_traveler?: boolean | null
+          traveler_id: string
+          trip_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_lead_traveler?: boolean | null
+          traveler_id?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_trip_travelers_traveler_id_fkey"
+            columns: ["traveler_id"]
+            isOneToOne: false
+            referencedRelation: "agency_travelers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_trip_travelers_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_trips: {
+        Row: {
+          account_id: string
+          agent_id: string
+          created_at: string
+          currency: string | null
+          description: string | null
+          destination: string | null
+          destinations: Json | null
+          end_date: string | null
+          id: string
+          internal_notes: string | null
+          name: string
+          notes: string | null
+          pipeline_stage: number | null
+          start_date: string | null
+          status: string | null
+          tags: string[] | null
+          total_commission_cents: number | null
+          total_cost_cents: number | null
+          total_paid_cents: number | null
+          traveler_count: number | null
+          trip_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          agent_id: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          destination?: string | null
+          destinations?: Json | null
+          end_date?: string | null
+          id?: string
+          internal_notes?: string | null
+          name: string
+          notes?: string | null
+          pipeline_stage?: number | null
+          start_date?: string | null
+          status?: string | null
+          tags?: string[] | null
+          total_commission_cents?: number | null
+          total_cost_cents?: number | null
+          total_paid_cents?: number | null
+          traveler_count?: number | null
+          trip_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          agent_id?: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          destination?: string | null
+          destinations?: Json | null
+          end_date?: string | null
+          id?: string
+          internal_notes?: string | null
+          name?: string
+          notes?: string | null
+          pipeline_stage?: number | null
+          start_date?: string | null
+          status?: string | null
+          tags?: string[] | null
+          total_commission_cents?: number | null
+          total_cost_cents?: number | null
+          total_paid_cents?: number | null
+          traveler_count?: number | null
+          trip_type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_trips_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_clients: {
         Row: {
           agent_id: string
@@ -2549,6 +3665,7 @@ export type Database = {
     }
     Functions: {
       cleanup_expired_search_cache: { Args: never; Returns: number }
+      generate_invoice_number: { Args: never; Returns: string }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -2586,16 +3703,69 @@ export type Database = {
       is_trip_owner: { Args: { p_trip_id: string }; Returns: boolean }
     }
     Enums: {
+      agency_account_type: "individual" | "household" | "company"
       app_role: "user" | "admin" | "moderator"
+      booking_segment_type:
+        | "flight"
+        | "hotel"
+        | "transfer"
+        | "rail"
+        | "tour"
+        | "cruise"
+        | "insurance"
+        | "car_rental"
+        | "other"
+      booking_status:
+        | "pending"
+        | "confirmed"
+        | "ticketed"
+        | "cancelled"
+        | "refunded"
+        | "no_show"
+      communication_type: "email" | "sms" | "call" | "note" | "approval"
+      document_type:
+        | "passport"
+        | "visa"
+        | "insurance"
+        | "confirmation"
+        | "invoice"
+        | "receipt"
+        | "waiver"
+        | "itinerary"
+        | "other"
       expense_split_type: "equal" | "manual" | "percentage"
       friendship_status: "pending" | "accepted" | "declined" | "blocked"
+      invoice_status:
+        | "draft"
+        | "sent"
+        | "partially_paid"
+        | "paid"
+        | "overdue"
+        | "cancelled"
+        | "refunded"
       itinerary_status:
         | "not_started"
         | "queued"
         | "generating"
         | "ready"
         | "failed"
+      payment_method:
+        | "credit_card"
+        | "bank_transfer"
+        | "check"
+        | "cash"
+        | "stripe"
+        | "other"
       payment_status_enum: "pending" | "paid" | "partial"
+      quote_status:
+        | "draft"
+        | "sent"
+        | "viewed"
+        | "approved"
+        | "rejected"
+        | "expired"
+      task_priority: "low" | "medium" | "high" | "urgent"
+      task_status: "pending" | "in_progress" | "completed" | "cancelled"
       trip_member_role: "primary" | "attendee"
       trip_status:
         | "draft"
@@ -2731,9 +3901,50 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      agency_account_type: ["individual", "household", "company"],
       app_role: ["user", "admin", "moderator"],
+      booking_segment_type: [
+        "flight",
+        "hotel",
+        "transfer",
+        "rail",
+        "tour",
+        "cruise",
+        "insurance",
+        "car_rental",
+        "other",
+      ],
+      booking_status: [
+        "pending",
+        "confirmed",
+        "ticketed",
+        "cancelled",
+        "refunded",
+        "no_show",
+      ],
+      communication_type: ["email", "sms", "call", "note", "approval"],
+      document_type: [
+        "passport",
+        "visa",
+        "insurance",
+        "confirmation",
+        "invoice",
+        "receipt",
+        "waiver",
+        "itinerary",
+        "other",
+      ],
       expense_split_type: ["equal", "manual", "percentage"],
       friendship_status: ["pending", "accepted", "declined", "blocked"],
+      invoice_status: [
+        "draft",
+        "sent",
+        "partially_paid",
+        "paid",
+        "overdue",
+        "cancelled",
+        "refunded",
+      ],
       itinerary_status: [
         "not_started",
         "queued",
@@ -2741,7 +3952,25 @@ export const Constants = {
         "ready",
         "failed",
       ],
+      payment_method: [
+        "credit_card",
+        "bank_transfer",
+        "check",
+        "cash",
+        "stripe",
+        "other",
+      ],
       payment_status_enum: ["pending", "paid", "partial"],
+      quote_status: [
+        "draft",
+        "sent",
+        "viewed",
+        "approved",
+        "rejected",
+        "expired",
+      ],
+      task_priority: ["low", "medium", "high", "urgent"],
+      task_status: ["pending", "in_progress", "completed", "cancelled"],
       trip_member_role: ["primary", "attendee"],
       trip_status: [
         "draft",
