@@ -80,6 +80,8 @@ export const ROUTES = {
     TRIP_DETAIL: '/agent/trips/:tripId',
     TASKS: '/agent/tasks',
     LIBRARY: '/agent/library',
+    SETTINGS: '/agent/settings',
+    DOCUMENTS: '/agent/documents',
   },
 } as const;
 
