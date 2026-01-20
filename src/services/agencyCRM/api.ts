@@ -741,6 +741,15 @@ export async function completeTask(id: string): Promise<AgencyTask> {
   return updateTask(id, { status: 'completed', completed_at: new Date().toISOString() });
 }
 
+export async function deleteTask(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('agency_tasks')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+}
+
 // ============ DOCUMENTS ============
 
 export async function getDocuments(filters?: { tripId?: string; travelerId?: string }): Promise<AgencyDocument[]> {
