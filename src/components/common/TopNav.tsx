@@ -246,6 +246,28 @@ export default function TopNav() {
               </>
             ) : (
               <>
+                {/* Build Itinerary Button */}
+                <Button
+                  variant={isTransparent ? 'outline' : 'secondary'}
+                  size="sm"
+                  onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
+                  className={`gap-2 ${isTransparent ? 'border-white/50 text-white hover:bg-white/10' : ''}`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Build Itinerary
+                </Button>
+
+                {/* Book Travel Button */}
+                <Button
+                  variant={isTransparent ? 'outline' : 'default'}
+                  size="sm"
+                  onClick={() => navigate(ROUTES.START)}
+                  className={`gap-2 ${isTransparent ? 'border-white text-white hover:bg-white/10' : ''}`}
+                >
+                  <Calendar className="h-4 w-4" />
+                  Book Travel
+                </Button>
+
                 <Link
                   to={ROUTES.SIGNIN}
                   className={`text-sm font-medium transition-colors ${
@@ -254,14 +276,6 @@ export default function TopNav() {
                 >
                   Sign In
                 </Link>
-                <Button
-                  variant={isTransparent ? 'outline' : 'default'}
-                  size="sm"
-                  onClick={() => navigate(ROUTES.SIGNUP)}
-                  className={isTransparent ? 'border-white text-white hover:bg-white/10' : ''}
-                >
-                  Get Started
-                </Button>
               </>
             )}
           </div>
@@ -370,18 +384,29 @@ export default function TopNav() {
                   </>
                 ) : (
                   <>
+                    <div className="space-y-2 mb-4">
+                      <Button
+                        variant="secondary"
+                        className="w-full gap-2"
+                        onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        Build Itinerary
+                      </Button>
+                      <Button
+                        className="w-full gap-2"
+                        onClick={() => navigate(ROUTES.START)}
+                      >
+                        <Calendar className="h-4 w-4" />
+                        Book Travel
+                      </Button>
+                    </div>
                     <Link
                       to={ROUTES.SIGNIN}
-                      className="block py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+                      className="block py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors text-center"
                     >
-                      Sign In
+                      Already have an account? Sign In
                     </Link>
-                    <Button
-                      className="w-full mt-2"
-                      onClick={() => navigate(ROUTES.SIGNUP)}
-                    >
-                      Get Started
-                    </Button>
                   </>
                 )}
               </div>
