@@ -88,6 +88,7 @@ import PaymentScheduleModal from '@/components/agent/PaymentScheduleModal';
 import QuickConfirmationCapture from '@/components/agent/QuickConfirmationCapture';
 import BookingSegmentModal from '@/components/agent/BookingSegmentModal';
 import FlightStatusTracker from '@/components/agent/FlightStatusTracker';
+import AgentHotelSearch from '@/components/agent/AgentHotelSearch';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -485,6 +486,10 @@ export default function TripWorkspace() {
               <Plane className="h-4 w-4 mr-1" />
               Flights
             </TabsTrigger>
+            <TabsTrigger value="hotels">
+              <Hotel className="h-4 w-4 mr-1" />
+              Hotels
+            </TabsTrigger>
             <TabsTrigger value="bookings">Bookings ({segments.length})</TabsTrigger>
             <TabsTrigger value="tasks">Tasks ({tasks.length})</TabsTrigger>
             <TabsTrigger value="documents">Documents ({documents.length})</TabsTrigger>
@@ -563,6 +568,85 @@ export default function TripWorkspace() {
                 </Card>
               )}
             </div>
+          </TabsContent>
+
+          {/* Hotels Tab - Search & Add Hotels */}
+          <TabsContent value="hotels">
+            <AgentHotelSearch
+              tripId={trip.id}
+              defaultDestination={trip.destination || ''}
+              defaultCheckIn={trip.start_date || ''}
+              defaultCheckOut={trip.end_date || ''}
+              defaultGuests={trip.traveler_count || 2}
+              onHotelAdded={(segment) => {
+                setSegments(prev => [...prev, segment]);
+                toast({ title: 'Hotel added to bookings' });
+              }}
+              onManualEntry={() => {
+                setEditingSegment(null);
+                setBookingSegmentModalOpen(true);
+              }}
+            />
+            
+            {/* Existing hotel bookings */}
+            {segments.filter(s => s.segment_type === 'hotel').length > 0 && (
+              <div className="mt-6">
+                <h3 className="font-semibold mb-4">Booked Hotels</h3>
+                <div className="space-y-3">
+                  {segments.filter(s => s.segment_type === 'hotel').map(segment => (
+                    <Card 
+                      key={segment.id}
+                      className="cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => {
+                        setEditingSegment(segment);
+                        setBookingSegmentModalOpen(true);
+                      }}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Hotel className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-medium">{segment.vendor_name || 'Hotel'}</h4>
+                              <Badge variant="outline" className={STATUS_COLORS[segment.status || 'pending']}>
+                                {segment.status}
+                              </Badge>
+                            </div>
+                            <div className="grid sm:grid-cols-3 gap-4 text-sm mt-2">
+                              {segment.destination && (
+                                <div>
+                                  <p className="text-muted-foreground">Location</p>
+                                  <p className="font-medium">{segment.destination}</p>
+                                </div>
+                              )}
+                              {segment.start_date && segment.end_date && (
+                                <div>
+                                  <p className="text-muted-foreground">Dates</p>
+                                  <p className="font-medium">
+                                    {format(new Date(segment.start_date), 'MMM d')} – {format(new Date(segment.end_date), 'MMM d')}
+                                  </p>
+                                </div>
+                              )}
+                              {segment.confirmation_number && (
+                                <div>
+                                  <p className="text-muted-foreground">Confirmation</p>
+                                  <p className="font-medium font-mono">{segment.confirmation_number}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold">{formatCurrency(segment.sell_price_cents || 0)}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           {/* Bookings Tab */}

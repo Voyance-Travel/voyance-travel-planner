@@ -3336,6 +3336,7 @@ export type Database = {
           budget_range: Json | null
           budget_tier: string | null
           climate_preferences: string[] | null
+          commission_split_config: Json | null
           communication_style: string | null
           completed_at: string | null
           created_at: string
@@ -3413,6 +3414,7 @@ export type Database = {
           budget_range?: Json | null
           budget_tier?: string | null
           climate_preferences?: string[] | null
+          commission_split_config?: Json | null
           communication_style?: string | null
           completed_at?: string | null
           created_at?: string
@@ -3490,6 +3492,7 @@ export type Database = {
           budget_range?: Json | null
           budget_tier?: string | null
           climate_preferences?: string[] | null
+          commission_split_config?: Json | null
           communication_style?: string | null
           completed_at?: string | null
           created_at?: string
