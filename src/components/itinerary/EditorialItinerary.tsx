@@ -20,7 +20,7 @@ import {
   Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
-  CreditCard
+  CreditCard, Library
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +44,7 @@ import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
+import SaveToLibraryModal from '@/components/agent/SaveToLibraryModal';
 
 // =============================================================================
 // TYPES
@@ -2320,6 +2321,7 @@ function DayCard({
   
   // Normalize destination for image lookups
   const cleanDestination = normalizeDestination(destination);
+  const [saveDayOpen, setSaveDayOpen] = useState(false);
 
   return (
     <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
@@ -2384,6 +2386,15 @@ function DayCard({
                   title="Regenerate Day"
                 >
                   <RefreshCw className={cn("h-4 w-4", isRegenerating && "animate-spin text-accent")} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSaveDayOpen(true)}
+                  className="h-8 w-8 hover:bg-primary/10"
+                  title="Save Day to Library"
+                >
+                  <Library className="h-4 w-4" />
                 </Button>
               </>
             )}
@@ -2466,6 +2477,15 @@ function DayCard({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <SaveToLibraryModal
+        open={saveDayOpen}
+        onOpenChange={setSaveDayOpen}
+        itemType="day"
+        content={day}
+        defaultName={day.title || day.theme || `Day ${day.dayNumber}`}
+        destinationHint={destination}
+      />
     </div>
   );
 }
@@ -2595,6 +2615,7 @@ function ActivityRow({
 
   const thumbnailUrl = fetchedImageUrl;
   const [thumbnailError, setThumbnailError] = useState(false);
+  const [saveToLibraryOpen, setSaveToLibraryOpen] = useState(false);
 
   return (
     <div className={cn(
@@ -2831,6 +2852,15 @@ function ActivityRow({
             )}
           </div>
         </div>
+
+        <SaveToLibraryModal
+          open={saveToLibraryOpen}
+          onOpenChange={setSaveToLibraryOpen}
+          itemType="activity"
+          content={activity}
+          defaultName={activity.title}
+          destinationHint={destination}
+        />
       </div>
     </div>
   );
