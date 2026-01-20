@@ -27,7 +27,8 @@ import {
   CalendarDays,
   ArrowRight,
   Send,
-  Banknote
+  Banknote,
+  Sparkles
 } from 'lucide-react';
 import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
@@ -84,6 +85,8 @@ import FinanceLedger from '@/components/agent/FinanceLedger';
 import TripCockpit from '@/components/agent/TripCockpit';
 import InvoiceBuilderModal from '@/components/agent/InvoiceBuilderModal';
 import PaymentScheduleModal from '@/components/agent/PaymentScheduleModal';
+import QuickConfirmationCapture from '@/components/agent/QuickConfirmationCapture';
+import BookingSegmentModal from '@/components/agent/BookingSegmentModal';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -128,6 +131,9 @@ export default function TripWorkspace() {
   const [editingTask, setEditingTask] = useState<AgencyTask | null>(null);
   const [invoiceBuilderOpen, setInvoiceBuilderOpen] = useState(false);
   const [paymentScheduleOpen, setPaymentScheduleOpen] = useState(false);
+  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [bookingSegmentModalOpen, setBookingSegmentModalOpen] = useState(false);
+  const [editingSegment, setEditingSegment] = useState<BookingSegment | null>(null);
   
   // Notes state
   const [clientNotes, setClientNotes] = useState('');
@@ -539,12 +545,27 @@ export default function TripWorkspace() {
                 <Button 
                   size="sm" 
                   variant="outline"
+                  onClick={() => setQuickCaptureOpen(true)}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Quick Capture
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
                   onClick={() => setImportBookingModalOpen(true)}
                 >
                   <FileText className="h-4 w-4 mr-2" />
-                  Import from Confirmation
+                  Import AI
                 </Button>
-                <Button size="sm" className="gap-2">
+                <Button 
+                  size="sm" 
+                  className="gap-2"
+                  onClick={() => {
+                    setEditingSegment(null);
+                    setBookingSegmentModalOpen(true);
+                  }}
+                >
                   <Plus className="h-4 w-4" />
                   Add Booking
                 </Button>
@@ -558,7 +579,7 @@ export default function TripWorkspace() {
                   <p className="text-muted-foreground mb-4">
                     Add flights, hotels, and other bookings to this trip
                   </p>
-                  <Button>
+                  <Button onClick={() => setQuickCaptureOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add First Booking
                   </Button>
@@ -569,7 +590,14 @@ export default function TripWorkspace() {
                 {segments.map(segment => {
                   const Icon = SEGMENT_ICONS[segment.segment_type] || SEGMENT_ICONS.default;
                   return (
-                    <Card key={segment.id}>
+                    <Card 
+                      key={segment.id} 
+                      className="cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => {
+                        setEditingSegment(segment);
+                        setBookingSegmentModalOpen(true);
+                      }}
+                    >
                       <CardContent className="p-4">
                         <div className="flex items-start gap-4">
                           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -627,7 +655,18 @@ export default function TripWorkspace() {
                                 </p>
                               </div>
                             )}
+                            {/* Show additional details for non-flight segments */}
+                            {segment.segment_type !== 'flight' && (segment.origin || segment.destination) && (
+                              <div className="mt-3 pt-3 border-t">
+                                <p className="text-sm text-muted-foreground">
+                                  {segment.origin}
+                                  {segment.origin && segment.destination && ' → '}
+                                  {segment.destination}
+                                </p>
+                              </div>
+                            )}
                           </div>
+                          <Edit className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       </CardContent>
                     </Card>
@@ -1027,6 +1066,21 @@ export default function TripWorkspace() {
         onOpenChange={setPaymentScheduleOpen}
         trip={trip}
         existingSchedules={paymentSchedules}
+        onSuccess={loadTripData}
+      />
+
+      <QuickConfirmationCapture
+        open={quickCaptureOpen}
+        onOpenChange={setQuickCaptureOpen}
+        tripId={trip.id}
+        onSuccess={loadTripData}
+      />
+
+      <BookingSegmentModal
+        open={bookingSegmentModalOpen}
+        onOpenChange={setBookingSegmentModalOpen}
+        tripId={trip.id}
+        segment={editingSegment}
         onSuccess={loadTripData}
       />
     </AgentLayout>

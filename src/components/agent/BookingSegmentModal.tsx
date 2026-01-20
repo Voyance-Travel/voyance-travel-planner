@@ -243,6 +243,333 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
                 </>
               )}
 
+              {/* Transfer-specific fields */}
+              {segmentType === 'transfer' && (
+                <>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="origin">Pickup Location</Label>
+                      <Input id="origin" {...register('origin')} placeholder="Airport, Hotel, Address..." />
+                    </div>
+                    <div>
+                      <Label htmlFor="destination">Drop-off Location</Label>
+                      <Input id="destination" {...register('destination')} placeholder="Hotel, Airport, Address..." />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.vehicle_type">Vehicle Type</Label>
+                      <Select
+                        value={(watch('segment_details.vehicle_type') as string) || ''}
+                        onValueChange={(v) => setValue('segment_details.vehicle_type', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select vehicle" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="sedan">Sedan</SelectItem>
+                          <SelectItem value="suv">SUV</SelectItem>
+                          <SelectItem value="van">Van</SelectItem>
+                          <SelectItem value="minibus">Minibus</SelectItem>
+                          <SelectItem value="coach">Coach/Bus</SelectItem>
+                          <SelectItem value="limousine">Limousine</SelectItem>
+                          <SelectItem value="water_taxi">Water Taxi/Boat</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.passengers">Passengers</Label>
+                      <Input id="segment_details.passengers" type="number" {...register('segment_details.passengers')} placeholder="2" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="segment_details.flight_tracking">Linked Flight # (for monitoring)</Label>
+                    <Input id="segment_details.flight_tracking" {...register('segment_details.flight_tracking')} placeholder="UA 123" />
+                  </div>
+                </>
+              )}
+
+              {/* Rail-specific fields */}
+              {segmentType === 'rail' && (
+                <>
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.train_number">Train Number</Label>
+                      <Input id="segment_details.train_number" {...register('segment_details.train_number')} placeholder="ICE 597" />
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.service_class">Service Class</Label>
+                      <Select
+                        value={(watch('segment_details.service_class') as string) || ''}
+                        onValueChange={(v) => setValue('segment_details.service_class', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="first">First Class</SelectItem>
+                          <SelectItem value="business">Business</SelectItem>
+                          <SelectItem value="standard">Standard</SelectItem>
+                          <SelectItem value="sleeper">Sleeper</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.seat_reservation">Seat/Car</Label>
+                      <Input id="segment_details.seat_reservation" {...register('segment_details.seat_reservation')} placeholder="Car 4, Seat 12A" />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="origin">Departure Station</Label>
+                      <Input id="origin" {...register('origin')} placeholder="Paris Gare du Nord" />
+                    </div>
+                    <div>
+                      <Label htmlFor="destination">Arrival Station</Label>
+                      <Input id="destination" {...register('destination')} placeholder="London St Pancras" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Car Rental-specific fields */}
+              {segmentType === 'car_rental' && (
+                <>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.vehicle_category">Vehicle Category</Label>
+                      <Select
+                        value={(watch('segment_details.vehicle_category') as string) || ''}
+                        onValueChange={(v) => setValue('segment_details.vehicle_category', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="economy">Economy</SelectItem>
+                          <SelectItem value="compact">Compact</SelectItem>
+                          <SelectItem value="midsize">Midsize</SelectItem>
+                          <SelectItem value="fullsize">Full-size</SelectItem>
+                          <SelectItem value="suv">SUV</SelectItem>
+                          <SelectItem value="luxury">Luxury</SelectItem>
+                          <SelectItem value="convertible">Convertible</SelectItem>
+                          <SelectItem value="minivan">Minivan</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.transmission">Transmission</Label>
+                      <Select
+                        value={(watch('segment_details.transmission') as string) || ''}
+                        onValueChange={(v) => setValue('segment_details.transmission', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="automatic">Automatic</SelectItem>
+                          <SelectItem value="manual">Manual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="origin">Pickup Location</Label>
+                      <Input id="origin" {...register('origin')} placeholder="LAX Airport" />
+                    </div>
+                    <div>
+                      <Label htmlFor="destination">Drop-off Location</Label>
+                      <Input id="destination" {...register('destination')} placeholder="Same as pickup" />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="segment_details.gps_included"
+                        checked={watch('segment_details.gps_included') === true}
+                        onCheckedChange={(v) => setValue('segment_details.gps_included', v)}
+                      />
+                      <Label htmlFor="segment_details.gps_included">GPS</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="segment_details.insurance_included"
+                        checked={watch('segment_details.insurance_included') === true}
+                        onCheckedChange={(v) => setValue('segment_details.insurance_included', v)}
+                      />
+                      <Label htmlFor="segment_details.insurance_included">Insurance</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="segment_details.unlimited_mileage"
+                        checked={watch('segment_details.unlimited_mileage') === true}
+                        onCheckedChange={(v) => setValue('segment_details.unlimited_mileage', v)}
+                      />
+                      <Label htmlFor="segment_details.unlimited_mileage">Unlimited Miles</Label>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Insurance-specific fields */}
+              {segmentType === 'insurance' && (
+                <>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.policy_type">Policy Type</Label>
+                      <Select
+                        value={(watch('segment_details.policy_type') as string) || ''}
+                        onValueChange={(v) => setValue('segment_details.policy_type', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="trip_cancellation">Trip Cancellation</SelectItem>
+                          <SelectItem value="travel_medical">Travel Medical</SelectItem>
+                          <SelectItem value="comprehensive">Comprehensive</SelectItem>
+                          <SelectItem value="cancel_for_any_reason">Cancel for Any Reason (CFAR)</SelectItem>
+                          <SelectItem value="medical_evacuation">Medical Evacuation</SelectItem>
+                          <SelectItem value="baggage">Baggage Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.policy_number">Policy Number</Label>
+                      <Input id="segment_details.policy_number" {...register('segment_details.policy_number')} placeholder="POL-123456" />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.coverage_amount">Coverage Amount ($)</Label>
+                      <Input id="segment_details.coverage_amount" type="number" {...register('segment_details.coverage_amount')} placeholder="50000" />
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.deductible">Deductible ($)</Label>
+                      <Input id="segment_details.deductible" type="number" {...register('segment_details.deductible')} placeholder="100" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="segment_details.covered_travelers">Covered Travelers</Label>
+                    <Input id="segment_details.covered_travelers" {...register('segment_details.covered_travelers')} placeholder="All travelers on trip" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="segment_details.pre_existing_waiver"
+                      checked={watch('segment_details.pre_existing_waiver') === true}
+                      onCheckedChange={(v) => setValue('segment_details.pre_existing_waiver', v)}
+                    />
+                    <Label htmlFor="segment_details.pre_existing_waiver">Pre-existing Condition Waiver</Label>
+                  </div>
+                </>
+              )}
+
+              {/* Tour-specific fields */}
+              {segmentType === 'tour' && (
+                <>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.tour_type">Tour Type</Label>
+                      <Select
+                        value={(watch('segment_details.tour_type') as string) || ''}
+                        onValueChange={(v) => setValue('segment_details.tour_type', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="group">Group Tour</SelectItem>
+                          <SelectItem value="private">Private Tour</SelectItem>
+                          <SelectItem value="self_guided">Self-Guided</SelectItem>
+                          <SelectItem value="day_trip">Day Trip</SelectItem>
+                          <SelectItem value="multi_day">Multi-Day</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.group_size">Group Size</Label>
+                      <Input id="segment_details.group_size" type="number" {...register('segment_details.group_size')} placeholder="12" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="destination">Tour Location/Destination</Label>
+                    <Input id="destination" {...register('destination')} placeholder="Tuscany Wine Country" />
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="segment_details.meals_included"
+                        checked={watch('segment_details.meals_included') === true}
+                        onCheckedChange={(v) => setValue('segment_details.meals_included', v)}
+                      />
+                      <Label htmlFor="segment_details.meals_included">Meals Included</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="segment_details.guide_included"
+                        checked={watch('segment_details.guide_included') === true}
+                        onCheckedChange={(v) => setValue('segment_details.guide_included', v)}
+                      />
+                      <Label htmlFor="segment_details.guide_included">Guide Included</Label>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Cruise-specific fields */}
+              {segmentType === 'cruise' && (
+                <>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.ship_name">Ship Name</Label>
+                      <Input id="segment_details.ship_name" {...register('segment_details.ship_name')} placeholder="Royal Caribbean Oasis" />
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.cabin_category">Cabin Category</Label>
+                      <Select
+                        value={(watch('segment_details.cabin_category') as string) || ''}
+                        onValueChange={(v) => setValue('segment_details.cabin_category', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inside">Inside</SelectItem>
+                          <SelectItem value="oceanview">Oceanview</SelectItem>
+                          <SelectItem value="balcony">Balcony</SelectItem>
+                          <SelectItem value="suite">Suite</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="segment_details.cabin_number">Cabin Number</Label>
+                      <Input id="segment_details.cabin_number" {...register('segment_details.cabin_number')} placeholder="D-512" />
+                    </div>
+                    <div>
+                      <Label htmlFor="segment_details.deck">Deck</Label>
+                      <Input id="segment_details.deck" {...register('segment_details.deck')} placeholder="Deck 9" />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="origin">Embarkation Port</Label>
+                      <Input id="origin" {...register('origin')} placeholder="Miami, FL" />
+                    </div>
+                    <div>
+                      <Label htmlFor="destination">Disembarkation Port</Label>
+                      <Input id="destination" {...register('destination')} placeholder="Miami, FL" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="segment_details.itinerary_ports">Ports of Call</Label>
+                    <Input id="segment_details.itinerary_ports" {...register('segment_details.itinerary_ports')} placeholder="Cozumel, Grand Cayman, Jamaica" />
+                  </div>
+                </>
+              )}
+
               {/* Dates & Times */}
               <Separator />
               <div className="grid sm:grid-cols-2 gap-4">
