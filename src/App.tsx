@@ -80,8 +80,7 @@ import AgentTrips from "./pages/agent/AgentTrips";
 import TripForm from "./pages/agent/TripForm";
 import AgentTasks from "./pages/agent/AgentTasks";
 import TripWorkspace from "./pages/agent/TripWorkspace";
-
-// 404
+import TripShare from "./pages/agent/TripShare";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -119,6 +118,9 @@ const App = () => (
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/help" element={<HelpCenter />} />
                 <Route path="/sample-itinerary" element={<SampleItinerary />} />
+                
+                {/* Public Share Route */}
+                <Route path="/share/:shareToken" element={<TripShare />} />
                 
                 {/* Auth Routes */}
                 <Route path="/signin" element={<SignIn />} />

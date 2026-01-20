@@ -17,7 +17,7 @@ import {
   Clock,
   CreditCard,
   AlertCircle,
-  Send,
+  Link2,
   Download
 } from 'lucide-react';
 import AgentLayout from '@/components/agent/AgentLayout';
@@ -52,6 +52,7 @@ import {
 } from '@/services/agencyCRM';
 import { format, differenceInDays } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import ShareTripModal from '@/components/agent/ShareTripModal';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -81,6 +82,7 @@ export default function TripWorkspace() {
   const [documents, setDocuments] = useState<AgencyDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -223,9 +225,9 @@ export default function TripWorkspace() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-2">
-              <Send className="h-4 w-4" />
-              Send to Client
+            <Button variant="outline" className="gap-2" onClick={() => setShareModalOpen(true)}>
+              <Link2 className="h-4 w-4" />
+              Share with Client
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -683,6 +685,14 @@ export default function TripWorkspace() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Share Modal */}
+      <ShareTripModal
+        open={shareModalOpen}
+        onOpenChange={setShareModalOpen}
+        tripId={trip.id}
+        tripName={trip.name}
+      />
     </AgentLayout>
   );
 }
