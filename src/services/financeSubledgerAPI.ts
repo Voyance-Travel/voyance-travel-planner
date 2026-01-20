@@ -220,9 +220,10 @@ export async function createLedgerEntry(entry: Partial<FinanceLedgerEntry>): Pro
   if (entry.external_reference) insertData.external_reference = entry.external_reference;
   if (entry.metadata) insertData.metadata = entry.metadata;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await supabase
     .from('finance_ledger_entries')
-    .insert(insertData)
+    .insert(insertData as any)
     .select()
     .single();
 
@@ -424,14 +425,7 @@ export async function createCommissionImport(params: {
 
   const { data, error } = await supabase
     .from('finance_commission_imports')
-    .insert(insertData as {
-      agent_id: string;
-      source: params.source,
-      source_reference: params.sourceReference,
-      file_name: params.fileName,
-      raw_data: params.rawData,
-      status: 'pending',
-    })
+    .insert(insertData as { agent_id: string; source: string; status: string })
     .select()
     .single();
 
