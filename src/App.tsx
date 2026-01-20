@@ -84,6 +84,7 @@ import TripShare from "./pages/agent/TripShare";
 import AgentLibrary from "./pages/agent/AgentLibrary";
 import AgentSettings from "./pages/agent/AgentSettings";
 import AgentDocuments from "./pages/agent/AgentDocuments";
+import AgentPayouts from "./pages/agent/AgentPayouts";
 import ClientIntakeForm from "./pages/agent/ClientIntakeForm";
 import NotFound from "./pages/NotFound";
 
@@ -188,6 +189,7 @@ const App = () => (
                 <Route path="/agent/library" element={<AgentLibrary />} />
                 <Route path="/agent/settings" element={<AgentSettings />} />
                 <Route path="/agent/documents" element={<AgentDocuments />} />
+                <Route path="/agent/payouts" element={<AgentPayouts />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />

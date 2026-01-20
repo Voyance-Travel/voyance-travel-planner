@@ -10,7 +10,8 @@ import {
   Building2,
   Menu,
   X,
-  Library
+  Library,
+  Banknote
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
 ];
 
 const bottomNavItems: NavItem[] = [
+  { label: 'Payouts', href: '/agent/payouts', icon: Banknote },
   { label: 'Agency Settings', href: '/agent/settings', icon: Building2 },
 ];
 

@@ -82,6 +82,7 @@ export const ROUTES = {
     LIBRARY: '/agent/library',
     SETTINGS: '/agent/settings',
     DOCUMENTS: '/agent/documents',
+    PAYOUTS: '/agent/payouts',
   },
 } as const;
 
