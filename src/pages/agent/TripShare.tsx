@@ -70,32 +70,53 @@ export default function TripShare() {
 
   const loadSharedTrip = async () => {
     try {
-      // Fetch the shared trip by token
-      const { data: tripData, error: tripError } = await supabase
-        .from('agency_trips')
-        .select('id, name, destination, start_date, end_date, traveler_count, notes, itinerary_data')
-        .eq('share_token', shareToken)
-        .eq('share_enabled', true)
-        .maybeSingle();
+      // Use secure RPC that returns sanitized payload (filters internal items server-side)
+      const { data, error } = await supabase
+        .rpc('get_shared_trip_payload', { p_share_token: shareToken });
 
-      if (tripError) throw tripError;
-      if (!tripData) {
+      if (error) throw error;
+      
+      // Cast to expected shape
+      const payload = data as {
+        error?: string;
+        id?: string;
+        name?: string;
+        destination?: string | null;
+        start_date?: string | null;
+        end_date?: string | null;
+        traveler_count?: number | null;
+        notes?: string | null;
+        itinerary_data?: { days?: EditorialDay[]; status?: string } | null;
+        segments?: BookingSegment[];
+      } | null;
+      
+      // Check for error in response
+      if (payload?.error) {
+        setError(payload.error);
+        setLoading(false);
+        return;
+      }
+
+      if (!payload || !payload.id) {
         setError('Trip not found or sharing is disabled');
         setLoading(false);
         return;
       }
 
-      setTrip(tripData as SharedTrip);
+      // Map RPC response to component state
+      setTrip({
+        id: payload.id,
+        name: payload.name || '',
+        destination: payload.destination || null,
+        start_date: payload.start_date || null,
+        end_date: payload.end_date || null,
+        traveler_count: payload.traveler_count || null,
+        notes: payload.notes || null,
+        itinerary_data: payload.itinerary_data || null,
+      } as SharedTrip);
 
-      // Fetch confirmed booking segments (public info only)
-      const { data: segmentsData } = await supabase
-        .from('agency_booking_segments')
-        .select('id, segment_type, vendor_name, confirmation_number, origin, destination, start_date, start_time, end_date, end_time, flight_number, room_type, status')
-        .eq('trip_id', tripData.id)
-        .in('status', ['confirmed', 'ticketed'])
-        .order('start_date', { ascending: true });
-
-      setSegments((segmentsData || []) as BookingSegment[]);
+      // Segments are already included in the sanitized payload
+      setSegments((payload.segments || []) as BookingSegment[]);
     } catch (err) {
       console.error('Error loading shared trip:', err);
       setError('Failed to load trip');
