@@ -176,6 +176,57 @@ export type Database = {
           },
         ]
       }
+      agent_clients: {
+        Row: {
+          agent_id: string
+          created_at: string | null
+          email: string | null
+          first_name: string
+          id: string
+          last_name: string
+          last_trip_date: string | null
+          notes: string | null
+          phone: string | null
+          tags: string[] | null
+          total_revenue_cents: number | null
+          total_trips: number | null
+          travel_preferences: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string | null
+          email?: string | null
+          first_name: string
+          id?: string
+          last_name: string
+          last_trip_date?: string | null
+          notes?: string | null
+          phone?: string | null
+          tags?: string[] | null
+          total_revenue_cents?: number | null
+          total_trips?: number | null
+          travel_preferences?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string | null
+          email?: string | null
+          first_name?: string
+          id?: string
+          last_name?: string
+          last_trip_date?: string | null
+          notes?: string | null
+          phone?: string | null
+          tags?: string[] | null
+          total_revenue_cents?: number | null
+          total_trips?: number | null
+          travel_preferences?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       airports: {
         Row: {
           city: string | null
@@ -1764,7 +1815,9 @@ export type Database = {
       trips: {
         Row: {
           abandoned_at: string | null
+          agent_notes: string | null
           budget_tier: string | null
+          client_id: string | null
           created_at: string
           destination: string
           destination_country: string | null
@@ -1772,6 +1825,7 @@ export type Database = {
           flight_selection: Json | null
           hotel_selection: Json | null
           id: string
+          is_agent_trip: boolean | null
           itinerary_data: Json | null
           itinerary_status:
             | Database["public"]["Enums"]["itinerary_status"]
@@ -1792,7 +1846,9 @@ export type Database = {
         }
         Insert: {
           abandoned_at?: string | null
+          agent_notes?: string | null
           budget_tier?: string | null
+          client_id?: string | null
           created_at?: string
           destination: string
           destination_country?: string | null
@@ -1800,6 +1856,7 @@ export type Database = {
           flight_selection?: Json | null
           hotel_selection?: Json | null
           id?: string
+          is_agent_trip?: boolean | null
           itinerary_data?: Json | null
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
@@ -1820,7 +1877,9 @@ export type Database = {
         }
         Update: {
           abandoned_at?: string | null
+          agent_notes?: string | null
           budget_tier?: string | null
+          client_id?: string | null
           created_at?: string
           destination?: string
           destination_country?: string | null
@@ -1828,6 +1887,7 @@ export type Database = {
           flight_selection?: Json | null
           hotel_selection?: Json | null
           id?: string
+          is_agent_trip?: boolean | null
           itinerary_data?: Json | null
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
@@ -1846,7 +1906,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "trips_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "agent_clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_credits: {
         Row: {
@@ -2045,6 +2113,8 @@ export type Database = {
           accommodation_style: string | null
           activity_level: string | null
           activity_weights: Json | null
+          agent_business_email: string | null
+          agent_business_name: string | null
           airport_radius_miles: number | null
           budget_alerts: boolean | null
           budget_range: Json | null
@@ -2096,6 +2166,7 @@ export type Database = {
           schedule_flexibility: string | null
           seat_preference: string | null
           sleep_schedule: string | null
+          travel_agent_mode: boolean | null
           travel_companions: string[] | null
           travel_frequency: string | null
           travel_pace: string | null
@@ -2115,6 +2186,8 @@ export type Database = {
           accommodation_style?: string | null
           activity_level?: string | null
           activity_weights?: Json | null
+          agent_business_email?: string | null
+          agent_business_name?: string | null
           airport_radius_miles?: number | null
           budget_alerts?: boolean | null
           budget_range?: Json | null
@@ -2166,6 +2239,7 @@ export type Database = {
           schedule_flexibility?: string | null
           seat_preference?: string | null
           sleep_schedule?: string | null
+          travel_agent_mode?: boolean | null
           travel_companions?: string[] | null
           travel_frequency?: string | null
           travel_pace?: string | null
@@ -2185,6 +2259,8 @@ export type Database = {
           accommodation_style?: string | null
           activity_level?: string | null
           activity_weights?: Json | null
+          agent_business_email?: string | null
+          agent_business_name?: string | null
           airport_radius_miles?: number | null
           budget_alerts?: boolean | null
           budget_range?: Json | null
@@ -2236,6 +2312,7 @@ export type Database = {
           schedule_flexibility?: string | null
           seat_preference?: string | null
           sleep_schedule?: string | null
+          travel_agent_mode?: boolean | null
           travel_companions?: string[] | null
           travel_frequency?: string | null
           travel_pace?: string | null
