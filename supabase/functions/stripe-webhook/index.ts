@@ -77,6 +77,19 @@ serve(async (req) => {
           const invoiceId = metadata.invoice_id;
           
           if (agentId) {
+            // IDEMPOTENCY CHECK: Skip if already processed
+            const { data: existingPayment } = await supabaseAdmin
+              .from("finance_ledger_entries")
+              .select("id")
+              .eq("stripe_payment_intent_id", paymentIntent.id)
+              .eq("entry_type", "client_payment")
+              .maybeSingle();
+
+            if (existingPayment) {
+              log("Duplicate payment event, skipping", { paymentIntentId: paymentIntent.id });
+              break;
+            }
+
             // Calculate Stripe fee (approximately 2.9% + $0.30)
             const stripeFee = Math.round(paymentIntent.amount * 0.029 + 30);
 
@@ -101,6 +114,7 @@ serve(async (req) => {
                   customer_email: metadata.customer_email,
                   payment_method: paymentIntent.payment_method_types?.[0],
                   stripe_event_id: event.id,
+                  activity_id: metadata.activity_id,
                 },
               });
 
@@ -265,6 +279,25 @@ serve(async (req) => {
         const charge = event.data.object as Stripe.Charge;
         log("Charge refunded", { chargeId: charge.id, amountRefunded: charge.amount_refunded });
 
+        // Get refund details
+        const refunds = charge.refunds?.data || [];
+        const latestRefund = refunds[0];
+
+        // IDEMPOTENCY CHECK: Skip if this specific refund already processed
+        if (latestRefund?.id) {
+          const { data: existingRefund } = await supabaseAdmin
+            .from("finance_ledger_entries")
+            .select("id")
+            .eq("stripe_refund_id", latestRefund.id)
+            .eq("entry_type", "client_refund")
+            .maybeSingle();
+
+          if (existingRefund) {
+            log("Duplicate refund event, skipping", { refundId: latestRefund.id });
+            break;
+          }
+        }
+
         // Find the original payment entry
         const { data: originalEntry } = await supabaseAdmin
           .from("finance_ledger_entries")
@@ -274,10 +307,6 @@ serve(async (req) => {
           .single();
 
         if (originalEntry) {
-          // Get refund details
-          const refunds = charge.refunds?.data || [];
-          const latestRefund = refunds[0];
-
           const { error: refundError } = await supabaseAdmin
             .from("finance_ledger_entries")
             .insert({
@@ -295,6 +324,7 @@ serve(async (req) => {
               metadata: {
                 refund_reason: latestRefund?.reason,
                 stripe_event_id: event.id,
+                activity_id: originalEntry.metadata?.activity_id,
               },
             });
 
@@ -305,6 +335,25 @@ serve(async (req) => {
               agentId: originalEntry.agent_id, 
               amount: charge.amount_refunded 
             });
+
+            // P0 FIX: Sync booking state to 'refunded' if activity linked
+            const activityId = originalEntry.metadata?.activity_id;
+            if (activityId) {
+              const { data: stateResult, error: stateError } = await supabaseAdmin
+                .rpc('transition_booking_state', {
+                  p_activity_id: activityId,
+                  p_new_state: 'refunded',
+                  p_trigger_source: 'stripe_webhook',
+                  p_trigger_reference: latestRefund?.id,
+                  p_metadata: { refund_amount: charge.amount_refunded },
+                });
+
+              if (stateError) {
+                log("Error transitioning booking state to refunded", stateError);
+              } else {
+                log("Booking state transitioned to refunded", { activityId, result: stateResult });
+              }
+            }
           }
         }
 
