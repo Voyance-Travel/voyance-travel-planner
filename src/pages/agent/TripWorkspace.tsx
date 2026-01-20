@@ -87,6 +87,7 @@ import InvoiceBuilderModal from '@/components/agent/InvoiceBuilderModal';
 import PaymentScheduleModal from '@/components/agent/PaymentScheduleModal';
 import QuickConfirmationCapture from '@/components/agent/QuickConfirmationCapture';
 import BookingSegmentModal from '@/components/agent/BookingSegmentModal';
+import FlightStatusTracker from '@/components/agent/FlightStatusTracker';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -480,6 +481,10 @@ export default function TripWorkspace() {
               <CalendarDays className="h-4 w-4 mr-1" />
               Itinerary
             </TabsTrigger>
+            <TabsTrigger value="flights">
+              <Plane className="h-4 w-4 mr-1" />
+              Flights
+            </TabsTrigger>
             <TabsTrigger value="bookings">Bookings ({segments.length})</TabsTrigger>
             <TabsTrigger value="tasks">Tasks ({tasks.length})</TabsTrigger>
             <TabsTrigger value="documents">Documents ({documents.length})</TabsTrigger>
@@ -535,6 +540,29 @@ export default function TripWorkspace() {
                 onSave={handleSaveItinerary}
               />
             )}
+          </TabsContent>
+
+          {/* Flights Tab - PNR & Status Tracking */}
+          <TabsContent value="flights">
+            <div className="space-y-6">
+              <FlightStatusTracker segments={segments} />
+              
+              {segments.filter(s => s.segment_type === 'flight').length === 0 && (
+                <Card className="text-center py-12">
+                  <CardContent>
+                    <Plane className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No flights to track</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Add flight bookings with PNR/confirmation numbers to enable status tracking
+                    </p>
+                    <Button onClick={() => setBookingSegmentModalOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Flight
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </TabsContent>
 
           {/* Bookings Tab */}
