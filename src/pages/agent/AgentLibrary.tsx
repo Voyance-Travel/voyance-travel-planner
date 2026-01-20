@@ -19,7 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function AgentLibrary() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,12 +27,13 @@ export default function AgentLibrary() {
   const [activeTab, setActiveTab] = useState<LibraryItemType>('activity');
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
     if (!isAuthenticated) {
       navigate('/signin');
       return;
     }
     loadItems();
-  }, [isAuthenticated, activeTab]);
+  }, [isAuthenticated, authLoading, activeTab]);
 
   const loadItems = async () => {
     setIsLoading(true);

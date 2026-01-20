@@ -58,6 +58,7 @@ import ShareTripModal from '@/components/agent/ShareTripModal';
 import CloneTripModal from '@/components/agent/CloneTripModal';
 import LibraryModal from '@/components/agent/LibraryModal';
 import ImportBookingModal from '@/components/agent/ImportBookingModal';
+import DocumentUploadModal from '@/components/agent/DocumentUploadModal';
 import { generateTripPdf, type TripPdfData, type BookingItem } from '@/utils/tripPdfGenerator';
 import { getAgentSettings } from '@/services/agentCRMAPI';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
@@ -81,7 +82,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function TripWorkspace() {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   const [trip, setTrip] = useState<AgencyTrip | null>(null);
   const [segments, setSegments] = useState<BookingSegment[]>([]);
@@ -94,8 +95,10 @@ export default function TripWorkspace() {
   const [cloneModalOpen, setCloneModalOpen] = useState(false);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [importBookingModalOpen, setImportBookingModalOpen] = useState(false);
+  const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
     if (!isAuthenticated) {
       navigate('/signin');
       return;
@@ -103,7 +106,7 @@ export default function TripWorkspace() {
     if (tripId) {
       loadTripData();
     }
-  }, [isAuthenticated, tripId, navigate]);
+  }, [isAuthenticated, authLoading, tripId, navigate]);
 
   const loadTripData = async () => {
     if (!tripId) return;
@@ -723,7 +726,7 @@ export default function TripWorkspace() {
           <TabsContent value="documents">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold">Documents</h3>
-              <Button size="sm" className="gap-2">
+              <Button size="sm" className="gap-2" onClick={() => setDocumentUploadOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Upload
               </Button>
@@ -736,7 +739,7 @@ export default function TripWorkspace() {
                   <p className="text-muted-foreground mb-4">
                     Upload confirmations, vouchers, and other trip documents
                   </p>
-                  <Button>
+                  <Button onClick={() => setDocumentUploadOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Upload Document
                   </Button>
@@ -793,6 +796,15 @@ export default function TripWorkspace() {
         open={importBookingModalOpen}
         onOpenChange={setImportBookingModalOpen}
         tripId={trip.id}
+        onSuccess={loadTripData}
+      />
+
+      {/* Document Upload Modal */}
+      <DocumentUploadModal
+        open={documentUploadOpen}
+        onOpenChange={setDocumentUploadOpen}
+        tripId={trip.id}
+        accountId={trip.account_id}
         onSuccess={loadTripData}
       />
     </AgentLayout>
