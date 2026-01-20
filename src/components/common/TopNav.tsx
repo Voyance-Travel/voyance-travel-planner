@@ -20,7 +20,8 @@ import { NotificationBell } from '@/components/common/NotificationBell';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 
 const navLinks = [
-  { href: ROUTES.EXPLORE, label: 'Destinations' },
+  { href: ROUTES.EXPLORE, label: 'Explore' },
+  { href: ROUTES.DESTINATIONS, label: 'Destinations' },
   { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
 ];
 
