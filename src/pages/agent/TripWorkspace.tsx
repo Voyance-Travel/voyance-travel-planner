@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Plane,
@@ -20,7 +20,14 @@ import {
   Link2,
   Download,
   Copy,
-  Library
+  Library,
+  ListTodo,
+  Wallet,
+  Receipt,
+  CalendarDays,
+  ArrowRight,
+  Send,
+  Banknote
 } from 'lucide-react';
 import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
@@ -30,6 +37,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,24 +54,32 @@ import {
   getTasks,
   getQuotes,
   getDocuments,
+  getTripPayments,
+  getPaymentSchedules,
+  getInvoices,
+  updateTrip,
   type AgencyTrip, 
   type BookingSegment,
   type AgencyTask,
   type AgencyQuote,
   type AgencyDocument,
+  type AgencyPayment,
+  type PaymentSchedule,
+  type AgencyInvoice,
   SEGMENT_TYPE_LABELS,
   PIPELINE_STAGES
 } from '@/services/agencyCRM';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, isPast } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import ShareTripModal from '@/components/agent/ShareTripModal';
 import CloneTripModal from '@/components/agent/CloneTripModal';
 import LibraryModal from '@/components/agent/LibraryModal';
 import ImportBookingModal from '@/components/agent/ImportBookingModal';
 import DocumentUploadModal from '@/components/agent/DocumentUploadModal';
+import TaskModal from '@/components/agent/TaskModal';
 import { generateTripPdf, type TripPdfData, type BookingItem } from '@/utils/tripPdfGenerator';
 import { getAgentSettings } from '@/services/agentCRMAPI';
-import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
+import EditorialItinerary, { type EditorialDay } from '@/components/itinerary/EditorialItinerary';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -84,11 +102,17 @@ export default function TripWorkspace() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
+  // Core data
   const [trip, setTrip] = useState<AgencyTrip | null>(null);
   const [segments, setSegments] = useState<BookingSegment[]>([]);
   const [tasks, setTasks] = useState<AgencyTask[]>([]);
   const [quotes, setQuotes] = useState<AgencyQuote[]>([]);
   const [documents, setDocuments] = useState<AgencyDocument[]>([]);
+  const [payments, setPayments] = useState<AgencyPayment[]>([]);
+  const [paymentSchedules, setPaymentSchedules] = useState<PaymentSchedule[]>([]);
+  const [invoices, setInvoices] = useState<AgencyInvoice[]>([]);
+  
+  // UI state
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -96,9 +120,16 @@ export default function TripWorkspace() {
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [importBookingModalOpen, setImportBookingModalOpen] = useState(false);
   const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<AgencyTask | null>(null);
+  
+  // Notes state
+  const [clientNotes, setClientNotes] = useState('');
+  const [internalNotes, setInternalNotes] = useState('');
+  const [notesLoading, setNotesLoading] = useState(false);
 
   useEffect(() => {
-    if (authLoading) return; // Wait for auth to load
+    if (authLoading) return;
     if (!isAuthenticated) {
       navigate('/signin');
       return;
@@ -112,26 +143,44 @@ export default function TripWorkspace() {
     if (!tripId) return;
     setIsLoading(true);
     
-    const [tripData, segmentsData, tasksData, quotesData, docsData] = await Promise.all([
-      getTrip(tripId),
-      getSegments(tripId),
-      getTasks({ tripId }),
-      getQuotes(tripId),
-      getDocuments({ tripId }),
-    ]);
-    
-    setTrip(tripData);
-    setSegments(segmentsData);
-    setTasks(tasksData);
-    setQuotes(quotesData);
-    setDocuments(docsData);
-    setIsLoading(false);
+    try {
+      const [tripData, segmentsData, tasksData, quotesData, docsData, paymentsData, schedulesData, invoicesData] = await Promise.all([
+        getTrip(tripId),
+        getSegments(tripId),
+        getTasks({ tripId }),
+        getQuotes(tripId),
+        getDocuments({ tripId }),
+        getTripPayments(tripId),
+        getPaymentSchedules(tripId),
+        getInvoices({ tripId }),
+      ]);
+      
+      setTrip(tripData);
+      setSegments(segmentsData);
+      setTasks(tasksData);
+      setQuotes(quotesData);
+      setDocuments(docsData);
+      setPayments(paymentsData);
+      setPaymentSchedules(schedulesData);
+      setInvoices(invoicesData);
+      
+      // Initialize notes
+      if (tripData) {
+        setClientNotes(tripData.notes || '');
+        setInternalNotes(tripData.internal_notes || '');
+      }
+    } catch (error) {
+      console.error('Failed to load trip data:', error);
+      toast({ title: 'Failed to load trip', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: trip?.currency || 'USD',
       minimumFractionDigits: 0,
     }).format(cents / 100);
   };
@@ -152,10 +201,8 @@ export default function TripWorkspace() {
     try {
       toast({ title: 'Generating PDF...' });
       
-      // Get agent branding
       const settings = await getAgentSettings();
       
-      // Prepare bookings data
       const bookings: BookingItem[] = segments.map(seg => ({
         type: seg.segment_type as BookingItem['type'],
         vendorName: seg.vendor_name || undefined,
@@ -169,7 +216,6 @@ export default function TripWorkspace() {
         endDate: seg.end_date || undefined,
       }));
       
-      // Get itinerary days
       const itineraryDays = (trip.itinerary_data?.days || []) as EditorialDay[];
       
       const pdfData: TripPdfData = {
@@ -196,6 +242,41 @@ export default function TripWorkspace() {
     }
   };
 
+  const handleSaveNotes = async () => {
+    if (!tripId) return;
+    setNotesLoading(true);
+    try {
+      await updateTrip(tripId, { 
+        notes: clientNotes, 
+        internal_notes: internalNotes 
+      });
+      toast({ title: 'Notes saved' });
+    } catch (error) {
+      toast({ title: 'Failed to save notes', variant: 'destructive' });
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const handleSaveItinerary = useCallback(async (days: EditorialDay[]) => {
+    if (!tripId || !trip) return;
+    try {
+      await updateTrip(tripId, {
+        itinerary_data: { days } as unknown as AgencyTrip['itinerary_data']
+      });
+      setTrip(prev => prev ? { ...prev, itinerary_data: { days } as unknown as AgencyTrip['itinerary_data'] } : null);
+    } catch (error) {
+      console.error('Failed to save itinerary:', error);
+      throw error;
+    }
+  }, [tripId, trip]);
+
+  // Computed values
+  const pendingTasks = tasks.filter(t => t.status !== 'completed');
+  const itineraryDays = (trip?.itinerary_data?.days || []) as EditorialDay[];
+  const totalOwed = (trip?.total_cost_cents || 0) - (trip?.total_paid_cents || 0);
+  const upcomingSchedules = paymentSchedules.filter(s => !s.is_paid && s.due_date);
+
   if (isLoading) {
     return (
       <AgentLayout>
@@ -203,7 +284,8 @@ export default function TripWorkspace() {
           <div className="animate-pulse space-y-4">
             <div className="h-8 bg-muted rounded w-1/3" />
             <div className="h-4 bg-muted rounded w-1/4" />
-            <div className="grid grid-cols-3 gap-4 mt-8">
+            <div className="grid grid-cols-4 gap-4 mt-8">
+              <div className="h-32 bg-muted rounded" />
               <div className="h-32 bg-muted rounded" />
               <div className="h-32 bg-muted rounded" />
               <div className="h-32 bg-muted rounded" />
@@ -230,9 +312,6 @@ export default function TripWorkspace() {
   const daysUntilTrip = trip.start_date 
     ? differenceInDays(new Date(trip.start_date), new Date())
     : null;
-
-  const pendingTasks = tasks.filter(t => t.status !== 'completed');
-  const currentQuote = quotes.find(q => q.is_current_version);
 
   return (
     <AgentLayout 
@@ -354,7 +433,7 @@ export default function TripWorkspace() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-muted-foreground">Commission</span>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <Banknote className="h-4 w-4 text-muted-foreground" />
               </div>
               <p className="text-2xl font-bold text-primary">
                 {formatCurrency(trip.total_commission_cents || 0)}
@@ -383,12 +462,23 @@ export default function TripWorkspace() {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 flex-wrap h-auto gap-1">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="itinerary">
+              <CalendarDays className="h-4 w-4 mr-1" />
+              Itinerary
+            </TabsTrigger>
             <TabsTrigger value="bookings">Bookings ({segments.length})</TabsTrigger>
-            <TabsTrigger value="quotes">Quotes ({quotes.length})</TabsTrigger>
             <TabsTrigger value="tasks">Tasks ({tasks.length})</TabsTrigger>
             <TabsTrigger value="documents">Documents ({documents.length})</TabsTrigger>
+            <TabsTrigger value="messages">
+              <MessageSquare className="h-4 w-4 mr-1" />
+              Notes
+            </TabsTrigger>
+            <TabsTrigger value="finance">
+              <Wallet className="h-4 w-4 mr-1" />
+              Finance
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -440,7 +530,7 @@ export default function TripWorkspace() {
                   {segments.length === 0 ? (
                     <div className="text-center py-4">
                       <p className="text-sm text-muted-foreground mb-3">No bookings yet</p>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => setActiveTab('bookings')}>
                         <Plus className="h-4 w-4 mr-2" />
                         Add Booking
                       </Button>
@@ -485,27 +575,63 @@ export default function TripWorkspace() {
               </Card>
             </div>
 
-            {/* Notes */}
-            {(trip.notes || trip.internal_notes) && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Notes</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {trip.notes && (
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Client Notes</h4>
-                      <p className="text-sm">{trip.notes}</p>
+            {/* Quick Finance Overview */}
+            {totalOwed > 0 && (
+              <Card className="border-amber-200 bg-amber-50/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                        <Wallet className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Balance Due</p>
+                        <p className="text-sm text-muted-foreground">
+                          {upcomingSchedules.length > 0 
+                            ? `Next payment: ${format(new Date(upcomingSchedules[0].due_date), 'MMM d')}` 
+                            : 'No payment schedule set'}
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  {trip.internal_notes && (
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Internal Notes</h4>
-                      <p className="text-sm">{trip.internal_notes}</p>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-amber-600">{formatCurrency(totalOwed)}</p>
+                      <Button size="sm" variant="outline" onClick={() => setActiveTab('finance')}>
+                        View Details
+                      </Button>
                     </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
+            )}
+          </TabsContent>
+
+          {/* Itinerary Tab */}
+          <TabsContent value="itinerary">
+            {itineraryDays.length === 0 ? (
+              <Card className="text-center py-12">
+                <CardContent>
+                  <CalendarDays className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No itinerary yet</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Build a day-by-day itinerary for this trip
+                  </p>
+                  <Button onClick={() => setLibraryModalOpen(true)}>
+                    <Library className="h-4 w-4 mr-2" />
+                    Browse Library
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <EditorialItinerary
+                tripId={trip.id}
+                destination={trip.destination || ''}
+                startDate={trip.start_date || ''}
+                endDate={trip.end_date || ''}
+                travelers={trip.traveler_count || 1}
+                days={itineraryDays}
+                isEditable={true}
+                onSave={handleSaveItinerary}
+              />
             )}
           </TabsContent>
 
@@ -590,7 +716,6 @@ export default function TripWorkspace() {
                                 </div>
                               )}
                             </div>
-                            {/* Flight specific details */}
                             {segment.segment_type === 'flight' && segment.flight_number && (
                               <div className="mt-3 pt-3 border-t">
                                 <p className="text-sm">
@@ -616,64 +741,18 @@ export default function TripWorkspace() {
             )}
           </TabsContent>
 
-          {/* Quotes Tab */}
-          <TabsContent value="quotes">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold">Quotes & Proposals</h3>
-              <Button size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
-                New Quote
-              </Button>
-            </div>
-            {quotes.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No quotes yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Create a quote to send to your client
-                  </p>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Quote
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {quotes.map(quote => (
-                  <Card key={quote.id} className={quote.is_current_version ? 'ring-2 ring-primary' : ''}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-medium">{quote.name || `Quote v${quote.version_number}`}</h4>
-                            {quote.is_current_version && (
-                              <Badge>Current</Badge>
-                            )}
-                            <Badge variant="outline">{quote.status}</Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Created {format(new Date(quote.created_at), 'MMM d, yyyy')}
-                            {quote.expires_at && ` • Expires ${format(new Date(quote.expires_at), 'MMM d')}`}
-                          </p>
-                        </div>
-                        <p className="text-xl font-bold">
-                          {formatCurrency(quote.total_cents || 0)}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
           {/* Tasks Tab */}
           <TabsContent value="tasks">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold">Tasks & Deadlines</h3>
-              <Button size="sm" className="gap-2">
+              <Button 
+                size="sm" 
+                className="gap-2"
+                onClick={() => {
+                  setEditingTask(null);
+                  setTaskModalOpen(true);
+                }}
+              >
                 <Plus className="h-4 w-4" />
                 Add Task
               </Button>
@@ -686,7 +765,10 @@ export default function TripWorkspace() {
                   <p className="text-muted-foreground mb-4">
                     Add tasks to track deadlines for this trip
                   </p>
-                  <Button>
+                  <Button onClick={() => {
+                    setEditingTask(null);
+                    setTaskModalOpen(true);
+                  }}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Task
                   </Button>
@@ -695,7 +777,14 @@ export default function TripWorkspace() {
             ) : (
               <div className="space-y-3">
                 {tasks.map(task => (
-                  <Card key={task.id}>
+                  <Card 
+                    key={task.id} 
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => {
+                      setEditingTask(task);
+                      setTaskModalOpen(true);
+                    }}
+                  >
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-3 h-3 rounded-full ${
@@ -765,10 +854,260 @@ export default function TripWorkspace() {
               </div>
             )}
           </TabsContent>
+
+          {/* Messages/Notes Tab */}
+          <TabsContent value="messages">
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Client Notes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5" />
+                    Client Notes
+                  </CardTitle>
+                  <CardDescription>Notes visible to client on shared itinerary</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    placeholder="Add notes for your client..."
+                    value={clientNotes}
+                    onChange={(e) => setClientNotes(e.target.value)}
+                    rows={6}
+                    className="mb-3"
+                  />
+                  <Button 
+                    size="sm" 
+                    onClick={handleSaveNotes}
+                    disabled={notesLoading}
+                  >
+                    {notesLoading ? 'Saving...' : 'Save Notes'}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Internal Notes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Internal Notes
+                  </CardTitle>
+                  <CardDescription>Private notes (not shared with client)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    placeholder="Add internal notes..."
+                    value={internalNotes}
+                    onChange={(e) => setInternalNotes(e.target.value)}
+                    rows={6}
+                    className="mb-3"
+                  />
+                  <Button 
+                    size="sm" 
+                    onClick={handleSaveNotes}
+                    disabled={notesLoading}
+                  >
+                    {notesLoading ? 'Saving...' : 'Save Notes'}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Finance Tab */}
+          <TabsContent value="finance" className="space-y-6">
+            {/* Finance Summary Cards */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Trip Total</span>
+                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-2xl font-bold">{formatCurrency(trip.total_cost_cents || 0)}</p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Paid to Date</span>
+                    <CreditCard className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-600">
+                    {formatCurrency(trip.total_paid_cents || 0)}
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card className={totalOwed > 0 ? 'border-amber-200' : ''}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Balance Due</span>
+                    <Wallet className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <p className={`text-2xl font-bold ${totalOwed > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {formatCurrency(totalOwed)}
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-primary/5 border-primary/20">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Your Commission</span>
+                    <Banknote className="h-4 w-4 text-primary" />
+                  </div>
+                  <p className="text-2xl font-bold text-primary">
+                    {formatCurrency(trip.total_commission_cents || 0)}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Payment Progress */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Payment Progress</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Collected</span>
+                    <span className="font-medium">{getPaymentProgress()}%</span>
+                  </div>
+                  <Progress value={getPaymentProgress()} className="h-3" />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{formatCurrency(trip.total_paid_cents || 0)} paid</span>
+                    <span>{formatCurrency(totalOwed)} remaining</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment Schedule */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg">Payment Schedule</CardTitle>
+                <Button size="sm" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Payment
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {paymentSchedules.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No payment schedule set
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {paymentSchedules.map(schedule => (
+                      <div 
+                        key={schedule.id} 
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          schedule.is_paid 
+                            ? 'bg-emerald-50 border-emerald-200' 
+                            : isPast(new Date(schedule.due_date)) 
+                              ? 'bg-red-50 border-red-200' 
+                              : 'bg-muted/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            schedule.is_paid ? 'bg-emerald-100' : 'bg-background'
+                          }`}>
+                            {schedule.is_paid ? (
+                              <CheckSquare className="h-4 w-4 text-emerald-600" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium">{schedule.description}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {schedule.is_paid 
+                                ? `Paid ${schedule.paid_at ? format(new Date(schedule.paid_at), 'MMM d') : ''}` 
+                                : `Due ${format(new Date(schedule.due_date), 'MMM d, yyyy')}`}
+                            </p>
+                          </div>
+                        </div>
+                        <p className={`font-bold ${schedule.is_paid ? 'text-emerald-600' : ''}`}>
+                          {formatCurrency(schedule.amount_cents)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Recent Payments */}
+            {payments.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Payment History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {payments.map(payment => (
+                      <div key={payment.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <CreditCard className="h-4 w-4 text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium capitalize">{payment.payment_method.replace('_', ' ')}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {format(new Date(payment.payment_date), 'MMM d, yyyy')}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="font-bold text-emerald-600">
+                          +{formatCurrency(payment.amount_cents)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Invoices */}
+            {invoices.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Invoices</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {invoices.map(invoice => (
+                      <div key={invoice.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div>
+                          <p className="font-medium font-mono">{invoice.invoice_number}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Issued {format(new Date(invoice.issue_date), 'MMM d, yyyy')}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold">{formatCurrency(invoice.total_cents || 0)}</p>
+                          <Badge variant={
+                            invoice.status === 'paid' ? 'default' :
+                            invoice.status === 'overdue' ? 'destructive' : 'outline'
+                          }>
+                            {invoice.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
 
-      {/* Share Modal */}
+      {/* Modals */}
       <ShareTripModal
         open={shareModalOpen}
         onOpenChange={setShareModalOpen}
@@ -776,7 +1115,6 @@ export default function TripWorkspace() {
         tripName={trip.name}
       />
 
-      {/* Clone Modal */}
       <CloneTripModal
         open={cloneModalOpen}
         onOpenChange={setCloneModalOpen}
@@ -784,14 +1122,12 @@ export default function TripWorkspace() {
         originalName={trip.name}
       />
 
-      {/* Library Modal */}
       <LibraryModal
         open={libraryModalOpen}
         onOpenChange={setLibraryModalOpen}
         mode="browse"
       />
 
-      {/* Import Booking Modal */}
       <ImportBookingModal
         open={importBookingModalOpen}
         onOpenChange={setImportBookingModalOpen}
@@ -799,12 +1135,19 @@ export default function TripWorkspace() {
         onSuccess={loadTripData}
       />
 
-      {/* Document Upload Modal */}
       <DocumentUploadModal
         open={documentUploadOpen}
         onOpenChange={setDocumentUploadOpen}
         tripId={trip.id}
         accountId={trip.account_id}
+        onSuccess={loadTripData}
+      />
+
+      <TaskModal
+        open={taskModalOpen}
+        onOpenChange={setTaskModalOpen}
+        tripId={trip.id}
+        task={editingTask}
         onSuccess={loadTripData}
       />
     </AgentLayout>

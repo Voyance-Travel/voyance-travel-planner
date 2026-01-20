@@ -601,6 +601,17 @@ export async function getPayments(invoiceId: string): Promise<AgencyPayment[]> {
   return (data || []) as unknown as AgencyPayment[];
 }
 
+export async function getTripPayments(tripId: string): Promise<AgencyPayment[]> {
+  const { data, error } = await supabase
+    .from('agency_payments')
+    .select('*')
+    .eq('trip_id', tripId)
+    .order('payment_date', { ascending: false });
+  
+  if (error) throw error;
+  return (data || []) as unknown as AgencyPayment[];
+}
+
 export async function recordPayment(payment: Partial<AgencyPayment>): Promise<AgencyPayment> {
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) throw new Error('Not authenticated');
