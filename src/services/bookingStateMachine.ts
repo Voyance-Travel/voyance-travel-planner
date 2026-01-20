@@ -293,12 +293,13 @@ export async function transitionBookingState(
   triggerReference?: string,
   metadata?: Record<string, unknown>
 ): Promise<StateTransitionResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await supabase.rpc('transition_booking_state', {
     p_activity_id: activityId,
     p_new_state: newState,
     p_trigger_source: triggerSource,
     p_trigger_reference: triggerReference || null,
-    p_metadata: metadata || null,
+    p_metadata: (metadata || null) as any,
   });
 
   if (error) {
@@ -391,15 +392,16 @@ export async function confirmBooking(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: updateError } = await supabase
     .from('trip_activities')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .update({
       confirmation_number: confirmationNumber,
       vendor_booking_id: vendorBookingId,
       vendor_name: vendorName,
-      voucher_data: voucher as unknown as Record<string, unknown>,
+      voucher_data: voucher as any,
       voucher_url: voucher?.voucherUrl,
-      cancellation_policy: cancellationPolicy as unknown as Record<string, unknown>,
+      cancellation_policy: cancellationPolicy as any,
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .eq('id', activityId);
 
   if (updateError) {
