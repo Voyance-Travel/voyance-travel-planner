@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { MapPin } from 'lucide-react';
+
 import { SignUpForm } from '@/components/auth/SignUpForm';
 import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
@@ -33,7 +33,7 @@ export default function SignUp() {
               transition={{ duration: 0.8 }}
               className="text-center text-white p-8"
             >
-              <MapPin className="w-16 h-16 mx-auto mb-6 text-white/80" />
+              
               <h2 className="text-4xl font-display font-light mb-4">
                 Begin your adventure
               </h2>
