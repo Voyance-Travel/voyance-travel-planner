@@ -1221,9 +1221,13 @@ export type Database = {
           end_date: string | null
           id: string
           internal_notes: string | null
+          itinerary_data: Json | null
+          linked_trip_id: string | null
           name: string
           notes: string | null
           pipeline_stage: number | null
+          share_enabled: boolean | null
+          share_token: string | null
           start_date: string | null
           status: string | null
           tags: string[] | null
@@ -1245,9 +1249,13 @@ export type Database = {
           end_date?: string | null
           id?: string
           internal_notes?: string | null
+          itinerary_data?: Json | null
+          linked_trip_id?: string | null
           name: string
           notes?: string | null
           pipeline_stage?: number | null
+          share_enabled?: boolean | null
+          share_token?: string | null
           start_date?: string | null
           status?: string | null
           tags?: string[] | null
@@ -1269,9 +1277,13 @@ export type Database = {
           end_date?: string | null
           id?: string
           internal_notes?: string | null
+          itinerary_data?: Json | null
+          linked_trip_id?: string | null
           name?: string
           notes?: string | null
           pipeline_stage?: number | null
+          share_enabled?: boolean | null
+          share_token?: string | null
           start_date?: string | null
           status?: string | null
           tags?: string[] | null
@@ -1288,6 +1300,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_trips_linked_trip_id_fkey"
+            columns: ["linked_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
             referencedColumns: ["id"]
           },
         ]
@@ -3666,6 +3685,7 @@ export type Database = {
     Functions: {
       cleanup_expired_search_cache: { Args: never; Returns: number }
       generate_invoice_number: { Args: never; Returns: string }
+      generate_share_token: { Args: never; Returns: string }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
