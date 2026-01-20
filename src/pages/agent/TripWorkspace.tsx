@@ -57,6 +57,7 @@ import { toast } from '@/hooks/use-toast';
 import ShareTripModal from '@/components/agent/ShareTripModal';
 import CloneTripModal from '@/components/agent/CloneTripModal';
 import LibraryModal from '@/components/agent/LibraryModal';
+import ImportBookingModal from '@/components/agent/ImportBookingModal';
 import { generateTripPdf, type TripPdfData, type BookingItem } from '@/utils/tripPdfGenerator';
 import { getAgentSettings } from '@/services/agentCRMAPI';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
@@ -92,6 +93,7 @@ export default function TripWorkspace() {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [cloneModalOpen, setCloneModalOpen] = useState(false);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+  const [importBookingModalOpen, setImportBookingModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -508,10 +510,20 @@ export default function TripWorkspace() {
           <TabsContent value="bookings">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold">All Bookings</h3>
-              <Button size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Booking
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => setImportBookingModalOpen(true)}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Import from Confirmation
+                </Button>
+                <Button size="sm" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Booking
+                </Button>
+              </div>
             </div>
             {segments.length === 0 ? (
               <Card className="text-center py-12">
@@ -774,6 +786,14 @@ export default function TripWorkspace() {
         open={libraryModalOpen}
         onOpenChange={setLibraryModalOpen}
         mode="browse"
+      />
+
+      {/* Import Booking Modal */}
+      <ImportBookingModal
+        open={importBookingModalOpen}
+        onOpenChange={setImportBookingModalOpen}
+        tripId={trip.id}
+        onSuccess={loadTripData}
       />
     </AgentLayout>
   );
