@@ -4761,6 +4761,10 @@ export type Database = {
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
       generate_share_token: { Args: never; Returns: string }
+      get_shared_trip_payload: {
+        Args: { p_share_token: string }
+        Returns: Json
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
