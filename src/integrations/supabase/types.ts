@@ -3398,6 +3398,7 @@ export type Database = {
           external_booking_id: string | null
           external_booking_url: string | null
           id: string
+          is_client_visible: boolean | null
           itinerary_day_id: string | null
           latitude: number | null
           location: string | null
@@ -3456,6 +3457,7 @@ export type Database = {
           external_booking_id?: string | null
           external_booking_url?: string | null
           id?: string
+          is_client_visible?: boolean | null
           itinerary_day_id?: string | null
           latitude?: number | null
           location?: string | null
@@ -3514,6 +3516,7 @@ export type Database = {
           external_booking_id?: string | null
           external_booking_url?: string | null
           id?: string
+          is_client_visible?: boolean | null
           itinerary_day_id?: string | null
           latitude?: number | null
           location?: string | null

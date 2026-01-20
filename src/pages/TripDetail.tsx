@@ -329,11 +329,12 @@ export default function TripDetail() {
 
         setTrip(tripData);
 
-        // Fetch activities
+        // Fetch activities (filter out internal-only activities for client view)
         const { data: activitiesData, error: activitiesError } = await supabase
           .from('trip_activities')
           .select('*')
           .eq('trip_id', tripId)
+          .neq('is_client_visible', false) // Exclude internal-only activities
           .order('itinerary_day_id', { ascending: true })
           .order('block_order', { ascending: true });
 
