@@ -30,19 +30,20 @@ import { toast } from '@/hooks/use-toast';
 
 export default function AgentClients() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [accounts, setAccounts] = useState<AgencyAccount[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [viewType, setViewType] = useState<'all' | 'individual' | 'household' | 'company'>('all');
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
     if (!isAuthenticated) {
       navigate('/signin');
       return;
     }
     loadAccounts();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
   const loadAccounts = async () => {
     setIsLoading(true);

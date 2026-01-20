@@ -47,7 +47,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function AgentTrips() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [trips, setTrips] = useState<AgencyTrip[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -55,12 +55,13 @@ export default function AgentTrips() {
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
     if (!isAuthenticated) {
       navigate('/signin');
       return;
     }
     loadTrips();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
   const loadTrips = async () => {
     setIsLoading(true);
