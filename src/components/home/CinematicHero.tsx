@@ -45,15 +45,15 @@ export default function CinematicHero() {
           >
             <div className="w-12 h-px bg-white/60" />
             <span className="text-xs tracking-[0.3em] uppercase text-white/70 font-sans font-medium">
-              The Art of Intentional Travel
+              AI-Powered Trip Planning
             </span>
           </motion.div>
 
           {/* Main Headline - Editorial Typography */}
           <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl font-normal mb-8 leading-[0.95] tracking-tight">
-            <span className="block">Where will</span>
-            <span className="block italic">your story</span>
-            <span className="block">unfold?</span>
+            <span className="block">Your perfect trip,</span>
+            <span className="block italic">planned in</span>
+            <span className="block">minutes</span>
           </h1>
 
           {/* Subheadline - Clean editorial copy */}
@@ -63,8 +63,8 @@ export default function CinematicHero() {
             transition={{ delay: 0.5, duration: 0.8 }}
             className="text-lg md:text-xl text-white/75 mb-12 max-w-lg font-sans font-light leading-relaxed"
           >
-            Curated itineraries crafted with care. 
-            Every detail considered, every moment intentional.
+            Tell us how you travel. Our AI builds a personalized day-by-day itinerary 
+            crafted around your style, interests, and pace.
           </motion.p>
 
           {/* CTA - Editorial Button */}
@@ -80,7 +80,7 @@ export default function CinematicHero() {
               className="text-base px-10 py-6 bg-white text-foreground hover:bg-white/90 font-sans font-medium tracking-wide"
             >
               <Link to={ROUTES.START}>
-                Begin Your Journey
+                Build My Itinerary
                 <ArrowRight className="ml-3 h-4 w-4" />
               </Link>
             </Button>
@@ -90,8 +90,8 @@ export default function CinematicHero() {
               className="text-base px-10 py-6 border-white/30 text-white bg-transparent hover:bg-white/10 font-sans"
               asChild
             >
-              <Link to={ROUTES.EXPLORE}>
-                View Destinations
+              <Link to={ROUTES.HOW_IT_WORKS}>
+                See How It Works
               </Link>
             </Button>
           </motion.div>
