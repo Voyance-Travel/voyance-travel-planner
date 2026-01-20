@@ -431,6 +431,13 @@ export type Database = {
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "agency_booking_segments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       agency_communications: {
@@ -522,6 +529,13 @@ export type Database = {
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "agency_communications_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       agency_documents: {
@@ -600,6 +614,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_documents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
           },
         ]
       }
@@ -713,6 +734,13 @@ export type Database = {
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "agency_invoices_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       agency_payment_schedules: {
@@ -789,6 +817,13 @@ export type Database = {
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "agency_payment_schedules_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       agency_payments: {
@@ -863,6 +898,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_payments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
           },
         ]
       }
@@ -965,6 +1007,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_quotes_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
           },
         ]
       }
@@ -1115,6 +1164,13 @@ export type Database = {
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "agency_tasks_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       agency_travelers: {
@@ -1263,6 +1319,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_trip_travelers_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
           },
         ]
       }
@@ -1933,6 +1996,311 @@ export type Database = {
           id?: string
           name?: string
           value_type?: string
+        }
+        Relationships: []
+      }
+      finance_commission_imports: {
+        Row: {
+          agent_id: string
+          created_at: string
+          currency: string
+          error_message: string | null
+          file_name: string | null
+          file_url: string | null
+          id: string
+          line_count: number
+          matched_count: number
+          metadata: Json | null
+          processed_at: string | null
+          raw_data: Json | null
+          source: string
+          source_reference: string | null
+          status: string
+          total_amount_cents: number
+          unmatched_count: number
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          currency?: string
+          error_message?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          line_count?: number
+          matched_count?: number
+          metadata?: Json | null
+          processed_at?: string | null
+          raw_data?: Json | null
+          source: string
+          source_reference?: string | null
+          status?: string
+          total_amount_cents?: number
+          unmatched_count?: number
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          currency?: string
+          error_message?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          line_count?: number
+          matched_count?: number
+          metadata?: Json | null
+          processed_at?: string | null
+          raw_data?: Json | null
+          source?: string
+          source_reference?: string | null
+          status?: string
+          total_amount_cents?: number
+          unmatched_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      finance_ledger_entries: {
+        Row: {
+          agent_id: string
+          amount_cents: number
+          created_at: string
+          currency: string
+          description: string
+          effective_date: string
+          entry_source: Database["public"]["Enums"]["finance_entry_source"]
+          entry_type: Database["public"]["Enums"]["finance_entry_type"]
+          external_reference: string | null
+          id: string
+          invoice_id: string | null
+          memo: string | null
+          metadata: Json | null
+          posted_at: string
+          segment_id: string | null
+          stripe_charge_id: string | null
+          stripe_dispute_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_payout_id: string | null
+          stripe_refund_id: string | null
+          stripe_transfer_id: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          amount_cents: number
+          created_at?: string
+          currency?: string
+          description: string
+          effective_date?: string
+          entry_source?: Database["public"]["Enums"]["finance_entry_source"]
+          entry_type: Database["public"]["Enums"]["finance_entry_type"]
+          external_reference?: string | null
+          id?: string
+          invoice_id?: string | null
+          memo?: string | null
+          metadata?: Json | null
+          posted_at?: string
+          segment_id?: string | null
+          stripe_charge_id?: string | null
+          stripe_dispute_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_payout_id?: string | null
+          stripe_refund_id?: string | null
+          stripe_transfer_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          description?: string
+          effective_date?: string
+          entry_source?: Database["public"]["Enums"]["finance_entry_source"]
+          entry_type?: Database["public"]["Enums"]["finance_entry_type"]
+          external_reference?: string | null
+          id?: string
+          invoice_id?: string | null
+          memo?: string | null
+          metadata?: Json | null
+          posted_at?: string
+          segment_id?: string | null
+          stripe_charge_id?: string | null
+          stripe_dispute_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_payout_id?: string | null
+          stripe_refund_id?: string | null
+          stripe_transfer_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_ledger_entries_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "agency_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "agency_booking_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
+          },
+        ]
+      }
+      finance_payout_lines: {
+        Row: {
+          agent_id: string
+          amount_cents: number
+          created_at: string
+          currency: string
+          description: string
+          id: string
+          ledger_entry_id: string | null
+          payout_run_id: string | null
+          segment_id: string | null
+          source_reference: string | null
+          source_type: string | null
+          trip_id: string | null
+        }
+        Insert: {
+          agent_id: string
+          amount_cents: number
+          created_at?: string
+          currency?: string
+          description: string
+          id?: string
+          ledger_entry_id?: string | null
+          payout_run_id?: string | null
+          segment_id?: string | null
+          source_reference?: string | null
+          source_type?: string | null
+          trip_id?: string | null
+        }
+        Update: {
+          agent_id?: string
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          description?: string
+          id?: string
+          ledger_entry_id?: string | null
+          payout_run_id?: string | null
+          segment_id?: string | null
+          source_reference?: string | null
+          source_type?: string | null
+          trip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_payout_lines_ledger_entry_id_fkey"
+            columns: ["ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "finance_ledger_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payout_lines_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "finance_payout_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payout_lines_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "agency_booking_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payout_lines_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payout_lines_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
+          },
+        ]
+      }
+      finance_payout_runs: {
+        Row: {
+          agent_id: string
+          completed_at: string | null
+          created_at: string
+          currency: string
+          id: string
+          initiated_at: string | null
+          line_count: number
+          metadata: Json | null
+          notes: string | null
+          scheduled_for: string | null
+          status: string
+          stripe_payout_id: string | null
+          stripe_transfer_id: string | null
+          total_amount_cents: number
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          initiated_at?: string | null
+          line_count?: number
+          metadata?: Json | null
+          notes?: string | null
+          scheduled_for?: string | null
+          status?: string
+          stripe_payout_id?: string | null
+          stripe_transfer_id?: string | null
+          total_amount_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          initiated_at?: string | null
+          line_count?: number
+          metadata?: Json | null
+          notes?: string | null
+          scheduled_for?: string | null
+          status?: string
+          stripe_payout_id?: string | null
+          stripe_transfer_id?: string | null
+          total_amount_cents?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -3655,6 +4023,27 @@ export type Database = {
       }
     }
     Views: {
+      finance_trip_profit_summary: {
+        Row: {
+          agent_earnings_cents: number | null
+          agent_id: string | null
+          agent_paid_out_cents: number | null
+          commission_expected_cents: number | null
+          commission_received_cents: number | null
+          currency: string | null
+          platform_fees_cents: number | null
+          stripe_fees_cents: number | null
+          total_client_charges_cents: number | null
+          total_client_payments_cents: number | null
+          total_refunds_cents: number | null
+          total_supplier_costs_cents: number | null
+          total_supplier_paid_cents: number | null
+          trip_gross_profit_cents: number | null
+          trip_id: string | null
+          trip_name: string | null
+        }
+        Relationships: []
+      }
       profiles_public: {
         Row: {
           avatar_url: string | null
@@ -3735,6 +4124,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agency_trips"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_booking_segments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "finance_trip_profit_summary"
+            referencedColumns: ["trip_id"]
           },
         ]
       }
@@ -3920,6 +4316,26 @@ export type Database = {
         | "itinerary"
         | "other"
       expense_split_type: "equal" | "manual" | "percentage"
+      finance_entry_source:
+        | "stripe_webhook"
+        | "manual"
+        | "import"
+        | "system"
+        | "api"
+      finance_entry_type:
+        | "client_charge"
+        | "client_payment"
+        | "client_refund"
+        | "client_credit"
+        | "supplier_payable"
+        | "supplier_payment"
+        | "commission_expected"
+        | "commission_received"
+        | "agent_earning"
+        | "agent_payout"
+        | "platform_fee"
+        | "stripe_fee"
+        | "adjustment"
       friendship_status: "pending" | "accepted" | "declined" | "blocked"
       invoice_status:
         | "draft"
@@ -4127,6 +4543,28 @@ export const Constants = {
         "other",
       ],
       expense_split_type: ["equal", "manual", "percentage"],
+      finance_entry_source: [
+        "stripe_webhook",
+        "manual",
+        "import",
+        "system",
+        "api",
+      ],
+      finance_entry_type: [
+        "client_charge",
+        "client_payment",
+        "client_refund",
+        "client_credit",
+        "supplier_payable",
+        "supplier_payment",
+        "commission_expected",
+        "commission_received",
+        "agent_earning",
+        "agent_payout",
+        "platform_fee",
+        "stripe_fee",
+        "adjustment",
+      ],
       friendship_status: ["pending", "accepted", "declined", "blocked"],
       invoice_status: [
         "draft",
