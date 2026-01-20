@@ -26,18 +26,18 @@ export default function FinalCTA() {
             <div className="flex items-center gap-4 mb-6">
               <div className="w-8 h-px bg-primary" />
               <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
-                Begin Today
+                Ready in Minutes
               </span>
             </div>
 
             {/* Headline */}
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground mb-6 leading-tight">
-              Your next chapter <em className="font-normal">starts here</em>
+              Stop planning, <em className="font-normal">start traveling</em>
             </h2>
 
             {/* Subhead */}
             <p className="text-lg text-muted-foreground font-sans font-light mb-10 max-w-md leading-relaxed">
-              Let us craft an itinerary that reflects who you are and where you want to go. Every journey begins with a single step.
+              Our AI handles the research, timing, and logistics. You get a beautiful, personalized itinerary ready to follow or customize.
             </p>
 
             {/* CTA Button */}
@@ -47,7 +47,7 @@ export default function FinalCTA() {
               className="text-base px-10 py-6 font-sans font-medium tracking-wide"
             >
               <Link to={ROUTES.START}>
-                Start Planning
+                Build My Itinerary
                 <ArrowRight className="ml-3 h-4 w-4" />
               </Link>
             </Button>
