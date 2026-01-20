@@ -380,6 +380,17 @@ export async function createSegment(segment: Partial<BookingSegment>): Promise<B
     commission_cents: segment.commission_cents || 0,
     commission_rate: segment.commission_rate,
     currency: segment.currency || 'USD',
+    // Settlement type (travel subledger)
+    settlement_type: segment.settlement_type || 'supplier_direct',
+    supplier_paid_cents: segment.supplier_paid_cents || 0,
+    supplier_paid_at: segment.supplier_paid_at,
+    commission_expected_cents: segment.commission_expected_cents || 0,
+    commission_received_cents: segment.commission_received_cents || 0,
+    commission_received_at: segment.commission_received_at,
+    arc_submission_date: segment.arc_submission_date,
+    arc_settlement_date: segment.arc_settlement_date,
+    arc_report_number: segment.arc_report_number,
+    // Deadlines
     ticketing_deadline: segment.ticketing_deadline,
     payment_deadline: segment.payment_deadline,
     cancellation_deadline: segment.cancellation_deadline,
