@@ -3382,6 +3382,10 @@ export type Database = {
           schedule_flexibility: string | null
           seat_preference: string | null
           sleep_schedule: string | null
+          stripe_connect_account_id: string | null
+          stripe_connect_onboarding_complete: boolean | null
+          stripe_connect_status: string | null
+          stripe_payout_schedule: string | null
           travel_agent_mode: boolean | null
           travel_companions: string[] | null
           travel_frequency: string | null
@@ -3455,6 +3459,10 @@ export type Database = {
           schedule_flexibility?: string | null
           seat_preference?: string | null
           sleep_schedule?: string | null
+          stripe_connect_account_id?: string | null
+          stripe_connect_onboarding_complete?: boolean | null
+          stripe_connect_status?: string | null
+          stripe_payout_schedule?: string | null
           travel_agent_mode?: boolean | null
           travel_companions?: string[] | null
           travel_frequency?: string | null
@@ -3528,6 +3536,10 @@ export type Database = {
           schedule_flexibility?: string | null
           seat_preference?: string | null
           sleep_schedule?: string | null
+          stripe_connect_account_id?: string | null
+          stripe_connect_onboarding_complete?: boolean | null
+          stripe_connect_status?: string | null
+          stripe_payout_schedule?: string | null
           travel_agent_mode?: boolean | null
           travel_companions?: string[] | null
           travel_frequency?: string | null

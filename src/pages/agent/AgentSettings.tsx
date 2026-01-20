@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { useAgentAuth } from '@/hooks/useAgentAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import StripeConnectOnboarding from '@/components/agent/StripeConnectOnboarding';
 
 interface AgentSettingsData {
   travel_agent_mode: boolean;
@@ -242,6 +243,9 @@ export default function AgentSettings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Stripe Connect - Agent Payouts */}
+          <StripeConnectOnboarding />
 
           {/* Agent Mode Toggle */}
           <Card className="border-destructive/20">
