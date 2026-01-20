@@ -14,7 +14,7 @@ import {
   FileText,
   Bell
 } from 'lucide-react';
-import MainLayout from '@/components/layout/MainLayout';
+import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -206,7 +206,7 @@ export default function AgentTasks() {
   };
 
   return (
-    <MainLayout>
+    <AgentLayout>
       <Head
         title="Tasks & Deadlines | Travel Agent CRM"
         description="Manage your tasks and deadlines"
@@ -318,6 +318,6 @@ export default function AgentTasks() {
           </>
         )}
       </div>
-    </MainLayout>
+    </AgentLayout>
   );
 }

@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Filter
 } from 'lucide-react';
-import MainLayout from '@/components/layout/MainLayout';
+import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -96,7 +96,7 @@ export default function AgentTrips() {
   };
 
   return (
-    <MainLayout>
+    <AgentLayout>
       <Head
         title="Trips | Travel Agent CRM"
         description="Manage all your client trips"
@@ -347,6 +347,6 @@ export default function AgentTrips() {
           </div>
         )}
       </div>
-    </MainLayout>
+    </AgentLayout>
   );
 }
