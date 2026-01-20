@@ -11,6 +11,10 @@ export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type DocumentType = 'passport' | 'visa' | 'insurance' | 'confirmation' | 'invoice' | 'receipt' | 'waiver' | 'itinerary' | 'other';
 export type CommunicationType = 'email' | 'sms' | 'call' | 'note' | 'approval';
 
+// Settlement type for travel subledger
+// Drives: A/R (client balance), A/P (vendor balance), Commission tracking
+export type BookingSettlementType = 'arc_bsp' | 'supplier_direct' | 'commission_track';
+
 export interface AgencyAccount {
   id: string;
   agent_id: string;
@@ -163,6 +167,17 @@ export interface BookingSegment {
   commission_cents: number;
   commission_rate?: number;
   currency: string;
+  // Settlement type (travel subledger)
+  settlement_type?: BookingSettlementType;
+  supplier_paid_cents?: number;         // A/P: What we've paid to supplier
+  supplier_paid_at?: string;            // When supplier was paid
+  commission_expected_cents?: number;   // Expected commission
+  commission_received_cents?: number;   // Commission actually received
+  commission_received_at?: string;      // When commission arrived
+  // ARC/BSP-specific
+  arc_submission_date?: string;
+  arc_settlement_date?: string;
+  arc_report_number?: string;
   // Deadlines
   ticketing_deadline?: string;
   payment_deadline?: string;

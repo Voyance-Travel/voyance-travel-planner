@@ -243,6 +243,9 @@ export type Database = {
         Row: {
           agent_id: string
           aircraft_type: string | null
+          arc_report_number: string | null
+          arc_settlement_date: string | null
+          arc_submission_date: string | null
           booking_reference: string | null
           cabin_class: string | null
           cancellation_deadline: string | null
@@ -250,7 +253,10 @@ export type Database = {
           check_in_time: string | null
           check_out_time: string | null
           commission_cents: number | null
+          commission_expected_cents: number | null
           commission_rate: number | null
+          commission_received_at: string | null
+          commission_received_cents: number | null
           confirmation_number: string | null
           created_at: string
           currency: string | null
@@ -272,11 +278,16 @@ export type Database = {
           segment_details: Json | null
           segment_type: Database["public"]["Enums"]["booking_segment_type"]
           sell_price_cents: number | null
+          settlement_type:
+            | Database["public"]["Enums"]["booking_settlement_type"]
+            | null
           start_date: string | null
           start_time: string | null
           status: Database["public"]["Enums"]["booking_status"] | null
           supplier_contact: string | null
           supplier_id: string | null
+          supplier_paid_at: string | null
+          supplier_paid_cents: number | null
           ticketing_deadline: string | null
           travelers_on_segment: string[] | null
           trip_id: string
@@ -287,6 +298,9 @@ export type Database = {
         Insert: {
           agent_id: string
           aircraft_type?: string | null
+          arc_report_number?: string | null
+          arc_settlement_date?: string | null
+          arc_submission_date?: string | null
           booking_reference?: string | null
           cabin_class?: string | null
           cancellation_deadline?: string | null
@@ -294,7 +308,10 @@ export type Database = {
           check_in_time?: string | null
           check_out_time?: string | null
           commission_cents?: number | null
+          commission_expected_cents?: number | null
           commission_rate?: number | null
+          commission_received_at?: string | null
+          commission_received_cents?: number | null
           confirmation_number?: string | null
           created_at?: string
           currency?: string | null
@@ -316,11 +333,16 @@ export type Database = {
           segment_details?: Json | null
           segment_type: Database["public"]["Enums"]["booking_segment_type"]
           sell_price_cents?: number | null
+          settlement_type?:
+            | Database["public"]["Enums"]["booking_settlement_type"]
+            | null
           start_date?: string | null
           start_time?: string | null
           status?: Database["public"]["Enums"]["booking_status"] | null
           supplier_contact?: string | null
           supplier_id?: string | null
+          supplier_paid_at?: string | null
+          supplier_paid_cents?: number | null
           ticketing_deadline?: string | null
           travelers_on_segment?: string[] | null
           trip_id: string
@@ -331,6 +353,9 @@ export type Database = {
         Update: {
           agent_id?: string
           aircraft_type?: string | null
+          arc_report_number?: string | null
+          arc_settlement_date?: string | null
+          arc_submission_date?: string | null
           booking_reference?: string | null
           cabin_class?: string | null
           cancellation_deadline?: string | null
@@ -338,7 +363,10 @@ export type Database = {
           check_in_time?: string | null
           check_out_time?: string | null
           commission_cents?: number | null
+          commission_expected_cents?: number | null
           commission_rate?: number | null
+          commission_received_at?: string | null
+          commission_received_cents?: number | null
           confirmation_number?: string | null
           created_at?: string
           currency?: string | null
@@ -360,11 +388,16 @@ export type Database = {
           segment_details?: Json | null
           segment_type?: Database["public"]["Enums"]["booking_segment_type"]
           sell_price_cents?: number | null
+          settlement_type?:
+            | Database["public"]["Enums"]["booking_settlement_type"]
+            | null
           start_date?: string | null
           start_time?: string | null
           status?: Database["public"]["Enums"]["booking_status"] | null
           supplier_contact?: string | null
           supplier_id?: string | null
+          supplier_paid_at?: string | null
+          supplier_paid_cents?: number | null
           ticketing_deadline?: string | null
           travelers_on_segment?: string[] | null
           trip_id?: string
@@ -3649,6 +3682,29 @@ export type Database = {
         }
         Relationships: []
       }
+      trip_finance_ledger: {
+        Row: {
+          agent_id: string | null
+          arc_bsp_count: number | null
+          commission_track_count: number | null
+          supplier_direct_count: number | null
+          total_client_charges_cents: number | null
+          total_commission_expected_cents: number | null
+          total_commission_received_cents: number | null
+          total_supplier_owed_cents: number | null
+          total_supplier_paid_cents: number | null
+          trip_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_booking_segments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "agency_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_members_safe: {
         Row: {
           accepted_at: string | null
@@ -3807,6 +3863,10 @@ export type Database = {
         | "insurance"
         | "car_rental"
         | "other"
+      booking_settlement_type:
+        | "arc_bsp"
+        | "supplier_direct"
+        | "commission_track"
       booking_status:
         | "pending"
         | "confirmed"
@@ -4005,6 +4065,11 @@ export const Constants = {
         "insurance",
         "car_rental",
         "other",
+      ],
+      booking_settlement_type: [
+        "arc_bsp",
+        "supplier_direct",
+        "commission_track",
       ],
       booking_status: [
         "pending",
