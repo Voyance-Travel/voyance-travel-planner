@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 import TravelDNATransparency from './TravelDNATransparency';
 import DNAAccuracyFeedback from './DNAAccuracyFeedback';
 import TraitOverrideSliders from './TraitOverrideSliders';
+import MicroDisambiguation from './MicroDisambiguation';
 
 /** Map category names to their Lucide icon components */
 const CATEGORY_ICONS = {
@@ -397,27 +398,45 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         </CollapsibleContent>
       </Collapsible>
 
+      {/* Micro-Disambiguation for low confidence users */}
+      {confidence < 60 && (
+        <MicroDisambiguation
+          userId={userId}
+          confidence={confidence}
+          onResolved={() => {
+            // Could trigger a refetch of DNA data
+            window.location.reload();
+          }}
+        />
+      )}
+
       {/* Tabbed Content - Minimal Style */}
       <div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full justify-start bg-transparent border-b border-border rounded-none h-auto p-0 gap-6">
+          <TabsList className="w-full justify-start bg-transparent border-b border-border rounded-none h-auto p-0 gap-4 md:gap-6 overflow-x-auto">
             <TabsTrigger 
               value="identity" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
               What This Means
             </TabsTrigger>
             <TabsTrigger 
+              value="insights" 
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
+            >
+              Insights
+            </TabsTrigger>
+            <TabsTrigger 
               value="superpowers" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
               Superpowers
             </TabsTrigger>
             <TabsTrigger 
-              value="growth" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground"
+              value="adjust" 
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
-              Growth Edges
+              Adjust
             </TabsTrigger>
           </TabsList>
 
@@ -473,6 +492,73 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                     </div>
                   </div>
                 )}
+
+                {/* Growth Edges - moved here for better UX */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+                    Room to Grow
+                  </h4>
+                  <div className="grid gap-3">
+                    {narrative.growthEdges.slice(0, 2).map((edge, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-4 py-2 text-foreground/80"
+                      >
+                        <TrendingUp className="h-4 w-4 text-foreground/40" />
+                        <span>{edge}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </TabsContent>
+
+            {/* NEW: Insights Tab - Travel DNA V2 Transparency */}
+            <TabsContent value="insights" className="mt-8">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-8"
+              >
+                {/* Travel DNA Transparency Component */}
+                <TravelDNATransparency 
+                  dnaData={dnaData.travel_dna_v2 as {
+                    dna_version?: number;
+                    trait_scores?: Record<string, number>;
+                    archetype_matches?: Array<{
+                      archetype_id: string;
+                      name: string;
+                      category?: string;
+                      score: number;
+                      pct: number;
+                    }>;
+                    confidence?: number;
+                    trait_contributions?: Array<{
+                      question_id: string;
+                      answer_id: string;
+                      label?: string;
+                      deltas: Record<string, number>;
+                      normalized_multiplier: number;
+                    }>;
+                  } | null}
+                />
+                
+                {/* Accuracy Feedback Component */}
+                <div className="pt-6 border-t border-border">
+                  <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground mb-4">
+                    Help Us Improve
+                  </h4>
+                  <DNAAccuracyFeedback
+                    userId={userId}
+                    dnaVersion={dnaData.dna_version || 1}
+                    topArchetypes={(dnaData.archetype_matches as Array<{
+                      archetype_id: string;
+                      name: string;
+                      pct: number;
+                    }>) || []}
+                  />
+                </div>
               </motion.div>
             </TabsContent>
 
@@ -503,30 +589,17 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               </motion.div>
             </TabsContent>
 
-            <TabsContent value="growth" className="mt-8">
+            {/* NEW: Adjust Tab - Trait Override Sliders */}
+            <TabsContent value="adjust" className="mt-8">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
               >
-                <p className="text-muted-foreground">
-                  Every traveler has room to grow. These gentle nudges might open new horizons.
-                </p>
-                <div className="grid gap-3">
-                  {narrative.growthEdges.map((edge, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      className="flex items-center gap-4 py-3 border-b border-border/50 last:border-0"
-                    >
-                      <TrendingUp className="h-4 w-4 text-foreground/40" />
-                      <span className="text-foreground">{edge}</span>
-                    </motion.div>
-                  ))}
-                </div>
+                <TraitOverrideSliders
+                  userId={userId}
+                  computedTraits={(dnaData.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || {}}
+                />
               </motion.div>
             </TabsContent>
           </AnimatePresence>
