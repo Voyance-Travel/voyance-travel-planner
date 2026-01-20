@@ -23,6 +23,7 @@ const navLinks = [
   { href: ROUTES.EXPLORE, label: 'Explore' },
   { href: ROUTES.DESTINATIONS, label: 'Destinations' },
   { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
+  { href: ROUTES.PRICING, label: 'Pricing' },
 ];
 
 const userMenuItems = [
