@@ -86,22 +86,47 @@ export default function HowItWorksCarousel() {
           {/* Left: Image */}
           <motion.div 
             key={activeStep}
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6 }}
             className="lg:col-span-7 relative"
           >
             <div className="aspect-[4/3] lg:aspect-[16/12] overflow-hidden relative">
-              <img
+              {/* Animated Ken Burns effect on image */}
+              <motion.img
+                key={`img-${activeStep}`}
                 src={steps[activeStep].image}
                 alt={steps[activeStep].title}
+                initial={{ scale: 1.1, x: 10 }}
+                animate={{ 
+                  scale: 1,
+                  x: 0,
+                }}
+                transition={{ 
+                  duration: 8,
+                  ease: "easeOut"
+                }}
+                whileHover={{ scale: 1.02 }}
                 className="w-full h-full object-cover"
+              />
+              {/* Subtle continuous pan animation */}
+              <motion.div
+                className="absolute inset-0 pointer-events-none"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
               />
               {/* Overlay with step number */}
               <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/70 to-transparent">
-                <span className="text-8xl md:text-9xl font-serif text-white/20">
+                <motion.span 
+                  key={`num-${activeStep}`}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                  className="text-8xl md:text-9xl font-serif text-white/20"
+                >
                   {steps[activeStep].number}
-                </span>
+                </motion.span>
               </div>
             </div>
           </motion.div>
