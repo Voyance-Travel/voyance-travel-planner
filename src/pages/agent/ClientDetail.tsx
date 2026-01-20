@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { 
-  ArrowLeft,
   Edit,
   Trash2,
   Plus,
@@ -116,7 +115,6 @@ export default function ClientDetail() {
         <div className="max-w-5xl mx-auto px-6 py-8 text-center">
           <h2 className="text-xl font-semibold mb-2">Client not found</h2>
           <Button variant="outline" onClick={() => navigate('/agent/clients')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Clients
           </Button>
         </div>
@@ -125,28 +123,33 @@ export default function ClientDetail() {
   }
 
   return (
-    <AgentLayout>
+    <AgentLayout
+      breadcrumbs={[
+        { label: 'Dashboard', href: '/agent' },
+        { label: 'Clients', href: '/agent/clients' },
+        { label: account.name }
+      ]}
+    >
       <Head title={`${account.name} | Travel Agent CRM`} />
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto px-4 py-2 lg:px-6">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/agent/clients')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex-1">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div>
             <h1 className="text-2xl font-display font-bold">{account.name}</h1>
             {account.company_name && (
               <p className="text-muted-foreground">{account.company_name}</p>
             )}
           </div>
-          <Button variant="outline" onClick={() => navigate(`/agent/clients/${clientId}/edit`)}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-          <Button variant="destructive" size="icon" onClick={handleDelete}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => navigate(`/agent/clients/${clientId}/edit`)}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+            <Button variant="destructive" size="icon" onClick={handleDelete}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Quick Stats */}

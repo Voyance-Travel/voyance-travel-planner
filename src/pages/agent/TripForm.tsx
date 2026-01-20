@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Calendar } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -105,19 +105,20 @@ export default function TripForm() {
   }
 
   return (
-    <AgentLayout>
+    <AgentLayout
+      breadcrumbs={[
+        { label: 'Dashboard', href: '/agent' },
+        { label: 'Trips', href: '/agent/trips' },
+        { label: isEdit ? 'Edit' : 'New' }
+      ]}
+    >
       <Head title={isEdit ? 'Edit Trip' : 'New Trip'} />
 
-      <div className="max-w-2xl mx-auto px-6 py-8">
+      <div className="max-w-2xl mx-auto px-4 py-2 lg:px-6">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/agent/trips')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-2xl font-display font-bold">
-            {isEdit ? 'Edit Trip' : 'New Trip'}
-          </h1>
-        </div>
+        <h1 className="text-2xl font-display font-bold mb-6">
+          {isEdit ? 'Edit Trip' : 'New Trip'}
+        </h1>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <Card>

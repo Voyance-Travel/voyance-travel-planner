@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft,
   Plane,
   Hotel,
   Car,
@@ -21,7 +20,7 @@ import {
   Send,
   Download
 } from 'lucide-react';
-import MainLayout from '@/components/layout/MainLayout';
+import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -133,7 +132,7 @@ export default function TripWorkspace() {
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <AgentLayout>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="animate-pulse space-y-4">
             <div className="h-8 bg-muted rounded w-1/3" />
@@ -145,20 +144,20 @@ export default function TripWorkspace() {
             </div>
           </div>
         </div>
-      </MainLayout>
+      </AgentLayout>
     );
   }
 
   if (!trip) {
     return (
-      <MainLayout>
+      <AgentLayout>
         <div className="max-w-7xl mx-auto px-4 py-8 text-center">
           <h2 className="text-xl font-semibold">Trip not found</h2>
           <Button onClick={() => navigate('/agent/trips')} className="mt-4">
             Back to Trips
           </Button>
         </div>
-      </MainLayout>
+      </AgentLayout>
     );
   }
 
@@ -170,22 +169,19 @@ export default function TripWorkspace() {
   const currentQuote = quotes.find(q => q.is_current_version);
 
   return (
-    <MainLayout>
+    <AgentLayout 
+      breadcrumbs={[
+        { label: 'Dashboard', href: '/agent' },
+        { label: 'Trips', href: '/agent/trips' },
+        { label: trip.name }
+      ]}
+    >
       <Head
         title={`${trip.name} | Trip Workspace`}
         description="Manage trip details, bookings, and communications"
       />
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Back Button */}
-        <Button 
-          variant="ghost" 
-          className="mb-4 -ml-2"
-          onClick={() => navigate('/agent/trips')}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Trips
-        </Button>
+      <div className="max-w-7xl mx-auto px-4 py-2 lg:px-6">
 
         {/* Trip Header */}
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-6">
@@ -687,6 +683,6 @@ export default function TripWorkspace() {
           </TabsContent>
         </Tabs>
       </div>
-    </MainLayout>
+    </AgentLayout>
   );
 }

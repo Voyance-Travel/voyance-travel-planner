@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -5,12 +6,15 @@ import {
   Plane, 
   CheckSquare, 
   FileText,
-  Settings,
   ChevronRight,
-  Building2
+  Building2,
+  Menu,
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 interface NavItem {
   label: string;
@@ -35,7 +39,7 @@ interface AgentSidebarProps {
   taskCount?: number;
 }
 
-export default function AgentSidebar({ taskCount }: AgentSidebarProps) {
+function NavContent({ taskCount, onNavigate }: { taskCount?: number; onNavigate?: () => void }) {
   const location = useLocation();
   
   const isActive = (href: string) => {
@@ -46,14 +50,15 @@ export default function AgentSidebar({ taskCount }: AgentSidebarProps) {
   };
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 border-r bg-card min-h-[calc(100vh-4rem)]">
+    <>
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => (
           <Link
             key={item.href}
             to={item.href}
+            onClick={onNavigate}
             className={cn(
-              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               isActive(item.href)
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -78,8 +83,9 @@ export default function AgentSidebar({ taskCount }: AgentSidebarProps) {
           <Link
             key={item.href}
             to={item.href}
+            onClick={onNavigate}
             className={cn(
-              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               isActive(item.href)
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -90,6 +96,38 @@ export default function AgentSidebar({ taskCount }: AgentSidebarProps) {
           </Link>
         ))}
       </div>
-    </aside>
+    </>
+  );
+}
+
+export default function AgentSidebar({ taskCount }: AgentSidebarProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      {/* Mobile Menu Button - Fixed position */}
+      <div className="lg:hidden fixed bottom-4 left-4 z-50">
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <Button size="icon" className="h-12 w-12 rounded-full shadow-lg">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0">
+            <div className="flex flex-col h-full">
+              <div className="p-4 border-b">
+                <h2 className="font-semibold text-lg">Trip OS</h2>
+              </div>
+              <NavContent taskCount={taskCount} onNavigate={() => setMobileOpen(false)} />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex flex-col w-64 border-r bg-card min-h-[calc(100vh-4rem)] sticky top-16">
+        <NavContent taskCount={taskCount} />
+      </aside>
+    </>
   );
 }
