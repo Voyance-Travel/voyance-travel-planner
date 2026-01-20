@@ -46,7 +46,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUserData } = useAuth();
   const navigate = useNavigate();
   
   // Loading states
@@ -537,9 +537,11 @@ export default function Settings() {
                     <Switch
                       id="travel-agent-mode"
                       checked={travelAgentMode}
-                      onCheckedChange={(checked) => {
+                      onCheckedChange={async (checked) => {
                         setTravelAgentMode(checked);
-                        savePreference('travel_agent_mode', checked);
+                        await savePreference('travel_agent_mode', checked);
+                        // Refresh user data so nav menu updates immediately
+                        await refreshUserData();
                       }}
                       disabled={saving}
                     />
