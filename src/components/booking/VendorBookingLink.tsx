@@ -17,6 +17,8 @@ interface VendorBookingLinkProps extends Omit<ButtonProps, 'onClick'> {
   /** Show estimated price for context (optional) */
   estimatedPrice?: number;
   currency?: string;
+  /** Callback fired after the link is clicked (useful for state changes) */
+  onAfterClick?: () => void;
 }
 
 /**
@@ -73,6 +75,7 @@ export function VendorBookingLink({
   variant = 'outline',
   size = 'sm',
   children,
+  onAfterClick,
   ...props
 }: VendorBookingLinkProps) {
   // Use direct URL if provided, otherwise generate search URL
@@ -81,6 +84,7 @@ export function VendorBookingLink({
 
   const handleClick = () => {
     window.open(bookingUrl, '_blank', 'noopener,noreferrer');
+    onAfterClick?.();
   };
 
   // Format estimated price if provided
