@@ -100,6 +100,25 @@ export interface AgencyTrip {
   notes?: string;
   internal_notes?: string;
   tags?: string[];
+  share_token?: string;
+  share_enabled?: boolean;
+  itinerary_data?: {
+    days?: Array<{
+      dayNumber: number;
+      date?: string;
+      title?: string;
+      theme?: string;
+      activities: Array<{
+        id: string;
+        title: string;
+        description?: string;
+        startTime?: string;
+        time?: string;
+        type?: string;
+        location?: { name?: string; address?: string };
+      }>;
+    }>;
+  };
   created_at: string;
   updated_at: string;
   // Joined data

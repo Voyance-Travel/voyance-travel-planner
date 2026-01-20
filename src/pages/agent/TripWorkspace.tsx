@@ -57,6 +57,9 @@ import { toast } from '@/hooks/use-toast';
 import ShareTripModal from '@/components/agent/ShareTripModal';
 import CloneTripModal from '@/components/agent/CloneTripModal';
 import LibraryModal from '@/components/agent/LibraryModal';
+import { generateTripPdf, type TripPdfData, type BookingItem } from '@/utils/tripPdfGenerator';
+import { getAgentSettings } from '@/services/agentCRMAPI';
+import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -136,6 +139,56 @@ export default function TripWorkspace() {
   const getPipelineStageName = (stageNum: number | null) => {
     const stage = PIPELINE_STAGES.find(s => s.stage === stageNum);
     return stage?.name || 'Inquiry';
+  };
+
+  const handleExportPdf = async () => {
+    if (!trip) return;
+    
+    try {
+      toast({ title: 'Generating PDF...' });
+      
+      // Get agent branding
+      const settings = await getAgentSettings();
+      
+      // Prepare bookings data
+      const bookings: BookingItem[] = segments.map(seg => ({
+        type: seg.segment_type as BookingItem['type'],
+        vendorName: seg.vendor_name || undefined,
+        confirmationNumber: seg.confirmation_number || undefined,
+        details: seg.origin && seg.destination 
+          ? `${seg.origin} → ${seg.destination}` 
+          : seg.start_date 
+            ? format(new Date(seg.start_date), 'MMM d, yyyy')
+            : undefined,
+        startDate: seg.start_date || undefined,
+        endDate: seg.end_date || undefined,
+      }));
+      
+      // Get itinerary days
+      const itineraryDays = (trip.itinerary_data?.days || []) as EditorialDay[];
+      
+      const pdfData: TripPdfData = {
+        tripName: trip.name,
+        destination: trip.destination || '',
+        startDate: trip.start_date || '',
+        endDate: trip.end_date || '',
+        travelerCount: trip.traveler_count || 1,
+        clientName: trip.account?.name,
+        notes: trip.notes || undefined,
+        days: itineraryDays,
+        bookings,
+        branding: {
+          businessName: settings?.agent_business_name || 'Travel Advisor',
+          email: settings?.agent_business_email || undefined,
+        },
+      };
+      
+      await generateTripPdf(pdfData);
+      toast({ title: 'PDF downloaded!' });
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      toast({ title: 'Failed to generate PDF', variant: 'destructive' });
+    }
   };
 
   if (isLoading) {
@@ -254,7 +307,7 @@ export default function TripWorkspace() {
                   <Library className="h-4 w-4 mr-2" />
                   My Library
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPdf}>
                   <Download className="h-4 w-4 mr-2" />
                   Export PDF
                 </DropdownMenuItem>
