@@ -1665,6 +1665,272 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_history: {
+        Row: {
+          booking_id: string
+          changes: Json | null
+          created_at: string
+          event_type: string
+          id: string
+          new_status: Database["public"]["Enums"]["booking_status_v2"] | null
+          notes: string | null
+          previous_status:
+            | Database["public"]["Enums"]["booking_status_v2"]
+            | null
+          supplier_response: Json | null
+          triggered_by: string | null
+          triggered_by_user_id: string | null
+        }
+        Insert: {
+          booking_id: string
+          changes?: Json | null
+          created_at?: string
+          event_type: string
+          id?: string
+          new_status?: Database["public"]["Enums"]["booking_status_v2"] | null
+          notes?: string | null
+          previous_status?:
+            | Database["public"]["Enums"]["booking_status_v2"]
+            | null
+          supplier_response?: Json | null
+          triggered_by?: string | null
+          triggered_by_user_id?: string | null
+        }
+        Update: {
+          booking_id?: string
+          changes?: Json | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          new_status?: Database["public"]["Enums"]["booking_status_v2"] | null
+          notes?: string | null
+          previous_status?:
+            | Database["public"]["Enums"]["booking_status_v2"]
+            | null
+          supplier_response?: Json | null
+          triggered_by?: string | null
+          triggered_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_history_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      booking_offers: {
+        Row: {
+          availability_summary: string | null
+          available_dates: Json | null
+          cancellation_summary: string | null
+          created_at: string
+          currency: string
+          deep_link: string | null
+          description: string | null
+          duration_minutes: number | null
+          exclusions: Json | null
+          expires_at: string
+          fetched_at: string
+          id: string
+          image_url: string | null
+          image_urls: Json | null
+          inclusions: Json | null
+          location: Json | null
+          max_participants: number | null
+          min_participants: number | null
+          price_breakdown: Json | null
+          price_cents: number
+          product_type: Database["public"]["Enums"]["booking_product_type"]
+          rating: number | null
+          review_count: number | null
+          supplier: Database["public"]["Enums"]["booking_supplier"]
+          supplier_metadata: Json | null
+          supplier_offer_id: string
+          supplier_product_code: string | null
+          title: string
+          trip_id: string | null
+          user_id: string
+        }
+        Insert: {
+          availability_summary?: string | null
+          available_dates?: Json | null
+          cancellation_summary?: string | null
+          created_at?: string
+          currency?: string
+          deep_link?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          exclusions?: Json | null
+          expires_at?: string
+          fetched_at?: string
+          id?: string
+          image_url?: string | null
+          image_urls?: Json | null
+          inclusions?: Json | null
+          location?: Json | null
+          max_participants?: number | null
+          min_participants?: number | null
+          price_breakdown?: Json | null
+          price_cents: number
+          product_type: Database["public"]["Enums"]["booking_product_type"]
+          rating?: number | null
+          review_count?: number | null
+          supplier: Database["public"]["Enums"]["booking_supplier"]
+          supplier_metadata?: Json | null
+          supplier_offer_id: string
+          supplier_product_code?: string | null
+          title: string
+          trip_id?: string | null
+          user_id: string
+        }
+        Update: {
+          availability_summary?: string | null
+          available_dates?: Json | null
+          cancellation_summary?: string | null
+          created_at?: string
+          currency?: string
+          deep_link?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          exclusions?: Json | null
+          expires_at?: string
+          fetched_at?: string
+          id?: string
+          image_url?: string | null
+          image_urls?: Json | null
+          inclusions?: Json | null
+          location?: Json | null
+          max_participants?: number | null
+          min_participants?: number | null
+          price_breakdown?: Json | null
+          price_cents?: number
+          product_type?: Database["public"]["Enums"]["booking_product_type"]
+          rating?: number | null
+          review_count?: number | null
+          supplier?: Database["public"]["Enums"]["booking_supplier"]
+          supplier_metadata?: Json | null
+          supplier_offer_id?: string
+          supplier_product_code?: string | null
+          title?: string
+          trip_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_offers_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      booking_quotes: {
+        Row: {
+          cancellation_policy: Json
+          created_at: string
+          currency: string
+          exclusions: Json | null
+          expires_at: string
+          id: string
+          inclusions: Json | null
+          is_locked: boolean
+          modification_policy: Json | null
+          offer_id: string | null
+          participant_count: number
+          price_breakdown: Json | null
+          price_cents: number
+          product_type: Database["public"]["Enums"]["booking_product_type"]
+          selected_date: string | null
+          selected_time: string | null
+          supplier: Database["public"]["Enums"]["booking_supplier"]
+          supplier_offer_id: string
+          supplier_quote_id: string | null
+          title: string
+          trip_activity_id: string | null
+          trip_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancellation_policy: Json
+          created_at?: string
+          currency?: string
+          exclusions?: Json | null
+          expires_at: string
+          id?: string
+          inclusions?: Json | null
+          is_locked?: boolean
+          modification_policy?: Json | null
+          offer_id?: string | null
+          participant_count?: number
+          price_breakdown?: Json | null
+          price_cents: number
+          product_type: Database["public"]["Enums"]["booking_product_type"]
+          selected_date?: string | null
+          selected_time?: string | null
+          supplier: Database["public"]["Enums"]["booking_supplier"]
+          supplier_offer_id: string
+          supplier_quote_id?: string | null
+          title: string
+          trip_activity_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancellation_policy?: Json
+          created_at?: string
+          currency?: string
+          exclusions?: Json | null
+          expires_at?: string
+          id?: string
+          inclusions?: Json | null
+          is_locked?: boolean
+          modification_policy?: Json | null
+          offer_id?: string | null
+          participant_count?: number
+          price_breakdown?: Json | null
+          price_cents?: number
+          product_type?: Database["public"]["Enums"]["booking_product_type"]
+          selected_date?: string | null
+          selected_time?: string | null
+          supplier?: Database["public"]["Enums"]["booking_supplier"]
+          supplier_offer_id?: string
+          supplier_quote_id?: string | null
+          title?: string
+          trip_activity_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_quotes_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "booking_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_quotes_trip_activity_id_fkey"
+            columns: ["trip_activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_quotes_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_state_log: {
         Row: {
           created_at: string
@@ -1714,6 +1980,164 @@ export type Database = {
             columns: ["trip_activity_id"]
             isOneToOne: false
             referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookings: {
+        Row: {
+          booked_date: string
+          booked_time: string | null
+          booking_reference: string
+          cancellation_policy: Json
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          currency: string
+          id: string
+          last_supplier_sync: string | null
+          lead_traveler_email: string | null
+          lead_traveler_name: string | null
+          modification_policy: Json | null
+          offer_id: string | null
+          paid_at: string | null
+          participant_count: number
+          payment_method: string | null
+          price_breakdown: Json | null
+          price_cents: number
+          product_type: Database["public"]["Enums"]["booking_product_type"]
+          quote_id: string | null
+          refund_amount_cents: number | null
+          refund_status: string | null
+          refunded_at: string | null
+          status: Database["public"]["Enums"]["booking_status_v2"]
+          stripe_charge_id: string | null
+          stripe_payment_intent_id: string | null
+          supplier: Database["public"]["Enums"]["booking_supplier"]
+          supplier_booking_id: string | null
+          supplier_emails: Json | null
+          supplier_status: string | null
+          tickets: Json | null
+          title: string
+          traveler_data: Json
+          trip_activity_id: string | null
+          trip_id: string | null
+          updated_at: string
+          user_id: string
+          voucher_data: Json | null
+          voucher_url: string | null
+        }
+        Insert: {
+          booked_date: string
+          booked_time?: string | null
+          booking_reference: string
+          cancellation_policy: Json
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          last_supplier_sync?: string | null
+          lead_traveler_email?: string | null
+          lead_traveler_name?: string | null
+          modification_policy?: Json | null
+          offer_id?: string | null
+          paid_at?: string | null
+          participant_count?: number
+          payment_method?: string | null
+          price_breakdown?: Json | null
+          price_cents: number
+          product_type: Database["public"]["Enums"]["booking_product_type"]
+          quote_id?: string | null
+          refund_amount_cents?: number | null
+          refund_status?: string | null
+          refunded_at?: string | null
+          status?: Database["public"]["Enums"]["booking_status_v2"]
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
+          supplier: Database["public"]["Enums"]["booking_supplier"]
+          supplier_booking_id?: string | null
+          supplier_emails?: Json | null
+          supplier_status?: string | null
+          tickets?: Json | null
+          title: string
+          traveler_data: Json
+          trip_activity_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+          user_id: string
+          voucher_data?: Json | null
+          voucher_url?: string | null
+        }
+        Update: {
+          booked_date?: string
+          booked_time?: string | null
+          booking_reference?: string
+          cancellation_policy?: Json
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          last_supplier_sync?: string | null
+          lead_traveler_email?: string | null
+          lead_traveler_name?: string | null
+          modification_policy?: Json | null
+          offer_id?: string | null
+          paid_at?: string | null
+          participant_count?: number
+          payment_method?: string | null
+          price_breakdown?: Json | null
+          price_cents?: number
+          product_type?: Database["public"]["Enums"]["booking_product_type"]
+          quote_id?: string | null
+          refund_amount_cents?: number | null
+          refund_status?: string | null
+          refunded_at?: string | null
+          status?: Database["public"]["Enums"]["booking_status_v2"]
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
+          supplier?: Database["public"]["Enums"]["booking_supplier"]
+          supplier_booking_id?: string | null
+          supplier_emails?: Json | null
+          supplier_status?: string | null
+          tickets?: Json | null
+          title?: string
+          traveler_data?: Json
+          trip_activity_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+          user_id?: string
+          voucher_data?: Json | null
+          voucher_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "booking_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "booking_quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_trip_activity_id_fkey"
+            columns: ["trip_activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
             referencedColumns: ["id"]
           },
         ]
@@ -4330,6 +4754,7 @@ export type Database = {
     }
     Functions: {
       cleanup_expired_search_cache: { Args: never; Returns: number }
+      generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
       generate_share_token: { Args: never; Returns: string }
@@ -4412,6 +4837,12 @@ export type Database = {
         | "changed"
         | "cancelled"
         | "refunded"
+      booking_product_type:
+        | "activity"
+        | "hotel"
+        | "flight"
+        | "transfer"
+        | "package"
       booking_segment_type:
         | "flight"
         | "hotel"
@@ -4434,6 +4865,20 @@ export type Database = {
         | "cancelled"
         | "refunded"
         | "no_show"
+      booking_status_v2:
+        | "pending"
+        | "confirmed"
+        | "ticketed"
+        | "cancelled"
+        | "refunded"
+        | "no_show"
+        | "completed"
+      booking_supplier:
+        | "viator"
+        | "rapid_hotels"
+        | "amadeus"
+        | "direct"
+        | "manual"
       communication_type: "email" | "sms" | "call" | "note" | "approval"
       document_type:
         | "passport"
@@ -4643,6 +5088,13 @@ export const Constants = {
         "cancelled",
         "refunded",
       ],
+      booking_product_type: [
+        "activity",
+        "hotel",
+        "flight",
+        "transfer",
+        "package",
+      ],
       booking_segment_type: [
         "flight",
         "hotel",
@@ -4667,6 +5119,22 @@ export const Constants = {
         "cancelled",
         "refunded",
         "no_show",
+      ],
+      booking_status_v2: [
+        "pending",
+        "confirmed",
+        "ticketed",
+        "cancelled",
+        "refunded",
+        "no_show",
+        "completed",
+      ],
+      booking_supplier: [
+        "viator",
+        "rapid_hotels",
+        "amadeus",
+        "direct",
+        "manual",
       ],
       communication_type: ["email", "sms", "call", "note", "approval"],
       document_type: [
