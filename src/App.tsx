@@ -82,6 +82,8 @@ import AgentTasks from "./pages/agent/AgentTasks";
 import TripWorkspace from "./pages/agent/TripWorkspace";
 import TripShare from "./pages/agent/TripShare";
 import AgentLibrary from "./pages/agent/AgentLibrary";
+import AgentSettings from "./pages/agent/AgentSettings";
+import AgentDocuments from "./pages/agent/AgentDocuments";
 import ClientIntakeForm from "./pages/agent/ClientIntakeForm";
 import NotFound from "./pages/NotFound";
 
@@ -184,10 +186,8 @@ const App = () => (
                 <Route path="/agent/trips/:tripId/edit" element={<TripForm />} />
                 <Route path="/agent/tasks" element={<AgentTasks />} />
                 <Route path="/agent/library" element={<AgentLibrary />} />
-
-                {/* Agent Sidebar Links (aliases) */}
-                <Route path="/agent/settings" element={<Navigate to="/profile/settings" replace />} />
-                <Route path="/agent/documents" element={<Navigate to="/agent/trips" replace />} />
+                <Route path="/agent/settings" element={<AgentSettings />} />
+                <Route path="/agent/documents" element={<AgentDocuments />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />

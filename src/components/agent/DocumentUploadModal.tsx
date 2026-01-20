@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 interface DocumentUploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  tripId: string;
+  tripId?: string; // Optional - allows uploading without a specific trip
   accountId?: string;
   travelerId?: string;
   onSuccess?: () => void;
@@ -102,7 +102,8 @@ export default function DocumentUploadModal({
 
       // Upload file to storage
       const fileExt = file.name.split('.').pop();
-      const fileName = `${userData.user.id}/${tripId}/${Date.now()}-${documentName}.${fileExt}`;
+      const pathPrefix = tripId ? `${userData.user.id}/${tripId}` : `${userData.user.id}/general`;
+      const fileName = `${pathPrefix}/${Date.now()}-${documentName}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('agency-documents')
@@ -117,7 +118,7 @@ export default function DocumentUploadModal({
 
       // Save document metadata to database
       await uploadDocument({
-        trip_id: tripId,
+        trip_id: tripId || undefined,
         account_id: accountId,
         traveler_id: travelerId,
         document_type: documentType as any,
