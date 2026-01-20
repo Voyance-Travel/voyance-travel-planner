@@ -137,25 +137,25 @@ export default function TopNav() {
                   <NotificationBell />
                 </div>
 
-                {/* Build Itinerary Link */}
+                {/* Book Travel Link */}
                 <Link
-                  to={`${ROUTES.START}?mode=itinerary`}
+                  to={ROUTES.START}
                   className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${
                     isTransparent ? 'text-white/80 hover:text-white' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Build Itinerary
+                  <Calendar className="h-3.5 w-3.5" />
+                  Book Travel
                 </Link>
 
-                {/* Book Travel Button */}
+                {/* Build Itinerary Button */}
                 <Button
                   size="sm"
-                  onClick={() => navigate(ROUTES.START)}
+                  onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
-                  <Calendar className="h-4 w-4" />
-                  Book Travel
+                  <Sparkles className="h-4 w-4" />
+                  Build Itinerary
                 </Button>
 
                 {/* User Dropdown */}
@@ -245,25 +245,25 @@ export default function TopNav() {
               </>
             ) : (
               <>
-                {/* Build Itinerary Link */}
+                {/* Book Travel Link */}
                 <Link
-                  to={`${ROUTES.START}?mode=itinerary`}
+                  to={ROUTES.START}
                   className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${
                     isTransparent ? 'text-white/80 hover:text-white' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Build Itinerary
+                  <Calendar className="h-3.5 w-3.5" />
+                  Book Travel
                 </Link>
 
-                {/* Book Travel Button */}
+                {/* Build Itinerary Button */}
                 <Button
                   size="sm"
-                  onClick={() => navigate(ROUTES.START)}
+                  onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
-                  <Calendar className="h-4 w-4" />
-                  Book Travel
+                  <Sparkles className="h-4 w-4" />
+                  Build Itinerary
                 </Button>
 
                 <Link
@@ -357,18 +357,18 @@ export default function TopNav() {
                     })}
                     <div className="pt-2 space-y-2">
                       <Link
-                        to={`${ROUTES.START}?mode=itinerary`}
+                        to={ROUTES.START}
                         className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        Build Itinerary
-                      </Link>
-                      <Button
-                        className="w-full gap-2"
-                        onClick={() => navigate(ROUTES.START)}
                       >
                         <Calendar className="h-4 w-4" />
                         Book Travel
+                      </Link>
+                      <Button
+                        className="w-full gap-2"
+                        onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        Build Itinerary
                       </Button>
                     </div>
                     <button
@@ -383,18 +383,18 @@ export default function TopNav() {
                   <>
                     <div className="space-y-2 mb-4">
                       <Link
-                        to={`${ROUTES.START}?mode=itinerary`}
+                        to={ROUTES.START}
                         className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        Build Itinerary
-                      </Link>
-                      <Button
-                        className="w-full gap-2"
-                        onClick={() => navigate(ROUTES.START)}
                       >
                         <Calendar className="h-4 w-4" />
                         Book Travel
+                      </Link>
+                      <Button
+                        className="w-full gap-2"
+                        onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        Build Itinerary
                       </Button>
                     </div>
                     <Link
