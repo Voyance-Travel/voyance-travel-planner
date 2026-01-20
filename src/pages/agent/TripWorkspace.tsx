@@ -80,6 +80,7 @@ import TaskModal from '@/components/agent/TaskModal';
 import { generateTripPdf, type TripPdfData, type BookingItem } from '@/utils/tripPdfGenerator';
 import { getAgentSettings } from '@/services/agentCRMAPI';
 import EditorialItinerary, { type EditorialDay } from '@/components/itinerary/EditorialItinerary';
+import FinanceLedger from '@/components/agent/FinanceLedger';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -914,56 +915,16 @@ export default function TripWorkspace() {
             </div>
           </TabsContent>
 
-          {/* Finance Tab */}
+          {/* Finance Tab - Travel Subledger */}
           <TabsContent value="finance" className="space-y-6">
-            {/* Finance Summary Cards */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Trip Total</span>
-                    <Receipt className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <p className="text-2xl font-bold">{formatCurrency(trip.total_cost_cents || 0)}</p>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Paid to Date</span>
-                    <CreditCard className="h-4 w-4 text-emerald-600" />
-                  </div>
-                  <p className="text-2xl font-bold text-emerald-600">
-                    {formatCurrency(trip.total_paid_cents || 0)}
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className={totalOwed > 0 ? 'border-amber-200' : ''}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Balance Due</span>
-                    <Wallet className="h-4 w-4 text-amber-600" />
-                  </div>
-                  <p className={`text-2xl font-bold ${totalOwed > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                    {formatCurrency(totalOwed)}
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-primary/5 border-primary/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Your Commission</span>
-                    <Banknote className="h-4 w-4 text-primary" />
-                  </div>
-                  <p className="text-2xl font-bold text-primary">
-                    {formatCurrency(trip.total_commission_cents || 0)}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Finance Ledger with ARC/BSP, Supplier Direct, Commission Track */}
+            <FinanceLedger
+              segments={segments}
+              tripTotalCents={trip.total_cost_cents || 0}
+              tripPaidCents={trip.total_paid_cents || 0}
+              tripCommissionCents={trip.total_commission_cents || 0}
+              currency={trip.currency}
+            />
 
             {/* Payment Progress */}
             <Card>

@@ -47,9 +47,11 @@ const SEGMENT_TYPES: { value: BookingSegmentType; label: string; icon: React.Com
 
 export default function BookingSegmentModal({ open, onOpenChange, tripId, segment, onSuccess }: BookingSegmentModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { register, handleSubmit, reset, watch, setValue } = useForm<Partial<BookingSegment>>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { register, handleSubmit, reset, watch, setValue } = useForm<any>();
   const isEdit = !!segment;
   const segmentType = watch('segment_type') || 'flight';
+  const settlementType = watch('settlement_type') || 'supplier_direct';
 
   useEffect(() => {
     if (segment) {
@@ -60,19 +62,23 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
         status: 'pending',
         is_refundable: true,
         currency: 'USD',
+        settlement_type: 'supplier_direct',
       });
     }
   }, [segment, reset]);
 
-  const onSubmit = async (data: Partial<BookingSegment>) => {
+  const onSubmit = async (data: Record<string, unknown>) => {
     setIsSubmitting(true);
     try {
       const payload = {
         ...data,
         trip_id: tripId,
-        net_cost_cents: Math.round((data.net_cost_cents || 0) * 100),
-        sell_price_cents: Math.round((data.sell_price_cents || 0) * 100),
-        commission_cents: Math.round((data.commission_cents || 0) * 100),
+        net_cost_cents: Math.round((Number(data.net_cost_cents) || 0) * 100),
+        sell_price_cents: Math.round((Number(data.sell_price_cents) || 0) * 100),
+        commission_cents: Math.round((Number(data.commission_cents) || 0) * 100),
+        supplier_paid_cents: Math.round((Number(data.supplier_paid_cents) || 0) * 100),
+        commission_expected_cents: Math.round((Number(data.commission_expected_cents) || 0) * 100),
+        commission_received_cents: Math.round((Number(data.commission_received_cents) || 0) * 100),
       };
 
       if (isEdit && segment) {
@@ -117,7 +123,7 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
               <Label>Booking Type *</Label>
               <Select 
                 value={segmentType} 
-                onValueChange={(v) => setValue('segment_type', v as BookingSegmentType)}
+                onValueChange={(v) => setValue('segment_type', v)}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -137,8 +143,8 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
             <div>
               <Label>Status</Label>
               <Select 
-                value={watch('status') || 'pending'} 
-                onValueChange={(v) => setValue('status', v as BookingSegment['status'])}
+                value={(watch('status') as string) || 'pending'} 
+                onValueChange={(v) => setValue('status', v)}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -268,6 +274,41 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
 
             {/* Financials Tab */}
             <TabsContent value="financials" className="space-y-4 mt-4">
+              {/* Settlement Type - How booking is financially processed */}
+              <div>
+                <Label>Submit To (Settlement Type)</Label>
+                <Select 
+                  value={watch('settlement_type') || 'supplier_direct'} 
+                  onValueChange={(v) => setValue('settlement_type', v as BookingSegment['settlement_type'])}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="arc_bsp">
+                      <div className="flex flex-col">
+                        <span>ARC/BSP</span>
+                        <span className="text-xs text-muted-foreground">Airline reporting settlement</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="supplier_direct">
+                      <div className="flex flex-col">
+                        <span>Supplier Direct</span>
+                        <span className="text-xs text-muted-foreground">Agency collects, then pays supplier</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="commission_track">
+                      <div className="flex flex-col">
+                        <span>Commission Track</span>
+                        <span className="text-xs text-muted-foreground">Client pays supplier, commission due later</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+
               <div className="grid sm:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="net_cost_cents">Net Cost ($)</Label>
@@ -300,6 +341,7 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
                   />
                 </div>
               </div>
+
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="commission_rate">Commission Rate (%)</Label>
@@ -330,6 +372,81 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
                   </Select>
                 </div>
               </div>
+
+              {/* Settlement-specific fields */}
+              {watch('settlement_type') === 'arc_bsp' && (
+                <>
+                  <Separator />
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="arc_submission_date">ARC Submission Date</Label>
+                      <Input id="arc_submission_date" type="date" {...register('arc_submission_date')} />
+                    </div>
+                    <div>
+                      <Label htmlFor="arc_settlement_date">Settlement Date</Label>
+                      <Input id="arc_settlement_date" type="date" {...register('arc_settlement_date')} />
+                    </div>
+                    <div>
+                      <Label htmlFor="arc_report_number">Report/Batch #</Label>
+                      <Input id="arc_report_number" {...register('arc_report_number')} placeholder="e.g., 12345" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {watch('settlement_type') === 'supplier_direct' && (
+                <>
+                  <Separator />
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="supplier_paid_cents">Amount Paid to Supplier ($)</Label>
+                      <Input 
+                        id="supplier_paid_cents" 
+                        type="number" 
+                        step="0.01"
+                        {...register('supplier_paid_cents')} 
+                        placeholder="0.00" 
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="supplier_paid_at">Date Paid</Label>
+                      <Input id="supplier_paid_at" type="date" {...register('supplier_paid_at')} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {watch('settlement_type') === 'commission_track' && (
+                <>
+                  <Separator />
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="commission_expected_cents">Expected Commission ($)</Label>
+                      <Input 
+                        id="commission_expected_cents" 
+                        type="number" 
+                        step="0.01"
+                        {...register('commission_expected_cents')} 
+                        placeholder="0.00" 
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="commission_received_cents">Received Commission ($)</Label>
+                      <Input 
+                        id="commission_received_cents" 
+                        type="number" 
+                        step="0.01"
+                        {...register('commission_received_cents')} 
+                        placeholder="0.00" 
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="commission_received_at">Date Received</Label>
+                      <Input id="commission_received_at" type="date" {...register('commission_received_at')} />
+                    </div>
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             {/* Policies Tab */}
