@@ -32,7 +32,7 @@ type FormData = Partial<AgencyAccount> & {
 export default function AccountForm() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(!!clientId);
   
@@ -45,6 +45,7 @@ export default function AccountForm() {
   });
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       navigate('/signin');
       return;
@@ -52,7 +53,7 @@ export default function AccountForm() {
     if (isEdit) {
       loadAccount();
     }
-  }, [isAuthenticated, clientId, navigate]);
+  }, [isAuthenticated, authLoading, clientId, navigate]);
 
   const loadAccount = async () => {
     if (!clientId) return;
