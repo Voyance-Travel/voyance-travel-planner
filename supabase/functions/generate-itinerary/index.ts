@@ -435,7 +435,15 @@ async function getCollaboratorPreferences(supabase: any, tripId: string): Promis
  * Get flight and hotel context for AI prompt
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getFlightHotelContext(supabase: any, tripId: string): Promise<string> {
+interface FlightHotelContextResult {
+  context: string;
+  arrivalTime?: string;
+  earliestFirstActivityTime?: string;
+  returnDepartureTime?: string;
+  latestLastActivityTime?: string;
+}
+
+async function getFlightHotelContext(supabase: any, tripId: string): Promise<FlightHotelContextResult> {
   try {
     const { data: trip, error } = await supabase
       .from('trips')
@@ -443,9 +451,13 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<str
       .eq('id', tripId)
       .maybeSingle();
 
-    if (error || !trip) return '';
+    if (error || !trip) return { context: '' };
 
     const sections: string[] = [];
+    let arrivalTimeStr: string | undefined;
+    let earliestFirstActivity: string | undefined;
+    let returnDepartureTimeStr: string | undefined;
+    let latestLastActivity: string | undefined;
 
     // Parse flight information
     const flight = trip.flight_selection as {
@@ -469,14 +481,54 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<str
       }
       if (flight.arrivalTime) {
         const arr = new Date(flight.arrivalTime);
-        flightInfo.push(`  Arrival: ${arr.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+        arrivalTimeStr = arr.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        flightInfo.push(`  Arrival: ${arrivalTimeStr}`);
+        
+        // Calculate earliest first activity: arrival + 4 hours buffer
+        // This accounts for: landing, taxiing, deplaning (30 min), customs/immigration (1-2 hours),
+        // baggage claim (30 min), transport to hotel (45-60 min), hotel check-in (30 min)
+        const ARRIVAL_BUFFER_HOURS = 4;
+        const earliestActivityTime = new Date(arr.getTime() + ARRIVAL_BUFFER_HOURS * 60 * 60 * 1000);
+        earliestFirstActivity = `${earliestActivityTime.getHours().toString().padStart(2, '0')}:${earliestActivityTime.getMinutes().toString().padStart(2, '0')}`;
+        
+        console.log(`[FlightContext] Arrival at ${arrivalTimeStr}, earliest first activity: ${earliestFirstActivity}`);
       }
+      
       if (flight.returnDepartureTime) {
         const retDept = new Date(flight.returnDepartureTime);
-        flightInfo.push(`✈️ Return: ${retDept.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+        returnDepartureTimeStr = retDept.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        flightInfo.push(`✈️ Return departure: ${returnDepartureTimeStr}`);
+        
+        // Calculate latest last activity: return departure - 3 hours buffer
+        // This accounts for: hotel checkout (30 min), transport to airport (45-60 min), 
+        // check-in/security (1.5-2 hours for international)
+        const DEPARTURE_BUFFER_HOURS = 3;
+        const latestActivityTime = new Date(retDept.getTime() - DEPARTURE_BUFFER_HOURS * 60 * 60 * 1000);
+        latestLastActivity = `${latestActivityTime.getHours().toString().padStart(2, '0')}:${latestActivityTime.getMinutes().toString().padStart(2, '0')}`;
+        
+        console.log(`[FlightContext] Return at ${returnDepartureTimeStr}, latest last activity: ${latestLastActivity}`);
       }
+      
       if (flightInfo.length > 0) {
-        sections.push(`\n${'='.repeat(40)}\n✈️ FLIGHT SCHEDULE (Plan around these times!)\n${'='.repeat(40)}\n${flightInfo.join('\n')}`);
+        let flightConstraints = `\n${'='.repeat(40)}\n✈️ FLIGHT SCHEDULE - CRITICAL CONSTRAINTS\n${'='.repeat(40)}\n${flightInfo.join('\n')}`;
+        
+        // Add explicit timing constraints
+        if (earliestFirstActivity) {
+          flightConstraints += `\n\n🚨 DAY 1 TIMING CONSTRAINT:`;
+          flightConstraints += `\n   - Flight lands at ${arrivalTimeStr}`;
+          flightConstraints += `\n   - Allow 4 hours for: customs/immigration, baggage, transport to hotel, check-in`;
+          flightConstraints += `\n   - EARLIEST first sightseeing activity: ${earliestFirstActivity} (NOT earlier!)`;
+          flightConstraints += `\n   - If arrival is late (after 6 PM), Day 1 should only include dinner and rest`;
+        }
+        
+        if (latestLastActivity) {
+          flightConstraints += `\n\n🚨 LAST DAY TIMING CONSTRAINT:`;
+          flightConstraints += `\n   - Return flight departs at ${returnDepartureTimeStr}`;
+          flightConstraints += `\n   - Allow 3 hours for: checkout, transport to airport, check-in, security`;
+          flightConstraints += `\n   - LATEST activity before airport transfer: ${latestLastActivity}`;
+        }
+        
+        sections.push(flightConstraints);
       }
     }
 
@@ -505,10 +557,16 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<str
       }
     }
 
-    return sections.join('\n');
+    return {
+      context: sections.join('\n'),
+      arrivalTime: arrivalTimeStr,
+      earliestFirstActivityTime: earliestFirstActivity,
+      returnDepartureTime: returnDepartureTimeStr,
+      latestLastActivityTime: latestLastActivity,
+    };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
-    return '';
+    return { context: '' };
   }
 }
 
@@ -1016,12 +1074,15 @@ CRITICAL DATA REQUIREMENTS (REQUIRED FOR EVERY ACTIVITY):
 
 STRUCTURAL REQUIREMENTS:
 1. Include 4-6 activities per day including meals
-2. Start days around 9:00 AM and end by 9:00-10:00 PM
-3. Account for travel time between activities
-4. Include transportation instructions between each activity
-5. DAY 1 MUST START with airport arrival and transfer to hotel
-6. LAST DAY MUST END with hotel checkout and transfer to airport
-7. Include website URLs for popular venues when known`;
+2. START times depend on flight schedule (see FLIGHT CONSTRAINTS in preferences if provided):
+   - If flight arrival time is specified: first sightseeing activity must be AT LEAST 4 hours AFTER landing
+   - If no flight info: start days around 9:00 AM
+3. End days by 9:00-10:00 PM (unless late arrival day - then end earlier)
+4. Account for travel time between activities
+5. Include transportation instructions between each activity
+6. DAY 1 MUST START with airport arrival and transfer to hotel (times based on actual flight if provided)
+7. LAST DAY MUST END with hotel checkout and transfer to airport (times based on return flight if provided)
+8. Include website URLs for popular venues when known`;
 
   const daysList = [];
   for (let i = 0; i < context.totalDays; i++) {
@@ -1040,11 +1101,13 @@ TRIP DETAILS:
 ${preferenceContext}
 
 IMPORTANT STRUCTURE:
-- DAY 1: Start with "Arrival at [Airport Name]" as the FIRST activity (category: "transport"), 
+- DAY 1: Start with "Arrival at [Airport Name]" as the FIRST activity (category: "transport") at the ACTUAL arrival time from flight data, 
   followed by "Airport Transfer to Hotel" (category: "transport"), 
   then "Check-in at Hotel" (category: "accommodation")
+  ⚠️ CRITICAL: If flight arrival time is provided, the first NON-transport/accommodation activity CANNOT start earlier than 4 hours after landing. 
+  For example: landing at 10:30 AM → first sightseeing/dining at 14:30 (2:30 PM) or later.
 - LAST DAY: End with "Hotel Checkout" (category: "accommodation"), 
-  followed by "Transfer to Airport" (category: "transport"), 
+  followed by "Transfer to Airport" (category: "transport") - ensure arrival at airport 2.5-3 hours before departure, 
   then "Departure from [Airport Name]" (category: "transport")
 
 Generate activities for these days:
@@ -1768,9 +1831,15 @@ serve(async (req) => {
       // FLIGHT & HOTEL CONTEXT - Use booked flight/hotel in itinerary planning
       // =======================================================================
       console.log("[Stage 1.3] Fetching flight and hotel context...");
-      const flightHotelContext = await getFlightHotelContext(supabase, tripId);
-      if (flightHotelContext) {
+      const flightHotelResult = await getFlightHotelContext(supabase, tripId);
+      if (flightHotelResult.context) {
         console.log("[Stage 1.3] Flight/hotel context added to AI prompt");
+        if (flightHotelResult.earliestFirstActivityTime) {
+          console.log(`[Stage 1.3] Day 1 earliest activity: ${flightHotelResult.earliestFirstActivityTime}`);
+        }
+        if (flightHotelResult.latestLastActivityTime) {
+          console.log(`[Stage 1.3] Last day latest activity: ${flightHotelResult.latestLastActivityTime}`);
+        }
       }
       
       // Build raw preference context (structured data)
@@ -1790,7 +1859,7 @@ serve(async (req) => {
       }
       
       // Combine all context for maximum personalization
-      const preferenceContext = rawPreferenceContext + enrichedPreferenceContext + flightHotelContext;
+      const preferenceContext = rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context;
 
       // STAGE 2: AI Generation
       let aiResult;
