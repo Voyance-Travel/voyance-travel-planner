@@ -93,6 +93,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
   const [dnaData, setDnaData] = useState<TravelDNAData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('identity');
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
 
   useEffect(() => {
     async function loadDNA() {
@@ -199,7 +200,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
     ? CATEGORY_ICONS[secondaryNarrative.category] || Compass
     : null;
   const categoryInfo = CATEGORY_DESCRIPTIONS[narrative.category];
-  const [isInfoOpen, setIsInfoOpen] = useState(false);
 
   return (
     <motion.div 
