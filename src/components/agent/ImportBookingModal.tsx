@@ -36,8 +36,9 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
-import { createSegment, type BookingSegmentType, type BookingSettlementType } from '@/services/agencyCRM';
+import { createSegment, updateTrip, getTrip, type BookingSegmentType, type BookingSettlementType } from '@/services/agencyCRM';
 import { toast } from '@/hooks/use-toast';
+import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 
 interface ImportBookingModalProps {
   open: boolean;
@@ -219,10 +220,12 @@ export default function ImportBookingModal({ open, onOpenChange, tripId, onSucce
       const sellPriceCents = sellPrice ? Math.round(parseFloat(sellPrice) * 100) : netCostCents;
       const commissionCents = commission ? Math.round(parseFloat(commission) * 100) : 0;
 
-      await createSegment({
+      // Create the booking segment with 'imported' source
+      const segment = await createSegment({
         trip_id: tripId,
         segment_type: parsedBooking.segment_type,
         status: 'pending',
+        booking_source: 'imported', // Mode 2: External booking, imported
         vendor_name: parsedBooking.vendor_name,
         confirmation_number: parsedBooking.confirmation_number,
         start_date: parsedBooking.start_date,
@@ -240,11 +243,25 @@ export default function ImportBookingModal({ open, onOpenChange, tripId, onSucce
         net_cost_cents: netCostCents,
         sell_price_cents: sellPriceCents,
         commission_cents: commissionCents,
+        commission_expected_cents: commissionCents,
         settlement_type: settlementType,
         notes: parsedBooking.notes,
       });
 
-      toast({ title: 'Booking imported successfully!' });
+      // Auto-create itinerary item if we have a start date
+      if (parsedBooking.start_date) {
+        try {
+          await addToItinerary(parsedBooking, segment.id);
+        } catch (itinError) {
+          console.warn('Could not auto-add to itinerary:', itinError);
+          // Don't fail the whole import if itinerary update fails
+        }
+      }
+
+      toast({ 
+        title: 'Booking imported!',
+        description: 'Added to bookings and itinerary'
+      });
       onSuccess();
       handleClose();
     } catch (err) {
@@ -252,6 +269,94 @@ export default function ImportBookingModal({ open, onOpenChange, tripId, onSucce
       toast({ title: 'Failed to save booking', variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Auto-add imported booking to itinerary
+  const addToItinerary = async (booking: ParsedBooking, segmentId: string) => {
+    const trip = await getTrip(tripId);
+    if (!trip) return;
+
+    const itineraryData = trip.itinerary_data || { days: [] };
+    const days = (itineraryData.days || []) as EditorialDay[];
+    
+    // Find the day matching the booking's start date
+    const bookingDate = booking.start_date;
+    let targetDay = days.find(d => d.date === bookingDate);
+    
+    // If no matching day, create one or add to first day
+    if (!targetDay && days.length > 0) {
+      // Try to find closest day
+      targetDay = days[0];
+    }
+    
+    if (!targetDay) {
+      // No itinerary yet - create first day
+      targetDay = {
+        dayNumber: 1,
+        date: bookingDate,
+        title: `Day 1`,
+        activities: [],
+      };
+      days.push(targetDay);
+    }
+
+    // Map booking segment type to itinerary activity type
+    type ItineraryActivityType = 'transportation' | 'accommodation' | 'dining' | 'cultural' | 'activity' | 'relaxation' | 'shopping';
+    const mapSegmentToActivityType = (segmentType: BookingSegmentType): ItineraryActivityType => {
+      const mapping: Record<string, ItineraryActivityType> = {
+        flight: 'transportation',
+        hotel: 'accommodation',
+        car_rental: 'transportation',
+        transfer: 'transportation',
+        rail: 'transportation',
+        tour: 'activity',
+        cruise: 'transportation',
+        insurance: 'activity',
+        other: 'activity',
+      };
+      return mapping[segmentType] || 'activity';
+    };
+
+    // Create itinerary activity from booking
+    const activityTitle = getActivityTitle(booking);
+    const newActivity: EditorialDay['activities'][number] = {
+      id: `imported-${segmentId}`,
+      title: activityTitle,
+      description: booking.notes || `Confirmation: ${booking.confirmation_number || 'Pending'}`,
+      startTime: booking.start_time || '09:00',
+      time: booking.start_time || '09:00',
+      type: mapSegmentToActivityType(booking.segment_type),
+      location: {
+        name: booking.vendor_name || '',
+        address: booking.destination || booking.origin || '',
+      },
+    };
+
+    targetDay.activities.push(newActivity);
+
+    // Save updated itinerary
+    await updateTrip(tripId, {
+      itinerary_data: { days } as unknown as typeof trip.itinerary_data,
+    });
+  };
+
+  const getActivityTitle = (booking: ParsedBooking): string => {
+    switch (booking.segment_type) {
+      case 'flight':
+        return `✈️ ${booking.flight_number || 'Flight'}: ${booking.origin_code || booking.origin || ''} → ${booking.destination_code || booking.destination || ''}`;
+      case 'hotel':
+        return `🏨 Check-in: ${booking.vendor_name || 'Hotel'}`;
+      case 'car_rental':
+        return `🚗 Pickup: ${booking.vendor_name || 'Car Rental'}`;
+      case 'transfer':
+        return `🚐 Transfer: ${booking.origin || ''} → ${booking.destination || ''}`;
+      case 'tour':
+        return `🎯 ${booking.vendor_name || 'Tour'}`;
+      case 'cruise':
+        return `🚢 Embark: ${booking.vendor_name || 'Cruise'}`;
+      default:
+        return `📋 ${booking.vendor_name || SEGMENT_TYPE_LABELS[booking.segment_type] || 'Booking'}`;
     }
   };
 

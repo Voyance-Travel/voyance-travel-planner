@@ -15,6 +15,13 @@ export type CommunicationType = 'email' | 'sms' | 'call' | 'note' | 'approval';
 // Drives: A/R (client balance), A/P (vendor balance), Commission tracking
 export type BookingSettlementType = 'arc_bsp' | 'supplier_direct' | 'commission_track';
 
+// Booking source - tracks how the booking was created
+// Mode 1: native_api (Viator, future API bookings)
+// Mode 2: imported (agent booked externally, imported confirmation)
+// Mode 3: client_booked (informational - client booked themselves)
+// Default: manual (entered by hand)
+export type BookingSource = 'native_api' | 'imported' | 'client_booked' | 'manual';
+
 export interface AgencyAccount {
   id: string;
   agent_id: string;
@@ -189,6 +196,14 @@ export interface BookingSegment {
   travelers_on_segment?: string[];
   segment_details?: Record<string, unknown>;
   notes?: string;
+  // Booking source - distinguishes the three booking modes
+  booking_source?: BookingSource;
+  // Informational fields (Mode 3 - client-booked segments)
+  is_informational_only?: boolean;
+  baggage_allowance?: string;
+  terminal_info?: { departure?: string; arrival?: string };
+  timezone_info?: string;
+  support_instructions?: string;
   created_at: string;
   updated_at: string;
 }

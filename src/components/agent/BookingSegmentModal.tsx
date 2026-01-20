@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { createSegment, updateSegment, deleteSegment, type BookingSegment, type BookingSegmentType } from '@/services/agencyCRM';
 import { toast } from '@/hooks/use-toast';
+import ClientBookedSegmentFields from './ClientBookedSegmentFields';
 
 interface BookingSegmentModalProps {
   open: boolean;
@@ -161,10 +162,11 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
           </div>
 
           <Tabs defaultValue="details" className="w-full">
-            <TabsList>
+            <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="policies">Policies</TabsTrigger>
+              <TabsTrigger value="client-booked">Client-Booked</TabsTrigger>
             </TabsList>
 
             {/* Details Tab */}
@@ -821,6 +823,16 @@ export default function BookingSegmentModal({ open, onOpenChange, tripId, segmen
                   rows={3}
                 />
               </div>
+            </TabsContent>
+
+            {/* Client-Booked / Informational Tab */}
+            <TabsContent value="client-booked" className="space-y-4 mt-4">
+              <ClientBookedSegmentFields
+                register={register}
+                watch={watch}
+                setValue={setValue}
+                segmentType={segmentType}
+              />
             </TabsContent>
           </Tabs>
 
