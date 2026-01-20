@@ -39,12 +39,14 @@ import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityIma
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { WeatherForecast } from './WeatherForecast';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
+import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import SaveToLibraryModal from '@/components/agent/SaveToLibraryModal';
+import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 
 // =============================================================================
 // TYPES
@@ -80,6 +82,28 @@ export interface EditorialActivity {
   isLocked?: boolean;
   website?: string;
   bookingUrl?: string; // External booking URL for affiliate links
+  // Booking state fields
+  bookingState?: BookingItemState;
+  quotePriceCents?: number;
+  quoteExpiresAt?: string;
+  quoteLocked?: boolean;
+  confirmationNumber?: string;
+  voucherUrl?: string;
+  voucherData?: {
+    voucherCode?: string;
+    voucherUrl?: string;
+    qrCode?: string;
+    redemptionInstructions?: string;
+  };
+  cancellationPolicy?: {
+    deadline: string;
+    refundPercentage: number;
+    description: string;
+  };
+  travelerData?: TravelerInfo[];
+  vendorName?: string;
+  bookedAt?: string;
+  cancelledAt?: string;
 }
 
 export interface EditorialDay {
@@ -2293,6 +2317,8 @@ interface DayCardProps {
   onDayRegenerate: () => void;
   onAddActivity: () => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
+  onPaymentRequest?: (activityId: string) => void;
+  onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
 }
 
 function DayCard({
@@ -2315,6 +2341,8 @@ function DayCard({
   onDayRegenerate,
   onAddActivity,
   onTimeEdit,
+  onPaymentRequest,
+  onBookingStateChange,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
@@ -2440,6 +2468,8 @@ function DayCard({
                   onMove={onActivityMove}
                   onRemove={onActivityRemove}
                   onTimeEdit={onTimeEdit}
+                  onPaymentRequest={onPaymentRequest}
+                  onBookingStateChange={onBookingStateChange}
                 />
               ))}
             </div>
@@ -2511,6 +2541,8 @@ interface ActivityRowProps {
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onRemove: (dayIndex: number, activityId: string) => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
+  onPaymentRequest?: (activityId: string) => void;
+  onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
 }
 
 function ActivityRow({
@@ -2530,6 +2562,8 @@ function ActivityRow({
   onMove,
   onRemove,
   onTimeEdit,
+  onPaymentRequest,
+  onBookingStateChange,
 }: ActivityRowProps) {
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
@@ -2764,36 +2798,34 @@ function ActivityRow({
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
             <span className="font-medium">{formatCurrency(cost)}</span>
-            {/* Link options: direct booking URL > venue website > affiliate search (for paid items only) */}
-            {activity.bookingUrl ? (
-              <a
-                href={activity.bookingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-              >
-                <ExternalLink className="h-3 w-3" />
-                Book Now
-              </a>
-            ) : activity.website ? (
-              <a
-                href={activity.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-              >
-                <ExternalLink className="h-3 w-3" />
-                {cost > 0 ? 'View & Book' : 'View Details'}
-              </a>
-            ) : activity.bookingRequired && cost > 0 ? (
-              <VendorBookingLink
-                activityName={activity.title}
-                destination={destination}
-                estimatedPrice={cost}
-                preferredVendor="viator"
-                size="sm"
-              />
-            ) : null}
+            {/* Booking state actions - replaces static vendor links */}
+            <InlineBookingActions
+              activity={{
+                id: activity.id,
+                title: activity.title,
+                bookingState: activity.bookingState,
+                bookingRequired: activity.bookingRequired,
+                quotePriceCents: activity.quotePriceCents,
+                quoteExpiresAt: activity.quoteExpiresAt,
+                quoteLocked: activity.quoteLocked,
+                confirmationNumber: activity.confirmationNumber,
+                voucherUrl: activity.voucherUrl,
+                voucherData: activity.voucherData,
+                cancellationPolicy: activity.cancellationPolicy,
+                travelerData: activity.travelerData,
+                vendorName: activity.vendorName,
+                bookedAt: activity.bookedAt,
+                cancelledAt: activity.cancelledAt,
+                website: activity.website,
+                cost,
+                currency: activity.cost?.currency || 'USD',
+              }}
+              destination={destination}
+              estimatedCost={cost}
+              onPaymentRequest={onPaymentRequest}
+              onStateChange={onBookingStateChange}
+              compact
+            />
             {isEditable && (
               <div className="flex items-center gap-1">
                 <button
