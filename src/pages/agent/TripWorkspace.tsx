@@ -18,7 +18,9 @@ import {
   CreditCard,
   AlertCircle,
   Link2,
-  Download
+  Download,
+  Copy,
+  Library
 } from 'lucide-react';
 import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
@@ -53,6 +55,8 @@ import {
 import { format, differenceInDays } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import ShareTripModal from '@/components/agent/ShareTripModal';
+import CloneTripModal from '@/components/agent/CloneTripModal';
+import LibraryModal from '@/components/agent/LibraryModal';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -83,6 +87,8 @@ export default function TripWorkspace() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [cloneModalOpen, setCloneModalOpen] = useState(false);
+  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -239,6 +245,14 @@ export default function TripWorkspace() {
                 <DropdownMenuItem onClick={() => navigate(`/agent/trips/${tripId}/edit`)}>
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Trip
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCloneModalOpen(true)}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Clone Trip
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLibraryModalOpen(true)}>
+                  <Library className="h-4 w-4 mr-2" />
+                  My Library
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Download className="h-4 w-4 mr-2" />
@@ -692,6 +706,21 @@ export default function TripWorkspace() {
         onOpenChange={setShareModalOpen}
         tripId={trip.id}
         tripName={trip.name}
+      />
+
+      {/* Clone Modal */}
+      <CloneTripModal
+        open={cloneModalOpen}
+        onOpenChange={setCloneModalOpen}
+        tripId={trip.id}
+        originalName={trip.name}
+      />
+
+      {/* Library Modal */}
+      <LibraryModal
+        open={libraryModalOpen}
+        onOpenChange={setLibraryModalOpen}
+        mode="browse"
       />
     </AgentLayout>
   );

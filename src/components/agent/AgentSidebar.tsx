@@ -9,7 +9,8 @@ import {
   ChevronRight,
   Building2,
   Menu,
-  X
+  X,
+  Library
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +29,7 @@ const navItems: NavItem[] = [
   { label: 'Clients', href: '/agent/clients', icon: Users },
   { label: 'Trips', href: '/agent/trips', icon: Plane },
   { label: 'Tasks', href: '/agent/tasks', icon: CheckSquare },
+  { label: 'Library', href: '/agent/library', icon: Library },
   { label: 'Documents', href: '/agent/documents', icon: FileText },
 ];
 

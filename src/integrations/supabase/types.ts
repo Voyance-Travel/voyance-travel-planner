@@ -1362,6 +1362,48 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_itinerary_library: {
+        Row: {
+          agent_id: string
+          content: Json
+          created_at: string
+          description: string | null
+          destination_hint: string | null
+          id: string
+          item_type: string
+          name: string
+          tags: string[] | null
+          updated_at: string
+          usage_count: number | null
+        }
+        Insert: {
+          agent_id: string
+          content: Json
+          created_at?: string
+          description?: string | null
+          destination_hint?: string | null
+          id?: string
+          item_type: string
+          name: string
+          tags?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Update: {
+          agent_id?: string
+          content?: Json
+          created_at?: string
+          description?: string | null
+          destination_hint?: string | null
+          id?: string
+          item_type?: string
+          name?: string
+          tags?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       airports: {
         Row: {
           city: string | null

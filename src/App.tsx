@@ -81,6 +81,7 @@ import TripForm from "./pages/agent/TripForm";
 import AgentTasks from "./pages/agent/AgentTasks";
 import TripWorkspace from "./pages/agent/TripWorkspace";
 import TripShare from "./pages/agent/TripShare";
+import AgentLibrary from "./pages/agent/AgentLibrary";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -180,6 +181,7 @@ const App = () => (
                 <Route path="/agent/trips/:tripId" element={<TripWorkspace />} />
                 <Route path="/agent/trips/:tripId/edit" element={<TripForm />} />
                 <Route path="/agent/tasks" element={<AgentTasks />} />
+                <Route path="/agent/library" element={<AgentLibrary />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
