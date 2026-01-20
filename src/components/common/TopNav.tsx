@@ -8,7 +8,9 @@ import {
   Settings, 
   LogOut,
   ChevronDown,
-  Plane
+  Plane,
+  Calendar,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,9 +20,7 @@ import { NotificationBell } from '@/components/common/NotificationBell';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 
 const navLinks = [
-  { href: ROUTES.START, label: 'Start Planning', highlight: true },
-  { href: ROUTES.EXPLORE, label: 'Explore' },
-  { href: ROUTES.DESTINATIONS, label: 'Destinations' },
+  { href: ROUTES.EXPLORE, label: 'Destinations' },
   { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
 ];
 
@@ -107,17 +107,13 @@ export default function TopNav() {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center gap-8">
+          <div className="hidden lg:flex items-center gap-6">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
                 className={`text-sm font-medium transition-colors hover:opacity-80 ${
-                  link.highlight
-                    ? isTransparent
-                      ? 'text-white font-semibold'
-                      : 'text-primary font-semibold'
-                    : location.pathname === link.href
+                  location.pathname === link.href
                     ? isTransparent
                       ? 'text-white'
                       : 'text-primary'
@@ -132,7 +128,7 @@ export default function TopNav() {
           </div>
 
           {/* Desktop Auth Buttons / User Menu */}
-          <div className="hidden lg:flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-3">
             {isAuthenticated ? (
               <>
                 {/* Notification Bell */}
@@ -140,14 +136,26 @@ export default function TopNav() {
                   <NotificationBell />
                 </div>
 
+                {/* Build Itinerary Button */}
+                <Button
+                  variant={isTransparent ? 'outline' : 'secondary'}
+                  size="sm"
+                  onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
+                  className={`gap-2 ${isTransparent ? 'border-white/50 text-white hover:bg-white/10' : ''}`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Build Itinerary
+                </Button>
+
+                {/* Book Travel Button */}
                 <Button
                   variant={isTransparent ? 'outline' : 'default'}
                   size="sm"
                   onClick={() => navigate(ROUTES.START)}
                   className={`gap-2 ${isTransparent ? 'border-white text-white hover:bg-white/10' : ''}`}
                 >
-                  <Plane className="h-4 w-4" />
-                  Plan a Trip
+                  <Calendar className="h-4 w-4" />
+                  Book Travel
                 </Button>
 
                 {/* User Dropdown */}
@@ -334,13 +342,21 @@ export default function TopNav() {
                         </Link>
                       );
                     })}
-                    <div className="pt-2">
+                    <div className="pt-2 space-y-2">
+                      <Button
+                        variant="secondary"
+                        className="w-full gap-2"
+                        onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        Build Itinerary
+                      </Button>
                       <Button
                         className="w-full gap-2"
                         onClick={() => navigate(ROUTES.START)}
                       >
-                        <Plane className="h-4 w-4" />
-                        Plan a Trip
+                        <Calendar className="h-4 w-4" />
+                        Book Travel
                       </Button>
                     </div>
                     <button
