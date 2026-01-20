@@ -372,127 +372,139 @@ export default function Pricing() {
             <div className="text-center mb-8">
               <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 text-primary text-sm font-medium rounded-full mb-4">
                 <Briefcase className="w-4 h-4" />
-                For Professionals
+                For Travel Professionals
               </span>
               <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground">
-                Built for Travel Agents
+                Your Trip Operating System
               </h2>
               <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
-                A complete CRM to manage clients, build itineraries, track payments, and grow your agency.
+                Build and revise trips in minutes. Keep confirmations, payments, tasks, and commissions attached to the trip.
               </p>
             </div>
 
-            <div className="bg-gradient-to-br from-card via-card to-primary/5 rounded-2xl border-2 border-primary/30 p-8 relative overflow-hidden">
-              {/* Background decoration */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-              
-              <div className="relative flex flex-col lg:flex-row gap-8">
-                {/* Left: Header & Price */}
-                <div className="lg:w-1/3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-2xl font-serif font-bold text-foreground">{PLAN_FEATURES.TRAVEL_AGENT.name}</h3>
-                  </div>
-                  <p className="text-primary font-medium mb-4">{PLAN_FEATURES.TRAVEL_AGENT.headline}</p>
-                  
-                  <div className="mb-4">
-                    <span className="text-4xl font-bold text-foreground">${STRIPE_PRODUCTS.TRAVEL_AGENT.price}</span>
-                    <span className="text-muted-foreground">/month</span>
-                  </div>
-                  
-                  <p className="text-muted-foreground text-sm mb-6">
-                    {PLAN_FEATURES.TRAVEL_AGENT.subheadline}
-                  </p>
-                  
-                  <Button 
-                    size="lg"
-                    className="w-full gap-2" 
-                    onClick={() => openCheckout(STRIPE_PRODUCTS.TRAVEL_AGENT.priceId, 'subscription', 'travel_agent', 'Travel Agent')} 
-                    disabled={loadingPlan === 'travel_agent'}
-                  >
-                    {loadingPlan === 'travel_agent' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Briefcase className="h-4 w-4" />
-                        {PLAN_FEATURES.TRAVEL_AGENT.cta}
-                      </>
-                    )}
-                  </Button>
-                  
-                  <p className="text-xs text-muted-foreground text-center mt-3">
-                    Best for: {PLAN_FEATURES.TRAVEL_AGENT.bestFor}
-                  </p>
+            {/* Agent value props */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+              {[
+                { icon: Clock, title: 'Fewer Dropped Balls', desc: 'Deadline reminders that actually work' },
+                { icon: Zap, title: 'Faster Proposals', desc: 'Beautiful itineraries in 10 minutes' },
+                { icon: FileText, title: 'Everything Attached', desc: 'Confirmations live with the trip' },
+                { icon: Wallet, title: 'Commission Visibility', desc: 'Track what you have earned' },
+              ].map((item, i) => (
+                <div key={item.title} className="bg-muted/50 rounded-lg p-4 text-center">
+                  <item.icon className="h-6 w-6 text-primary mx-auto mb-2" />
+                  <h4 className="font-medium text-sm text-foreground">{item.title}</h4>
+                  <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
                 </div>
+              ))}
+            </div>
 
-                {/* Right: Features Grid */}
-                <div className="lg:w-2/3">
-                  <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3">
-                    {/* CRM Features */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Users className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Client Management</span>
-                      </div>
-                      <ul className="space-y-2">
-                        {['Client & Account Management', 'Traveler Profiles (passport, preferences, loyalty)', 'Trip Pipeline (Inquiry → Completed)', 'Booking Segments (flights, hotels, tours, transfers)'].map((f, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm">
-                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                            <span className="text-foreground">{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Quotes & Payments */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <FileText className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quotes & Payments</span>
-                      </div>
-                      <ul className="space-y-2">
-                        {['Quote Builder with Versioning', 'Client Approvals & Audit Trail', 'Invoice Generation & Payment Tracking', 'Commission & Fee Management'].map((f, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm">
-                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                            <span className="text-foreground">{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Deadlines & Docs */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Clock className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Deadlines & Documents</span>
-                      </div>
-                      <ul className="space-y-2">
-                        {['Deadline Engine (payments, ticketing, visa)', 'Document Storage & Client Portal', 'Automated Reminder Emails'].map((f, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm">
-                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                            <span className="text-foreground">{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Plus All Personal */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Sparkles className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plus Everything in Yearly</span>
-                      </div>
-                      <ul className="space-y-2">
-                        {['Unlimited Itinerary Builds', 'Unlimited Client Trips', 'Export Itineraries (PDF)', 'Email Templates & Communication Log'].map((f, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm">
-                            <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                            <span className="text-foreground">{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+            {/* Agent Tiers */}
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Starter */}
+              <div className="bg-card rounded-2xl border p-6">
+                <div className="mb-4">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {PLAN_FEATURES.AGENT_STARTER.badge}
+                  </span>
+                  <h3 className="text-xl font-bold text-foreground mt-1">{PLAN_FEATURES.AGENT_STARTER.name}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.AGENT_STARTER.headline}</p>
                 </div>
+                <div className="mb-4">
+                  <span className="text-3xl font-bold text-foreground">${PLAN_FEATURES.AGENT_STARTER.price}</span>
+                  <span className="text-muted-foreground">/mo</span>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="w-full mb-4"
+                  onClick={() => openCheckout(STRIPE_PRODUCTS.TRAVEL_AGENT.priceId, 'subscription', 'agent_starter', 'Starter')}
+                  disabled={loadingPlan === 'agent_starter'}
+                >
+                  {loadingPlan === 'agent_starter' ? <Loader2 className="h-4 w-4 animate-spin" /> : PLAN_FEATURES.AGENT_STARTER.cta}
+                </Button>
+                <ul className="space-y-2">
+                  {PLAN_FEATURES.AGENT_STARTER.features.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                      <span className="text-foreground">{f}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
+
+              {/* Pro - Most Popular */}
+              <div className="bg-gradient-to-br from-card via-card to-primary/5 rounded-2xl border-2 border-primary p-6 relative">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="bg-primary text-primary-foreground text-xs font-medium px-3 py-1 rounded-full">
+                    Most Popular
+                  </span>
+                </div>
+                <div className="mb-4 mt-2">
+                  <span className="text-xs font-medium text-primary uppercase tracking-wide">
+                    {PLAN_FEATURES.AGENT_PRO.badge}
+                  </span>
+                  <h3 className="text-xl font-bold text-foreground mt-1">{PLAN_FEATURES.AGENT_PRO.name}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.AGENT_PRO.headline}</p>
+                </div>
+                <div className="mb-4">
+                  <span className="text-3xl font-bold text-foreground">${PLAN_FEATURES.AGENT_PRO.price}</span>
+                  <span className="text-muted-foreground">/mo</span>
+                </div>
+                <Button 
+                  className="w-full mb-4"
+                  onClick={() => openCheckout(STRIPE_PRODUCTS.TRAVEL_AGENT.priceId, 'subscription', 'agent_pro', 'Pro')}
+                  disabled={loadingPlan === 'agent_pro'}
+                >
+                  {loadingPlan === 'agent_pro' ? <Loader2 className="h-4 w-4 animate-spin" /> : PLAN_FEATURES.AGENT_PRO.cta}
+                </Button>
+                <ul className="space-y-2">
+                  {PLAN_FEATURES.AGENT_PRO.features.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                      <span className="text-foreground">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Agency */}
+              <div className="bg-card rounded-2xl border p-6">
+                <div className="mb-4">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {PLAN_FEATURES.AGENT_AGENCY.badge}
+                  </span>
+                  <h3 className="text-xl font-bold text-foreground mt-1">{PLAN_FEATURES.AGENT_AGENCY.name}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{PLAN_FEATURES.AGENT_AGENCY.headline}</p>
+                </div>
+                <div className="mb-4">
+                  <span className="text-3xl font-bold text-foreground">${PLAN_FEATURES.AGENT_AGENCY.price}</span>
+                  <span className="text-muted-foreground">/mo</span>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="w-full mb-4"
+                  onClick={() => navigate('/contact?subject=Agency%20Plan')}
+                >
+                  {PLAN_FEATURES.AGENT_AGENCY.cta}
+                </Button>
+                <ul className="space-y-2">
+                  {PLAN_FEATURES.AGENT_AGENCY.features.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                      <span className="text-foreground">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Agent CTA */}
+            <div className="text-center mt-8">
+              <p className="text-sm text-muted-foreground mb-3">
+                Already using spreadsheets + email chaos? See how Voyance replaces your workflow.
+              </p>
+              <Button variant="link" onClick={() => navigate('/agent')}>
+                Explore the Trip Workspace <ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
             </div>
           </motion.div>
         </div>
