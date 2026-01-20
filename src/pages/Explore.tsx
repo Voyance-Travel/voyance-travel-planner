@@ -8,7 +8,7 @@ import Footer from '@/components/common/Footer';
 import ScrollTarget from '@/components/common/ScrollTarget';
 import FilterPanel from '@/components/explore/FilterPanel';
 import HeroSection from '@/components/explore/sections/HeroSection';
-import SeasonalCollections from '@/components/explore/sections/SeasonalCollections';
+
 import ExploreByStyle from '@/components/explore/sections/ExploreByStyle';
 import TrendingDestinationsEnhanced from '@/components/explore/sections/TrendingDestinationsEnhanced';
 import VoyanceGuides from '@/components/explore/sections/VoyanceGuides';
@@ -315,10 +315,6 @@ export default function Explore() {
       {/* Show regular sections when not searching */}
       {!isSearching && (
         <>
-          {/* Seasonal Collections */}
-          <ScrollTarget id="seasonal" className="scroll-mt-20">
-            <SeasonalCollections />
-          </ScrollTarget>
 
           {/* Explore by Style */}
           <ScrollTarget id="styles" className="scroll-mt-20">
