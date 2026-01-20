@@ -802,33 +802,38 @@ export function EditorialItinerary({
   return (
     <div className="space-y-6">
       {/* Trip Summary Bar - Editorial Style */}
-      <div className="py-6 px-6 -mx-4 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 border-b border-border rounded-t-xl">
-        <div className="flex flex-wrap items-center gap-6 text-sm">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
-            <Calendar className="h-4 w-4 text-primary" />
-            <span className="text-muted-foreground">Duration:</span>
-            <span className="font-semibold text-foreground">{days.length} Days</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
-            <Users className="h-4 w-4 text-accent" />
-            <span className="text-muted-foreground">Travelers:</span>
-            <span className="font-semibold text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
-          </div>
-          {style && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
-              <MapPin className="h-4 w-4 text-primary" />
-              <span className="text-muted-foreground">Style:</span>
-              <span className="font-semibold text-foreground capitalize">{style}</span>
+      <div className="py-5 px-6 -mx-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          {/* Left: Trip info pills */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
+              <Calendar className="h-4 w-4 text-primary" />
+              <span className="text-muted-foreground">Duration:</span>
+              <span className="font-semibold text-foreground">{days.length} Days</span>
             </div>
-          )}
-          {pace && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 shadow-sm">
-              <Clock className="h-4 w-4 text-accent" />
-              <span className="text-muted-foreground">Pace:</span>
-              <span className="font-semibold text-foreground capitalize">{pace}</span>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
+              <Users className="h-4 w-4 text-accent" />
+              <span className="text-muted-foreground">Travelers:</span>
+              <span className="font-semibold text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
             </div>
-          )}
-          <div className="ml-auto flex items-center gap-4">
+            {style && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
+                <MapPin className="h-4 w-4 text-primary" />
+                <span className="text-muted-foreground">Style:</span>
+                <span className="font-semibold text-foreground capitalize">{style}</span>
+              </div>
+            )}
+            {pace && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
+                <Clock className="h-4 w-4 text-accent" />
+                <span className="text-muted-foreground">Pace:</span>
+                <span className="font-semibold text-foreground capitalize">{pace}</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Right: Cost + Actions */}
+          <div className="flex flex-wrap items-center gap-3">
             {isEditable && hasChanges && (
               <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse">
                 <AlertCircle className="h-3 w-3 mr-1" />
