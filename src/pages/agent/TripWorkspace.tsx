@@ -81,6 +81,9 @@ import { generateTripPdf, type TripPdfData, type BookingItem } from '@/utils/tri
 import { getAgentSettings } from '@/services/agentCRMAPI';
 import EditorialItinerary, { type EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import FinanceLedger from '@/components/agent/FinanceLedger';
+import TripCockpit from '@/components/agent/TripCockpit';
+import InvoiceBuilderModal from '@/components/agent/InvoiceBuilderModal';
+import PaymentScheduleModal from '@/components/agent/PaymentScheduleModal';
 
 const SEGMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   flight: Plane,
@@ -123,6 +126,8 @@ export default function TripWorkspace() {
   const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<AgencyTask | null>(null);
+  const [invoiceBuilderOpen, setInvoiceBuilderOpen] = useState(false);
+  const [paymentScheduleOpen, setPaymentScheduleOpen] = useState(false);
   
   // Notes state
   const [clientNotes, setClientNotes] = useState('');
@@ -484,126 +489,16 @@ export default function TripWorkspace() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* Upcoming Deadlines */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Clock className="h-5 w-5" />
-                    Upcoming Deadlines
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {pendingTasks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No pending tasks</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {pendingTasks.slice(0, 5).map(task => (
-                        <div key={task.id} className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${
-                            task.priority === 'urgent' ? 'bg-red-500' :
-                            task.priority === 'high' ? 'bg-orange-500' : 'bg-amber-500'
-                          }`} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{task.title}</p>
-                            {task.due_date && (
-                              <p className="text-xs text-muted-foreground">
-                                {format(new Date(task.due_date), 'MMM d, yyyy')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Booking Summary */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Plane className="h-5 w-5" />
-                    Booking Summary
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {segments.length === 0 ? (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-muted-foreground mb-3">No bookings yet</p>
-                      <Button variant="outline" size="sm" onClick={() => setActiveTab('bookings')}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Booking
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {segments.slice(0, 4).map(segment => {
-                        const Icon = SEGMENT_ICONS[segment.segment_type] || SEGMENT_ICONS.default;
-                        return (
-                          <div key={segment.id} className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                              <Icon className="h-4 w-4 text-muted-foreground" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {SEGMENT_TYPE_LABELS[segment.segment_type]}
-                                {segment.vendor_name && ` • ${segment.vendor_name}`}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {segment.confirmation_number || 'No confirmation yet'}
-                              </p>
-                            </div>
-                            <Badge variant="outline" className={STATUS_COLORS[segment.status || 'pending']}>
-                              {segment.status || 'pending'}
-                            </Badge>
-                          </div>
-                        );
-                      })}
-                      {segments.length > 4 && (
-                        <Button 
-                          variant="ghost" 
-                          className="w-full" 
-                          size="sm"
-                          onClick={() => setActiveTab('bookings')}
-                        >
-                          View all {segments.length} bookings →
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Quick Finance Overview */}
-            {totalOwed > 0 && (
-              <Card className="border-amber-200 bg-amber-50/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-                        <Wallet className="h-5 w-5 text-amber-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Balance Due</p>
-                        <p className="text-sm text-muted-foreground">
-                          {upcomingSchedules.length > 0 
-                            ? `Next payment: ${format(new Date(upcomingSchedules[0].due_date), 'MMM d')}` 
-                            : 'No payment schedule set'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-amber-600">{formatCurrency(totalOwed)}</p>
-                      <Button size="sm" variant="outline" onClick={() => setActiveTab('finance')}>
-                        View Details
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Trip Cockpit - The Command Center */}
+            <TripCockpit
+              trip={trip}
+              segments={segments}
+              tasks={tasks}
+              paymentSchedules={paymentSchedules}
+              onOpenShareModal={() => setShareModalOpen(true)}
+              onOpenTab={setActiveTab}
+              formatCurrency={formatCurrency}
+            />
           </TabsContent>
 
           {/* Itinerary Tab */}
@@ -946,11 +841,10 @@ export default function TripWorkspace() {
               </CardContent>
             </Card>
 
-            {/* Payment Schedule */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Payment Schedule</CardTitle>
-                <Button size="sm" variant="outline">
+                <Button size="sm" variant="outline" onClick={() => setPaymentScheduleOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Payment
                 </Button>
@@ -1034,12 +928,20 @@ export default function TripWorkspace() {
             )}
 
             {/* Invoices */}
-            {invoices.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Invoices</CardTitle>
-                </CardHeader>
-                <CardContent>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg">Invoices</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setInvoiceBuilderOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Invoice
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {invoices.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No invoices yet
+                  </p>
+                ) : (
                   <div className="space-y-3">
                     {invoices.map(invoice => (
                       <div key={invoice.id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -1061,9 +963,9 @@ export default function TripWorkspace() {
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -1109,6 +1011,22 @@ export default function TripWorkspace() {
         onOpenChange={setTaskModalOpen}
         tripId={trip.id}
         task={editingTask}
+        onSuccess={loadTripData}
+      />
+
+      <InvoiceBuilderModal
+        open={invoiceBuilderOpen}
+        onOpenChange={setInvoiceBuilderOpen}
+        trip={trip}
+        segments={segments}
+        onSuccess={loadTripData}
+      />
+
+      <PaymentScheduleModal
+        open={paymentScheduleOpen}
+        onOpenChange={setPaymentScheduleOpen}
+        trip={trip}
+        existingSchedules={paymentSchedules}
         onSuccess={loadTripData}
       />
     </AgentLayout>
