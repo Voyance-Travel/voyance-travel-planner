@@ -32,6 +32,9 @@ export interface AgencyAccount {
   total_revenue_cents: number;
   lifetime_value_cents: number;
   referral_source?: string;
+  // Intake form
+  intake_token?: string;
+  intake_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }

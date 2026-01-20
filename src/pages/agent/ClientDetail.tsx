@@ -14,27 +14,37 @@ import {
   DollarSign,
   User,
   FileText,
-  CreditCard
+  CreditCard,
+  Link as LinkIcon,
+  Copy,
+  ExternalLink,
+  Check,
+  X
 } from 'lucide-react';
 import AgentLayout from '@/components/agent/AgentLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   getAccount, 
   getTravelers, 
   getTrips, 
   deleteAccount,
+  generateIntakeLink,
+  toggleIntakeEnabled,
   type AgencyAccount,
   type AgencyTraveler,
   type AgencyTrip 
 } from '@/services/agencyCRM';
 import { toast } from '@/hooks/use-toast';
 import TravelerModal from '@/components/agent/TravelerModal';
+import IntakeLinkCard from '@/components/agent/IntakeLinkCard';
 
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -307,7 +317,13 @@ export default function ClientDetail() {
           </TabsContent>
 
           {/* Details Tab */}
-          <TabsContent value="details">
+          <TabsContent value="details" className="space-y-6">
+            {/* Client Intake Form Card */}
+            <IntakeLinkCard 
+              account={account} 
+              onUpdate={loadData} 
+            />
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Account Details</CardTitle>

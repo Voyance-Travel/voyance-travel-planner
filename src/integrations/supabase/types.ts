@@ -186,6 +186,8 @@ export type Database = {
           company_name: string | null
           created_at: string
           id: string
+          intake_enabled: boolean | null
+          intake_token: string | null
           lifetime_value_cents: number | null
           name: string
           notes: string | null
@@ -204,6 +206,8 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           id?: string
+          intake_enabled?: boolean | null
+          intake_token?: string | null
           lifetime_value_cents?: number | null
           name: string
           notes?: string | null
@@ -222,6 +226,8 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           id?: string
+          intake_enabled?: boolean | null
+          intake_token?: string | null
           lifetime_value_cents?: number | null
           name?: string
           notes?: string | null
@@ -3726,6 +3732,7 @@ export type Database = {
     }
     Functions: {
       cleanup_expired_search_cache: { Args: never; Returns: number }
+      generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
       generate_share_token: { Args: never; Returns: string }
       has_role: {
@@ -3763,6 +3770,29 @@ export type Database = {
         Returns: boolean
       }
       is_trip_owner: { Args: { p_trip_id: string }; Returns: boolean }
+      submit_client_intake: {
+        Args: {
+          p_allergies?: string[]
+          p_date_of_birth?: string
+          p_dietary_restrictions?: string[]
+          p_email?: string
+          p_emergency_contact?: Json
+          p_gender?: string
+          p_intake_token: string
+          p_legal_first_name: string
+          p_legal_last_name: string
+          p_meal_preference?: string
+          p_medical_notes?: string
+          p_mobility_needs?: string
+          p_notes?: string
+          p_passport_country?: string
+          p_passport_expiry?: string
+          p_phone?: string
+          p_preferred_name?: string
+          p_seat_preference?: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       agency_account_type: "individual" | "household" | "company"

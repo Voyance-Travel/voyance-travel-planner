@@ -82,6 +82,7 @@ import AgentTasks from "./pages/agent/AgentTasks";
 import TripWorkspace from "./pages/agent/TripWorkspace";
 import TripShare from "./pages/agent/TripShare";
 import AgentLibrary from "./pages/agent/AgentLibrary";
+import ClientIntakeForm from "./pages/agent/ClientIntakeForm";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -120,8 +121,9 @@ const App = () => (
                 <Route path="/help" element={<HelpCenter />} />
                 <Route path="/sample-itinerary" element={<SampleItinerary />} />
                 
-                {/* Public Share Route */}
+                {/* Public Share Routes */}
                 <Route path="/share/:shareToken" element={<TripShare />} />
+                <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
                 
                 {/* Auth Routes */}
                 <Route path="/signin" element={<SignIn />} />
