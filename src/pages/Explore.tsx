@@ -155,6 +155,9 @@ export default function Explore() {
       <HeroSection
         onFilterToggle={() => setShowFilters(!showFilters)}
         onBrowseClick={handleBrowseClick}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSearchSubmit={() => searchQuery && setSearchParams({ q: searchQuery })}
       />
 
       {/* Search Bar */}

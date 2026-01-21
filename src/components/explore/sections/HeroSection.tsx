@@ -6,9 +6,25 @@ import { Input } from '@/components/ui/input';
 interface HeroSectionProps {
   onFilterToggle: () => void;
   onBrowseClick: () => void;
+  searchQuery?: string;
+  onSearchChange?: (value: string) => void;
+  onSearchSubmit?: () => void;
 }
 
-export default function HeroSection({ onFilterToggle, onBrowseClick }: HeroSectionProps) {
+export default function HeroSection({ 
+  onFilterToggle, 
+  onBrowseClick,
+  searchQuery = '',
+  onSearchChange,
+  onSearchSubmit
+}: HeroSectionProps) {
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && onSearchSubmit) {
+      e.preventDefault();
+      onSearchSubmit();
+    }
+  };
   return (
     <section className="relative pt-32 pb-24 overflow-hidden">
       {/* Background */}
@@ -43,13 +59,16 @@ export default function HeroSection({ onFilterToggle, onBrowseClick }: HeroSecti
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Where would you like to go?"
+                value={searchQuery}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+                onKeyDown={handleKeyDown}
                 className="pl-11 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-foreground"
               />
             </div>
             <Button onClick={onFilterToggle} variant="ghost" size="icon" className="shrink-0 text-muted-foreground">
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
-            <Button onClick={onBrowseClick} className="rounded-full px-6">
+            <Button onClick={onSearchSubmit || onBrowseClick} className="rounded-full px-6">
               Search
             </Button>
           </div>
