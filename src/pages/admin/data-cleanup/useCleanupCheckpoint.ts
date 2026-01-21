@@ -47,7 +47,8 @@ export function useCleanupCheckpoint(target: CleanupTarget, dryRun: boolean) {
     if (typeof window === "undefined") return;
     const raw = window.localStorage.getItem(storageKey);
     const parsed = safeParse(raw);
-    if (!parsed || !parsed.dryRun || parsed.dryRun !== dryRun) {
+    // Allow both dryRun=true and dryRun=false checkpoints; only reject mismatched mode.
+    if (!parsed || parsed.dryRun !== dryRun) {
       setCheckpoint(null);
       return;
     }
