@@ -9,23 +9,8 @@ import { Loader2, CheckCircle, XCircle, AlertCircle, Database, Sparkles } from '
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import MainLayout from '@/components/layout/MainLayout';
-
-interface CleanupResult {
-  id: string;
-  city: string;
-  status: string;
-  changes?: Record<string, unknown>;
-}
-
-interface CleanupResponse {
-  message: string;
-  dryRun: boolean;
-  processed: number;
-  offset: number;
-  nextOffset: number;
-  complete?: boolean;
-  results: CleanupResult[];
-}
+import type { CleanupResponse, CleanupResult, CleanupStats } from './data-cleanup/cleanupTypes';
+import { useCleanupCheckpoint } from './data-cleanup/useCleanupCheckpoint';
 
 export default function DataCleanup() {
   const [isRunning, setIsRunning] = useState(false);
@@ -33,8 +18,10 @@ export default function DataCleanup() {
   const [results, setResults] = useState<CleanupResult[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [logs, setLogs] = useState<string[]>([]);
-  const [stats, setStats] = useState({ updated: 0, clean: 0, errors: 0, processed: 0 });
+  const [stats, setStats] = useState<CleanupStats>({ updated: 0, clean: 0, errors: 0, processed: 0 });
   const [, startTransition] = useTransition();
+
+  const { checkpoint, hasCheckpoint, saveCheckpoint, clearCheckpoint } = useCleanupCheckpoint(dryRun);
 
   const MAX_LOG_LINES = 400;
   const MAX_RESULTS = 200;
@@ -50,7 +37,9 @@ export default function DataCleanup() {
 
   const addLog = (message: string) => addLogs([message]);
 
-  const runCleanup = async () => {
+  const runCleanup = async (opts?: { resume?: boolean }) => {
+    const resume = !!opts?.resume;
+
     setIsRunning(true);
     setResults([]);
     setLogs([]);
@@ -60,21 +49,38 @@ export default function DataCleanup() {
     // First, get total count
     const { count } = await supabase
       .from('destinations')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      // Match the backend function's main filter (only destinations missing required fields)
+      .or('currency_code.is.null,timezone.is.null,cost_tier.is.null');
     
     const totalCount = count || 0;
     setProgress({ current: 0, total: totalCount });
     addLog(`Starting cleanup of ${totalCount} destinations (${dryRun ? 'DRY RUN' : 'LIVE'})`);
 
-    let offset = 0;
+    // Only resume checkpoints for dry runs (live runs should rely on DB filters instead).
+    const shouldResume = dryRun && resume && checkpoint;
+    if (!shouldResume) {
+      clearCheckpoint();
+    }
+
+    let offset = shouldResume ? checkpoint.offset : 0;
     const batchSize = 3;
-    let processedTotal = 0;
+    let processedTotal = shouldResume ? checkpoint.processedTotal : 0;
+    let statsTotal: CleanupStats = shouldResume
+      ? checkpoint!.stats
+      : { updated: 0, clean: 0, errors: 0, processed: 0 };
+
+    if (shouldResume) {
+      setStats(statsTotal);
+      setProgress({ current: processedTotal, total: totalCount });
+      addLog(`Resuming dry run from offset ${offset} (processed ${processedTotal}/${totalCount})`);
+    }
 
     try {
       while (true) {
         addLog(`Processing batch starting at offset ${offset}...`);
         
-        const { data, error } = await supabase.functions.invoke('cleanup-destinations', {
+         const { data, error } = await supabase.functions.invoke('cleanup-destinations', {
           body: { batchSize, offset, dryRun }
         });
 
@@ -92,13 +98,15 @@ export default function DataCleanup() {
         const batchErrors = response.results.filter(r => r.status === 'error').length;
         processedTotal += response.processed;
 
-        startTransition(() => {
-          setStats(prev => ({
-            updated: prev.updated + batchUpdated,
-            clean: prev.clean + batchClean,
-            errors: prev.errors + batchErrors,
-            processed: prev.processed + response.processed,
-          }));
+         statsTotal = {
+           updated: statsTotal.updated + batchUpdated,
+           clean: statsTotal.clean + batchClean,
+           errors: statsTotal.errors + batchErrors,
+           processed: statsTotal.processed + response.processed,
+         };
+
+         startTransition(() => {
+           setStats(statsTotal);
 
           setResults(prev => {
             const next = [...prev, ...response.results];
@@ -121,10 +129,22 @@ export default function DataCleanup() {
         
         if (response.complete) {
           addLog('All destinations processed!');
+           if (dryRun) clearCheckpoint();
           break;
         }
 
         offset = response.nextOffset;
+
+         if (dryRun) {
+           // Persist progress so a crash/refresh doesn't force a restart from offset 0.
+           saveCheckpoint({
+             dryRun,
+             offset,
+             processedTotal,
+             totalCount,
+             stats: statsTotal,
+           });
+         }
 
         // Add delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -135,6 +155,8 @@ export default function DataCleanup() {
       addLog(`Fatal error: ${err instanceof Error ? err.message : 'Unknown'}`);
       toast.error('Cleanup failed');
     } finally {
+      // Clear checkpoint after successful completion; keep it if run failed so user can resume.
+      // (We clear on completion above via response.complete; this is a fallback.)
       setIsRunning(false);
     }
   };
@@ -210,7 +232,7 @@ export default function DataCleanup() {
               </div>
 
               <Button 
-                onClick={runCleanup} 
+                onClick={() => runCleanup()} 
                 disabled={isRunning}
                 className="w-full"
                 size="lg"
@@ -227,6 +249,23 @@ export default function DataCleanup() {
                   </>
                 )}
               </Button>
+
+              {dryRun && hasCheckpoint && !isRunning && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => runCleanup({ resume: true })}
+                  className="w-full"
+                >
+                  Resume Dry Run
+                </Button>
+              )}
+
+              {dryRun && (
+                <p className="text-xs text-muted-foreground">
+                  Dry run doesn’t save changes to the database; use “Resume Dry Run” after a crash to avoid reprocessing.
+                </p>
+              )}
 
               {progress.total > 0 && (
                 <div className="space-y-2">
