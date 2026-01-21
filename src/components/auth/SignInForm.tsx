@@ -23,9 +23,12 @@ export function SignInForm() {
   
   // Check for redirect path in: 1) location state, 2) query param, 3) default
   // Filter out agent routes - users should explicitly navigate to agent portal
-  const stateFrom = (location.state as { from?: string })?.from;
+  const stateFrom = (location.state as { from?: string | { pathname?: string } })?.from;
   const queryNext = searchParams.get('next') || searchParams.get('redirect');
-  const rawNextPath = stateFrom || queryNext || ROUTES.PROFILE.VIEW;
+  // Ensure rawNextPath is always a string
+  const rawNextPath = typeof stateFrom === 'string' 
+    ? stateFrom 
+    : (stateFrom?.pathname || queryNext || ROUTES.PROFILE.VIEW);
   const nextPath = rawNextPath.startsWith('/agent') ? ROUTES.PROFILE.VIEW : rawNextPath;
 
   const handleSubmit = async (e: React.FormEvent) => {
