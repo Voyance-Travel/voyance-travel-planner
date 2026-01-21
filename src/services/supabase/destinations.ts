@@ -97,15 +97,33 @@ export async function getDestinationById(
 export async function getDestinationByCity(
   city: string
 ): Promise<Destination | null> {
+  // Try exact match first (case-insensitive)
   const { data, error } = await supabase
     .from("destinations")
     .select("*")
-    .ilike("city", city)
+    .ilike("city", city.trim())
     .maybeSingle();
 
   if (error) {
     console.error("Error fetching destination by city:", error);
     throw error;
+  }
+
+  // If no exact match, try fuzzy search
+  if (!data) {
+    const { data: fuzzyData, error: fuzzyError } = await supabase
+      .from("destinations")
+      .select("*")
+      .ilike("city", `%${city.trim()}%`)
+      .limit(1)
+      .maybeSingle();
+    
+    if (fuzzyError) {
+      console.error("Error in fuzzy destination search:", fuzzyError);
+      return null;
+    }
+    
+    return fuzzyData;
   }
 
   return data;

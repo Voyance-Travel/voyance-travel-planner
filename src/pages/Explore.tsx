@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, SlidersHorizontal, X, Sparkles, Database } from 'lucide-react';
+import { SlidersHorizontal, X, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Head from '@/components/common/Head';
 import TopNav from '@/components/common/TopNav';
@@ -16,7 +16,6 @@ import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 import { scrollToTop } from '@/utils/scrollUtils';
 import { destinations as allDestinations } from '@/lib/destinations';
 import { buildRoute } from '@/config/routes';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useHybridDestinationSearch, HybridDestination } from '@/hooks/useHybridDestinationSearch';
@@ -176,47 +175,40 @@ export default function Explore() {
         onSearchSubmit={() => searchQuery && setSearchParams({ q: searchQuery })}
       />
 
-      {/* Search Bar */}
-      <div className="max-w-7xl mx-auto px-4 -mt-8 relative z-10">
-        <form onSubmit={handleSearch} className="bg-card rounded-2xl shadow-lg p-4 flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search destinations, countries, or regions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-12 text-base"
-            />
+      {/* Filter & Active Search Indicators Bar */}
+      <div className="max-w-7xl mx-auto px-4 -mt-6 relative z-10">
+        <div className="bg-card/80 backdrop-blur-sm rounded-xl shadow-sm border border-border/50 p-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button 
+              type="button"
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className="gap-2"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+              {(filters.region || filters.budget || filters.vibe) && (
+                <Badge variant="secondary" className="ml-1">
+                  {[filters.region, filters.budget, filters.vibe].filter(Boolean).length}
+                </Badge>
+              )}
+            </Button>
             {searchQuery && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          <Button 
-            type="button"
-            variant="outline" 
-            size="lg"
-            onClick={() => setShowFilters(!showFilters)}
-            className="gap-2"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            Filters
-            {(filters.region || filters.budget || filters.vibe) && (
-              <Badge variant="secondary" className="ml-1">
-                {[filters.region, filters.budget, filters.vibe].filter(Boolean).length}
+              <Badge variant="secondary" className="gap-1">
+                Searching: "{searchQuery}"
+                <button onClick={clearSearch} className="ml-1 hover:text-foreground">
+                  <X className="h-3 w-3" />
+                </button>
               </Badge>
             )}
-          </Button>
-          <Button type="submit" size="lg">
-            Search
-          </Button>
-        </form>
+          </div>
+          {isSearching && (
+            <span className="text-sm text-muted-foreground">
+              {displayDestinations.length} result{displayDestinations.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Filter Panel */}
