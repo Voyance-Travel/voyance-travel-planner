@@ -43,6 +43,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+  console.log('[cleanup-destinations] Function started');
+
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -53,17 +56,25 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { batchSize = 10, offset = 0, dryRun = true } = await req.json();
+    const { batchSize = 3, offset = 0, dryRun = true } = await req.json();
+    console.log(`[cleanup-destinations] Processing batch: offset=${offset}, batchSize=${batchSize}, dryRun=${dryRun}`);
 
-    // Fetch destinations that need cleanup - prioritize those with missing core data
+    // Fetch destinations that NEED cleanup - skip those already processed
+    // Priority: those missing currency_code, timezone, or cost_tier
     const { data: destinations, error: fetchError } = await supabase
       .from('destinations')
       .select('id, city, country, region, description, stock_image_url, tags, known_for, points_of_interest, cost_tier, timezone, currency_code, seasonality, best_time_to_visit, temperature_range')
+      .or('currency_code.is.null,timezone.is.null,cost_tier.is.null')
       .order('city')
       .range(offset, offset + batchSize - 1);
 
-    if (fetchError) throw fetchError;
+    if (fetchError) {
+      console.error('[cleanup-destinations] Fetch error:', fetchError);
+      throw fetchError;
+    }
+
     if (!destinations || destinations.length === 0) {
+      console.log('[cleanup-destinations] No more destinations to process');
       return new Response(JSON.stringify({ 
         message: 'No more destinations to process',
         processed: 0,
@@ -72,10 +83,22 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    console.log(`[cleanup-destinations] Found ${destinations.length} destinations to process`);
     const results: { id: string; city: string; status: string; changes?: object }[] = [];
 
     for (const dest of destinations) {
+      const destStartTime = Date.now();
+      
+      // Check if we're running low on time (45 second safety margin)
+      if (Date.now() - startTime > 45000) {
+        console.log(`[cleanup-destinations] Time limit approaching, stopping early`);
+        results.push({ id: dest.id, city: dest.city, status: 'skipped_timeout' });
+        continue;
+      }
+
       try {
+        console.log(`[cleanup-destinations] Processing: ${dest.city}, ${dest.country}`);
+        
         // Analyze and clean with AI
         const cleaned = await cleanDestinationWithAI(dest, LOVABLE_API_KEY);
         
@@ -95,8 +118,8 @@ serve(async (req) => {
             hasChanges = true;
           }
 
-          // Improve known_for if empty or generic
-          if (!dest.known_for || dest.known_for.length < 3) {
+          // Improve known_for if empty or has few items
+          if (!dest.known_for || (Array.isArray(dest.known_for) && dest.known_for.length < 3)) {
             updates.known_for = cleaned.knownFor;
             hasChanges = true;
           }
@@ -150,8 +173,14 @@ serve(async (req) => {
                 .update(updates)
                 .eq('id', dest.id);
               
-              if (updateError) throw updateError;
+              if (updateError) {
+                console.error(`[cleanup-destinations] Update error for ${dest.city}:`, updateError);
+                throw updateError;
+              }
             }
+            
+            const elapsed = Date.now() - destStartTime;
+            console.log(`[cleanup-destinations] ${dest.city}: ${Object.keys(updates).length} fields updated (${elapsed}ms)`);
             
             results.push({
               id: dest.id,
@@ -160,11 +189,15 @@ serve(async (req) => {
               changes: updates
             });
           } else {
+            console.log(`[cleanup-destinations] ${dest.city}: no changes needed`);
             results.push({ id: dest.id, city: dest.city, status: 'no_changes_needed' });
           }
+        } else {
+          console.log(`[cleanup-destinations] ${dest.city}: AI returned null`);
+          results.push({ id: dest.id, city: dest.city, status: 'ai_failed' });
         }
       } catch (destError) {
-        console.error(`Error processing ${dest.city}:`, destError);
+        console.error(`[cleanup-destinations] Error processing ${dest.city}:`, destError);
         results.push({ 
           id: dest.id, 
           city: dest.city, 
@@ -174,17 +207,21 @@ serve(async (req) => {
       }
     }
 
+    const totalTime = Date.now() - startTime;
+    console.log(`[cleanup-destinations] Batch complete: ${results.length} processed in ${totalTime}ms`);
+
     return new Response(JSON.stringify({
       message: `Processed ${destinations.length} destinations`,
       dryRun,
       processed: destinations.length,
       offset,
       nextOffset: offset + batchSize,
-      results
+      results,
+      executionTimeMs: totalTime
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error('Cleanup error:', error);
+    console.error('[cleanup-destinations] Fatal error:', error);
     return new Response(JSON.stringify({ 
       error: error instanceof Error ? error.message : 'Unknown error' 
     }), { 
@@ -221,8 +258,8 @@ function needsImageFix(url: string | null): boolean {
   return false;
 }
 
-function hasGenericPOIs(pois: string[] | null): boolean {
-  if (!pois || pois.length === 0) return true;
+function hasGenericPOIs(pois: unknown): boolean {
+  if (!pois || !Array.isArray(pois) || pois.length === 0) return true;
   
   const genericPOIs = [
     'Cathedral Historic Old Town',
@@ -233,7 +270,7 @@ function hasGenericPOIs(pois: string[] | null): boolean {
   ];
   
   // If most POIs are generic
-  const genericCount = pois.filter(poi => 
+  const genericCount = pois.filter((poi: string) => 
     genericPOIs.some(generic => poi.includes(generic))
   ).length;
   
@@ -272,6 +309,10 @@ Please provide improved, accurate data. Return a JSON object with these fields:
 Only return valid JSON, no markdown or explanation.`;
 
   try {
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -279,14 +320,17 @@ Only return valid JSON, no markdown or explanation.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-flash-lite", // Use lite model for speed
         messages: [
           { role: "system", content: "You are a travel data specialist. Always return valid JSON only." },
           { role: "user", content: prompt }
         ],
-        temperature: 0.7,
+        temperature: 0.5, // Lower temperature for more consistent results
       }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       if (response.status === 429) throw new Error("Rate limited");
@@ -327,7 +371,11 @@ Only return valid JSON, no markdown or explanation.`;
       timezone: parsed.timezone || ''
     };
   } catch (error) {
-    console.error(`AI cleanup failed for ${dest.city}:`, error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error(`[cleanup-destinations] AI timeout for ${dest.city}`);
+    } else {
+      console.error(`[cleanup-destinations] AI cleanup failed for ${dest.city}:`, error);
+    }
     return null;
   }
 }
