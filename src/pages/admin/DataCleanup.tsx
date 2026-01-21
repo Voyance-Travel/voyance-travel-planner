@@ -23,7 +23,12 @@ export default function DataCleanup() {
   const [stats, setStats] = useState<CleanupStats>({ updated: 0, clean: 0, errors: 0, processed: 0 });
   const [, startTransition] = useTransition();
 
-  const { checkpoint, hasCheckpoint, saveCheckpoint, clearCheckpoint } = useCleanupCheckpoint(activeTab, dryRun);
+  // Maintain independent checkpoints per target so switching tabs mid-run can't corrupt the active run's checkpoint.
+  const destinationsCheckpoint = useCleanupCheckpoint('destinations', dryRun);
+  const attractionsCheckpoint = useCleanupCheckpoint('attractions', dryRun);
+
+  const getCheckpointApi = (target: CleanupTarget) =>
+    target === 'destinations' ? destinationsCheckpoint : attractionsCheckpoint;
 
   const checkpointRef = useRef<{
     dryRun: boolean;
@@ -33,16 +38,19 @@ export default function DataCleanup() {
     stats: CleanupStats;
   } | null>(null);
 
+  const runningTargetRef = useRef<CleanupTarget | null>(null);
+
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (isRunning && dryRun && checkpointRef.current) {
-        saveCheckpoint(checkpointRef.current);
+      const runningTarget = runningTargetRef.current;
+      if (isRunning && runningTarget && checkpointRef.current) {
+        getCheckpointApi(runningTarget).saveCheckpoint(checkpointRef.current);
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isRunning, dryRun, saveCheckpoint]);
+  }, [isRunning, destinationsCheckpoint.saveCheckpoint, attractionsCheckpoint.saveCheckpoint]);
 
   const MAX_LOG_LINES = 400;
   const MAX_RESULTS = 200;
@@ -60,6 +68,10 @@ export default function DataCleanup() {
 
   const runCleanup = async (target: CleanupTarget, opts?: { resume?: boolean }) => {
     const resume = !!opts?.resume;
+
+    const checkpointApi = getCheckpointApi(target);
+    const { checkpoint, saveCheckpoint, clearCheckpoint } = checkpointApi;
+    runningTargetRef.current = target;
 
     setIsRunning(true);
     setResults([]);
@@ -86,7 +98,7 @@ export default function DataCleanup() {
     setProgress({ current: 0, total: totalCount });
     addLog(`Starting ${target} cleanup of ${totalCount} items (${dryRun ? 'DRY RUN' : 'LIVE'})`);
 
-    const shouldResume = dryRun && resume && checkpoint;
+    const shouldResume = resume && !!checkpoint;
     if (!shouldResume) {
       clearCheckpoint();
     }
@@ -122,6 +134,8 @@ export default function DataCleanup() {
 
         const response = data as CleanupResponse;
 
+        const nextOffset = response.nextOffset ?? offset + batchSize;
+
         const batchUpdated = response.results.filter(r => r.status === 'updated' || r.status === 'would_update').length;
         const batchClean = response.results.filter(r => r.status === 'no_changes_needed').length;
         const batchErrors = response.results.filter(r => r.status === 'error' || r.status === 'ai_failed').length;
@@ -134,16 +148,15 @@ export default function DataCleanup() {
           processed: statsTotal.processed + response.processed,
         };
 
-        if (dryRun) {
-          checkpointRef.current = {
-            dryRun,
-            offset: response.nextOffset ?? offset + batchSize,
-            processedTotal,
-            totalCount,
-            stats: statsTotal,
-          };
-          saveCheckpoint(checkpointRef.current);
-        }
+        // Persist progress after each batch so a crash/refresh can resume without re-processing.
+        checkpointRef.current = {
+          dryRun,
+          offset: nextOffset,
+          processedTotal,
+          totalCount,
+          stats: statsTotal,
+        };
+        saveCheckpoint(checkpointRef.current);
 
         startTransition(() => {
           setStats(statsTotal);
@@ -169,14 +182,12 @@ export default function DataCleanup() {
         
         if (response.complete) {
           addLog(`All ${target} processed!`);
-          if (dryRun) {
-            clearCheckpoint();
-            checkpointRef.current = null;
-          }
+          clearCheckpoint();
+          checkpointRef.current = null;
           break;
         }
 
-        offset = response.nextOffset;
+        offset = nextOffset;
 
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
@@ -187,6 +198,7 @@ export default function DataCleanup() {
       toast.error('Cleanup failed');
     } finally {
       setIsRunning(false);
+      runningTargetRef.current = null;
     }
   };
 
@@ -247,41 +259,45 @@ export default function DataCleanup() {
           </TabsList>
 
           <TabsContent value="destinations">
-            <CleanupPanel
-              target="destinations"
-              description="Clean destination data (currency, timezone, cost tier)"
-              isRunning={isRunning}
-              dryRun={dryRun}
-              setDryRun={setDryRun}
-              hasCheckpoint={hasCheckpoint}
-              progress={progress}
-              stats={stats}
-              logs={logs}
-              results={results}
-              onRun={() => runCleanup('destinations')}
-              onResume={() => runCleanup('destinations', { resume: true })}
-              getStatusIcon={getStatusIcon}
-              getStatusBadge={getStatusBadge}
-            />
+            <div>
+              <CleanupPanel
+                target="destinations"
+                description="Clean destination data (currency, timezone, cost tier)"
+                isRunning={isRunning}
+                dryRun={dryRun}
+                setDryRun={setDryRun}
+                hasCheckpoint={destinationsCheckpoint.hasCheckpoint}
+                progress={progress}
+                stats={stats}
+                logs={logs}
+                results={results}
+                onRun={() => runCleanup('destinations')}
+                onResume={() => runCleanup('destinations', { resume: true })}
+                getStatusIcon={getStatusIcon}
+                getStatusBadge={getStatusBadge}
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="attractions">
-            <CleanupPanel
-              target="attractions"
-              description="Clean attraction data (descriptions, coordinates, destination links)"
-              isRunning={isRunning}
-              dryRun={dryRun}
-              setDryRun={setDryRun}
-              hasCheckpoint={hasCheckpoint}
-              progress={progress}
-              stats={stats}
-              logs={logs}
-              results={results}
-              onRun={() => runCleanup('attractions')}
-              onResume={() => runCleanup('attractions', { resume: true })}
-              getStatusIcon={getStatusIcon}
-              getStatusBadge={getStatusBadge}
-            />
+            <div>
+              <CleanupPanel
+                target="attractions"
+                description="Clean attraction data (descriptions, coordinates, destination links)"
+                isRunning={isRunning}
+                dryRun={dryRun}
+                setDryRun={setDryRun}
+                hasCheckpoint={attractionsCheckpoint.hasCheckpoint}
+                progress={progress}
+                stats={stats}
+                logs={logs}
+                results={results}
+                onRun={() => runCleanup('attractions')}
+                onResume={() => runCleanup('attractions', { resume: true })}
+                getStatusIcon={getStatusIcon}
+                getStatusBadge={getStatusBadge}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -368,20 +384,24 @@ function CleanupPanel({
               )}
             </Button>
 
-            {dryRun && hasCheckpoint && !isRunning && (
+            {hasCheckpoint && !isRunning && (
               <Button
                 type="button"
                 variant="outline"
                 onClick={onResume}
                 className="w-full"
               >
-                Resume Dry Run
+                {dryRun ? 'Resume Dry Run' : 'Resume Run'}
               </Button>
             )}
 
+            <p className="text-xs text-muted-foreground">
+              If your browser crashes or you refresh mid-run, use “Resume” to continue from the last saved batch.
+            </p>
+
             {dryRun && (
               <p className="text-xs text-muted-foreground">
-                Dry run doesn't save changes to the database; use "Resume Dry Run" after a crash to avoid reprocessing.
+                Dry run doesn't save changes to the database.
               </p>
             )}
 
