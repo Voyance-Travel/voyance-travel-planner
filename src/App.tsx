@@ -71,6 +71,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 
 // Admin
 import BulkImport from "./pages/admin/BulkImport";
+import DataCleanup from "./pages/admin/DataCleanup";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
@@ -174,6 +175,11 @@ const App = () => (
                 <Route path="/admin/bulk-import" element={
                   <ProtectedRoute>
                     <BulkImport />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/data-cleanup" element={
+                  <ProtectedRoute>
+                    <DataCleanup />
                   </ProtectedRoute>
                 } />
                 

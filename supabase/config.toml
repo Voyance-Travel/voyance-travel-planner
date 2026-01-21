@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.delete-my-account]
 verify_jwt = false
+
+[functions.cleanup-destinations]
+verify_jwt = false
