@@ -57,6 +57,8 @@ export interface RentalCarDetails {
   notes?: string;
 }
 
+import type { TripDestination, InterCityTransport } from '@/types/multiCity';
+
 export interface TripBasics {
   destination?: string;
   destinationId?: string;
@@ -69,6 +71,10 @@ export interface TripBasics {
   budgetAmount?: number; // Optional: actual dollar amount user wants to spend
   transportationPreference?: TransportationPreference;
   rentalCar?: RentalCarDetails;
+  // Multi-city support
+  isMultiCity?: boolean;
+  destinations?: TripDestination[];
+  interCityTransports?: InterCityTransport[];
 }
 
 export interface FlightSelection {

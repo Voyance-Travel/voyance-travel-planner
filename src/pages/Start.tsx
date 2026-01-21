@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -596,9 +596,18 @@ export default function Start() {
               
               {/* Destination */}
               <div>
-                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
-                  Destination
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans">
+                    Destination
+                  </label>
+                  <Link 
+                    to={ROUTES.PLANNER.MULTI_CITY}
+                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                    Planning multiple cities?
+                  </Link>
+                </div>
                 <AirportAutocomplete
                   value={destinationSelection.display}
                   onChange={setDestinationSelection}
