@@ -1,4 +1,4 @@
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,27 @@ export default function DataCleanup() {
   const [, startTransition] = useTransition();
 
   const { checkpoint, hasCheckpoint, saveCheckpoint, clearCheckpoint } = useCleanupCheckpoint(dryRun);
+
+  // Ref to hold current checkpoint state for beforeunload handler
+  const checkpointRef = useRef<{
+    dryRun: boolean;
+    offset: number;
+    processedTotal: number;
+    totalCount: number;
+    stats: CleanupStats;
+  } | null>(null);
+
+  // Save checkpoint on page unload to protect against browser crashes
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isRunning && dryRun && checkpointRef.current) {
+        saveCheckpoint(checkpointRef.current);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isRunning, dryRun, saveCheckpoint]);
 
   const MAX_LOG_LINES = 400;
   const MAX_RESULTS = 200;
@@ -105,6 +126,19 @@ export default function DataCleanup() {
            processed: statsTotal.processed + response.processed,
          };
 
+         // Update ref immediately for beforeunload handler (before any async gaps)
+         if (dryRun) {
+           checkpointRef.current = {
+             dryRun,
+             offset: response.nextOffset ?? offset + batchSize,
+             processedTotal,
+             totalCount,
+             stats: statsTotal,
+           };
+           // Save checkpoint immediately after every batch for crash protection
+           saveCheckpoint(checkpointRef.current);
+         }
+
          startTransition(() => {
            setStats(statsTotal);
 
@@ -129,22 +163,14 @@ export default function DataCleanup() {
         
         if (response.complete) {
           addLog('All destinations processed!');
-           if (dryRun) clearCheckpoint();
+          if (dryRun) {
+            clearCheckpoint();
+            checkpointRef.current = null;
+          }
           break;
         }
 
         offset = response.nextOffset;
-
-         if (dryRun) {
-           // Persist progress so a crash/refresh doesn't force a restart from offset 0.
-           saveCheckpoint({
-             dryRun,
-             offset,
-             processedTotal,
-             totalCount,
-             stats: statsTotal,
-           });
-         }
 
         // Add delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 2000));
