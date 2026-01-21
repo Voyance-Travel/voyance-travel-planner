@@ -6,7 +6,7 @@ import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import PlannerHeader from '@/components/planner/PlannerHeader';
 import TripContext from '@/components/planner/steps/TripContext';
-import FlightSelection from '@/components/planner/steps/FlightSelection';
+// FlightSelection removed - we're a "bring your own flight" platform
 import HotelSelection from '@/components/planner/steps/HotelSelection';
 import BookingOptions from '@/components/planner/steps/BookingOptions';
 import ItineraryPreview from '@/components/planner/steps/ItineraryPreview';
@@ -50,7 +50,6 @@ interface PlannerFormData {
 
 const STEPS = [
   { title: 'Trip Context', description: 'Travelers & budget' },
-  { title: 'Flights', description: 'Choose your flights' },
   { title: 'Hotels', description: 'Select accommodation' },
   { title: 'Book', description: 'Confirm your trip' },
 ];
@@ -208,7 +207,7 @@ export default function Planner() {
   };
 
   const getStepIndex = (step: PlannerStep): number => {
-    const steps: PlannerStep[] = ['context', 'flights', 'hotels', 'booking'];
+    const steps: PlannerStep[] = ['context', 'hotels', 'booking'];
     return steps.indexOf(step);
   };
 
@@ -306,11 +305,14 @@ export default function Planner() {
         params.set('travelers', String(formData.travelers || 1));
         if (tripId) params.set('tripId', tripId);
 
-        navigate(`/planner/flight?${params.toString()}`);
+        // Skip flights - go directly to hotels
+        setCurrentStep('hotels');
         return;
       }
+      case 'hotels':
+        setCurrentStep('booking');
+        break;
       default:
-        // Legacy flow retained for safety, but Start now routes into /planner/flight directly.
         break;
     }
   };
@@ -333,11 +335,8 @@ export default function Planner() {
     scrollToTop();
 
     switch (currentStep) {
-      case 'flights':
-        setCurrentStep('context');
-        break;
       case 'hotels':
-        setCurrentStep('flights');
+        setCurrentStep('context');
         break;
       case 'booking':
         setCurrentStep('hotels');
@@ -442,17 +441,7 @@ export default function Planner() {
           />
         )}
 
-        {currentStep === 'flights' && (
-          <FlightSelection
-            formData={formData}
-            selectedDeparture={formData.selectedDepartureFlight}
-            selectedReturn={formData.selectedReturnFlight}
-            onSelectDeparture={(id) => updateFormData({ selectedDepartureFlight: id })}
-            onSelectReturn={(id) => updateFormData({ selectedReturnFlight: id })}
-            onContinue={() => handleStepComplete('flights')}
-            onBack={handleBack}
-          />
-        )}
+        {/* Flight selection removed - customers bring their own flights */}
 
         {currentStep === 'hotels' && (
           <HotelSelection

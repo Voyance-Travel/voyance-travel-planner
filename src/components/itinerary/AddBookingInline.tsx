@@ -1,8 +1,9 @@
 /**
  * AddBookingInline Component
  * 
- * Inline UI for adding flight/hotel details when they were skipped during planning.
- * Provides options to either browse & book through the platform or manually enter details.
+ * Inline UI for adding flight/hotel details to an itinerary.
+ * Flights: Customers book their own flights elsewhere and add details here.
+ * Hotels: Can browse & book through platform or manually enter details.
  */
 
 import { useState } from 'react';
@@ -91,17 +92,7 @@ export function AddFlightInline({
     departureDate: endDate,
   });
 
-  const handleBrowseFlights = () => {
-    const params = new URLSearchParams({
-      tripId,
-      destination,
-      startDate,
-      endDate,
-      travelers: String(travelers),
-      ...(origin && { origin }),
-    });
-    navigate(`/planner/flight?${params.toString()}`);
-  };
+  // Removed: Browse & Book flights - we're a "bring your own flight" platform
 
   const handleSaveManualFlight = async () => {
     if (!outboundFlight.airline || !outboundFlight.flightNumber) {
@@ -170,19 +161,14 @@ export function AddFlightInline({
           <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
             <Plane className="h-6 w-6 text-primary" />
           </div>
-          <p className="text-muted-foreground mb-4">No flight added yet</p>
+          <p className="text-sm text-muted-foreground mb-1">Book your flight anywhere you like</p>
+          <p className="text-muted-foreground mb-4">Then add your details to sync your itinerary</p>
           
           <div className="flex flex-col gap-2">
-            <Button onClick={handleBrowseFlights} className="w-full">
+            <Button onClick={() => setShowManualEntry(true)} className="w-full">
               <Plus className="h-4 w-4 mr-2" />
-              Browse & Book Flights
+              Add My Flight Details
             </Button>
-            <button
-              onClick={() => setShowManualEntry(true)}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-            >
-              I already have a flight — enter details
-            </button>
           </div>
         </div>
       </div>
