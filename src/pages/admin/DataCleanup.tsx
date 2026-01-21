@@ -11,9 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import MainLayout from '@/components/layout/MainLayout';
 import type { CleanupResponse, CleanupResult, CleanupStats } from './data-cleanup/cleanupTypes';
-import { useCleanupCheckpoint } from './data-cleanup/useCleanupCheckpoint';
-
-type CleanupTarget = 'destinations' | 'attractions';
+import { useCleanupCheckpoint, type CleanupTarget } from './data-cleanup/useCleanupCheckpoint';
 
 export default function DataCleanup() {
   const [activeTab, setActiveTab] = useState<CleanupTarget>('destinations');
@@ -25,7 +23,7 @@ export default function DataCleanup() {
   const [stats, setStats] = useState<CleanupStats>({ updated: 0, clean: 0, errors: 0, processed: 0 });
   const [, startTransition] = useTransition();
 
-  const { checkpoint, hasCheckpoint, saveCheckpoint, clearCheckpoint } = useCleanupCheckpoint(dryRun);
+  const { checkpoint, hasCheckpoint, saveCheckpoint, clearCheckpoint } = useCleanupCheckpoint(activeTab, dryRun);
 
   const checkpointRef = useRef<{
     dryRun: boolean;

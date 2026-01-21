@@ -1,6 +1,8 @@
 import { useCallback, useState, useEffect } from "react";
 import type { CleanupStats } from "./cleanupTypes";
 
+export type CleanupTarget = 'destinations' | 'attractions';
+
 type CleanupCheckpoint = {
   dryRun: boolean;
   offset: number;
@@ -10,7 +12,9 @@ type CleanupCheckpoint = {
   updatedAt: string;
 };
 
-const STORAGE_KEY = "admin.destinationCleanup.checkpoint.v1";
+function getStorageKey(target: CleanupTarget): string {
+  return `admin.${target}Cleanup.checkpoint.v1`;
+}
 
 function safeParse(raw: string | null): CleanupCheckpoint | null {
   if (!raw) return null;
@@ -35,20 +39,20 @@ function safeParse(raw: string | null): CleanupCheckpoint | null {
   }
 }
 
-export function useCleanupCheckpoint(dryRun: boolean) {
-  // Use state + effect to read checkpoint, ensuring consistent hook count
+export function useCleanupCheckpoint(target: CleanupTarget, dryRun: boolean) {
   const [checkpoint, setCheckpoint] = useState<CleanupCheckpoint | null>(null);
+  const storageKey = getStorageKey(target);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     const parsed = safeParse(raw);
     if (!parsed || !parsed.dryRun || parsed.dryRun !== dryRun) {
       setCheckpoint(null);
       return;
     }
     setCheckpoint(parsed);
-  }, [dryRun]);
+  }, [dryRun, storageKey]);
 
   const hasCheckpoint = !!checkpoint;
 
@@ -58,13 +62,13 @@ export function useCleanupCheckpoint(dryRun: boolean) {
       ...next,
       updatedAt: new Date().toISOString(),
     };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, []);
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [storageKey]);
 
   const clearCheckpoint = useCallback(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    window.localStorage.removeItem(storageKey);
+  }, [storageKey]);
 
   return {
     checkpoint,
