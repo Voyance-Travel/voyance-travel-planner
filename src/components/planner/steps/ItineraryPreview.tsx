@@ -3,9 +3,9 @@ import { format } from 'date-fns';
 import { Plane, Hotel, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, DollarSign, Users, Car } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import type { DayItinerary } from '@/types/itinerary';
+import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/hooks/useEntitlements';
 import { useAuth } from '@/contexts/AuthContext';
 import { isQuizCompleted } from '@/utils/quizUtils';
@@ -20,6 +20,8 @@ import TripMembersPanel from '@/components/planner/budget/TripMembersPanel';
 import TransportationPreferences, { TransportationPreference } from '@/components/planner/TransportationPreferences';
 import RentalCarModal, { RentalCarDetails } from '@/components/planner/RentalCarModal';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import CustomerDayCard from '@/components/planner/CustomerDayCard';
+import { toast } from 'sonner';
 
 interface ItineraryPreviewProps {
   tripId?: string;
@@ -160,7 +162,9 @@ export default function ItineraryPreview({
   const [showRentalCarModal, setShowRentalCarModal] = useState(false);
   const [hasSetTransport, setHasSetTransport] = useState(false);
   const [hasConsumedQuota, setHasConsumedQuota] = useState(false);
-  const [activeTab, setActiveTab] = useState('itinerary'); // Moved here to fix hooks order
+  const [activeTab, setActiveTab] = useState('itinerary');
+  const [regeneratingDayNumber, setRegeneratingDayNumber] = useState<number | null>(null);
+  const [localDays, setLocalDays] = useState<DayItinerary[]>([]);
   
   // Check if user has completed the quiz
   const hasCompletedQuiz = user?.quizCompleted || isQuizCompleted();
@@ -260,6 +264,77 @@ export default function ItineraryPreview({
       regenerate();
     }
   };
+
+  // Sync local days with hook days
+  useEffect(() => {
+    if (days.length > 0) {
+      setLocalDays(days);
+    }
+  }, [days]);
+
+  // Handle day regeneration
+  const handleRegenerateDay = useCallback(async (dayNumber: number, keepActivities?: string[]) => {
+    if (!tripId) return;
+    
+    setRegeneratingDayNumber(dayNumber);
+    
+    try {
+      const { data, error } = await import('@/integrations/supabase/client').then(m => 
+        m.supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'regenerate-day',
+            tripId,
+            dayNumber,
+            destination: tripDetails.destination,
+            keepActivities,
+            preferences: {
+              transportationModes: transportPref.modes,
+              primaryTransport: transportPref.primaryMode,
+              hasRentalCar: !!rentalCar,
+            },
+          },
+        })
+      );
+
+      if (error) throw error;
+      
+      if (data?.success && data?.day) {
+        // Update local days with the regenerated day
+        setLocalDays(prev => prev.map(d => 
+          d.dayNumber === dayNumber 
+            ? { ...d, ...data.day, activities: data.day.activities || d.activities }
+            : d
+        ));
+        toast.success(`Day ${dayNumber} has been refreshed!`);
+      }
+    } catch (error) {
+      console.error('Failed to regenerate day:', error);
+      toast.error('Failed to refresh day. Please try again.');
+    } finally {
+      setRegeneratingDayNumber(null);
+    }
+  }, [tripId, tripDetails.destination, transportPref, rentalCar]);
+
+  // Handle activity lock toggle
+  const handleActivityLock = useCallback((activityId: string, locked: boolean) => {
+    setLocalDays(prev => prev.map(day => ({
+      ...day,
+      activities: day.activities.map(a => 
+        a.id === activityId ? { ...a, isLocked: locked } : a
+      )
+    })));
+    toast.success(locked ? 'Activity locked' : 'Activity unlocked');
+  }, []);
+
+  // Handle activity swap
+  const handleActivitySwap = useCallback((oldActivityId: string, newActivity: ItineraryActivity) => {
+    setLocalDays(prev => prev.map(day => ({
+      ...day,
+      activities: day.activities.map(a => 
+        a.id === oldActivityId ? { ...newActivity, time: a.time } : a
+      )
+    })));
+  }, []);
 
   // TEMPORARILY DISABLED: Premium gate removed - will be re-enabled later
   // Original check: if (!isLoadingEntitlements && !canGenerate && !isReady && !isGenerating) { ... }
@@ -632,11 +707,20 @@ export default function ItineraryPreview({
         </TabsList>
 
         <TabsContent value="itinerary">
-          {/* Day-by-Day Itinerary */}
+          {/* Day-by-Day Itinerary with Refresh & Search */}
           <div className="space-y-6">
-            {days.length > 0 ? (
-              days.map((day, dayIndex) => (
-                <StreamingDayCard key={day.dayNumber || dayIndex} day={day} isNew={false} />
+            {(localDays.length > 0 ? localDays : days).length > 0 ? (
+              (localDays.length > 0 ? localDays : days).map((day, dayIndex) => (
+                <CustomerDayCard
+                  key={day.dayNumber || dayIndex}
+                  day={day}
+                  dayIndex={dayIndex}
+                  onRegenerateDay={handleRegenerateDay}
+                  isRegenerating={regeneratingDayNumber === day.dayNumber}
+                  onActivityLock={handleActivityLock}
+                  onActivitySwap={handleActivitySwap}
+                  destination={tripDetails.destination}
+                />
               ))
             ) : (
               // Fallback if no days yet
