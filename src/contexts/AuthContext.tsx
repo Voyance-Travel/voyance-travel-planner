@@ -211,9 +211,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Handle synchronous state updates first
       setSession(session);
-      setIsLoading(false);
       
       if (session?.user) {
+        // Keep loading true until user data is loaded
         // Defer async operations with setTimeout to avoid deadlock
         setTimeout(async () => {
           // On sign in, sync profile and claim any locally-saved trips
@@ -230,9 +230,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const { profile, preferences } = await loadUserData(session.user);
           setUser(transformProfile(session.user, profile, preferences));
+          setIsLoading(false);
         }, 0);
       } else {
         setUser(null);
+        setIsLoading(false);
       }
     });
 
