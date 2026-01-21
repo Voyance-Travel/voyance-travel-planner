@@ -27,8 +27,8 @@ const steps = [
   {
     number: '4',
     icon: Plane,
-    title: 'Bring Your Own Flight',
-    description: 'Already booked your flight? Perfect. Add your flight details to sync your itinerary with your arrival and departure times.',
+    title: 'Add Your Flight Details',
+    description: 'Book your flights anywhere you like, then add your details here. We\'ll sync your itinerary to your arrival and departure times automatically.',
     image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800',
   },
 ];
