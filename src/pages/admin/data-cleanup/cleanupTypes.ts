@@ -1,6 +1,7 @@
 export interface CleanupResult {
   id: string;
-  city: string;
+  city?: string;  // For destinations
+  name?: string;  // For attractions
   status: string;
   changes?: Record<string, unknown>;
 }
