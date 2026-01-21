@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import type { CleanupStats } from "./cleanupTypes";
 
 type CleanupCheckpoint = {
@@ -36,17 +36,19 @@ function safeParse(raw: string | null): CleanupCheckpoint | null {
 }
 
 export function useCleanupCheckpoint(dryRun: boolean) {
-  const checkpoint = useMemo(() => {
-    // localStorage is browser-only; this hook is only used in client components.
-    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(STORAGE_KEY);
+  // Read checkpoint fresh on each call to ensure we catch any saved state
+  const getCheckpoint = (): CleanupCheckpoint | null => {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed = safeParse(raw);
     if (!parsed) return null;
     // Only allow resuming dry-runs; live runs should rely on DB filters.
     if (!parsed.dryRun) return null;
     if (parsed.dryRun !== dryRun) return null;
     return parsed;
-  }, [dryRun]);
+  };
 
+  const checkpoint = getCheckpoint();
   const hasCheckpoint = !!checkpoint;
 
   const saveCheckpoint = useCallback((next: Omit<CleanupCheckpoint, "updatedAt">) => {
