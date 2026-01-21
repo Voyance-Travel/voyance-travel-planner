@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,16 +33,29 @@ export default function DataCleanup() {
   const [results, setResults] = useState<CleanupResult[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [logs, setLogs] = useState<string[]>([]);
+  const [stats, setStats] = useState({ updated: 0, clean: 0, errors: 0, processed: 0 });
+  const [, startTransition] = useTransition();
 
-  const addLog = (message: string) => {
-    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+  const MAX_LOG_LINES = 400;
+  const MAX_RESULTS = 200;
+
+  const addLogs = (messages: string[]) => {
+    if (messages.length === 0) return;
+    const ts = new Date().toLocaleTimeString();
+    setLogs(prev => {
+      const next = [...prev, ...messages.map(m => `[${ts}] ${m}`)];
+      return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
+    });
   };
+
+  const addLog = (message: string) => addLogs([message]);
 
   const runCleanup = async () => {
     setIsRunning(true);
     setResults([]);
     setLogs([]);
     setProgress({ current: 0, total: 0 });
+    setStats({ updated: 0, clean: 0, errors: 0, processed: 0 });
 
     // First, get total count
     const { count } = await supabase
@@ -54,8 +67,8 @@ export default function DataCleanup() {
     addLog(`Starting cleanup of ${totalCount} destinations (${dryRun ? 'DRY RUN' : 'LIVE'})`);
 
     let offset = 0;
-    const batchSize = 5;
-    let allResults: CleanupResult[] = [];
+    const batchSize = 3;
+    let processedTotal = 0;
 
     try {
       while (true) {
@@ -72,24 +85,44 @@ export default function DataCleanup() {
         }
 
         const response = data as CleanupResponse;
+
+        // Update stats + UI in one render pass to avoid UI lockups
+        const batchUpdated = response.results.filter(r => r.status === 'updated' || r.status === 'would_update').length;
+        const batchClean = response.results.filter(r => r.status === 'no_changes_needed').length;
+        const batchErrors = response.results.filter(r => r.status === 'error').length;
+        processedTotal += response.processed;
+
+        startTransition(() => {
+          setStats(prev => ({
+            updated: prev.updated + batchUpdated,
+            clean: prev.clean + batchClean,
+            errors: prev.errors + batchErrors,
+            processed: prev.processed + response.processed,
+          }));
+
+          setResults(prev => {
+            const next = [...prev, ...response.results];
+            return next.length > MAX_RESULTS ? next.slice(-MAX_RESULTS) : next;
+          });
+
+          setProgress({ current: processedTotal, total: totalCount });
+        });
+
+        // Log individual results (batch to reduce re-renders)
+        const batchLogs: string[] = [];
+        response.results.forEach(r => {
+          if (r.status === 'updated' || r.status === 'would_update') {
+            batchLogs.push(`✓ ${r.city}: ${r.status}`);
+          } else if (r.status === 'error') {
+            batchLogs.push(`✗ ${r.city}: error`);
+          }
+        });
+        addLogs(batchLogs);
         
         if (response.complete) {
           addLog('All destinations processed!');
           break;
         }
-
-        allResults = [...allResults, ...response.results];
-        setResults(allResults);
-        setProgress({ current: offset + response.processed, total: totalCount });
-
-        // Log individual results
-        response.results.forEach(r => {
-          if (r.status === 'updated' || r.status === 'would_update') {
-            addLog(`✓ ${r.city}: ${r.status}`);
-          } else if (r.status === 'error') {
-            addLog(`✗ ${r.city}: error`);
-          }
-        });
 
         offset = response.nextOffset;
 
@@ -97,7 +130,7 @@ export default function DataCleanup() {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      toast.success(`Cleanup complete! Processed ${allResults.length} destinations.`);
+      toast.success(`Cleanup complete! Processed ${processedTotal} destinations.`);
     } catch (err) {
       addLog(`Fatal error: ${err instanceof Error ? err.message : 'Unknown'}`);
       toast.error('Cleanup failed');
@@ -216,25 +249,25 @@ export default function DataCleanup() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold text-green-600">
-                    {results.filter(r => r.status === 'updated' || r.status === 'would_update').length}
+                      {stats.updated}
                   </div>
                   <div className="text-sm text-muted-foreground">Updated</div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold text-muted-foreground">
-                    {results.filter(r => r.status === 'no_changes_needed').length}
+                      {stats.clean}
                   </div>
                   <div className="text-sm text-muted-foreground">Already Clean</div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold text-destructive">
-                    {results.filter(r => r.status === 'error').length}
+                      {stats.errors}
                   </div>
                   <div className="text-sm text-muted-foreground">Errors</div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold">
-                    {results.length}
+                      {stats.processed}
                   </div>
                   <div className="text-sm text-muted-foreground">Total Processed</div>
                 </div>
