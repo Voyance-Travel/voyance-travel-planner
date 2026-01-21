@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MapPin, DollarSign, Sparkles } from 'lucide-react';
+import { X, Globe, Wallet, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface Filters {
@@ -52,7 +52,7 @@ export default function FilterPanel({ isOpen, onClose, filters, onFilterChange }
           {/* Region */}
           <div className="mb-6">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
-              <MapPin className="h-4 w-4" />
+              <Globe className="h-4 w-4" />
               Region
             </div>
             <div className="flex flex-wrap gap-2">
@@ -75,7 +75,7 @@ export default function FilterPanel({ isOpen, onClose, filters, onFilterChange }
           {/* Budget */}
           <div className="mb-6">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
-              <DollarSign className="h-4 w-4" />
+              <Wallet className="h-4 w-4" />
               Budget
             </div>
             <div className="flex flex-wrap gap-2">
@@ -98,7 +98,7 @@ export default function FilterPanel({ isOpen, onClose, filters, onFilterChange }
           {/* Vibe */}
           <div className="mb-6">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
-              <Sparkles className="h-4 w-4" />
+              <Compass className="h-4 w-4" />
               Travel Vibe
             </div>
             <div className="flex flex-wrap gap-2">
