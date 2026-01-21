@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { Search, SlidersHorizontal, X, Sparkles, Database } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Head from '@/components/common/Head';
 import TopNav from '@/components/common/TopNav';
@@ -14,11 +14,12 @@ import TrendingDestinationsEnhanced from '@/components/explore/sections/Trending
 import VoyanceGuides from '@/components/explore/sections/VoyanceGuides';
 import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 import { scrollToTop } from '@/utils/scrollUtils';
-import { destinations as allDestinations, searchDestinations, regions } from '@/lib/destinations';
+import { destinations as allDestinations } from '@/lib/destinations';
 import { buildRoute } from '@/config/routes';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useHybridDestinationSearch, HybridDestination } from '@/hooks/useHybridDestinationSearch';
 
 // Travel style to destination mapping
 const styleToDestinations: Record<string, string[]> = {
@@ -71,8 +72,16 @@ export default function Explore() {
   const destinationGridRef = useRef<HTMLDivElement>(null);
   const searchResultsRef = useRef<HTMLDivElement>(null);
 
-  // Filter destinations based on search, style, season, and filters
-  const filteredDestinations = useMemo(() => {
+  // Hybrid search - combines featured destinations with database
+  const { 
+    results: hybridResults, 
+    isLoading: isSearchLoading,
+    featuredCount,
+    databaseCount 
+  } = useHybridDestinationSearch(searchQuery, !!searchQuery);
+
+  // Filter static destinations for style/season/region filters (non-search)
+  const filteredStaticDestinations = useMemo(() => {
     let results = allDestinations;
     
     // Filter by travel style
@@ -87,16 +96,6 @@ export default function Explore() {
       results = results.filter(d => seasonDestIds.includes(d.id));
     }
     
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      results = results.filter(d => 
-        d.city.toLowerCase().includes(q) || 
-        d.country.toLowerCase().includes(q) ||
-        d.tagline.toLowerCase().includes(q) ||
-        d.region.toLowerCase().includes(q)
-      );
-    }
-    
     if (filters.region) {
       results = results.filter(d => 
         d.region.toLowerCase().includes(filters.region!.toLowerCase())
@@ -104,7 +103,18 @@ export default function Explore() {
     }
     
     return results;
-  }, [searchQuery, filters.region, activeStyle, activeSeason]);
+  }, [filters.region, activeStyle, activeSeason]);
+
+  // Use hybrid results when searching, static when filtering
+  const displayDestinations = searchQuery ? hybridResults : filteredStaticDestinations.map(d => ({
+    id: d.id,
+    city: d.city,
+    country: d.country,
+    region: d.region,
+    tagline: d.tagline,
+    imageUrl: d.imageUrl,
+    source: 'featured' as const
+  }));
 
   const isSearching = searchQuery || filters.region || filters.budget || filters.vibe || activeStyle || activeSeason;
 
@@ -139,8 +149,14 @@ export default function Explore() {
     setSearchParams({});
   };
 
-  const handleDestinationClick = (destinationId: string) => {
-    navigate(buildRoute.destination(destinationId));
+  const handleDestinationClick = (destination: HybridDestination) => {
+    // For featured destinations, use slug-based routing
+    // For database destinations, use ID-based routing
+    if (destination.source === 'featured') {
+      navigate(buildRoute.destination(destination.id));
+    } else {
+      navigate(buildRoute.destination(destination.city.toLowerCase().replace(/\s+/g, '-')));
+    }
   };
 
   return (
@@ -224,8 +240,14 @@ export default function Explore() {
                     ? seasonLabels[activeSeason].title 
                     : activeStyle && styleLabels[activeStyle] 
                       ? `${styleLabels[activeStyle]} Destinations` 
-                      : `${filteredDestinations.length} Destination${filteredDestinations.length !== 1 ? 's' : ''} Found`}
+                      : `${displayDestinations.length} Destination${displayDestinations.length !== 1 ? 's' : ''} Found`}
                 </h2>
+                {searchQuery && featuredCount > 0 && databaseCount > 0 && (
+                  <p className="text-sm text-muted-foreground mb-2">
+                    <Sparkles className="inline h-3 w-3 mr-1" />
+                    {featuredCount} featured + {databaseCount} more from our database
+                  </p>
+                )}
                 {activeSeason && seasonLabels[activeSeason] && (
                   <p className="text-muted-foreground mb-3">{seasonLabels[activeSeason].description}</p>
                 )}
@@ -269,16 +291,20 @@ export default function Explore() {
               </Button>
             </div>
 
-            {filteredDestinations.length > 0 ? (
+            {isSearchLoading && searchQuery ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : displayDestinations.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredDestinations.map((destination, index) => (
+                {displayDestinations.map((destination, index) => (
                   <motion.div
                     key={destination.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     className="group cursor-pointer"
-                    onClick={() => handleDestinationClick(destination.id)}
+                    onClick={() => handleDestinationClick(destination)}
                   >
                     <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3">
                       <DestinationHeroImage
@@ -289,9 +315,14 @@ export default function Explore() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                       <div className="absolute bottom-3 left-3 right-3">
-                        <h3 className="font-semibold text-white text-lg">
-                          {destination.city}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-white text-lg">
+                            {destination.city}
+                          </h3>
+                          {destination.source === 'featured' && (
+                            <Sparkles className="h-3 w-3 text-amber-400" />
+                          )}
+                        </div>
                         <p className="text-sm text-white/80">
                           {destination.country} • {destination.region}
                         </p>
