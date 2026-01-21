@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { Sparkles, Map, Calendar, CreditCard, ArrowRight } from 'lucide-react';
+import { Sparkles, Map, Calendar, Plane, ArrowRight } from 'lucide-react';
 
 const steps = [
   {
@@ -14,7 +14,7 @@ const steps = [
     number: '2',
     icon: Map,
     title: 'AI Builds Your Itinerary',
-    description: 'Our AI crafts a personalized day-by-day plan with activities, restaurants, and hidden gems matched to your preferences.',
+    description: 'Our AI crafts a personalized day-by-day plan with hotels, activities, restaurants, and hidden gems matched to your preferences.',
     image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
   },
   {
@@ -26,9 +26,9 @@ const steps = [
   },
   {
     number: '4',
-    icon: CreditCard,
-    title: 'Travel With Confidence',
-    description: 'Access your itinerary anywhere. Get real-time suggestions and keep everything organized in one place.',
+    icon: Plane,
+    title: 'Bring Your Own Flight',
+    description: 'Already booked your flight? Perfect. Add your flight details to sync your itinerary with your arrival and departure times.',
     image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800',
   },
 ];
