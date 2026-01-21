@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -17,14 +18,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ActivityModal } from '@/components/ActivityModal';
-import { getDestinationById, getActivitiesByDestination, type Activity } from '@/lib/destinations';
+import { getDestinationById, getActivitiesByDestination, type Activity, type Destination } from '@/lib/destinations';
+import { getDestinationByCity } from '@/services/supabase/destinations';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 
@@ -38,8 +41,53 @@ export default function DestinationDetail() {
   const [isSaved, setIsSaved] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   
-  const destination = getDestinationById(slug || '');
+  // First try static destinations
+  const staticDestination = getDestinationById(slug || '');
   const activities = getActivitiesByDestination(slug || '');
+  
+  // If not found in static, try database (by city name from slug)
+  const cityName = slug?.replace(/-/g, ' ') || '';
+  const { data: dbDestination, isLoading: isLoadingDb } = useQuery({
+    queryKey: ['destination-by-city', cityName],
+    queryFn: () => getDestinationByCity(cityName),
+    enabled: !staticDestination && !!slug,
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+  });
+  
+  // Convert database destination to match static format
+  const destination: Destination | undefined = useMemo(() => {
+    if (staticDestination) return staticDestination;
+    if (!dbDestination) return undefined;
+    
+    return {
+      id: dbDestination.id,
+      city: dbDestination.city,
+      country: dbDestination.country || '',
+      region: dbDestination.region || '',
+      tagline: dbDestination.description || `Discover ${dbDestination.city}`,
+      description: dbDestination.description || '',
+      timezone: dbDestination.timezone || '',
+      currency: dbDestination.currency_code || '',
+      imageUrl: dbDestination.stock_image_url || '',
+      images: dbDestination.stock_image_url ? [dbDestination.stock_image_url] : [],
+      climate: dbDestination.seasonality || undefined,
+      bestMonths: dbDestination.best_time_to_visit?.split(',').map((m: string) => m.trim()) || undefined,
+    };
+  }, [staticDestination, dbDestination]);
+  
+  // Loading state for database fetch
+  if (!staticDestination && isLoadingDb) {
+    return (
+      <MainLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-muted-foreground">Loading destination...</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!destination) {
     return (
