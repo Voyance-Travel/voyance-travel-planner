@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 import type { CleanupStats } from "./cleanupTypes";
 
 type CleanupCheckpoint = {
@@ -36,19 +36,20 @@ function safeParse(raw: string | null): CleanupCheckpoint | null {
 }
 
 export function useCleanupCheckpoint(dryRun: boolean) {
-  // Read checkpoint fresh on each call to ensure we catch any saved state
-  const getCheckpoint = (): CleanupCheckpoint | null => {
-    if (typeof window === "undefined") return null;
+  // Use state + effect to read checkpoint, ensuring consistent hook count
+  const [checkpoint, setCheckpoint] = useState<CleanupCheckpoint | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed = safeParse(raw);
-    if (!parsed) return null;
-    // Only allow resuming dry-runs; live runs should rely on DB filters.
-    if (!parsed.dryRun) return null;
-    if (parsed.dryRun !== dryRun) return null;
-    return parsed;
-  };
+    if (!parsed || !parsed.dryRun || parsed.dryRun !== dryRun) {
+      setCheckpoint(null);
+      return;
+    }
+    setCheckpoint(parsed);
+  }, [dryRun]);
 
-  const checkpoint = getCheckpoint();
   const hasCheckpoint = !!checkpoint;
 
   const saveCheckpoint = useCallback((next: Omit<CleanupCheckpoint, "updatedAt">) => {
