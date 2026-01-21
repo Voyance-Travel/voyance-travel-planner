@@ -19,6 +19,9 @@ interface Destination {
   cost_tier: string | null;
   timezone: string | null;
   currency_code: string | null;
+  seasonality: string | null;
+  best_time_to_visit: string | null;
+  temperature_range: string | null;
 }
 
 interface CleanedDestination {
@@ -27,6 +30,12 @@ interface CleanedDestination {
   knownFor: string[];
   pointsOfInterest: string[];
   tags: string[];
+  currencyCode: string;
+  seasonality: string;
+  bestTimeToVisit: string;
+  temperatureRange: string;
+  costTier: string;
+  timezone: string;
 }
 
 serve(async (req) => {
@@ -46,10 +55,10 @@ serve(async (req) => {
 
     const { batchSize = 10, offset = 0, dryRun = true } = await req.json();
 
-    // Fetch destinations that need cleanup
+    // Fetch destinations that need cleanup - prioritize those with missing core data
     const { data: destinations, error: fetchError } = await supabase
       .from('destinations')
-      .select('id, city, country, region, description, stock_image_url, tags, known_for, points_of_interest, cost_tier, timezone, currency_code')
+      .select('id, city, country, region, description, stock_image_url, tags, known_for, points_of_interest, cost_tier, timezone, currency_code, seasonality, best_time_to_visit, temperature_range')
       .order('city')
       .range(offset, offset + batchSize - 1);
 
@@ -95,6 +104,42 @@ serve(async (req) => {
           // Improve points_of_interest if generic
           if (hasGenericPOIs(dest.points_of_interest)) {
             updates.points_of_interest = cleaned.pointsOfInterest;
+            hasChanges = true;
+          }
+
+          // Fill in missing currency_code
+          if (!dest.currency_code && cleaned.currencyCode) {
+            updates.currency_code = cleaned.currencyCode;
+            hasChanges = true;
+          }
+
+          // Fill in missing seasonality
+          if (!dest.seasonality && cleaned.seasonality) {
+            updates.seasonality = cleaned.seasonality;
+            hasChanges = true;
+          }
+
+          // Fill in missing best_time_to_visit
+          if (!dest.best_time_to_visit && cleaned.bestTimeToVisit) {
+            updates.best_time_to_visit = cleaned.bestTimeToVisit;
+            hasChanges = true;
+          }
+
+          // Fill in missing temperature_range
+          if (!dest.temperature_range && cleaned.temperatureRange) {
+            updates.temperature_range = cleaned.temperatureRange;
+            hasChanges = true;
+          }
+
+          // Fill in missing cost_tier
+          if (!dest.cost_tier && cleaned.costTier) {
+            updates.cost_tier = cleaned.costTier;
+            hasChanges = true;
+          }
+
+          // Fill in missing timezone
+          if (!dest.timezone && cleaned.timezone) {
+            updates.timezone = cleaned.timezone;
             hasChanges = true;
           }
 
@@ -199,18 +244,30 @@ async function cleanDestinationWithAI(
   dest: Destination, 
   apiKey: string
 ): Promise<CleanedDestination | null> {
-  const prompt = `You are a travel data specialist. Clean and improve this destination data for "${dest.city}, ${dest.country}".
+  const prompt = `You are a travel data specialist. Clean and improve this destination data for "${dest.city}, ${dest.country}" (Region: ${dest.region || 'Unknown'}).
 
 Current data:
 - Description: ${dest.description || 'Missing'}
 - Known for: ${JSON.stringify(dest.known_for || [])}
 - Points of interest: ${JSON.stringify(dest.points_of_interest || [])}
+- Currency code: ${dest.currency_code || 'Missing'}
+- Seasonality: ${dest.seasonality || 'Missing'}
+- Best time to visit: ${dest.best_time_to_visit || 'Missing'}
+- Temperature range: ${dest.temperature_range || 'Missing'}
+- Cost tier: ${dest.cost_tier || 'Missing'}
+- Timezone: ${dest.timezone || 'Missing'}
 
 Please provide improved, accurate data. Return a JSON object with these fields:
 1. "description": A compelling 2-3 sentence description that's unique to this specific destination (not generic). Mention what makes it special.
 2. "knownFor": Array of 5-7 specific things this destination is actually known for (not generic like "culture" or "food")
 3. "pointsOfInterest": Array of 5-7 real, specific attractions/landmarks in this destination
 4. "imageSearchQuery": A specific search query to find a beautiful, iconic photo of this destination (e.g., "Eiffel Tower Paris sunset" not just "Paris")
+5. "currencyCode": The ISO 4217 currency code for this country (e.g., "USD", "EUR", "KRW", "JPY")
+6. "seasonality": Travel seasonality info in format "peak: month1,month2, shoulder: month3,month4, off: month5,month6,month7"
+7. "bestTimeToVisit": Human-readable best time to visit (e.g., "March to May, September to November")
+8. "temperatureRange": Typical temperature range (e.g., "15°C to 30°C (59°F to 86°F)")
+9. "costTier": One of: "budget", "moderate", "expensive", "luxury"
+10. "timezone": IANA timezone (e.g., "Asia/Seoul", "Europe/Paris", "America/New_York")
 
 Only return valid JSON, no markdown or explanation.`;
 
@@ -261,7 +318,13 @@ Only return valid JSON, no markdown or explanation.`;
       imageUrl,
       knownFor: parsed.knownFor || [],
       pointsOfInterest: parsed.pointsOfInterest || [],
-      tags: dest.tags || []
+      tags: dest.tags || [],
+      currencyCode: parsed.currencyCode || '',
+      seasonality: parsed.seasonality || '',
+      bestTimeToVisit: parsed.bestTimeToVisit || '',
+      temperatureRange: parsed.temperatureRange || '',
+      costTier: parsed.costTier || '',
+      timezone: parsed.timezone || ''
     };
   } catch (error) {
     console.error(`AI cleanup failed for ${dest.city}:`, error);
