@@ -243,40 +243,26 @@ export default function Explore() {
                 {activeSeason && seasonLabels[activeSeason] && (
                   <p className="text-muted-foreground mb-3">{seasonLabels[activeSeason].description}</p>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {activeSeason && seasonLabels[activeSeason] && (
-                    <Badge variant="default" className="gap-1 bg-primary">
-                      {seasonLabels[activeSeason].title.replace(' Destinations', '').replace(' Escapes', '').replace(' Journeys', '').replace(' Wonderlands', '')}
-                      <button onClick={() => setSearchParams({})} className="ml-1 hover:text-primary-foreground/80">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
-                  {activeStyle && styleLabels[activeStyle] && (
-                    <Badge variant="default" className="gap-1 bg-primary">
-                      {styleLabels[activeStyle]}
-                      <button onClick={() => setSearchParams({})} className="ml-1 hover:text-primary-foreground/80">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
-                  {searchQuery && (
-                    <Badge variant="secondary" className="gap-1">
-                      "{searchQuery}"
-                      <button onClick={clearSearch} className="ml-1 hover:text-foreground">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
-                  {filters.region && (
-                    <Badge variant="secondary" className="gap-1">
-                      {filters.region}
-                      <button onClick={() => setFilters({...filters, region: null})} className="ml-1 hover:text-foreground">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
-                </div>
+                {(activeSeason || activeStyle) && (
+                  <div className="flex flex-wrap gap-2">
+                    {activeSeason && seasonLabels[activeSeason] && (
+                      <Badge variant="default" className="gap-1 bg-primary">
+                        {seasonLabels[activeSeason].title.replace(' Destinations', '').replace(' Escapes', '').replace(' Journeys', '').replace(' Wonderlands', '')}
+                        <button onClick={() => setSearchParams({})} className="ml-1 hover:text-primary-foreground/80">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )}
+                    {activeStyle && styleLabels[activeStyle] && (
+                      <Badge variant="default" className="gap-1 bg-primary">
+                        {styleLabels[activeStyle]}
+                        <button onClick={() => setSearchParams({})} className="ml-1 hover:text-primary-foreground/80">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </div>
               <Button variant="ghost" onClick={() => { clearSearch(); setFilters({ region: null, budget: null, vibe: null }); setSearchParams({}); }}>
                 Clear All
