@@ -3963,11 +3963,13 @@ export type Database = {
           created_at: string
           destination: string
           destination_country: string | null
+          destinations: Json | null
           end_date: string
           flight_selection: Json | null
           hotel_selection: Json | null
           id: string
           is_agent_trip: boolean | null
+          is_multi_city: boolean | null
           itinerary_data: Json | null
           itinerary_status:
             | Database["public"]["Enums"]["itinerary_status"]
@@ -3994,11 +3996,13 @@ export type Database = {
           created_at?: string
           destination: string
           destination_country?: string | null
+          destinations?: Json | null
           end_date: string
           flight_selection?: Json | null
           hotel_selection?: Json | null
           id?: string
           is_agent_trip?: boolean | null
+          is_multi_city?: boolean | null
           itinerary_data?: Json | null
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
@@ -4025,11 +4029,13 @@ export type Database = {
           created_at?: string
           destination?: string
           destination_country?: string | null
+          destinations?: Json | null
           end_date?: string
           flight_selection?: Json | null
           hotel_selection?: Json | null
           id?: string
           is_agent_trip?: boolean | null
+          is_multi_city?: boolean | null
           itinerary_data?: Json | null
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]

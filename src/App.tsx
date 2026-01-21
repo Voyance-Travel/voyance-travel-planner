@@ -47,6 +47,7 @@ import Settings from "./pages/Settings";
 
 // Pages - Trip Planning
 import Planner from "./pages/planner/Planner";
+import MultiCityPlanner from "./pages/planner/MultiCityPlanner";
 import PlannerFlight from "./pages/planner/PlannerFlightEnhanced";
 import PlannerHotel from "./pages/planner/PlannerHotelEnhanced";
 import PlannerSummary from "./pages/planner/PlannerSummary";
@@ -148,6 +149,7 @@ const App = () => (
                 
                 {/* Trip Planning Routes - Open for testing */}
                 <Route path="/planner" element={<Planner />} />
+                <Route path="/planner/multi-city" element={<MultiCityPlanner />} />
                 <Route path="/planner/flight" element={<PlannerFlight />} />
                 <Route path="/planner/hotel" element={<PlannerHotel />} />
                 <Route path="/planner/summary" element={<PlannerSummary />} />
