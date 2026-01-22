@@ -110,10 +110,6 @@ export default function DataCleanup() {
         .or('default_transport_modes.is.null,default_transport_modes.eq.[]');
       totalCount = count || 0;
     }
-    
-    setProgress({ current: 0, total: totalCount });
-    addLog(`Starting ${target} cleanup of ${totalCount} items (${runDryRun ? 'DRY RUN' : 'LIVE'})`);
-
     const shouldResume = resume && !!checkpoint;
     if (!shouldResume) {
       clearCheckpoint();
@@ -128,17 +124,30 @@ export default function DataCleanup() {
     
     let offset = useCheckpointOffset ? checkpoint.offset : 0;
     const batchSize = 5;
-    let processedTotal = shouldResume ? checkpoint.processedTotal : 0;
+
+    // NOTE: For LIVE runs, `totalCount` represents the *current* number of dirty records,
+    // which can shrink as records are cleaned. To keep the UI progress stable (and avoid
+    // cases like 3973 / 3784 when resuming), we treat progress.total as an estimate:
+    // processedSoFarAtStart + dirtyRemainingAtStart.
+    const processedTotalAtStart = shouldResume ? checkpoint.processedTotal : 0;
+    const uiTotal = runDryRun ? totalCount : processedTotalAtStart + totalCount;
+
+    let processedTotal = processedTotalAtStart;
     let statsTotal: CleanupStats = shouldResume
       ? checkpoint!.stats
       : { updated: 0, clean: 0, errors: 0, processed: 0 };
 
+    setProgress({ current: processedTotal, total: uiTotal });
+    addLog(
+      `Starting ${target} cleanup of ${totalCount} items (${runDryRun ? 'DRY RUN' : 'LIVE'})`
+    );
+
     if (shouldResume) {
       setStats(statsTotal);
-      setProgress({ current: processedTotal, total: checkpoint.totalCount });
+      setProgress({ current: processedTotal, total: uiTotal });
       if (useCheckpointOffset) {
         addLog(
-          `Resuming dry run from offset ${offset} (processed ${processedTotal}/${checkpoint.totalCount})`
+          `Resuming dry run from offset ${offset} (processed ${processedTotal}/${totalCount})`
         );
       } else {
         addLog(
@@ -199,7 +208,7 @@ export default function DataCleanup() {
             return next.length > MAX_RESULTS ? next.slice(-MAX_RESULTS) : next;
           });
 
-          setProgress({ current: processedTotal, total: totalCount });
+          setProgress({ current: processedTotal, total: uiTotal });
         });
 
         const batchLogs: string[] = [];
