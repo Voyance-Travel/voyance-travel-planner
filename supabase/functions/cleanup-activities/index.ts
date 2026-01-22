@@ -44,6 +44,12 @@ interface CleanupResult {
   error?: string;
 }
 
+type ScanResult = {
+  dirtyCount: number;
+  batch: Activity[];
+  scannedAll: boolean;
+};
+
 function isTemplatedDescription(desc: string | null): boolean {
   if (!desc) return true;
   const normalized = desc.trim();
@@ -62,6 +68,57 @@ function hasBadCoordinates(coords: { lat: number; lng: number } | null): boolean
 
 function isDirty(activity: Activity): boolean {
   return isTemplatedDescription(activity.description) || hasBadCoordinates(activity.coordinates);
+}
+
+async function scanDirtyActivities(
+  // Keep loose typing here: the Deno/esm.sh Supabase types differ across environments.
+  // Strict typing can fail during edge-runtime typecheck even though runtime works.
+  supabase: any,
+  effectiveOffset: number,
+  limit: number
+): Promise<ScanResult> {
+  // Pull a minimal column set; keep paging deterministic.
+  const selectCols =
+    "id, name, description, category, destination_id, coordinates, best_times, accessibility_info";
+
+  const pageSize = 750;
+  const maxPages = 200; // safety (200 * 750 = 150k rows)
+
+  let dirtyCount = 0;
+  const batch: Activity[] = [];
+
+  for (let page = 0; page < maxPages; page++) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data: pageData, error: pageError } = await supabase
+      .from("activities")
+      .select(selectCols)
+      .range(from, to)
+      .order("id");
+
+    if (pageError) throw pageError;
+    if (!pageData || pageData.length === 0) {
+      return { dirtyCount, batch, scannedAll: true };
+    }
+
+    for (const row of pageData as unknown as Activity[]) {
+      if (!isDirty(row)) continue;
+
+      if (dirtyCount >= effectiveOffset && batch.length < limit) {
+        batch.push(row);
+      }
+
+      dirtyCount++;
+    }
+
+    if (pageData.length < pageSize) {
+      return { dirtyCount, batch, scannedAll: true };
+    }
+  }
+
+  // If we hit maxPages, we can't confidently say we're complete.
+  return { dirtyCount, batch, scannedAll: false };
 }
 
 async function enrichWithAI(
@@ -171,7 +228,12 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const { dryRun = true, offset = 0, limit = BATCH_SIZE } = await req.json();
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const dryRun = (body as any).dryRun ?? true;
+    const offset = Number((body as any).offset ?? 0);
+    // UI sends `batchSize`; older versions may send `limit`.
+    const limit = Math.max(0, Number((body as any).limit ?? (body as any).batchSize ?? BATCH_SIZE));
+    const countOnly = Boolean((body as any).countOnly ?? false);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -183,91 +245,53 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Use RPC or simpler approach - fetch in batches and filter
-    // The complex JSON path filtering doesn't work well in PostgREST .or()
-    
-    // First get a rough count of potentially dirty records (null descriptions or all)
-    const { count: totalCount, error: countError } = await supabase
-      .from("activities")
-      .select("*", { count: "exact", head: true });
-    
-    if (countError) throw countError;
-    
-    // Fetch a larger batch and filter in JS (more reliable than complex PostgREST filters)
-    // For efficiency, paginate through all records
-    const pageSize = 500; // Fetch more, filter down
+    // PostgREST JSON-path filters for coordinates are unreliable in `.or(...)` queries.
+    // We scan pages and apply `isDirty()` in-memory.
     const effectiveOffset = dryRun ? offset : 0;
-    
-    // Calculate which page of raw data we need
-    const rawPage = Math.floor(effectiveOffset / pageSize);
-    
-    let allDirtyActivities: Activity[] = [];
-    let currentPage = 0;
-    let scannedTotal = 0;
-    
-    // Scan through pages until we have enough dirty records
-    while (allDirtyActivities.length < effectiveOffset + limit) {
-      const { data: pageData, error: pageError } = await supabase
-        .from("activities")
-        .select("id, name, description, category, destination_id, coordinates, best_times, accessibility_info")
-        .range(currentPage * pageSize, (currentPage + 1) * pageSize - 1)
-        .order("id");
-      
-      if (pageError) throw pageError;
-      if (!pageData || pageData.length === 0) break;
-      
-      scannedTotal += pageData.length;
-      
-      // Filter for dirty records
-      const dirtyInPage = pageData.filter(isDirty);
-      allDirtyActivities = allDirtyActivities.concat(dirtyInPage);
-      
-      currentPage++;
-      
-      // Safety: don't scan forever
-      if (currentPage > 50) break;
-    }
-    
-    const dirtyCount = allDirtyActivities.length;
-    
-    // Get batch to process
-    const batch = allDirtyActivities.slice(effectiveOffset, effectiveOffset + limit);
-    
-    if (batch.length === 0) {
-      // If we haven't scanned everything, there might be more
-      const hasMore = scannedTotal < (totalCount ?? 0);
-      
-      if (hasMore && dryRun) {
-        // There might be dirty records in unscanned pages
-        return new Response(
-          JSON.stringify({
-            success: true,
-            message: "Scanned batch complete, more pages may exist",
-            dryRun,
-            processed: 0,
-            offset: effectiveOffset,
-            nextOffset: scannedTotal,
-            complete: false,
-            hasMore: true,
-            totalCount: dirtyCount,
-            stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
-            results: [],
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      // No more dirty records
+    const { dirtyCount, batch, scannedAll } = await scanDirtyActivities(
+      supabase,
+      effectiveOffset,
+      countOnly ? 0 : limit
+    );
+
+    if (countOnly) {
+      const hasMore = dirtyCount > 0 || !scannedAll;
+      const complete = scannedAll && dirtyCount === 0;
       return new Response(
         JSON.stringify({
           success: true,
-          message: "No dirty activities to process",
+          message: "Counted dirty activities",
           dryRun,
           processed: 0,
-          offset: 0,
-          nextOffset: 0,
-          complete: true,
-          hasMore: false,
+          offset: effectiveOffset,
+          nextOffset: effectiveOffset,
+          complete,
+          hasMore,
+          totalCount: dirtyCount,
+          stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
+          results: [],
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (batch.length === 0) {
+      // Only mark complete when we have scanned everything and found *no* dirty records.
+      const complete = scannedAll && dirtyCount === 0;
+      const hasMore = !complete;
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: complete
+            ? "No dirty activities to process"
+            : "No dirty activities found in scanned window; try again",
+          dryRun,
+          processed: 0,
+          offset: effectiveOffset,
+          nextOffset: dryRun ? effectiveOffset : 0,
+          complete,
+          hasMore,
           totalCount: dirtyCount,
           stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
           results: [],
@@ -345,10 +369,12 @@ serve(async (req) => {
       }
     }
 
-    // Calculate if complete
-    const hasMore = dryRun 
-      ? effectiveOffset + results.length < dirtyCount 
-      : cleaned > 0; // For live runs, continue if we cleaned anything
+    // Completion rules:
+    // - Dry run: paginate until offset reaches dirtyCount
+    // - Live run: keep going until a subsequent scan finds 0 dirty records
+    const hasMore = dryRun
+      ? effectiveOffset + results.length < dirtyCount
+      : dirtyCount > 0;
 
     return new Response(
       JSON.stringify({
@@ -358,7 +384,7 @@ serve(async (req) => {
         processed: results.length, // Top-level for UI compatibility
         offset: effectiveOffset,
         nextOffset: dryRun ? effectiveOffset + results.length : 0,
-        complete: !hasMore, // UI expects 'complete' flag
+        complete: dryRun ? !hasMore : false,
         hasMore,
         totalCount: dirtyCount,
         stats: {
