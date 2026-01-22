@@ -58,6 +58,7 @@ interface HotelDetails {
   totalPrice: number;
   amenities: string[];
   imageUrl?: string;
+  images?: string[];
 }
 
 interface TripSummaryData {
@@ -107,8 +108,10 @@ export default function EditorialTripSummary({
 }: EditorialTripSummaryProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [costExpanded, setCostExpanded] = useState(true);
+  const [hotelBreakdownExpanded, setHotelBreakdownExpanded] = useState(false);
   const [activitiesBudget, setActivitiesBudget] = useState(data.activitiesBudget || 0);
   const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [hotelImageIndex, setHotelImageIndex] = useState(0);
 
   const nights = Math.ceil(
     (new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24)
@@ -404,14 +407,47 @@ export default function EditorialTripSummary({
                 </div>
 
                 <div className="flex flex-col md:flex-row gap-8">
-                  {/* Hotel Image */}
-                  {data.hotel.imageUrl && (
-                    <div className="w-full md:w-48 h-48 md:h-auto rounded-lg overflow-hidden shrink-0">
-                      <img 
-                        src={data.hotel.imageUrl} 
-                        alt={data.hotel.name} 
-                        className="w-full h-full object-cover"
-                      />
+                  {/* Hotel Images Gallery */}
+                  {(data.hotel.images?.length || data.hotel.imageUrl) && (
+                    <div className="w-full md:w-64 shrink-0 space-y-2">
+                      <div className="relative h-48 rounded-lg overflow-hidden">
+                        <img 
+                          src={data.hotel.images?.[hotelImageIndex] || data.hotel.imageUrl} 
+                          alt={`${data.hotel.name} - ${hotelImageIndex + 1}`} 
+                          className="w-full h-full object-cover"
+                        />
+                        {data.hotel.images && data.hotel.images.length > 1 && (
+                          <>
+                            <button 
+                              onClick={() => setHotelImageIndex((hotelImageIndex - 1 + data.hotel!.images!.length) % data.hotel!.images!.length)}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+                            >
+                              <ChevronUp className="w-4 h-4 -rotate-90" />
+                            </button>
+                            <button 
+                              onClick={() => setHotelImageIndex((hotelImageIndex + 1) % data.hotel!.images!.length)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+                            >
+                              <ChevronDown className="w-4 h-4 -rotate-90" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {data.hotel.images && data.hotel.images.length > 1 && (
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {data.hotel.images.slice(0, 4).map((img, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setHotelImageIndex(idx)}
+                              className={`w-14 h-10 rounded overflow-hidden shrink-0 border-2 transition-all ${
+                                idx === hotelImageIndex ? 'border-primary' : 'border-transparent opacity-70 hover:opacity-100'
+                              }`}
+                            >
+                              <img src={img} alt="" className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                   
@@ -511,17 +547,44 @@ export default function EditorialTripSummary({
                         {/* Hotel */}
                         {data.hotel && (
                           <div>
-                            <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                            <button 
+                              onClick={() => setHotelBreakdownExpanded(!hotelBreakdownExpanded)}
+                              className="w-full flex items-center gap-2 text-sm font-medium mb-2 hover:text-foreground transition-colors"
+                            >
                               <Hotel className="h-3.5 w-3.5 text-primary" />
                               Accommodation
-                            </div>
+                              {hotelBreakdownExpanded ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+                            </button>
                             <div className="space-y-1 text-sm pl-5">
                               <div className="flex justify-between text-muted-foreground">
-                                <span>{nights} nights</span>
+                                <span>{nights} nights × ${data.hotel.pricePerNight}/night</span>
                                 <span>${hotelSubtotal.toFixed(0)}</span>
                               </div>
+                              <AnimatePresence>
+                                {hotelBreakdownExpanded && (
+                                  <motion.div 
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="py-2 space-y-1 border-l-2 border-muted pl-3 ml-1">
+                                      {Array.from({ length: nights }).map((_, i) => {
+                                        const nightDate = new Date(data.startDate);
+                                        nightDate.setDate(nightDate.getDate() + i);
+                                        return (
+                                          <div key={i} className="flex justify-between text-xs text-muted-foreground">
+                                            <span>{format(nightDate, 'EEE, MMM d')}</span>
+                                            <span>${data.hotel!.pricePerNight.toFixed(0)}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                               <div className="flex justify-between text-muted-foreground/70 text-xs">
-                                <span>Taxes & fees</span>
+                                <span>Taxes & fees (15%)</span>
                                 <span>${hotelTaxes.toFixed(0)}</span>
                               </div>
                             </div>
