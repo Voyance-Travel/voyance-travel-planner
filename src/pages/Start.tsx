@@ -555,17 +555,24 @@ export default function Start() {
             <div className="flex items-center justify-center gap-4 mb-6">
               <div className="w-8 h-px bg-white/40" />
               <span className="text-xs tracking-[0.3em] uppercase text-white/60 font-sans">
-                Plan Your Journey
+                {itineraryOnlyMode ? 'Quick Itinerary' : 'Plan Your Journey'}
               </span>
               <div className="w-8 h-px bg-white/40" />
             </div>
             
             <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-normal mb-4 leading-[0.95]">
-              Where to <em className="font-normal italic">next?</em>
+              {itineraryOnlyMode ? (
+                <>Generate your <em className="font-normal italic">itinerary</em></>
+              ) : (
+                <>Where to <em className="font-normal italic">next?</em></>
+              )}
             </h1>
             
             <p className="text-base text-white/70 font-sans font-light leading-relaxed max-w-lg mx-auto">
-              Tell us your destination and dates. We'll craft an itinerary thoughtfully planned to every detail.
+              {itineraryOnlyMode 
+                ? "Skip the booking details — we'll build your day-by-day itinerary instantly. Add flights and hotels later."
+                : "Tell us your destination and dates. We'll craft an itinerary thoughtfully planned to every detail."
+              }
             </p>
           </motion.div>
         </div>
