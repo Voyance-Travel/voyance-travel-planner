@@ -365,6 +365,20 @@ serve(async (req) => {
 
       const allNotifications: Array<TripNotification & { tripName: string; destination: string }> = [];
       
+      // Helper to sanitize text (clean up old buggy notifications)
+      const sanitizeText = (text: string): string => {
+        if (!text) return 'Activity';
+        return text
+          .replace(/undefined/gi, 'Activity')
+          .replace(/\[object Object\]/gi, '')
+          .replace(/Coming up: Activity$/i, 'Upcoming Activity')
+          .replace(/How was Activity\?/i, 'How was your activity?')
+          .replace(/at\s*\.\s*Time/gi, 'Time')
+          .replace(/at\s+Time/gi, 'Time')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+      
       for (const trip of trips || []) {
         const metadata = trip.metadata as { scheduledNotifications?: TripNotification[] } | null;
         const notifications = metadata?.scheduledNotifications || [];
@@ -374,6 +388,8 @@ serve(async (req) => {
             allNotifications.push({
               ...notif,
               id: notif.id || crypto.randomUUID(),
+              title: sanitizeText(notif.title),
+              message: sanitizeText(notif.message),
               tripName: trip.name,
               destination: trip.destination
             });
