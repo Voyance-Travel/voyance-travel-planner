@@ -19,16 +19,33 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
+// Helper to create readable name from activity ID
+function humanizeActivityId(id: string): string {
+  if (!id) return 'Activity';
+  return id
+    .replace(/_/g, ' ')
+    .replace(/-/g, ' ')
+    .replace(/\d+/g, '') // Remove numbers
+    .replace(/:/g, '') // Remove colons from time-based IDs
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+    .trim() || 'Activity';
+}
+
 // Sanitize notification text to clean up any undefined/object issues from old data
-function sanitizeNotificationText(text: string): string {
-  if (!text) return 'Activity';
+function sanitizeNotificationText(text: string, activityId?: string): string {
+  if (!text) return activityId ? humanizeActivityId(activityId) : 'Activity';
+  
+  // Get a readable name from the activity ID for replacements
+  const activityNameFromId = activityId ? humanizeActivityId(activityId) : 'Activity';
   
   // Replace common issues from old data
   return text
-    .replace(/undefined/gi, 'Activity')
+    .replace(/undefined/gi, activityNameFromId)
     .replace(/\[object Object\]/gi, '')
-    .replace(/Coming up: Activity$/i, 'Upcoming Activity')
-    .replace(/How was Activity\?/i, 'How was your activity?')
+    .replace(/Coming up: Activity$/i, `Coming up: ${activityNameFromId}`)
+    .replace(/How was Activity\?/i, `How was ${activityNameFromId}?`)
     .replace(/at\s*\.\s*Time/gi, 'Time') // Clean "at . Time" 
     .replace(/at\s+Time/gi, 'Time') // Clean "at Time"
     .replace(/\s+/g, ' ') // Normalize whitespace
@@ -64,8 +81,8 @@ export function NotificationBell() {
   const notifications = useMemo(() => {
     return rawNotifications.map(n => ({
       ...n,
-      title: sanitizeNotificationText(n.title),
-      message: sanitizeNotificationText(n.message)
+      title: sanitizeNotificationText(n.title, n.activityId),
+      message: sanitizeNotificationText(n.message, n.activityId)
     }));
   }, [rawNotifications]);
 

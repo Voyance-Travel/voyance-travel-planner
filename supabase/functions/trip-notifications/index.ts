@@ -14,6 +14,7 @@ interface TripNotification {
   title: string;
   message: string;
   activityId?: string;
+  activityName?: string; // Store actual activity name for display
   scheduledFor: string;
   sent: boolean;
   createdAt: string;
@@ -77,6 +78,19 @@ async function scheduleTripNotifications(
   // Parse itinerary data for activity reminders
   const itineraryData = trip.itinerary_data as { days?: Array<{ dayNumber: number; date: string; activities?: Array<{ id: string; name?: string; title?: string; startTime?: string; location?: string | { name?: string; address?: string } }> }> } | null;
   
+  // Helper to create a readable name from an activity ID (fallback)
+  function humanizeActivityId(id: string): string {
+    if (!id) return 'Activity';
+    return id
+      .replace(/_/g, ' ')
+      .replace(/-/g, ' ')
+      .replace(/\d+/g, '') // Remove numbers
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ')
+      .trim() || 'Activity';
+  }
+  
   if (itineraryData?.days) {
     for (const day of itineraryData.days) {
       const dayDate = new Date(day.date);
@@ -88,8 +102,8 @@ async function scheduleTripNotifications(
         for (const activity of day.activities) {
           if (!activity.startTime) continue;
           
-          // Get activity name - support multiple field names
-          const activityName = activity.title || activity.name || 'Upcoming activity';
+          // Get activity name - support multiple field names, with ID fallback
+          const activityName = activity.title || activity.name || humanizeActivityId(activity.id);
           
           // Get location string - handle all possible formats
           let locationStr = '';
@@ -131,6 +145,7 @@ async function scheduleTripNotifications(
                 ? `Your next activity starts in 30 minutes at ${locationStr}. Time to get ready!`
                 : `Your next activity "${activityName}" starts in 30 minutes. Time to get ready!`,
               activityId: activity.id,
+              activityName, // Store for later use
               scheduledFor: reminderTime.toISOString(),
               sent: false
             });
@@ -147,6 +162,7 @@ async function scheduleTripNotifications(
               title: `How was ${activityName}?`,
               message: `We'd love to hear about your experience! Your feedback helps us personalize your future trips.`,
               activityId: activity.id,
+              activityName, // Store for later use
               scheduledFor: feedbackTime.toISOString(),
               sent: false
             });
@@ -365,14 +381,31 @@ serve(async (req) => {
 
       const allNotifications: Array<TripNotification & { tripName: string; destination: string }> = [];
       
+      // Helper to create readable name from activity ID
+      const humanizeActivityId = (id: string): string => {
+        if (!id) return 'Activity';
+        return id
+          .replace(/_/g, ' ')
+          .replace(/-/g, ' ')
+          .replace(/\d+/g, '')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ')
+          .trim() || 'Activity';
+      };
+      
       // Helper to sanitize text (clean up old buggy notifications)
-      const sanitizeText = (text: string): string => {
-        if (!text) return 'Activity';
+      const sanitizeText = (text: string, activityId?: string): string => {
+        if (!text) return activityId ? humanizeActivityId(activityId) : 'Activity';
+        
+        // If text contains "undefined", try to replace with activity name from ID
+        const activityNameFromId = activityId ? humanizeActivityId(activityId) : 'Activity';
+        
         return text
-          .replace(/undefined/gi, 'Activity')
+          .replace(/undefined/gi, activityNameFromId)
           .replace(/\[object Object\]/gi, '')
-          .replace(/Coming up: Activity$/i, 'Upcoming Activity')
-          .replace(/How was Activity\?/i, 'How was your activity?')
+          .replace(/Coming up: Activity$/i, `Coming up: ${activityNameFromId}`)
+          .replace(/How was Activity\?/i, `How was ${activityNameFromId}?`)
           .replace(/at\s*\.\s*Time/gi, 'Time')
           .replace(/at\s+Time/gi, 'Time')
           .replace(/\s+/g, ' ')
@@ -385,11 +418,15 @@ serve(async (req) => {
         
         for (const notif of notifications) {
           if (!notif.sent) {
+            // Use stored activityName if available, or extract from activityId
+            const activityNameDisplay = notif.activityName || (notif.activityId ? humanizeActivityId(notif.activityId) : undefined);
+            
             allNotifications.push({
               ...notif,
               id: notif.id || crypto.randomUUID(),
-              title: sanitizeText(notif.title),
-              message: sanitizeText(notif.message),
+              title: sanitizeText(notif.title, notif.activityId),
+              message: sanitizeText(notif.message, notif.activityId),
+              activityName: activityNameDisplay,
               tripName: trip.name,
               destination: trip.destination
             });
