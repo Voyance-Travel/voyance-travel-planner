@@ -83,7 +83,7 @@ import TripForm from "./pages/agent/TripForm";
 import AgentTasks from "./pages/agent/AgentTasks";
 import TripWorkspace from "./pages/agent/TripWorkspace";
 import TripShare from "./pages/agent/TripShare";
-import AgentLibrary from "./pages/agent/AgentLibrary";
+// Library removed - agent features disabled
 import AgentSettings from "./pages/agent/AgentSettings";
 import AgentDocuments from "./pages/agent/AgentDocuments";
 import AgentPayouts from "./pages/agent/AgentPayouts";
