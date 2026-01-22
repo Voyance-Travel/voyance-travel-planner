@@ -98,6 +98,13 @@ export default function RefinedDestinationCard({
 
   const handleExploreClick = () => {
     setIsNavigating(true);
+
+    // Clear any in-progress planner state so an old destination can't override the newly-selected card
+    try {
+      localStorage.removeItem('voyance-current-trip');
+    } catch {
+      // Ignore
+    }
     
     try {
       localStorage.setItem(
@@ -112,8 +119,8 @@ export default function RefinedDestinationCard({
       // Continue even if localStorage fails
     }
     
-    // Pass city name directly - Start page handles city names
-    navigate(`/start?destination=${encodeURIComponent(city)}`);
+    // Pass city + country for clarity
+    navigate(`/start?destination=${encodeURIComponent(`${city}, ${country}`)}`);
   };
 
   return (
