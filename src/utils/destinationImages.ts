@@ -24,8 +24,8 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=1200',
   ],
   'barcelona': [
-    'https://images.unsplash.com/photo-1583422409516-2895a77efed6?w=1200',
     'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=1200',
+    'https://images.unsplash.com/photo-1562883676-8c7feb83f09b?w=1200',
     'https://images.unsplash.com/photo-1523531294919-4bcd7c65e216?w=1200',
   ],
   'santorini': [
