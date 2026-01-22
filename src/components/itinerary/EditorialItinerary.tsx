@@ -1008,6 +1008,16 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+            {/* Flight Sync Warning - Show if flight times don't match Day 1 */}
+            {flightSelection?.outbound?.arrival?.time && days[0]?.activities?.[0] && (
+              <FlightSyncWarning
+                flightArrivalTime={flightSelection.outbound.arrival.time}
+                day1FirstActivity={days[0].activities[0]}
+                onSyncDay1={() => handleDayRegenerate(0)}
+                isRegenerating={regeneratingDay === days[0]?.dayNumber}
+              />
+            )}
+
             {/* Airport Game Plan - Show before Day 1 */}
             {flightSelection?.outbound && (
               <AirportGamePlan 
@@ -2411,6 +2421,103 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
             </>
           )}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// FLIGHT SYNC WARNING COMPONENT
+// =============================================================================
+
+interface FlightSyncWarningProps {
+  flightArrivalTime: string;
+  day1FirstActivity?: EditorialActivity;
+  onSyncDay1: () => void;
+  isRegenerating: boolean;
+}
+
+function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, isRegenerating }: FlightSyncWarningProps) {
+  // Parse flight arrival time
+  const parseTimeToMinutes = (timeStr: string): number | null => {
+    if (!timeStr) return null;
+    const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!match) return null;
+    
+    let hours = parseInt(match[1], 10);
+    const mins = parseInt(match[2], 10);
+    const period = match[3]?.toUpperCase();
+    
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    
+    return hours * 60 + mins;
+  };
+  
+  const flightMins = parseTimeToMinutes(flightArrivalTime);
+  const activityMins = parseTimeToMinutes(day1FirstActivity?.startTime || '');
+  
+  // If no flight time or first activity, don't show warning
+  if (flightMins === null || activityMins === null) return null;
+  
+  // Check if Day 1's first activity is "Arrival" type - if so, compare times
+  const isArrivalActivity = day1FirstActivity?.title?.toLowerCase().includes('arrival') ||
+    day1FirstActivity?.category === 'transport';
+  
+  if (!isArrivalActivity) return null;
+  
+  // Calculate difference in hours
+  const diffMins = Math.abs(flightMins - activityMins);
+  const diffHours = diffMins / 60;
+  
+  // If times differ by more than 1 hour, show warning
+  if (diffHours <= 1) return null;
+  
+  const formatTime = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    const period = h >= 12 ? 'PM' : 'AM';
+    const displayH = h % 12 || 12;
+    return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
+  };
+  
+  return (
+    <div className="border border-amber-500/50 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 mb-4">
+      <div className="flex items-start gap-3">
+        <div className="p-2 bg-amber-500/20 rounded-full shrink-0">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+        </div>
+        <div className="flex-1">
+          <h4 className="font-medium text-amber-900 dark:text-amber-100">
+            Flight times don't match your itinerary
+          </h4>
+          <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+            Your flight arrives at <span className="font-semibold">{flightArrivalTime}</span>, 
+            but Day 1 shows arrival at <span className="font-semibold">{formatTime(activityMins)}</span>.
+          </p>
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            This can happen if you added or changed your flight after generating the itinerary.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSyncDay1}
+            disabled={isRegenerating}
+            className="mt-3 border-amber-500 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/50"
+          >
+            {isRegenerating ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Syncing Day 1...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Regenerate Day 1 with correct times
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
