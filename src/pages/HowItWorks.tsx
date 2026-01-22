@@ -17,7 +17,7 @@ const steps = [
   {
     icon: Compass,
     title: 'Get Personalized Recommendations',
-    description: 'Our AI matches you with destinations and experiences that resonate with who you are. No more generic itineraries—every suggestion is tailored to you.',
+    description: 'Our AI matches you with destinations and experiences that resonate with who you are. Every suggestion is tailored to your travel style and preferences.',
     image: 'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&q=80',
     color: 'from-blue-500 to-cyan-600',
   },
@@ -31,7 +31,7 @@ const steps = [
   {
     icon: Plane,
     title: 'Book Everything in One Place',
-    description: 'Flights, hotels, activities—all seamlessly bookable. Lock in your prices and get ready for an unforgettable journey.',
+    description: 'Flights, hotels, activities—all seamlessly bookable in one place. Get ready for an unforgettable journey.',
     image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&q=80',
     color: 'from-orange-500 to-rose-600',
   },
@@ -56,7 +56,7 @@ const benefits = [
   {
     icon: Shield,
     title: 'Book with Confidence',
-    description: 'Price lock guarantees, flexible cancellations, and 24/7 trip support.',
+    description: 'Transparent pricing and verified booking options you can trust.',
   },
 ];
 
@@ -294,7 +294,7 @@ export default function HowItWorks() {
               {
                 icon: Heart,
                 title: 'Honest Recommendations',
-                description: 'Every suggestion is based on your preferences—not paid partnerships.',
+                description: 'Every suggestion is based on your preferences, not paid partnerships.',
                 color: 'from-rose-500 to-pink-500',
               },
               {
@@ -341,11 +341,11 @@ export default function HowItWorks() {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-emerald-400" />
-              <span>Flexible booking options available</span>
+              <span>Transparent pricing with no hidden fees</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-emerald-400" />
-              <span>24/7 traveler support</span>
+              <span>Verified booking options</span>
             </div>
           </motion.div>
         </div>
