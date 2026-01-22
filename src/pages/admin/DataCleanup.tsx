@@ -167,7 +167,7 @@ export default function DataCleanup() {
     
     let offset = useCheckpointOffset ? checkpoint.offset : 0;
     // Larger batch size for activities (server is optimized for it), medium for attractions, smaller for others
-    const batchSize = target === 'activities' ? 30 : target === 'attractions' ? 15 : 10;
+    const batchSize = target === 'activities' ? 50 : target === 'attractions' ? 15 : 10;
 
     const processedTotalAtStart = shouldResume ? checkpoint.processedTotal : 0;
     // For progress UI we need a stable total across resumes.
