@@ -2231,47 +2231,91 @@ serve(async (req) => {
        let dayConstraints = '';
        if (isFirstDay && (flightContext.arrivalTime24 || flightContext.arrivalTime)) {
          const arrival24 = flightContext.arrivalTime24 || (flightContext.arrivalTime ? normalizeTo24h(flightContext.arrivalTime) : null) || '18:00';
+         const arrivalMins = parseTimeToMinutes(arrival24) ?? (18 * 60);
          const transferStart = addMinutesToHHMM(arrival24, 45);
          const transferEnd = addMinutesToHHMM(transferStart, 60);
          const checkInStart = transferEnd;
          const checkInEnd = addMinutesToHHMM(checkInStart, 30);
          const earliestAfterArrival = flightContext.earliestFirstActivityTime || addMinutesToHHMM(arrival24, 240);
-         const isLateArrival = (parseTimeToMinutes(arrival24) ?? 0) >= (18 * 60);
+         const isLateArrival = arrivalMins >= (18 * 60);
 
         dayConstraints = `
-🚨 ARRIVAL DAY REQUIREMENTS:
- - This is the ARRIVAL day. Flight lands at ${arrival24}.
-- You MUST start with these 3 activities in order:
-   1. "Arrival at Airport" (category: transport) at ${arrival24}
-   2. "Airport Transfer to Hotel" (category: transport) at ${transferStart}–${transferEnd}
-   3. "Hotel Check-in" (category: accommodation) at ${checkInStart}–${checkInEnd}
- - The EARLIEST sightseeing/dining activity can start at ${earliestAfterArrival} (allow 4 hours after landing for customs/baggage/transfer/check-in)
- - IMPORTANT: startTime/endTime MUST be in HH:MM (24-hour) format.
- - Hotel to use: ${flightContext.hotelName || 'the selected hotel'}${flightContext.hotelAddress ? ` (${flightContext.hotelAddress})` : ''}
- - If arrival is after 18:00, Day 1 should ONLY include: arrival → transfer → check-in → (optional) quick dinner near hotel → rest. No morning activities.
-- DO NOT start with breakfast or morning activities - the traveler is arriving!`;
-      } else if (isLastDay && flightContext.returnDepartureTime) {
-        dayConstraints = `
-🚨 DEPARTURE DAY REQUIREMENTS:
-- This is the DEPARTURE day. Return flight departs at ${flightContext.returnDepartureTime}.
-- You MUST end with these activities in order:
-  1. "Hotel Checkout" (category: accommodation)
-  2. "Transfer to Airport" (category: transport)
-  3. "Departure from Airport" (category: transport) at ${flightContext.returnDepartureTime}
-- The LATEST activity before checkout should end by ${flightContext.latestLastActivityTime || '12:00'} (3 hours before flight for checkout/transfer/security)
-- Plan only morning activities, keep the afternoon clear for airport`;
+THE FLIGHT LANDS AT ${arrival24} (that's ${flightContext.arrivalTime || arrival24}).
+The traveler is NOT in the destination before this time. They are on a plane.
+
+REQUIRED ACTIVITY SEQUENCE (in this exact order):
+1. Activity 1: "Arrival at Airport" 
+   - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
+   - category: "transport"
+   - location: { name: "Airport", address: "Rome Fiumicino Airport (FCO)" }
+   
+2. Activity 2: "Airport Transfer to Hotel"
+   - startTime: "${transferStart}", endTime: "${transferEnd}" 
+   - category: "transport"
+   
+3. Activity 3: "Hotel Check-in"
+   - startTime: "${checkInStart}", endTime: "${checkInEnd}"
+   - category: "accommodation"
+   - location: { name: "${flightContext.hotelName || 'Hotel'}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
+
+${isLateArrival ? `
+Since arrival is after 6 PM, Day 1 should ONLY have:
+- The 3 activities above (Arrival, Transfer, Check-in)
+- OPTIONALLY: One late dinner activity near the hotel (starting around ${addMinutesToHHMM(checkInEnd, 60)})
+- NO other activities. The traveler needs rest after a long flight.
+` : `
+After check-in, the earliest any sightseeing/dining can start is ${earliestAfterArrival}.
+`}
+
+DO NOT include any activities that happen BEFORE ${arrival24} - no breakfast, no morning sightseeing.
+The day starts when the plane lands, not at 9 AM.`;
+       } else if (isLastDay && flightContext.returnDepartureTime) {
+         const departure24 = flightContext.returnDepartureTime24 || normalizeTo24h(flightContext.returnDepartureTime) || '12:00';
+         const latestActivity = flightContext.latestLastActivityTime || addMinutesToHHMM(departure24, -180);
+         
+         dayConstraints = `
+THE RETURN FLIGHT DEPARTS AT ${departure24} (that's ${flightContext.returnDepartureTime}).
+The traveler must be at the airport 3 hours before departure.
+
+REQUIRED ENDING SEQUENCE (activities must end with):
+1. "Hotel Checkout" (category: accommodation) - around ${addMinutesToHHMM(departure24, -210)}
+2. "Transfer to Airport" (category: transport) 
+3. "Departure from Airport" (category: transport) - endTime should be ${departure24}
+
+ALL sightseeing/activities must END by ${latestActivity}.
+Plan only morning activities and leave afternoon clear for airport.`;
+       }
+
+      // Build system prompt with day-specific timing constraints EMBEDDED
+      let timingInstructions = '';
+      if (isFirstDay && dayConstraints) {
+        // For arrival day, put constraints directly in system prompt for maximum weight
+        timingInstructions = `
+CRITICAL ARRIVAL DAY INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
+${dayConstraints}
+
+FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
+      } else if (isLastDay && dayConstraints) {
+        timingInstructions = `
+CRITICAL DEPARTURE DAY INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
+${dayConstraints}
+
+FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
+      } else {
+        timingInstructions = '- Start around 9:00 AM, end by 9:00-10:00 PM';
       }
 
       const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
-Requirements:
+
+${timingInstructions}
+
+General Requirements:
 - Include FULL street addresses for all locations
 - Provide realistic cost estimates in local currency
 - Account for travel time between activities
-- Include meals (breakfast, lunch, dinner as appropriate)
-${isFirstDay ? '- This is ARRIVAL day - start with airport arrival, NOT breakfast!' : ''}
-${isLastDay ? '- This is DEPARTURE day - end with airport departure!' : ''}
-${!isFirstDay && !isLastDay ? '- Start around 9:00 AM, end by 9:00-10:00 PM' : ''}
-- Every activity MUST have a "title" field (the display name)`;
+- Include meals (breakfast, lunch, dinner as appropriate for the time of day)
+- Every activity MUST have a "title" field (the display name)
+- All times MUST be in 24-hour HH:MM format`;
 
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
 
@@ -2280,12 +2324,9 @@ Travelers: ${travelers}
 Budget: ${budgetTier || 'standard'}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferenceContext}
-${dayConstraints}
 ${previousDayActivities?.length ? `\nAvoid repeating: ${previousDayActivities.join(', ')}` : ''}
 
-Generate activities with full details including addresses, costs, and transportation.
-${isFirstDay ? 'Remember: Start with Arrival at Airport, then Transfer, then Hotel Check-in!' : ''}
-${isLastDay ? 'Remember: End with Hotel Checkout, then Transfer to Airport, then Departure!' : ''}`;
+Generate activities following the timing constraints specified in the system prompt.`;
 
       try {
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
