@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, CheckCircle, XCircle, AlertCircle, Database, Sparkles, MapPin, Building } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, AlertCircle, Database, Sparkles, MapPin, Building, Compass } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import MainLayout from '@/components/layout/MainLayout';
@@ -26,9 +26,13 @@ export default function DataCleanup() {
   // Maintain independent checkpoints per target so switching tabs mid-run can't corrupt the active run's checkpoint.
   const destinationsCheckpoint = useCleanupCheckpoint('destinations');
   const attractionsCheckpoint = useCleanupCheckpoint('attractions');
+  const localKnowledgeCheckpoint = useCleanupCheckpoint('local-knowledge');
 
-  const getCheckpointApi = (target: CleanupTarget) =>
-    target === 'destinations' ? destinationsCheckpoint : attractionsCheckpoint;
+  const getCheckpointApi = (target: CleanupTarget) => {
+    if (target === 'destinations') return destinationsCheckpoint;
+    if (target === 'attractions') return attractionsCheckpoint;
+    return localKnowledgeCheckpoint;
+  };
 
   const checkpointRef = useRef<{
     dryRun: boolean;
@@ -50,7 +54,7 @@ export default function DataCleanup() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isRunning, destinationsCheckpoint.saveCheckpoint, attractionsCheckpoint.saveCheckpoint]);
+  }, [isRunning, destinationsCheckpoint.saveCheckpoint, attractionsCheckpoint.saveCheckpoint, localKnowledgeCheckpoint.saveCheckpoint]);
 
   const MAX_LOG_LINES = 400;
   const MAX_RESULTS = 200;
@@ -93,11 +97,17 @@ export default function DataCleanup() {
         .select('*', { count: 'exact', head: true })
         .or('currency_code.is.null,timezone.is.null,cost_tier.is.null');
       totalCount = count || 0;
-    } else {
+    } else if (target === 'attractions') {
       const { count } = await supabase
         .from('attractions')
         .select('*', { count: 'exact', head: true })
         .or('description.ilike.Popular %,latitude.lt.1,latitude.gt.-1');
+      totalCount = count || 0;
+    } else if (target === 'local-knowledge') {
+      const { count } = await supabase
+        .from('destinations')
+        .select('*', { count: 'exact', head: true })
+        .or('default_transport_modes.is.null,default_transport_modes.eq.[]');
       totalCount = count || 0;
     }
     
@@ -124,7 +134,7 @@ export default function DataCleanup() {
       );
     }
 
-    const functionName = target === 'destinations' ? 'cleanup-destinations' : 'cleanup-attractions';
+    const functionName = target === 'destinations' ? 'cleanup-destinations' : target === 'attractions' ? 'cleanup-attractions' : 'enrich-destinations';
 
     try {
       while (true) {
@@ -266,6 +276,10 @@ export default function DataCleanup() {
               <MapPin className="h-4 w-4" />
               Attractions
             </TabsTrigger>
+            <TabsTrigger value="local-knowledge" className="flex items-center gap-2">
+              <Compass className="h-4 w-4" />
+              Local Knowledge
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="destinations">
@@ -313,6 +327,32 @@ export default function DataCleanup() {
                   const mode = attractionsCheckpoint.checkpoint?.dryRun;
                   if (typeof mode === 'boolean') setDryRun(mode);
                   return runCleanup('attractions', { resume: true, dryRunOverride: mode });
+                }}
+                getStatusIcon={getStatusIcon}
+                getStatusBadge={getStatusBadge}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="local-knowledge">
+            <div>
+              <CleanupPanel
+                target="local-knowledge"
+                description="Enrich destinations with local transport tips, safety info, scams to avoid, tipping customs, and insider knowledge"
+                isRunning={isRunning}
+                dryRun={dryRun}
+                setDryRun={setDryRun}
+                hasCheckpoint={localKnowledgeCheckpoint.hasCheckpoint}
+                checkpointDryRun={localKnowledgeCheckpoint.checkpoint?.dryRun ?? null}
+                progress={progress}
+                stats={stats}
+                logs={logs}
+                results={results}
+                onRun={() => runCleanup('local-knowledge')}
+                onResume={() => {
+                  const mode = localKnowledgeCheckpoint.checkpoint?.dryRun;
+                  if (typeof mode === 'boolean') setDryRun(mode);
+                  return runCleanup('local-knowledge', { resume: true, dryRunOverride: mode });
                 }}
                 getStatusIcon={getStatusIcon}
                 getStatusBadge={getStatusBadge}
