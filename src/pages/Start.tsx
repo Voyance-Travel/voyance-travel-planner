@@ -5,6 +5,7 @@ import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, Doll
 import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
+import { getHeroImage } from '@/utils/heroImages';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
@@ -666,14 +667,11 @@ export default function Start() {
         {/* Hero Background Image */}
         <div className="absolute inset-0">
           <img 
-            src={itineraryOnlyMode 
-              ? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1600&q=80"
-              : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1600&q=80"
-            }
+            src={getHeroImage(itineraryOnlyMode ? 'explore' : 'planning')}
             alt=""
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover brightness-90 contrast-110 saturate-110"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/70 to-background" />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/25 via-background/45 to-background backdrop-blur-[1px]" />
         </div>
         
         <div className="relative max-w-4xl mx-auto px-6 text-center">
