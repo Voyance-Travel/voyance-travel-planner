@@ -131,20 +131,33 @@ export default function DataCleanup() {
         .or('default_transport_modes.is.null,default_transport_modes.eq.[]');
       totalCount = count || 0;
     } else if (target === 'activities') {
-      // Activities cleanup - edge function handles the complex dirty filter
-      // Just get total count here, the function will return exact dirty count
-      const { count: allCount } = await supabase
-        .from('activities')
-        .select('*', { count: 'exact', head: true });
+      // Activities cleanup - get dirty count matching edge function filter
+      const TEMPLATED_DESCRIPTIONS = [
+        'Local crafts, handmade goods, and street performers',
+        'Scenic walk along a famous route, passing iconic landmarks and views',
+        'Step back in time and explore the rich heritage of the area',
+        'From traditional dishes to contemporary cuisine, taste the best of the local food scene',
+        'Explore iconic architecture, museums, and cultural sites of the city'
+      ];
       
-      totalCount = allCount || 0;
+      const [{ count: dirtyCount }, { count: allCount }] = await Promise.all([
+        supabase
+          .from('activities')
+          .select('*', { count: 'exact', head: true })
+          .or(`description.in.(${TEMPLATED_DESCRIPTIONS.map(d => `"${d}"`).join(',')}),and(coordinates->lat.lt.1,coordinates->lat.gt.-1,coordinates->lng.lt.1,coordinates->lng.gt.-1)`),
+        supabase
+          .from('activities')
+          .select('*', { count: 'exact', head: true })
+      ]);
+
+      totalCount = dirtyCount || 0;
       overallCount = allCount ?? null;
 
       if (typeof overallCount === 'number') {
         setDatasetCounts({
           total: overallCount,
-          dirty: totalCount, // Will be updated by first batch response
-          clean: 0,
+          dirty: totalCount,
+          clean: Math.max(0, overallCount - totalCount),
         });
       }
     }
