@@ -170,7 +170,9 @@ export default function DataCleanup() {
           setStats(statsTotal);
 
           setResults(prev => {
-            const next = [...prev, ...response.results];
+            // Filter out "no_changes_needed" to reduce noise
+            const filtered = response.results.filter(r => r.status !== 'no_changes_needed');
+            const next = [...prev, ...filtered];
             return next.length > MAX_RESULTS ? next.slice(-MAX_RESULTS) : next;
           });
 
