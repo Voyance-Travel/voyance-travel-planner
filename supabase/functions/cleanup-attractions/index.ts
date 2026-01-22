@@ -288,8 +288,8 @@ Return ONLY valid JSON.`;
 
   try {
     const controller = new AbortController();
-    // Shorter timeout for faster failure detection
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    // 20s timeout - balanced for reliability
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -298,8 +298,8 @@ Return ONLY valid JSON.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // Use faster model
-        model: "google/gemini-3-flash-preview",
+        // Use fastest model for bulk cleanup
+        model: "google/gemini-2.5-flash-lite",
         messages: [
           { role: "system", content: "Travel data specialist. Return valid JSON only. Use real coordinates, never 0 or placeholders." },
           { role: "user", content: prompt }
