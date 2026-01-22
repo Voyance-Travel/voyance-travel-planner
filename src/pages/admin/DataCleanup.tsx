@@ -174,8 +174,8 @@ export default function DataCleanup() {
     const useCheckpointOffset = shouldResume && runDryRun;
     
     let offset = useCheckpointOffset ? checkpoint.offset : 0;
-    // Larger batch size for attractions/activities (parallel processing), smaller for others
-    const batchSize = (target === 'attractions' || target === 'activities') ? 15 : 10;
+    // Larger batch size for activities (server is optimized for it), medium for attractions, smaller for others
+    const batchSize = target === 'activities' ? 30 : target === 'attractions' ? 15 : 10;
 
     const processedTotalAtStart = shouldResume ? checkpoint.processedTotal : 0;
     // For progress UI we need a stable total across resumes.
@@ -326,9 +326,11 @@ export default function DataCleanup() {
           break;
         }
 
-        // Dry runs paginate through a static set; live runs must always re-query from the start
-        // because the result set shrinks as records are cleaned.
-        offset = runDryRun ? nextOffset : 0;
+        // Dry runs paginate through a static set.
+        // Live runs:
+        // - Attractions can safely re-query from offset 0 (DB filter shrinks).
+        // - Activities uses a scan cursor (nextOffset) to avoid getting stuck when the first window is clean.
+        offset = runDryRun ? nextOffset : (target === 'activities' ? nextOffset : 0);
 
         // Shorter delay for attractions (parallel processing handles rate limiting)
         await new Promise(resolve => setTimeout(resolve, (target === 'attractions' || target === 'activities') ? 500 : 2000));
