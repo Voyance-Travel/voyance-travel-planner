@@ -48,6 +48,7 @@ type ScanResult = {
   dirtyCount: number;
   batch: Activity[];
   scannedAll: boolean;
+  nextOffset: number;
 };
 
 function isTemplatedDescription(desc: string | null): boolean {
@@ -72,6 +73,7 @@ function isDirty(activity: Activity): boolean {
 
 async function scanDirtyActivities(
   supabase: any,
+  startOffset: number,
   limit: number,
   countOnly: boolean
 ): Promise<ScanResult> {
@@ -80,22 +82,28 @@ async function scanDirtyActivities(
   const selectCols =
     "id, name, description, category, destination_id, coordinates, best_times, accessibility_info";
 
-  const pageSize = 500;
-  const maxPages = countOnly ? 400 : 20; // Only scan more if counting
+  // Larger pages = fewer DB round-trips.
+  const pageSize = 750;
+  // For live runs we scan a moving window; we don't want to scan the whole table every call.
+  const maxPages = countOnly ? 400 : 40;
 
   let dirtyCount = 0;
   const batch: Activity[] = [];
   let scannedAll = false;
+  let pagesScanned = 0;
+
+  const normalizedStart = Number.isFinite(startOffset) && startOffset > 0 ? Math.floor(startOffset) : 0;
 
   for (let page = 0; page < maxPages; page++) {
-    const from = page * pageSize;
+    pagesScanned = page + 1;
+    const from = normalizedStart + page * pageSize;
     const to = from + pageSize - 1;
 
     const { data: pageData, error: pageError } = await supabase
       .from("activities")
       .select(selectCols)
-      .range(from, to)
-      .order("id");
+      .order("id")
+      .range(from, to);
 
     if (pageError) throw pageError;
     if (!pageData || pageData.length === 0) {
@@ -125,7 +133,10 @@ async function scanDirtyActivities(
     }
   }
 
-  return { dirtyCount, batch, scannedAll };
+  // If we hit the end, wrap around to the beginning on the next call.
+  const nextOffset = scannedAll ? 0 : (normalizedStart + pagesScanned * pageSize);
+
+  return { dirtyCount, batch, scannedAll, nextOffset };
 }
 
 async function enrichWithAI(
@@ -239,7 +250,9 @@ serve(async (req) => {
     const dryRun = (body as any).dryRun ?? true;
     const offset = Number((body as any).offset ?? 0);
     // UI sends `batchSize`; older versions may send `limit`.
-    const limit = Math.max(0, Number((body as any).limit ?? (body as any).batchSize ?? BATCH_SIZE));
+    const requestedLimit = Math.max(0, Number((body as any).limit ?? (body as any).batchSize ?? BATCH_SIZE));
+    // Prefer the server-side batch size for throughput; don't let the UI accidentally cap us.
+    const limit = Math.max(0, Math.min(BATCH_SIZE, requestedLimit || BATCH_SIZE));
     const countOnly = Boolean((body as any).countOnly ?? false);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -253,8 +266,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Scan for dirty activities - optimized to stop early once we have enough
-    const { dirtyCount, batch, scannedAll } = await scanDirtyActivities(
+    const { dirtyCount, batch, scannedAll, nextOffset } = await scanDirtyActivities(
       supabase,
+      offset,
       countOnly ? 0 : limit,
       countOnly
     );
@@ -281,8 +295,18 @@ serve(async (req) => {
     }
 
     if (batch.length === 0) {
-      // Only mark complete when we have scanned everything and found *no* dirty records.
-      const complete = scannedAll && dirtyCount === 0;
+      // If we're scanning from the beginning and didn't find anything in this window,
+      // do a one-time full check to confirm completion (so the UI can actually stop).
+      let confirmedNoDirty = false;
+      if (!countOnly && (offset ?? 0) === 0 && !scannedAll) {
+        const full = await scanDirtyActivities(supabase, 0, 0, true);
+        confirmedNoDirty = full.scannedAll && full.dirtyCount === 0;
+      }
+
+      // Only mark complete when we scan from the beginning and find *no* dirty records.
+      // If we started mid-table and hit the end, we wrap to 0 and keep going.
+      const complete =
+        ((scannedAll && dirtyCount === 0) || confirmedNoDirty) && (offset ?? 0) === 0;
       const hasMore = !complete;
 
       return new Response(
@@ -293,11 +317,10 @@ serve(async (req) => {
             : "No dirty activities found in scanned window; try again",
           dryRun,
           processed: 0,
-          offset: 0,
-          nextOffset: 0,
+          offset: offset || 0,
+          nextOffset,
           complete,
           hasMore,
-          totalCount: dirtyCount,
           stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
           results: [],
         }),
@@ -375,7 +398,8 @@ serve(async (req) => {
     }
 
     // Completion: keep going until we find 0 dirty records
-    const hasMore = dirtyCount > results.length;
+    // We scan a moving window; keep going unless we're truly done.
+    const hasMore = true;
 
     return new Response(
       JSON.stringify({
@@ -383,11 +407,10 @@ serve(async (req) => {
         message: `Processed ${results.length} activities`,
         dryRun,
         processed: results.length,
-        offset: 0,
-        nextOffset: 0,
-        complete: dirtyCount === 0,
+        offset: offset || 0,
+        nextOffset,
+        complete: false,
         hasMore,
-        totalCount: dirtyCount,
         stats: {
           processed: results.length,
           cleaned,
