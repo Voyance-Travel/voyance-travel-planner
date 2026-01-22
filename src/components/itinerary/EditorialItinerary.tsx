@@ -942,16 +942,15 @@ export function EditorialItinerary({
             <div className="flex items-center gap-0">
               <button
                 onClick={() => setShowLocalCurrency(!showLocalCurrency)}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
                 title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
               >
-                <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
-                  {localCurrency}
+                <span className="text-primary font-semibold">
+                  {tripCurrency}
                 </span>
-                <span className="text-muted-foreground/50">/</span>
-                <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
-                  USD
-                </span>
+                <svg className="h-3 w-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
               </button>
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-r-md bg-primary/10 border border-primary/20 text-sm">
                 <span className="text-muted-foreground">Total:</span>
