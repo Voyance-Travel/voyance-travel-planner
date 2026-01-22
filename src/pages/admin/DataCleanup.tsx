@@ -101,7 +101,7 @@ export default function DataCleanup() {
       const { count } = await supabase
         .from('attractions')
         .select('*', { count: 'exact', head: true })
-        .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1)');
+        .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1,longitude.lt.1,longitude.gt.-1)');
       totalCount = count || 0;
     } else if (target === 'local-knowledge') {
       const { count } = await supabase
@@ -120,34 +120,35 @@ export default function DataCleanup() {
     // Therefore, we should always start at offset 0 for live runs - the remaining dirty
     // records are always at the beginning of the filtered result set.
     // Only dry runs should use checkpoint offset since they don't modify data.
-    const useCheckpointOffset = shouldResume && checkpoint.dryRun;
+    const useCheckpointOffset = shouldResume && runDryRun;
     
     let offset = useCheckpointOffset ? checkpoint.offset : 0;
     const batchSize = 5;
 
-    // NOTE: For LIVE runs, `totalCount` represents the *current* number of dirty records,
-    // which can shrink as records are cleaned. To keep the UI progress stable (and avoid
-    // cases like 3973 / 3784 when resuming), we treat progress.total as an estimate:
-    // processedSoFarAtStart + dirtyRemainingAtStart.
     const processedTotalAtStart = shouldResume ? checkpoint.processedTotal : 0;
-    const uiTotal = runDryRun ? totalCount : processedTotalAtStart + totalCount;
+    // For progress UI we need a stable total across resumes.
+    // We persist the baseline total in the checkpoint (checkpoint.totalCount).
+    // Clamp so we never show current > total due to older checkpoints / filter changes.
+    const baselineTotal = shouldResume
+      ? Math.max(checkpoint.totalCount, processedTotalAtStart)
+      : totalCount;
 
     let processedTotal = processedTotalAtStart;
     let statsTotal: CleanupStats = shouldResume
       ? checkpoint!.stats
       : { updated: 0, clean: 0, errors: 0, processed: 0 };
 
-    setProgress({ current: processedTotal, total: uiTotal });
+    setProgress({ current: processedTotal, total: baselineTotal });
     addLog(
       `Starting ${target} cleanup of ${totalCount} items (${runDryRun ? 'DRY RUN' : 'LIVE'})`
     );
 
     if (shouldResume) {
       setStats(statsTotal);
-      setProgress({ current: processedTotal, total: uiTotal });
+      setProgress({ current: processedTotal, total: baselineTotal });
       if (useCheckpointOffset) {
         addLog(
-          `Resuming dry run from offset ${offset} (processed ${processedTotal}/${totalCount})`
+          `Resuming dry run from offset ${offset} (processed ${processedTotal}/${baselineTotal})`
         );
       } else {
         addLog(
@@ -189,11 +190,13 @@ export default function DataCleanup() {
         };
 
         // Persist progress after each batch so a crash/refresh can resume without re-processing.
+        // For live runs, persist a stable baseline total (not the current dirty count).
+        const nextCheckpointOffset = runDryRun ? nextOffset : 0;
         checkpointRef.current = {
           dryRun: runDryRun,
-          offset: nextOffset,
+          offset: nextCheckpointOffset,
           processedTotal,
-          totalCount,
+          totalCount: baselineTotal,
           stats: statsTotal,
         };
         saveCheckpoint(checkpointRef.current);
@@ -208,7 +211,7 @@ export default function DataCleanup() {
             return next.length > MAX_RESULTS ? next.slice(-MAX_RESULTS) : next;
           });
 
-          setProgress({ current: processedTotal, total: uiTotal });
+          setProgress({ current: processedTotal, total: baselineTotal });
         });
 
         const batchLogs: string[] = [];
@@ -229,7 +232,9 @@ export default function DataCleanup() {
           break;
         }
 
-        offset = nextOffset;
+        // Dry runs paginate through a static set; live runs must always re-query from the start
+        // because the result set shrinks as records are cleaned.
+        offset = runDryRun ? nextOffset : 0;
 
         await new Promise(resolve => setTimeout(resolve, 2000));
       }

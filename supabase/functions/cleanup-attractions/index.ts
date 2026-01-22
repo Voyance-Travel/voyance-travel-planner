@@ -65,7 +65,7 @@ serve(async (req) => {
     const { data: attractions, error: fetchError } = await supabase
       .from('attractions')
       .select('id, name, description, address, latitude, longitude, category, subcategory, destination_id, visit_duration_mins, average_rating')
-      .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1)')
+      .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1,longitude.lt.1,longitude.gt.-1)')
       .order('name')
       .range(offset, offset + batchSize - 1);
 
