@@ -704,7 +704,7 @@ export default function Start() {
             <p className="text-base text-white/70 font-sans font-light leading-relaxed max-w-lg mx-auto">
               {itineraryOnlyMode 
                 ? "Already have your flights and hotel booked? We'll generate a personalized day-by-day itinerary for your trip."
-                : "Search and compare hotels, then add your own flight details. We'll craft an AI-powered itinerary for your destination."
+                : "Book your flight anywhere you prefer, then let us find your perfect hotel and build a personalized itinerary."
               }
             </p>
           </motion.div>
