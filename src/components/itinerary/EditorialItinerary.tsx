@@ -2467,6 +2467,8 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
           body: { 
             origin, 
             destination: hotelDest,
+            city: destination, // City name for database fare lookup
+            airportCode: arrivalAirport || undefined,
             arrivalTime: arrivalTime ? new Date().toISOString() : undefined
           }
         });
