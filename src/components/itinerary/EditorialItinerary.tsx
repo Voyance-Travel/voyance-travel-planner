@@ -2420,6 +2420,19 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
 // AIRPORT GAME PLAN COMPONENT
 // =============================================================================
 
+interface TransferOption {
+  mode: string;
+  duration: string;
+  durationMinutes: number;
+  estimatedCost?: string;
+  notes?: string;
+}
+
+interface TransferData {
+  taxi: { duration: string; cost: string };
+  train: { duration: string; cost: string };
+}
+
 interface AirportGamePlanProps {
   flightSelection: FlightSelection;
   hotelSelection?: HotelSelection | null;
@@ -2428,6 +2441,72 @@ interface AirportGamePlanProps {
 
 function AirportGamePlan({ flightSelection, hotelSelection, destination }: AirportGamePlanProps) {
   const outbound = flightSelection.outbound;
+  const [transferData, setTransferData] = useState<TransferData | null>(null);
+  const [isLoadingTransfer, setIsLoadingTransfer] = useState(false);
+  
+  // Fetch dynamic transfer data from Google Maps Distance Matrix API
+  useEffect(() => {
+    if (!outbound || !hotelSelection?.name) return;
+    
+    const fetchTransferData = async () => {
+      setIsLoadingTransfer(true);
+      try {
+        const arrivalAirport = outbound.arrival?.airport || '';
+        const arrivalTime = outbound.arrival?.time || '';
+        
+        // Build origin string (airport)
+        const origin = arrivalAirport 
+          ? `${arrivalAirport} Airport, ${destination}`
+          : `${destination} Airport`;
+        
+        // Build destination string (hotel or city center)
+        const hotelDest = hotelSelection?.address 
+          || `${hotelSelection.name}, ${destination}`;
+        
+        const response = await supabase.functions.invoke('airport-transfers', {
+          body: { 
+            origin, 
+            destination: hotelDest,
+            arrivalTime: arrivalTime ? new Date().toISOString() : undefined
+          }
+        });
+        
+        if (response.error) {
+          console.error('Transfer API error:', response.error);
+          return;
+        }
+        
+        const data = response.data;
+        if (data?.options) {
+          // Map API response to our format
+          const taxiOption = data.options.find((o: TransferOption) => 
+            o.mode.toLowerCase().includes('taxi') || o.mode.toLowerCase().includes('ride')
+          );
+          const transitOption = data.options.find((o: TransferOption) => 
+            o.mode.toLowerCase().includes('train') || o.mode.toLowerCase().includes('bus')
+          );
+          
+          setTransferData({
+            taxi: {
+              duration: taxiOption?.duration || '30-50 min',
+              cost: taxiOption?.estimatedCost || 'Varies',
+            },
+            train: {
+              duration: transitOption?.duration || 'N/A',
+              cost: transitOption?.estimatedCost || 'N/A',
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch transfer data:', error);
+      } finally {
+        setIsLoadingTransfer(false);
+      }
+    };
+    
+    fetchTransferData();
+  }, [outbound?.arrival?.airport, hotelSelection?.name, destination]);
+  
   if (!outbound) return null;
 
   // Parse arrival time and calculate recommendations
@@ -2458,22 +2537,20 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
     }
     if (hours < 0) hours += 24;
     
-    // Format back
-    const displayHours = hours % 12 || 12;
-    const displayPeriod = hours >= 12 ? 'PM' : 'AM';
-    return `${displayHours}:${String(finalMins).padStart(2, '0')} ${displayPeriod}`;
+    // Format back to 12h
+    const finalPeriod = hours >= 12 ? 'PM' : 'AM';
+    const finalHours = hours % 12 || 12;
+    return `${finalHours}:${String(finalMins).padStart(2, '0')} ${finalPeriod}`;
   };
 
-  // Determine post-landing recommendation based on arrival time
+  // Post-landing advice based on arrival time
   const getPostLandingAdvice = () => {
-    if (!arrivalTime) return { action: 'Check in & explore', reason: 'Get settled and start exploring!' };
-    
+    if (!arrivalTime) return { action: 'Head to hotel', reason: 'Check in and freshen up' };
     const match = arrivalTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-    if (!match) return { action: 'Check in & explore', reason: 'Get settled and start exploring!' };
+    if (!match) return { action: 'Head to hotel', reason: 'Check in and freshen up' };
     
     let hours = parseInt(match[1], 10);
     const period = match[3]?.toUpperCase();
-    
     if (period === 'PM' && hours !== 12) hours += 12;
     if (period === 'AM' && hours === 12) hours = 0;
     
@@ -2488,54 +2565,26 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
     }
   };
 
-  // Estimate airport to hotel transfer based on destination
-  const getTransferEstimate = () => {
-    // Destination-specific transfer data for major cities
-    const transferData: Record<string, { taxi: { duration: string; cost: string }; train: { duration: string; cost: string } }> = {
-      // Italy
+  // Fallback transfer estimate when API hasn't loaded yet
+  const getStaticTransferEstimate = (): TransferData => {
+    const transferFallback: Record<string, TransferData> = {
       'rome': { taxi: { duration: '45-60 min', cost: '€48 fixed' }, train: { duration: '32 min', cost: '€14' } },
-      'florence': { taxi: { duration: '25-35 min', cost: '€25-35' }, train: { duration: '25 min', cost: '€6' } },
-      'venice': { taxi: { duration: '25-40 min', cost: '€40-50' }, train: { duration: '20 min', cost: '€15' } },
-      'milan': { taxi: { duration: '45-60 min', cost: '€95 fixed' }, train: { duration: '50 min', cost: '€13' } },
-      // France
       'paris': { taxi: { duration: '35-60 min', cost: '€55 fixed' }, train: { duration: '35 min', cost: '€11' } },
-      'nice': { taxi: { duration: '25-35 min', cost: '€35-45' }, train: { duration: '25 min', cost: '€6' } },
-      // Spain
-      'barcelona': { taxi: { duration: '25-40 min', cost: '€40-50' }, train: { duration: '25 min', cost: '€5' } },
-      'madrid': { taxi: { duration: '25-40 min', cost: '€30-40' }, train: { duration: '25 min', cost: '€5' } },
-      // UK
       'london': { taxi: { duration: '45-75 min', cost: '£60-90' }, train: { duration: '15 min', cost: '£25' } },
-      // Portugal
-      'lisbon': { taxi: { duration: '20-30 min', cost: '€20-25' }, train: { duration: '20 min', cost: '€4' } },
-      // Greece
-      'athens': { taxi: { duration: '35-50 min', cost: '€40 fixed' }, train: { duration: '45 min', cost: '€10' } },
-      'santorini': { taxi: { duration: '15-25 min', cost: '€25-35' }, train: { duration: 'N/A', cost: 'Bus €2' } },
-      // Japan
       'tokyo': { taxi: { duration: '60-90 min', cost: '¥25,000+' }, train: { duration: '35 min', cost: '¥3,000' } },
-      'kyoto': { taxi: { duration: '75-100 min', cost: '¥15,000+' }, train: { duration: '75 min', cost: '¥2,900' } },
-      // USA
       'new york': { taxi: { duration: '45-75 min', cost: '$55-75' }, train: { duration: '45 min', cost: '$11' } },
-      'los angeles': { taxi: { duration: '30-60 min', cost: '$50-80' }, train: { duration: '45 min', cost: '$10' } },
-      // Asia
-      'bangkok': { taxi: { duration: '35-60 min', cost: '฿400-600' }, train: { duration: '30 min', cost: '฿45' } },
-      'singapore': { taxi: { duration: '25-40 min', cost: 'S$25-40' }, train: { duration: '30 min', cost: 'S$3' } },
-      'bali': { taxi: { duration: '40-75 min', cost: '$15-25' }, train: { duration: 'N/A', cost: 'N/A' } },
-      // Default/generic
       'default': { taxi: { duration: '30-50 min', cost: 'Varies' }, train: { duration: '30-45 min', cost: 'Varies' } },
     };
     
     const destKey = destination.toLowerCase().trim();
-    // Try exact match, then partial match
-    const data = transferData[destKey] || 
-      Object.entries(transferData).find(([key]) => destKey.includes(key) || key.includes(destKey))?.[1] ||
-      transferData['default'];
-    
-    return data;
+    return transferFallback[destKey] || 
+      Object.entries(transferFallback).find(([key]) => destKey.includes(key) || key.includes(destKey))?.[1] ||
+      transferFallback['default'];
   };
 
   const recommendedArrival = getRecommendedAirportArrival();
   const postLanding = getPostLandingAdvice();
-  const transfer = getTransferEstimate();
+  const transfer = transferData || getStaticTransferEstimate();
 
   return (
     <div className="border border-border bg-card rounded-lg overflow-hidden">
@@ -2590,7 +2639,17 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
               <Hotel className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <p className="font-medium text-sm">Getting to {hotelSelection.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-sm">Getting to {hotelSelection.name}</p>
+                {isLoadingTransfer && (
+                  <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
+                )}
+                {transferData && !isLoadingTransfer && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/20">
+                    Live
+                  </Badge>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
                   <span className="font-medium">🚕 Taxi/Uber</span>
