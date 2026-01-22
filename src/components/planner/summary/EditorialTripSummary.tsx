@@ -185,8 +185,8 @@ export default function EditorialTripSummary({
       className="print:max-w-none"
     >
       {/* Full-bleed Hero - extend into the nav area */}
-      <div className="relative -mx-4 md:-mx-8 lg:-mx-16 -mt-6 mb-12">
-        <div className="relative h-[50vh] min-h-[420px] max-h-[520px] overflow-hidden">
+      <div className="relative -mx-4 md:-mx-8 lg:-mx-16 -mt-6 mb-16">
+        <div className="relative h-[55vh] min-h-[480px] max-h-[580px] overflow-hidden">
           <DynamicDestinationPhotos 
             destination={data.destination} 
             startDate={data.startDate} 
@@ -195,10 +195,10 @@ export default function EditorialTripSummary({
             variant="hero"
             hideOverlayText={true}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-black/40 to-black/10" />
           
           {/* Hero Content */}
-          <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-12 lg:p-16">
+          <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-12 lg:p-16 pb-12 md:pb-16">
             <motion.div
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
