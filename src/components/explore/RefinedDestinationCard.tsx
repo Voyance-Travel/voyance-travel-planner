@@ -98,14 +98,13 @@ export default function RefinedDestinationCard({
 
   const handleExploreClick = () => {
     setIsNavigating(true);
-    const slug = `${city}-${country}`.toLowerCase().replace(/\s+/g, "-");
     
     try {
       localStorage.setItem(
         "voyanceTrip",
         JSON.stringify({
-          destination: { slug, city, country, id },
-          currentStep: "hotels",
+          destination: { slug: id, city, country, id },
+          currentStep: "basics",
           updatedAt: new Date().toISOString()
         })
       );
@@ -113,7 +112,8 @@ export default function RefinedDestinationCard({
       // Continue even if localStorage fails
     }
     
-    navigate(`/start/hotels?destination=${slug}`);
+    // Pass city name directly - Start page handles city names
+    navigate(`/start?destination=${encodeURIComponent(city)}`);
   };
 
   return (
