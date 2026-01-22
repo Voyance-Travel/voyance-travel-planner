@@ -588,37 +588,41 @@ export default function Start() {
             className="bg-card p-6 md:p-8 shadow-elevated rounded-2xl border border-border"
           >
             <div className="space-y-5">
-              {/* Origin */}
-              <div>
-                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
-                  Departing from
-                </label>
-                <AirportAutocomplete
-                  value={originSelection.display}
-                  onChange={setOriginSelection}
-                  placeholder="Your city or airport"
-                  icon={Plane}
-                />
-              </div>
+              {/* Origin - Only show for full trip planning (need for hotel search context) */}
+              {!itineraryOnlyMode && (
+                <div>
+                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
+                    Departing from
+                  </label>
+                  <AirportAutocomplete
+                    value={originSelection.display}
+                    onChange={setOriginSelection}
+                    placeholder="Your city or airport"
+                    icon={Plane}
+                  />
+                </div>
+              )}
               
               {/* Destination */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans">
-                    Destination
+                    {itineraryOnlyMode ? 'Where are you going?' : 'Destination'}
                   </label>
-                  <Link 
-                    to={ROUTES.PLANNER.MULTI_CITY}
-                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                    Planning multiple cities?
-                  </Link>
+                  {!itineraryOnlyMode && (
+                    <Link 
+                      to={ROUTES.PLANNER.MULTI_CITY}
+                      className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      Planning multiple cities?
+                    </Link>
+                  )}
                 </div>
                 <AirportAutocomplete
                   value={destinationSelection.display}
                   onChange={setDestinationSelection}
-                  placeholder="Where do you want to go?"
+                  placeholder={itineraryOnlyMode ? "City you're visiting" : "Where do you want to go?"}
                   icon={MapPin}
                 />
               </div>
@@ -627,7 +631,7 @@ export default function Start() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
-                    Departure
+                    {itineraryOnlyMode ? 'Arrival Date' : 'Departure'}
                   </label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -663,7 +667,7 @@ export default function Start() {
                 
                 <div>
                   <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
-                    Return
+                    {itineraryOnlyMode ? 'Departure Date' : 'Return'}
                   </label>
                   <Popover>
                     <PopoverTrigger asChild>
