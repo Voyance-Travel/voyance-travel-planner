@@ -13,6 +13,8 @@ export interface CleanupResponse {
   offset: number;
   nextOffset: number;
   complete?: boolean;
+  hasMore?: boolean;
+  totalCount?: number;
   results: CleanupResult[];
   executionTimeMs?: number;
 }
