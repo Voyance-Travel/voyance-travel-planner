@@ -19,6 +19,7 @@ import { enrichHotel } from '@/services/hotelAPI';
 import { usePaymentVerification } from '@/hooks/usePaymentVerification';
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
 import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
+import { getDestinationByCity, type Destination } from '@/services/supabase/destinations';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -61,6 +62,7 @@ export default function TripDetail() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
+  const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
@@ -320,6 +322,22 @@ export default function TripDetail() {
           if (localTrip) {
             setTrip(localTrip);
             setActivities([]);
+
+            // Fetch destination metadata (currency, etc.) for local trips too
+            try {
+              const cleanDestination = (localTrip.destination || '')
+                .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+                .trim();
+              if (cleanDestination) {
+                const dest = await getDestinationByCity(cleanDestination);
+                setDestinationMeta(dest);
+              } else {
+                setDestinationMeta(null);
+              }
+            } catch (e) {
+              console.warn('[TripDetail] Destination metadata lookup failed (local trip):', e);
+              setDestinationMeta(null);
+            }
             return;
           }
 
@@ -329,6 +347,22 @@ export default function TripDetail() {
         }
 
         setTrip(tripData);
+
+        // Fetch destination metadata so itinerary can show correct local currency (EUR for Rome)
+        try {
+          const cleanDestination = (tripData.destination || '')
+            .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+            .trim();
+          if (cleanDestination) {
+            const dest = await getDestinationByCity(cleanDestination);
+            setDestinationMeta(dest);
+          } else {
+            setDestinationMeta(null);
+          }
+        } catch (e) {
+          console.warn('[TripDetail] Destination metadata lookup failed:', e);
+          setDestinationMeta(null);
+        }
 
         // Fetch activities (filter out internal-only activities for client view)
         const { data: activitiesData, error: activitiesError } = await supabase
@@ -372,6 +406,7 @@ export default function TripDetail() {
         console.error('Error fetching trip:', err);
         setTrip(null);
         setError('Failed to load trip details');
+        setDestinationMeta(null);
       } finally {
         setLoading(false);
       }
@@ -847,7 +882,11 @@ export default function TripDetail() {
                 <EditorialItinerary
                   tripId={trip.id}
                   destination={trip.destination}
-                  destinationCountry={trip.destination_country || undefined}
+                  destinationCountry={
+                    trip.destination_country ||
+                    ((destinationMeta as any)?.country as string | undefined) ||
+                    undefined
+                  }
                   startDate={trip.start_date}
                   endDate={trip.end_date}
                   travelers={trip.travelers || 1}
@@ -855,6 +894,19 @@ export default function TripDetail() {
                   days={editorDays}
                   flightSelection={normalizedFlight}
                   hotelSelection={trip.hotel_selection as Record<string, unknown> | null}
+                  destinationInfo={
+                    destinationMeta
+                      ? {
+                          currency: ((destinationMeta as any)?.currency_code as string | undefined) ||
+                            ((destinationMeta as any)?.currency as string | undefined),
+                          currencySymbol: ((destinationMeta as any)?.currency_symbol as string | undefined),
+                          bestTime: ((destinationMeta as any)?.best_time_to_visit as string | undefined),
+                          timezone: ((destinationMeta as any)?.timezone as string | undefined),
+                          overview: ((destinationMeta as any)?.description as string | undefined),
+                          tips: ((destinationMeta as any)?.local_tips as string | undefined),
+                        }
+                      : undefined
+                  }
                   isEditable={true}
                   onBookingAdded={() => window.location.reload()}
                 />
