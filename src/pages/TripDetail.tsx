@@ -648,17 +648,6 @@ export default function TripDetail() {
                 {format(parseISO(trip.start_date), 'MMM d')} - {format(parseISO(trip.end_date), 'MMM d, yyyy')}
               </div>
 
-              {(trip.status === 'draft' || trip.status === 'planning') && (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate(`/planner?tripId=${trip.id}`)}
-                  className="ml-auto"
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Continue Planning
-                </Button>
-              )}
             </div>
           )}
 
