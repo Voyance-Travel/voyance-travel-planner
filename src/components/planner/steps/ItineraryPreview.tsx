@@ -493,63 +493,47 @@ export default function ItineraryPreview({
         animate={{ opacity: 1, y: 0 }}
         className="max-w-4xl mx-auto"
       >
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-display font-medium text-foreground mb-2">
-            Your Trip Preview
-          </h1>
-          <p className="text-muted-foreground">
-            Generating itinerary for {tripDetails.destination}
+        {/* Compact Progress Header */}
+        <div className="text-center mb-8">
+          <p className="text-xs tracking-[0.2em] uppercase text-primary font-medium mb-3">
+            {tripDetails.destination}
           </p>
-        </div>
-
-        {/* Quiz Not Completed Warning - show during generation too */}
-        {!hasCompletedQuiz && (
-          <Card className="border-amber-500/30 bg-amber-500/10 mb-6">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="w-6 h-6 text-amber-600 mt-0.5 shrink-0" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-foreground">Generating Generic Itinerary</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Since you haven't completed the quiz, this itinerary won't reflect your personal preferences. You can take the quiz later to get more personalized recommendations.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Progress Card */}
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="relative">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <Sparkles className="w-4 h-4 text-primary absolute -top-1 -right-1" />
+          <h1 className="font-serif text-3xl md:text-4xl font-light text-foreground mb-6">
+            Crafting Your <em className="italic">Itinerary</em>
+          </h1>
+          
+          {/* Inline Progress Bar */}
+          <div className="max-w-md mx-auto">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="relative shrink-0">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
               </div>
               <div className="flex-1">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-medium">{message}</span>
-                  <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
-                </div>
-                <Progress value={progress} className="h-2" />
+                <Progress value={progress} className="h-1.5" />
               </div>
+              <span className="text-sm text-muted-foreground tabular-nums w-10 text-right">
+                {Math.round(progress)}%
+              </span>
             </div>
-            
-            {currentStep === 'generating' && totalDays > 0 && (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Calendar className="w-4 h-4" />
-                <span>Day {currentDay} of {totalDays}</span>
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground">
+              {message}
+            </p>
+          </div>
+          
+          <Button variant="ghost" size="sm" onClick={cancel} className="mt-4 text-muted-foreground">
+            Cancel
+          </Button>
+        </div>
 
-            <div className="flex justify-center mt-4">
-              <Button variant="ghost" size="sm" onClick={cancel}>
-                Cancel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Quiz Not Completed Warning - compact */}
+        {!hasCompletedQuiz && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 mb-6 text-sm">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <p className="text-muted-foreground">
+              Generic itinerary — <a href="/quiz" className="text-primary hover:underline">take the quiz</a> for personalized recommendations
+            </p>
+          </div>
+        )}
 
         {/* Streaming Day Cards - show as they're generated */}
         <div className="space-y-6">
@@ -563,21 +547,7 @@ export default function ItineraryPreview({
             ))}
           </AnimatePresence>
 
-          {/* Placeholder for next day being generated */}
-          {currentDay > 0 && currentDay <= totalDays && days.length < currentDay && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-8"
-            >
-              <div className="flex items-center justify-center gap-3 text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Generating Day {currentDay}...</span>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Show skeletons for remaining days */}
+          {/* Show skeletons when no days yet */}
           {days.length === 0 && [0, 1, 2].map((i) => (
             <DayCardSkeleton key={i} dayIndex={i} />
           ))}
