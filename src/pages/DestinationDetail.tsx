@@ -531,7 +531,7 @@ export default function DestinationDetail() {
                 >
                   <div className="flex items-center gap-2 mb-4">
                     <Sparkles className="h-5 w-5 text-accent" />
-                    <span className="text-sm font-medium text-accent">AI-Powered Planning</span>
+                    <span className="text-sm font-medium text-accent">Personalized Planning</span>
                   </div>
                   
                   <h3 className="font-serif text-xl font-semibold mb-2">
