@@ -838,68 +838,53 @@ export function EditorialItinerary({
   return (
     <div className="space-y-6">
       {/* Trip Summary Bar - Editorial Style */}
-      <div className="py-5 px-6 -mx-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="py-4 px-4 -mx-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl">
+        <div className="flex items-center justify-between gap-4">
           {/* Left: Trip info pills */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
-              <Calendar className="h-4 w-4 text-primary" />
-              <span className="text-muted-foreground">Duration:</span>
-              <span className="font-semibold text-foreground">{days.length} Days</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-background border border-border text-sm">
+              <Calendar className="h-3.5 w-3.5 text-primary" />
+              <span className="font-medium text-foreground">{days.length} Days</span>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
-              <Users className="h-4 w-4 text-accent" />
-              <span className="text-muted-foreground">Travelers:</span>
-              <span className="font-semibold text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-background border border-border text-sm">
+              <Users className="h-3.5 w-3.5 text-primary" />
+              <span className="font-medium text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
             </div>
-            {style && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
-                <MapPin className="h-4 w-4 text-primary" />
-                <span className="text-muted-foreground">Style:</span>
-                <span className="font-semibold text-foreground capitalize">{style}</span>
-              </div>
-            )}
-            {pace && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border shadow-sm">
-                <Clock className="h-4 w-4 text-accent" />
-                <span className="text-muted-foreground">Pace:</span>
-                <span className="font-semibold text-foreground capitalize">{pace}</span>
-              </div>
-            )}
           </div>
           
           {/* Right: Cost + Actions */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
             {isEditable && hasChanges && (
-              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse">
+              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse text-xs">
                 <AlertCircle className="h-3 w-3 mr-1" />
-                Unsaved Changes
+                Unsaved
               </Badge>
             )}
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20">
-              <span className="text-sm text-muted-foreground">Estimated Total:</span>
-              <span className="text-2xl font-serif font-semibold text-primary">${totalCost.toLocaleString()}</span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/20 text-sm">
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-semibold text-primary">${totalCost.toLocaleString()}</span>
             </div>
             {isEditable && (
               <>
                 <Button 
                   variant="outline" 
+                  size="sm"
                   onClick={handleOptimize} 
                   disabled={isOptimizing || days.length === 0} 
-                  className="gap-2 border-accent/50 hover:bg-accent/10 hover:border-accent"
+                  className="gap-1.5 h-8 text-xs"
                 >
-                  {isOptimizing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4 text-accent" />}
+                  {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
                   {isOptimizing ? 'Optimizing...' : 'Optimize'}
                 </Button>
-                <Button onClick={handleSave} disabled={isSaving || !hasChanges} className="gap-2 bg-primary hover:bg-primary/90 shadow-md">
-                  {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSaving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved ✓'}
+                <Button 
+                  size="sm"
+                  onClick={handleSave} 
+                  disabled={isSaving || !hasChanges} 
+                  className="gap-1.5 h-8 text-xs"
+                >
+                  {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  {hasChanges ? 'Save' : 'Saved ✓'}
                 </Button>
-                {lastSaved && !hasChanges && (
-                  <span className="text-xs text-muted-foreground">
-                    Auto-saved {format(lastSaved, 'h:mm a')}
-                  </span>
-                )}
               </>
             )}
           </div>
