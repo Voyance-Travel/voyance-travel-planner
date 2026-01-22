@@ -665,7 +665,7 @@ export default function Profile() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-10"
+            className="space-y-8"
           >
             {/* Loading state */}
             {isLoadingTrips && (
@@ -674,50 +674,158 @@ export default function Profile() {
               </div>
             )}
 
-            {!isLoadingTrips && (
-              <>
-                {/* Upcoming */}
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground mb-4">Upcoming</h2>
-                  {upcomingTrips.length > 0 ? (
-                    <div className="grid gap-4">
+            {!isLoadingTrips && trips.length === 0 && (
+              <div className="text-center py-16 border border-dashed border-border rounded-lg">
+                <MapPin className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No trips yet</h3>
+                <p className="text-muted-foreground mb-6">Start planning your next adventure</p>
+                <Button asChild>
+                  <Link to={ROUTES.START}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Plan a Trip
+                  </Link>
+                </Button>
+              </div>
+            )}
+
+            {!isLoadingTrips && trips.length > 0 && (
+              <div className="relative">
+                {/* Timeline Line */}
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+
+                {/* Upcoming Section */}
+                {upcomingTrips.length > 0 && (
+                  <div className="mb-10">
+                    <div className="flex items-center gap-3 mb-5 relative">
+                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center z-10 shadow-sm">
+                        <Plane className="h-4 w-4 text-primary-foreground" />
+                      </div>
+                      <span className="text-sm font-semibold text-primary uppercase tracking-wide">
+                        Upcoming ({upcomingTrips.length})
+                      </span>
+                    </div>
+                    <div className="pl-12 space-y-4">
                       {upcomingTrips.map((trip) => (
-                        <TripCard key={trip.id} trip={trip} />
+                        <Link
+                          key={trip.id}
+                          to={`/trip/${trip.id}`}
+                          className="group flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:border-primary/50 hover:shadow-lg transition-all"
+                        >
+                          <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
+                            <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors truncate">
+                              {trip.destination}
+                            </h3>
+                            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
+                              <Calendar className="h-3.5 w-3.5" />
+                              {trip.dates}
+                            </p>
+                            {trip.progress && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-primary rounded-full transition-all"
+                                    style={{ width: `${trip.progress}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground">{trip.progress}% planned</span>
+                              </div>
+                            )}
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        </Link>
                       ))}
                     </div>
-                  ) : (
-                    <EmptyState message="No upcoming trips" action="Plan a Trip" />
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* Completed */}
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground mb-4">Completed</h2>
-                  {completedTrips.length > 0 ? (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                {/* Completed Section */}
+                {completedTrips.length > 0 && (
+                  <div className="mb-10">
+                    <div className="flex items-center gap-3 mb-5 relative">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center z-10 shadow-sm">
+                        <CheckCircle className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                        Completed ({completedTrips.length})
+                      </span>
+                    </div>
+                    <div className="pl-12 space-y-4">
                       {completedTrips.map((trip) => (
-                        <TripCard key={trip.id} trip={trip} />
+                        <Link
+                          key={trip.id}
+                          to={`/trip/${trip.id}`}
+                          className="group flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:border-emerald-500/50 hover:shadow-lg transition-all"
+                        >
+                          <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
+                            <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-lg text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
+                              {trip.destination}
+                            </h3>
+                            <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="h-3.5 w-3.5" />
+                                {trip.dates}
+                              </span>
+                              {trip.rating && (
+                                <span className="flex items-center gap-1">
+                                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                                  {trip.rating}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
+                        </Link>
                       ))}
                     </div>
-                  ) : (
-                    <EmptyState message="No completed trips yet" />
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* Saved */}
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground mb-4">Saved Ideas</h2>
-                  {savedTrips.length > 0 ? (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                {/* Saved/Draft Section */}
+                {savedTrips.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-3 mb-5 relative">
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center z-10 shadow-sm">
+                        <Compass className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                        Saved Ideas ({savedTrips.length})
+                      </span>
+                    </div>
+                    <div className="pl-12 space-y-4">
                       {savedTrips.map((trip) => (
-                        <TripCard key={trip.id} trip={trip} />
+                        <Link
+                          key={trip.id}
+                          to={`/trip/${trip.id}`}
+                          className="group flex items-center gap-4 p-4 bg-card border border-dashed border-border rounded-xl hover:border-foreground/30 hover:shadow-md transition-all"
+                        >
+                          <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 opacity-80">
+                            <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-lg text-foreground/80 group-hover:text-foreground transition-colors truncate">
+                              {trip.destination}
+                            </h3>
+                            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
+                              <Calendar className="h-3.5 w-3.5" />
+                              {trip.dates}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="ghost" className="text-xs">
+                            Continue
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
+                        </Link>
                       ))}
                     </div>
-                  ) : (
-                    <EmptyState message="No saved trips" />
-                  )}
-                </div>
-              </>
+                  </div>
+                )}
+              </div>
             )}
           </motion.div>
         )}
