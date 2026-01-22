@@ -75,7 +75,7 @@ async function scheduleTripNotifications(
   }
 
   // Parse itinerary data for activity reminders
-  const itineraryData = trip.itinerary_data as { days?: Array<{ dayNumber: number; date: string; activities?: Array<{ id: string; name: string; startTime?: string; location?: string }> }> } | null;
+  const itineraryData = trip.itinerary_data as { days?: Array<{ dayNumber: number; date: string; activities?: Array<{ id: string; name?: string; title?: string; startTime?: string; location?: string | { name?: string; address?: string } }> }> } | null;
   
   if (itineraryData?.days) {
     for (const day of itineraryData.days) {
@@ -87,6 +87,21 @@ async function scheduleTripNotifications(
       if (day.activities) {
         for (const activity of day.activities) {
           if (!activity.startTime) continue;
+          
+          // Get activity name - support both 'name' and 'title' fields
+          const activityName = activity.title || activity.name || 'Activity';
+          
+          // Get location string - handle both string and object formats
+          let locationStr = '';
+          if (activity.location) {
+            if (typeof activity.location === 'string') {
+              locationStr = activity.location;
+            } else if (activity.location.name) {
+              locationStr = activity.location.name;
+            } else if (activity.location.address) {
+              locationStr = activity.location.address;
+            }
+          }
           
           // Parse activity time
           const [hours, minutes] = activity.startTime.split(':').map(Number);
@@ -104,8 +119,8 @@ async function scheduleTripNotifications(
               tripId,
               userId,
               type: 'activity_reminder',
-              title: `Coming up: ${activity.name}`,
-              message: `Your next activity starts in 30 minutes${activity.location ? ` at ${activity.location}` : ''}. Time to get ready!`,
+              title: `Coming up: ${activityName}`,
+              message: `Your next activity starts in 30 minutes${locationStr ? ` at ${locationStr}` : ''}. Time to get ready!`,
               activityId: activity.id,
               scheduledFor: reminderTime.toISOString(),
               sent: false
@@ -120,7 +135,7 @@ async function scheduleTripNotifications(
               tripId,
               userId,
               type: 'feedback_prompt',
-              title: `How was ${activity.name}?`,
+              title: `How was ${activityName}?`,
               message: `We'd love to hear about your experience! Your feedback helps us personalize your future trips.`,
               activityId: activity.id,
               scheduledFor: feedbackTime.toISOString(),
