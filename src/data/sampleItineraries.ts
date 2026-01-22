@@ -882,15 +882,341 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
       },
     ],
   },
+  'kyoto-cultural': {
+    destination: 'Kyoto, Japan',
+    style: 'moderate',
+    pace: 'relaxed',
+    flightCost: 1950,
+    hotelCost: 1600,
+    flightInfo: {
+      outbound: {
+        airline: 'ANA',
+        flightNumber: 'NH 105',
+        departure: { airport: 'LAX', city: 'Los Angeles', time: '11:55 AM', date: 'Apr 5, 2026', terminal: 'B' },
+        arrival: { airport: 'KIX', city: 'Osaka Kansai', time: '4:45 PM', date: 'Apr 6, 2026', terminal: '1' },
+        duration: '11h 50m',
+        stops: 'Non-stop',
+        seats: ['24A (Window)', '24B (Middle)'],
+        class: 'Economy'
+      },
+      return: {
+        airline: 'ANA',
+        flightNumber: 'NH 106',
+        departure: { airport: 'KIX', city: 'Osaka Kansai', time: '6:00 PM', date: 'Apr 12, 2026', terminal: '1' },
+        arrival: { airport: 'LAX', city: 'Los Angeles', time: '12:30 PM', date: 'Apr 12, 2026', terminal: 'B' },
+        duration: '10h 30m',
+        stops: 'Non-stop',
+        seats: ['24A (Window)', '24B (Middle)'],
+        class: 'Economy'
+      }
+    },
+    hotelInfo: {
+      name: 'Hoshinoya Kyoto',
+      type: 'Traditional Ryokan',
+      checkIn: 'Apr 6, 2026 (3:00 PM)',
+      checkOut: 'Apr 12, 2026 (11:00 AM)',
+      nights: 6,
+      rooms: '1 River View Suite with Tatami',
+      amenities: ['Private Onsen', 'Kaiseki Dining', 'Tea Ceremony Room', 'Zen Garden'],
+      rating: 4.9,
+      reviewCount: 687,
+      address: 'Arashiyama Genrokuzancho, Nishikyo Ward, Kyoto',
+      distanceFromAirport: '56 miles (90 minutes by Haruka Express)',
+      images: [
+        'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800',
+        'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800'
+      ],
+      recentReviews: [
+        { author: 'Sarah M.', date: '2 days ago', rating: 5, comment: 'Absolutely magical traditional experience!' },
+        { author: 'James T.', date: '1 week ago', rating: 5, comment: 'The kaiseki dinner was unforgettable.' }
+      ]
+    },
+    destinationInfo: {
+      overview: "Kyoto is Japan's cultural heart, home to 17 UNESCO World Heritage sites, 2,000 temples, and centuries of tradition.",
+      culturalNotes: "Remove shoes before entering temples. Bow slightly when greeting. Avoid loud conversations.",
+      bestTime: "March-May for cherry blossoms. October-November for autumn colors.",
+      currency: "Japanese Yen (¥) - 1 USD ≈ 150 JPY",
+      language: "Japanese. English limited outside tourist areas.",
+      tips: "Get a JR Pass for trains. Book popular temples early. Carry cash - many places don't accept cards."
+    },
+    days: [
+      {
+        date: new Date().toISOString(),
+        dayNumber: 1,
+        theme: "Arrival & Eastern Kyoto",
+        description: "Arrive and explore Gion's historic streets",
+        weather: { high: 68, low: 52, condition: 'sunny', description: 'Pleasant spring weather' },
+        activities: [
+          {
+            id: 'kyoto-1-1',
+            title: 'Arrival at Osaka Kansai',
+            description: 'Land at Kansai International Airport',
+            time: '16:45',
+            duration: '45 minutes',
+            type: 'transportation',
+            cost: 0,
+            location: { name: 'Kansai International Airport', address: 'KIX Airport, Osaka' },
+            rating: 4.5,
+            tags: ['Arrival', 'Airport'],
+            isLocked: false,
+          },
+          {
+            id: 'kyoto-1-2',
+            title: 'Haruka Express to Kyoto',
+            description: 'Direct train through the Japanese countryside to Kyoto Station',
+            time: '18:00',
+            duration: '75 minutes',
+            type: 'transportation',
+            cost: 45,
+            location: { name: 'JR Haruka Express', address: 'Kansai to Kyoto Station' },
+            rating: 4.8,
+            tags: ['Train', 'Scenic', 'Efficient'],
+            isLocked: false,
+          },
+          {
+            id: 'kyoto-1-3',
+            title: 'Evening Walk in Gion',
+            description: 'Stroll through the historic geisha district as lanterns illuminate the wooden machiya houses',
+            time: '20:00',
+            duration: '90 minutes',
+            type: 'cultural',
+            cost: 0,
+            location: { name: 'Gion District', address: 'Gion, Higashiyama Ward, Kyoto' },
+            rating: 4.9,
+            tags: ['Geisha', 'Historic', 'Photography'],
+            isLocked: false,
+          },
+        ],
+        totalCost: 45,
+        estimatedWalkingTime: '2 hours',
+        estimatedDistance: '60 miles',
+      },
+      {
+        date: new Date(Date.now() + 86400000).toISOString(),
+        dayNumber: 2,
+        theme: "Temples & Tea Ceremonies",
+        description: "Discover ancient temples and traditional rituals",
+        weather: { high: 70, low: 54, condition: 'partly-cloudy', description: 'Mild with some clouds' },
+        activities: [
+          {
+            id: 'kyoto-2-1',
+            title: 'Fushimi Inari Shrine',
+            description: 'Walk through thousands of vermilion torii gates on the sacred mountain',
+            time: '07:00',
+            duration: '3 hours',
+            type: 'cultural',
+            cost: 0,
+            location: { name: 'Fushimi Inari Taisha', address: '68 Fukakusa Yabunouchicho, Fushimi Ward' },
+            rating: 4.9,
+            tags: ['Shrine', 'Hiking', 'Iconic'],
+            isLocked: false,
+          },
+          {
+            id: 'kyoto-2-2',
+            title: 'Traditional Tea Ceremony',
+            description: 'Learn the art of chado (tea ceremony) from a tea master in a traditional tearoom',
+            time: '14:00',
+            duration: '90 minutes',
+            type: 'cultural',
+            cost: 65,
+            location: { name: 'Camellia Tea Experience', address: 'Higashiyama, Kyoto' },
+            rating: 4.8,
+            tags: ['Tea', 'Traditional', 'Authentic'],
+            isLocked: false,
+          },
+          {
+            id: 'kyoto-2-3',
+            title: 'Kiyomizu-dera Temple',
+            description: 'Visit the iconic wooden temple with panoramic views of Kyoto',
+            time: '16:30',
+            duration: '2 hours',
+            type: 'cultural',
+            cost: 5,
+            location: { name: 'Kiyomizu-dera', address: '1-294 Kiyomizu, Higashiyama Ward' },
+            rating: 4.9,
+            tags: ['Temple', 'UNESCO', 'Views'],
+            isLocked: false,
+          },
+        ],
+        totalCost: 70,
+        estimatedWalkingTime: '5 hours',
+        estimatedDistance: '8 miles',
+      },
+    ],
+  },
+  'santorini-romance': {
+    destination: 'Santorini, Greece',
+    style: 'luxury',
+    pace: 'relaxed',
+    flightCost: 2200,
+    hotelCost: 2400,
+    flightInfo: {
+      outbound: {
+        airline: 'Emirates',
+        flightNumber: 'EK 215',
+        departure: { airport: 'JFK', city: 'New York', time: '10:15 PM', date: 'Jun 10, 2026', terminal: '4' },
+        arrival: { airport: 'JTR', city: 'Santorini', time: '6:45 PM', date: 'Jun 11, 2026', terminal: 'Main' },
+        duration: '14h 30m',
+        stops: '1 stop in Athens (2h layover)',
+        seats: ['8A (Window)', '8B (Middle)'],
+        class: 'Business'
+      },
+      return: {
+        airline: 'Emirates',
+        flightNumber: 'EK 216',
+        departure: { airport: 'JTR', city: 'Santorini', time: '8:00 AM', date: 'Jun 16, 2026', terminal: 'Main' },
+        arrival: { airport: 'JFK', city: 'New York', time: '2:30 PM', date: 'Jun 16, 2026', terminal: '4' },
+        duration: '13h 30m',
+        stops: '1 stop in Athens (1h 45m layover)',
+        seats: ['8A (Window)', '8B (Middle)'],
+        class: 'Business'
+      }
+    },
+    hotelInfo: {
+      name: 'Canaves Oia Suites',
+      type: 'Luxury Boutique Hotel',
+      checkIn: 'Jun 11, 2026 (3:00 PM)',
+      checkOut: 'Jun 16, 2026 (12:00 PM)',
+      nights: 5,
+      rooms: '1 Infinity Suite with Caldera View',
+      amenities: ['Private Infinity Pool', 'Sunset Views', 'Spa', 'Fine Dining Restaurant'],
+      rating: 4.9,
+      reviewCount: 1456,
+      address: 'Oia, Santorini 847 02, Greece',
+      distanceFromAirport: '12 miles (25 minutes by private transfer)',
+      images: [
+        'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800',
+        'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800'
+      ],
+      recentReviews: [
+        { author: 'Emily R.', date: '3 days ago', rating: 5, comment: 'The most romantic hotel I\'ve ever stayed at!' },
+        { author: 'Michael S.', date: '1 week ago', rating: 5, comment: 'Sunset views from the infinity pool were unreal.' }
+      ]
+    },
+    destinationInfo: {
+      overview: "Santorini is a stunning volcanic island known for its dramatic caldera views, whitewashed villages, and legendary sunsets.",
+      culturalNotes: "Greeks are warm and hospitable. Tipping 10-15% is customary. Siesta (3-5 PM) is observed.",
+      bestTime: "May-June and September-October. July-August is peak season and very crowded.",
+      currency: "Euro (€) - 1 USD ≈ 0.92 EUR",
+      language: "Greek. English widely spoken in tourist areas.",
+      tips: "Book sunset dinner reservations weeks ahead. Rent an ATV to explore. Stay in Oia for the best sunsets."
+    },
+    days: [
+      {
+        date: new Date().toISOString(),
+        dayNumber: 1,
+        theme: "Arrival & Oia Discovery",
+        description: "Settle into paradise and explore iconic Oia",
+        weather: { high: 82, low: 72, condition: 'sunny', description: 'Perfect Mediterranean weather' },
+        activities: [
+          {
+            id: 'santorini-1-1',
+            title: 'Arrival at Santorini Airport',
+            description: 'Land on the volcanic island and feel the Aegean breeze',
+            time: '18:45',
+            duration: '30 minutes',
+            type: 'transportation',
+            cost: 0,
+            location: { name: 'Santorini International Airport', address: 'JTR Airport, Santorini' },
+            rating: 4.3,
+            tags: ['Arrival', 'Island'],
+            isLocked: false,
+          },
+          {
+            id: 'santorini-1-2',
+            title: 'Private Transfer to Oia',
+            description: 'Scenic drive along the caldera rim to your hotel',
+            time: '19:30',
+            duration: '25 minutes',
+            type: 'transportation',
+            cost: 55,
+            location: { name: 'Private Transfer', address: 'Airport to Oia' },
+            rating: 4.8,
+            tags: ['Private', 'Scenic', 'Comfortable'],
+            isLocked: false,
+          },
+          {
+            id: 'santorini-1-3',
+            title: 'First Santorini Sunset',
+            description: 'Watch the famous Oia sunset from your private infinity pool',
+            time: '20:30',
+            duration: '1 hour',
+            type: 'relaxation',
+            cost: 0,
+            location: { name: 'Canaves Oia Suites', address: 'Oia, Santorini' },
+            rating: 5.0,
+            tags: ['Sunset', 'Romantic', 'Pool'],
+            isLocked: false,
+          },
+        ],
+        totalCost: 55,
+        estimatedWalkingTime: '30 minutes',
+        estimatedDistance: '12 miles',
+      },
+      {
+        date: new Date(Date.now() + 86400000).toISOString(),
+        dayNumber: 2,
+        theme: "Wine & Volcanic Beaches",
+        description: "Explore vineyards and unique black sand beaches",
+        weather: { high: 84, low: 74, condition: 'sunny', description: 'Warm and sunny' },
+        activities: [
+          {
+            id: 'santorini-2-1',
+            title: 'Santo Wines Winery Tour',
+            description: 'Taste Assyrtiko wines while overlooking the caldera',
+            time: '11:00',
+            duration: '2 hours',
+            type: 'dining',
+            cost: 45,
+            location: { name: 'Santo Wines', address: 'Pyrgos, Santorini' },
+            rating: 4.7,
+            tags: ['Wine', 'Views', 'Tasting'],
+            isLocked: false,
+          },
+          {
+            id: 'santorini-2-2',
+            title: 'Red Beach Visit',
+            description: 'Swim at the dramatic volcanic red sand beach',
+            time: '14:00',
+            duration: '3 hours',
+            type: 'activity',
+            cost: 0,
+            location: { name: 'Red Beach', address: 'Akrotiri, Santorini' },
+            rating: 4.6,
+            tags: ['Beach', 'Volcanic', 'Swimming'],
+            isLocked: false,
+          },
+          {
+            id: 'santorini-2-3',
+            title: 'Sunset Sailing Cruise',
+            description: 'Catamaran cruise around the caldera with dinner and wine',
+            time: '17:30',
+            duration: '5 hours',
+            type: 'activity',
+            cost: 180,
+            location: { name: 'Santorini Sailing', address: 'Ammoudi Bay, Oia' },
+            rating: 4.9,
+            tags: ['Sailing', 'Sunset', 'Romantic'],
+            isLocked: false,
+          },
+        ],
+        totalCost: 225,
+        estimatedWalkingTime: '2 hours',
+        estimatedDistance: '25 miles',
+      },
+    ],
+  },
 };
 
 export function getItineraryBySlug(slug: string): SampleItineraryData {
   let destination = 'bali-wellness';
   
   if (slug) {
-    if (slug.includes('tokyo') || slug.includes('japan')) destination = 'tokyo-modern';
+    if (slug.includes('kyoto') || slug.includes('japan')) destination = 'kyoto-cultural';
+    else if (slug.includes('santorini') || slug.includes('greece')) destination = 'santorini-romance';
     else if (slug.includes('iceland') || slug.includes('reykjavik')) destination = 'iceland-adventure';
     else if (slug.includes('bali')) destination = 'bali-wellness';
+    else if (slug.includes('tokyo')) destination = 'tokyo-modern';
   }
   
   return SAMPLE_ITINERARIES[destination] || SAMPLE_ITINERARIES['bali-wellness'];
