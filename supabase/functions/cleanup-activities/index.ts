@@ -71,21 +71,21 @@ function isDirty(activity: Activity): boolean {
 }
 
 async function scanDirtyActivities(
-  // Keep loose typing here: the Deno/esm.sh Supabase types differ across environments.
-  // Strict typing can fail during edge-runtime typecheck even though runtime works.
   supabase: any,
-  effectiveOffset: number,
-  limit: number
+  limit: number,
+  countOnly: boolean
 ): Promise<ScanResult> {
-  // Pull a minimal column set; keep paging deterministic.
+  // OPTIMIZED: For live runs, we only need to find `limit` dirty records, not scan everything.
+  // We stop as soon as we have enough records for the batch.
   const selectCols =
     "id, name, description, category, destination_id, coordinates, best_times, accessibility_info";
 
-  const pageSize = 750;
-  const maxPages = 200; // safety (200 * 750 = 150k rows)
+  const pageSize = 500;
+  const maxPages = countOnly ? 400 : 20; // Only scan more if counting
 
   let dirtyCount = 0;
   const batch: Activity[] = [];
+  let scannedAll = false;
 
   for (let page = 0; page < maxPages; page++) {
     const from = page * pageSize;
@@ -99,26 +99,33 @@ async function scanDirtyActivities(
 
     if (pageError) throw pageError;
     if (!pageData || pageData.length === 0) {
-      return { dirtyCount, batch, scannedAll: true };
+      scannedAll = true;
+      break;
     }
 
     for (const row of pageData as unknown as Activity[]) {
       if (!isDirty(row)) continue;
-
-      if (dirtyCount >= effectiveOffset && batch.length < limit) {
+      
+      dirtyCount++;
+      
+      // For batch collection, add until we have enough
+      if (!countOnly && batch.length < limit) {
         batch.push(row);
       }
+    }
 
-      dirtyCount++;
+    // EARLY EXIT: If we have enough records for the batch, stop scanning
+    if (!countOnly && batch.length >= limit) {
+      break;
     }
 
     if (pageData.length < pageSize) {
-      return { dirtyCount, batch, scannedAll: true };
+      scannedAll = true;
+      break;
     }
   }
 
-  // If we hit maxPages, we can't confidently say we're complete.
-  return { dirtyCount, batch, scannedAll: false };
+  return { dirtyCount, batch, scannedAll };
 }
 
 async function enrichWithAI(
@@ -245,13 +252,11 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // PostgREST JSON-path filters for coordinates are unreliable in `.or(...)` queries.
-    // We scan pages and apply `isDirty()` in-memory.
-    const effectiveOffset = dryRun ? offset : 0;
+    // Scan for dirty activities - optimized to stop early once we have enough
     const { dirtyCount, batch, scannedAll } = await scanDirtyActivities(
       supabase,
-      effectiveOffset,
-      countOnly ? 0 : limit
+      countOnly ? 0 : limit,
+      countOnly
     );
 
     if (countOnly) {
@@ -263,8 +268,8 @@ serve(async (req) => {
           message: "Counted dirty activities",
           dryRun,
           processed: 0,
-          offset: effectiveOffset,
-          nextOffset: effectiveOffset,
+          offset: 0,
+          nextOffset: 0,
           complete,
           hasMore,
           totalCount: dirtyCount,
@@ -288,8 +293,8 @@ serve(async (req) => {
             : "No dirty activities found in scanned window; try again",
           dryRun,
           processed: 0,
-          offset: effectiveOffset,
-          nextOffset: dryRun ? effectiveOffset : 0,
+          offset: 0,
+          nextOffset: 0,
           complete,
           hasMore,
           totalCount: dirtyCount,
@@ -369,22 +374,18 @@ serve(async (req) => {
       }
     }
 
-    // Completion rules:
-    // - Dry run: paginate until offset reaches dirtyCount
-    // - Live run: keep going until a subsequent scan finds 0 dirty records
-    const hasMore = dryRun
-      ? effectiveOffset + results.length < dirtyCount
-      : dirtyCount > 0;
+    // Completion: keep going until we find 0 dirty records
+    const hasMore = dirtyCount > results.length;
 
     return new Response(
       JSON.stringify({
         success: true,
         message: `Processed ${results.length} activities`,
         dryRun,
-        processed: results.length, // Top-level for UI compatibility
-        offset: effectiveOffset,
-        nextOffset: dryRun ? effectiveOffset + results.length : 0,
-        complete: dryRun ? !hasMore : false,
+        processed: results.length,
+        offset: 0,
+        nextOffset: 0,
+        complete: dirtyCount === 0,
         hasMore,
         totalCount: dirtyCount,
         stats: {
@@ -396,7 +397,7 @@ serve(async (req) => {
         results: results.map(r => ({
           ...r,
           status: r.status === 'cleaned' ? 'updated' : r.status === 'skipped' ? 'no_changes_needed' : r.status,
-        })), // Map statuses to match UI expectations
+        })),
         executionTimeMs: Date.now() - startTime,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
