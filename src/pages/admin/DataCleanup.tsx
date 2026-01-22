@@ -331,6 +331,7 @@ export default function DataCleanup() {
                 setDryRun={setDryRun}
                 hasCheckpoint={attractionsCheckpoint.hasCheckpoint}
                 checkpointDryRun={attractionsCheckpoint.checkpoint?.dryRun ?? null}
+                checkpointProcessed={attractionsCheckpoint.checkpoint?.processedTotal ?? null}
                 progress={progress}
                 stats={stats}
                 logs={logs}
@@ -340,6 +341,17 @@ export default function DataCleanup() {
                   const mode = attractionsCheckpoint.checkpoint?.dryRun;
                   if (typeof mode === 'boolean') setDryRun(mode);
                   return runCleanup('attractions', { resume: true, dryRunOverride: mode });
+                }}
+                onUpdateCheckpoint={(processedTotal: number) => {
+                  const current = attractionsCheckpoint.checkpoint;
+                  if (current) {
+                    attractionsCheckpoint.saveCheckpoint({
+                      ...current,
+                      processedTotal,
+                      stats: { ...current.stats, processed: processedTotal }
+                    });
+                    toast.success(`Checkpoint updated to ${processedTotal} processed`);
+                  }
                 }}
                 getStatusIcon={getStatusIcon}
                 getStatusBadge={getStatusBadge}
@@ -386,12 +398,14 @@ interface CleanupPanelProps {
   setDryRun: (v: boolean) => void;
   hasCheckpoint: boolean;
   checkpointDryRun: boolean | null;
+  checkpointProcessed?: number | null;
   progress: { current: number; total: number };
   stats: CleanupStats;
   logs: string[];
   results: CleanupResult[];
   onRun: () => void;
   onResume: () => void;
+  onUpdateCheckpoint?: (processedTotal: number) => void;
   getStatusIcon: (status: string) => React.ReactNode;
   getStatusBadge: (status: string) => React.ReactNode;
 }
@@ -404,15 +418,20 @@ function CleanupPanel({
   setDryRun,
   hasCheckpoint,
   checkpointDryRun,
+  checkpointProcessed,
   progress,
   stats,
   logs,
   results,
   onRun,
   onResume,
+  onUpdateCheckpoint,
   getStatusIcon,
   getStatusBadge,
 }: CleanupPanelProps) {
+  const [editProcessed, setEditProcessed] = useState<string>('');
+  const [showEditCheckpoint, setShowEditCheckpoint] = useState(false);
+
   return (
     <>
       <div className="grid gap-6 md:grid-cols-2">
@@ -420,7 +439,7 @@ function CleanupPanel({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
-              {target === 'destinations' ? 'Destination' : 'Attraction'} Cleanup
+              {target === 'destinations' ? 'Destination' : target === 'attractions' ? 'Attraction' : 'Local Knowledge'} Cleanup
             </CardTitle>
             <CardDescription>{description}</CardDescription>
           </CardHeader>
@@ -460,22 +479,68 @@ function CleanupPanel({
             </Button>
 
             {hasCheckpoint && !isRunning && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onResume}
-                className="w-full"
-              >
-                {checkpointDryRun === true
-                  ? 'Resume Dry Run'
-                  : checkpointDryRun === false
-                    ? 'Resume Run'
-                    : 'Resume'}
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onResume}
+                  className="w-full"
+                >
+                  {checkpointDryRun === true
+                    ? 'Resume Dry Run'
+                    : checkpointDryRun === false
+                      ? 'Resume Run'
+                      : 'Resume'}
+                </Button>
+                
+                {/* Show checkpoint info and allow editing */}
+                <div className="p-3 bg-muted/50 rounded-lg text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Checkpoint: {checkpointProcessed ?? 0} processed</span>
+                    {onUpdateCheckpoint && (
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => {
+                          setEditProcessed(String(checkpointProcessed ?? 0));
+                          setShowEditCheckpoint(!showEditCheckpoint);
+                        }}
+                      >
+                        {showEditCheckpoint ? 'Cancel' : 'Edit'}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {showEditCheckpoint && onUpdateCheckpoint && (
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={editProcessed}
+                        onChange={(e) => setEditProcessed(e.target.value)}
+                        className="flex-1 px-2 py-1 rounded border bg-background text-sm"
+                        placeholder="Processed count"
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          const num = parseInt(editProcessed, 10);
+                          if (!isNaN(num) && num >= 0) {
+                            onUpdateCheckpoint(num);
+                            setShowEditCheckpoint(false);
+                          }
+                        }}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
 
             <p className="text-xs text-muted-foreground">
-              If your browser crashes or you refresh mid-run, use “Resume” to continue from the last saved batch.
+              If your browser crashes or you refresh mid-run, use "Resume" to continue from the last saved batch.
             </p>
 
             {dryRun && (
