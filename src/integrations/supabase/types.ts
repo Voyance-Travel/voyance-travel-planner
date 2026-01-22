@@ -3799,6 +3799,81 @@ export type Database = {
           },
         ]
       }
+      trip_photos: {
+        Row: {
+          activity_id: string | null
+          caption: string | null
+          created_at: string
+          day_number: number | null
+          file_name: string
+          file_size_bytes: number | null
+          id: string
+          is_cover: boolean | null
+          is_favorite: boolean | null
+          location: Json | null
+          metadata: Json | null
+          mime_type: string | null
+          storage_path: string
+          taken_at: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          caption?: string | null
+          created_at?: string
+          day_number?: number | null
+          file_name: string
+          file_size_bytes?: number | null
+          id?: string
+          is_cover?: boolean | null
+          is_favorite?: boolean | null
+          location?: Json | null
+          metadata?: Json | null
+          mime_type?: string | null
+          storage_path: string
+          taken_at?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string | null
+          caption?: string | null
+          created_at?: string
+          day_number?: number | null
+          file_name?: string
+          file_size_bytes?: number | null
+          id?: string
+          is_cover?: boolean | null
+          is_favorite?: boolean | null
+          location?: Json | null
+          metadata?: Json | null
+          mime_type?: string | null
+          storage_path?: string
+          taken_at?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_photos_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_photos_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_rental_cars: {
         Row: {
           booking_url: string | null

@@ -18,6 +18,7 @@ import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration'
 import { enrichHotel } from '@/services/hotelAPI';
 import { usePaymentVerification } from '@/hooks/usePaymentVerification';
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
+import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -861,6 +862,11 @@ export default function TripDetail() {
               );
             })()
           )}
+
+          {/* Trip Photo Gallery */}
+          <div className="mt-12">
+            <TripPhotoGallery tripId={trip.id} />
+          </div>
         </div>
       </section>
     </MainLayout>
