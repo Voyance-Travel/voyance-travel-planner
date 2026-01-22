@@ -55,7 +55,7 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { batchSize = 3, offset = 0, dryRun = true } = await req.json();
+    const { batchSize = 5, offset = 0, dryRun = true } = await req.json();
     console.log(`[cleanup-attractions] Processing batch: offset=${offset}, batchSize=${batchSize}, dryRun=${dryRun}`);
 
     // Fetch attractions that need cleanup:
