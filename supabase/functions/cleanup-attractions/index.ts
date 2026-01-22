@@ -134,9 +134,19 @@ serve(async (req) => {
           const updates: Record<string, unknown> = {};
           let hasChanges = false;
 
-          // Check if description is generic
-          if (attraction.description?.startsWith('Popular ')) {
-            updates.description = cleaned.description;
+          // Check if description is generic (case-insensitive)
+          const isGenericDescription =
+            typeof attraction.description === 'string' &&
+            /^popular\s/i.test(attraction.description.trimStart());
+
+          if (isGenericDescription) {
+            // Ensure we don't keep a "Popular ..." placeholder after cleaning
+            const nextDescription =
+              typeof cleaned.description === 'string' && /^popular\s/i.test(cleaned.description.trimStart())
+                ? `${attraction.name} is ${cleaned.description.replace(/^popular\s+/i, '').trim()}`
+                : cleaned.description;
+
+            updates.description = nextDescription;
             hasChanges = true;
           }
 
