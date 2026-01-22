@@ -464,9 +464,45 @@ async function getCollaboratorPreferences(supabase: any, tripId: string): Promis
 interface FlightHotelContextResult {
   context: string;
   arrivalTime?: string;
+  arrivalTime24?: string;
   earliestFirstActivityTime?: string;
   returnDepartureTime?: string;
+  returnDepartureTime24?: string;
   latestLastActivityTime?: string;
+  hotelName?: string;
+  hotelAddress?: string;
+}
+
+function parseTimeToMinutes(timeStr: string): number | null {
+  if (!timeStr) return null;
+  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const mins = parseInt(match[2], 10);
+  const period = match[3]?.toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  if (!period && hours >= 24) return null;
+  return hours * 60 + mins;
+}
+
+function minutesToHHMM(totalMinutes: number): string {
+  const mins = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function addMinutesToHHMM(timeHHMM: string, deltaMins: number): string {
+  const base = parseTimeToMinutes(timeHHMM);
+  if (base === null) return timeHHMM;
+  return minutesToHHMM(base + deltaMins);
+}
+
+function normalizeTo24h(timeStr: string): string | null {
+  const mins = parseTimeToMinutes(timeStr);
+  if (mins === null) return null;
+  return minutesToHHMM(mins);
 }
 
 async function getFlightHotelContext(supabase: any, tripId: string): Promise<FlightHotelContextResult> {
@@ -481,9 +517,13 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
 
     const sections: string[] = [];
     let arrivalTimeStr: string | undefined;
+    let arrivalTime24: string | undefined;
     let earliestFirstActivity: string | undefined;
     let returnDepartureTimeStr: string | undefined;
+    let returnDepartureTime24: string | undefined;
     let latestLastActivity: string | undefined;
+    let hotelName: string | undefined;
+    let hotelAddress: string | undefined;
 
     // Parse flight information - handle both flat and nested structures
     // Flat: { arrivalTime, returnDepartureTime }
@@ -518,54 +558,33 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       
       // Day 1 arrival - CRITICAL for first activity timing
       if (outboundArrival) {
-        // Parse the time string (could be "06:35 PM" or ISO date)
-        let arrivalDate: Date;
-        if (outboundArrival.includes('AM') || outboundArrival.includes('PM')) {
-          // Time string like "06:35 PM" - parse it
-          const [time, period] = outboundArrival.split(' ');
-          const [hours, minutes] = time.split(':').map(Number);
-          const adjustedHours = period === 'PM' && hours !== 12 ? hours + 12 : (period === 'AM' && hours === 12 ? 0 : hours);
-          arrivalDate = new Date();
-          arrivalDate.setHours(adjustedHours, minutes, 0, 0);
-        } else {
-          arrivalDate = new Date(outboundArrival);
+        // Normalize to 24h HH:MM (required by the AI tool schema for startTime/endTime)
+        arrivalTimeStr = outboundArrival; // keep original for display
+        arrivalTime24 = normalizeTo24h(outboundArrival) || (outboundArrival.includes('T') ? normalizeTo24h(new Date(outboundArrival).toTimeString()) || undefined : undefined);
+        flightInfo.push(`  Arrival: ${arrivalTimeStr}${arrivalTime24 ? ` (24h: ${arrivalTime24})` : ''}`);
+
+        // Calculate earliest sightseeing time: arrival + 4 hours buffer
+        if (arrivalTime24) {
+          const ARRIVAL_BUFFER_MINS = 4 * 60;
+          earliestFirstActivity = minutesToHHMM((parseTimeToMinutes(arrivalTime24) || 0) + ARRIVAL_BUFFER_MINS);
         }
-        
-        arrivalTimeStr = outboundArrival; // Keep original format for display
-        flightInfo.push(`  Arrival: ${arrivalTimeStr}`);
-        
-        // Calculate earliest first activity: arrival + 4 hours buffer
-        const ARRIVAL_BUFFER_HOURS = 4;
-        const earliestHours = arrivalDate.getHours() + ARRIVAL_BUFFER_HOURS;
-        const earliestMins = arrivalDate.getMinutes();
-        earliestFirstActivity = `${(earliestHours % 24).toString().padStart(2, '0')}:${earliestMins.toString().padStart(2, '0')}`;
-        
-        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", parsed arrival: ${arrivalTimeStr}, earliest first activity: ${earliestFirstActivity}`);
+
+        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", arrival24: ${arrivalTime24}, earliest sightseeing: ${earliestFirstActivity}`);
       }
       
       // Last day - return flight departure
       if (returnDeparture) {
-        let returnDate: Date;
-        if (returnDeparture.includes('AM') || returnDeparture.includes('PM')) {
-          const [time, period] = returnDeparture.split(' ');
-          const [hours, minutes] = time.split(':').map(Number);
-          const adjustedHours = period === 'PM' && hours !== 12 ? hours + 12 : (period === 'AM' && hours === 12 ? 0 : hours);
-          returnDate = new Date();
-          returnDate.setHours(adjustedHours, minutes, 0, 0);
-        } else {
-          returnDate = new Date(returnDeparture);
-        }
-        
         returnDepartureTimeStr = returnDeparture;
+        returnDepartureTime24 = normalizeTo24h(returnDeparture) || undefined;
         flightInfo.push(`✈️ Return departure: ${returnDepartureTimeStr}`);
-        
+
         // Calculate latest last activity: return departure - 3 hours buffer
-        const DEPARTURE_BUFFER_HOURS = 3;
-        const latestHours = returnDate.getHours() - DEPARTURE_BUFFER_HOURS;
-        const latestMins = returnDate.getMinutes();
-        latestLastActivity = `${((latestHours + 24) % 24).toString().padStart(2, '0')}:${latestMins.toString().padStart(2, '0')}`;
-        
-        console.log(`[FlightContext] Return at ${returnDepartureTimeStr}, latest last activity: ${latestLastActivity}`);
+        if (returnDepartureTime24) {
+          const DEPARTURE_BUFFER_MINS = 3 * 60;
+          latestLastActivity = minutesToHHMM((parseTimeToMinutes(returnDepartureTime24) || 0) - DEPARTURE_BUFFER_MINS);
+        }
+
+        console.log(`[FlightContext] Return raw ${returnDepartureTimeStr}, return24: ${returnDepartureTime24}, latest activity: ${latestLastActivity}`);
       }
       
       if (flightInfo.length > 0) {
@@ -574,10 +593,10 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
         // Add explicit timing constraints
         if (earliestFirstActivity) {
           flightConstraints += `\n\n🚨 DAY 1 TIMING CONSTRAINT:`;
-          flightConstraints += `\n   - Flight lands at ${arrivalTimeStr}`;
+          flightConstraints += `\n   - Flight lands at ${arrivalTime24 || arrivalTimeStr}`;
           flightConstraints += `\n   - Allow 4 hours for: customs/immigration, baggage, transport to hotel, check-in`;
           flightConstraints += `\n   - EARLIEST first sightseeing activity: ${earliestFirstActivity} (NOT earlier!)`;
-          flightConstraints += `\n   - If arrival is late (after 6 PM), Day 1 should only include dinner and rest`;
+          flightConstraints += `\n   - If arrival is late (after 6 PM), Day 1 should only include: arrival → transfer → check-in → (optional) quick dinner near hotel → rest`;
         }
         
         if (latestLastActivity) {
@@ -604,9 +623,11 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       const hotelInfo: string[] = [];
       if (hotel.name) {
         hotelInfo.push(`🏨 Hotel: ${hotel.name}`);
+        hotelName = hotel.name;
       }
       if (hotel.address) {
         hotelInfo.push(`   Address: ${hotel.address}`);
+        hotelAddress = hotel.address;
       }
       if (hotel.neighborhood) {
         hotelInfo.push(`   Neighborhood: ${hotel.neighborhood}`);
@@ -619,9 +640,13 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
     return {
       context: sections.join('\n'),
       arrivalTime: arrivalTimeStr,
+      arrivalTime24,
       earliestFirstActivityTime: earliestFirstActivity,
       returnDepartureTime: returnDepartureTimeStr,
+      returnDepartureTime24,
       latestLastActivityTime: latestLastActivity,
+      hotelName,
+      hotelAddress,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
@@ -2203,17 +2228,27 @@ serve(async (req) => {
       }
 
       // Build day-specific constraints
-      let dayConstraints = '';
-      if (isFirstDay && flightContext.arrivalTime) {
+       let dayConstraints = '';
+       if (isFirstDay && (flightContext.arrivalTime24 || flightContext.arrivalTime)) {
+         const arrival24 = flightContext.arrivalTime24 || (flightContext.arrivalTime ? normalizeTo24h(flightContext.arrivalTime) : null) || '18:00';
+         const transferStart = addMinutesToHHMM(arrival24, 45);
+         const transferEnd = addMinutesToHHMM(transferStart, 60);
+         const checkInStart = transferEnd;
+         const checkInEnd = addMinutesToHHMM(checkInStart, 30);
+         const earliestAfterArrival = flightContext.earliestFirstActivityTime || addMinutesToHHMM(arrival24, 240);
+         const isLateArrival = (parseTimeToMinutes(arrival24) ?? 0) >= (18 * 60);
+
         dayConstraints = `
 🚨 ARRIVAL DAY REQUIREMENTS:
-- This is the ARRIVAL day. Flight lands at ${flightContext.arrivalTime}.
+ - This is the ARRIVAL day. Flight lands at ${arrival24}.
 - You MUST start with these 3 activities in order:
-  1. "Arrival at Airport" (category: transport) at ${flightContext.arrivalTime}
-  2. "Airport Transfer to Hotel" (category: transport) - 45-60 min after arrival
-  3. "Hotel Check-in" (category: accommodation) - after transfer
-- The EARLIEST sightseeing/dining activity can start at ${flightContext.earliestFirstActivityTime || '14:00'} (4 hours after landing for customs/baggage/transfer/check-in)
-- If arrival is after 6 PM, only include dinner and rest - no sightseeing
+   1. "Arrival at Airport" (category: transport) at ${arrival24}
+   2. "Airport Transfer to Hotel" (category: transport) at ${transferStart}–${transferEnd}
+   3. "Hotel Check-in" (category: accommodation) at ${checkInStart}–${checkInEnd}
+ - The EARLIEST sightseeing/dining activity can start at ${earliestAfterArrival} (allow 4 hours after landing for customs/baggage/transfer/check-in)
+ - IMPORTANT: startTime/endTime MUST be in HH:MM (24-hour) format.
+ - Hotel to use: ${flightContext.hotelName || 'the selected hotel'}${flightContext.hotelAddress ? ` (${flightContext.hotelAddress})` : ''}
+ - If arrival is after 18:00, Day 1 should ONLY include: arrival → transfer → check-in → (optional) quick dinner near hotel → rest. No morning activities.
 - DO NOT start with breakfast or morning activities - the traveler is arriving!`;
       } else if (isLastDay && flightContext.returnDepartureTime) {
         dayConstraints = `
