@@ -59,9 +59,19 @@ export default function Planner() {
   const [searchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
   const { state: tripPlannerState } = useTripPlanner();
+  const destinationQuery = searchParams.get('destination');
   
   const [currentStep, setCurrentStep] = useState<PlannerStep>('context');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Keep destination in sync with the URL when explicitly provided.
+  // This prevents a previously-saved destination from "sticking" when navigating from Explore.
+  useEffect(() => {
+    if (!destinationQuery) return;
+    const destinationData = getDestinationById(destinationQuery);
+    const destinationName = destinationData?.city || destinationQuery;
+    setFormData(prev => (prev.destination === destinationName ? prev : { ...prev, destination: destinationName }));
+  }, [destinationQuery]);
   
   // Initialize form data from TripPlannerContext, query params, and user preferences
   const [formData, setFormData] = useState<PlannerFormData>(() => {
@@ -69,18 +79,14 @@ export default function Planner() {
     const contextData = tripPlannerState.basics;
     
     // Check for destination in query params (from Explore/Destinations pages)
+    // IMPORTANT: if a destination is explicitly provided in the URL, it should win over any
+    // previously-saved context destination (prevents "stuck" destinations like Casablanca).
     const destinationParam = searchParams.get('destination');
     let destinationName = contextData.destination || '';
-    
-    // If destination came from query param (it's an ID like 'paris'), resolve to city name
-    if (destinationParam && !destinationName) {
+
+    if (destinationParam) {
       const destinationData = getDestinationById(destinationParam);
-      if (destinationData) {
-        destinationName = destinationData.city;
-      } else {
-        // Fallback: use the param as-is if not found (could be a city name already)
-        destinationName = destinationParam;
-      }
+      destinationName = destinationData?.city || destinationParam;
     }
     
     // Generate companion slots based on traveler count
