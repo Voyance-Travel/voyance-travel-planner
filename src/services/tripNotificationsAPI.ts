@@ -9,6 +9,7 @@ export interface TripNotification {
   title: string;
   message: string;
   activityId?: string;
+  activityName?: string; // Actual activity name for display
   scheduledFor: string;
   sent: boolean;
   createdAt: string;
