@@ -356,7 +356,7 @@ export default function Profile() {
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'trips' as const, label: 'My Trips' },
-    { id: 'agent' as const, label: 'My Agent' },
+    // { id: 'agent' as const, label: 'My Agent' }, // Agent feature disabled
     { id: 'friends' as const, label: 'Friends' },
     { id: 'subscription' as const, label: 'Subscription' },
     { id: 'preferences' as const, label: 'Preferences' },

@@ -183,7 +183,8 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 
-                {/* Agent CRM Routes */}
+                {/* Agent CRM Routes - DISABLED */}
+                {/* Agent features temporarily disabled
                 <Route path="/agent" element={<AgentDashboard />} />
                 <Route path="/agent/clients" element={<AgentClients />} />
                 <Route path="/agent/clients/new" element={<AccountForm />} />
@@ -198,6 +199,7 @@ const App = () => (
                 <Route path="/agent/settings" element={<AgentSettings />} />
                 <Route path="/agent/documents" element={<AgentDocuments />} />
                 <Route path="/agent/payouts" element={<AgentPayouts />} />
+                */}
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
