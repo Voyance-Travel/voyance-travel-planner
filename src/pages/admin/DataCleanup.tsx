@@ -434,6 +434,7 @@ export default function DataCleanup() {
                 setDryRun={setDryRun}
                 hasCheckpoint={localKnowledgeCheckpoint.hasCheckpoint}
                 checkpointDryRun={localKnowledgeCheckpoint.checkpoint?.dryRun ?? null}
+                checkpointProcessed={localKnowledgeCheckpoint.checkpoint?.processedTotal ?? null}
                 progress={progress}
                 stats={stats}
                 logs={logs}
@@ -443,6 +444,17 @@ export default function DataCleanup() {
                   const mode = localKnowledgeCheckpoint.checkpoint?.dryRun;
                   if (typeof mode === 'boolean') setDryRun(mode);
                   return runCleanup('local-knowledge', { resume: true, dryRunOverride: mode });
+                }}
+                onUpdateCheckpoint={(processedTotal: number) => {
+                  const current = localKnowledgeCheckpoint.checkpoint;
+                  if (current) {
+                    localKnowledgeCheckpoint.saveCheckpoint({
+                      ...current,
+                      processedTotal,
+                      stats: { ...current.stats, processed: processedTotal }
+                    });
+                    toast.success(`Checkpoint updated to ${processedTotal} processed`);
+                  }
                 }}
                 getStatusIcon={getStatusIcon}
                 getStatusBadge={getStatusBadge}
