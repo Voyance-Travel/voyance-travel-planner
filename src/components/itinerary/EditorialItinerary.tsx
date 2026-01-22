@@ -2488,15 +2488,49 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
     }
   };
 
-  // Estimate airport to hotel transfer
+  // Estimate airport to hotel transfer based on destination
   const getTransferEstimate = () => {
-    // Generic estimates - in reality would use Google Maps API
-    return {
-      taxi: { duration: '30-45 min', cost: '$40-60' },
-      shuttle: { duration: '45-60 min', cost: '$15-25' },
-      train: { duration: '40-55 min', cost: '$10-15' },
-      rideshare: { duration: '30-45 min', cost: '$35-55' },
+    // Destination-specific transfer data for major cities
+    const transferData: Record<string, { taxi: { duration: string; cost: string }; train: { duration: string; cost: string } }> = {
+      // Italy
+      'rome': { taxi: { duration: '45-60 min', cost: '€48 fixed' }, train: { duration: '32 min', cost: '€14' } },
+      'florence': { taxi: { duration: '25-35 min', cost: '€25-35' }, train: { duration: '25 min', cost: '€6' } },
+      'venice': { taxi: { duration: '25-40 min', cost: '€40-50' }, train: { duration: '20 min', cost: '€15' } },
+      'milan': { taxi: { duration: '45-60 min', cost: '€95 fixed' }, train: { duration: '50 min', cost: '€13' } },
+      // France
+      'paris': { taxi: { duration: '35-60 min', cost: '€55 fixed' }, train: { duration: '35 min', cost: '€11' } },
+      'nice': { taxi: { duration: '25-35 min', cost: '€35-45' }, train: { duration: '25 min', cost: '€6' } },
+      // Spain
+      'barcelona': { taxi: { duration: '25-40 min', cost: '€40-50' }, train: { duration: '25 min', cost: '€5' } },
+      'madrid': { taxi: { duration: '25-40 min', cost: '€30-40' }, train: { duration: '25 min', cost: '€5' } },
+      // UK
+      'london': { taxi: { duration: '45-75 min', cost: '£60-90' }, train: { duration: '15 min', cost: '£25' } },
+      // Portugal
+      'lisbon': { taxi: { duration: '20-30 min', cost: '€20-25' }, train: { duration: '20 min', cost: '€4' } },
+      // Greece
+      'athens': { taxi: { duration: '35-50 min', cost: '€40 fixed' }, train: { duration: '45 min', cost: '€10' } },
+      'santorini': { taxi: { duration: '15-25 min', cost: '€25-35' }, train: { duration: 'N/A', cost: 'Bus €2' } },
+      // Japan
+      'tokyo': { taxi: { duration: '60-90 min', cost: '¥25,000+' }, train: { duration: '35 min', cost: '¥3,000' } },
+      'kyoto': { taxi: { duration: '75-100 min', cost: '¥15,000+' }, train: { duration: '75 min', cost: '¥2,900' } },
+      // USA
+      'new york': { taxi: { duration: '45-75 min', cost: '$55-75' }, train: { duration: '45 min', cost: '$11' } },
+      'los angeles': { taxi: { duration: '30-60 min', cost: '$50-80' }, train: { duration: '45 min', cost: '$10' } },
+      // Asia
+      'bangkok': { taxi: { duration: '35-60 min', cost: '฿400-600' }, train: { duration: '30 min', cost: '฿45' } },
+      'singapore': { taxi: { duration: '25-40 min', cost: 'S$25-40' }, train: { duration: '30 min', cost: 'S$3' } },
+      'bali': { taxi: { duration: '40-75 min', cost: '$15-25' }, train: { duration: 'N/A', cost: 'N/A' } },
+      // Default/generic
+      'default': { taxi: { duration: '30-50 min', cost: 'Varies' }, train: { duration: '30-45 min', cost: 'Varies' } },
     };
+    
+    const destKey = destination.toLowerCase().trim();
+    // Try exact match, then partial match
+    const data = transferData[destKey] || 
+      Object.entries(transferData).find(([key]) => destKey.includes(key) || key.includes(destKey))?.[1] ||
+      transferData['default'];
+    
+    return data;
   };
 
   const recommendedArrival = getRecommendedAirportArrival();
