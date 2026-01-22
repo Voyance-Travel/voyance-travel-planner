@@ -540,11 +540,19 @@ export function EditorialItinerary({
   const totalCost = totalActivityCost + flightCost + hotelCost;
   
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
-  const localCurrency =
+  // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
+  const countryCurrency = inferCurrencyFromCountry(destinationCountry);
+  const destinationCurrency =
     normalizeCurrencyCode(destinationInfo?.currency) ||
-    normalizeCurrencyCode(destinationInfo?.currencySymbol) ||
-    inferCurrencyFromCountry(destinationCountry) ||
-    inferCurrencyFromDays(days) ||
+    normalizeCurrencyCode(destinationInfo?.currencySymbol);
+  const daysCurrency = inferCurrencyFromDays(days);
+
+  const localCurrency =
+    (countryCurrency && destinationCurrency && countryCurrency !== destinationCurrency
+      ? countryCurrency
+      : destinationCurrency) ||
+    countryCurrency ||
+    daysCurrency ||
     'EUR';
   
   // Display currency based on user preference toggle
@@ -1280,7 +1288,7 @@ export function EditorialItinerary({
                 {flightCost > 0 && (
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Total</p>
-                    <p className="font-serif text-xl font-semibold text-foreground">${flightCost.toLocaleString()}</p>
+                    <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(flightCost, tripCurrency)}</p>
                   </div>
                 )}
               </div>
@@ -1483,7 +1491,7 @@ export function EditorialItinerary({
                 {hotelCost > 0 && (
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Total</p>
-                    <p className="font-serif text-xl font-semibold text-foreground">${hotelCost.toLocaleString()}</p>
+                    <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(hotelCost, tripCurrency)}</p>
                   </div>
                 )}
               </div>
