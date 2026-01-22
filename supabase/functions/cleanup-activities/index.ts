@@ -183,19 +183,31 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get total dirty count
-    const { data: allActivities, error: countError } = await supabase
+    // Build SQL filter for dirty records - must match isDirty() logic
+    // Dirty = templated description OR description too short OR bad coordinates OR no description
+    const templatedDescFilter = TEMPLATED_DESCRIPTIONS
+      .map(d => `description.ilike.%${d.substring(0, 30)}%`)
+      .join(',');
+    
+    // Get total dirty count first
+    const { count: totalDirty, error: countError } = await supabase
       .from("activities")
-      .select("id, name, description, category, destination_id, coordinates, best_times, accessibility_info");
-
+      .select("*", { count: "exact", head: true })
+      .or(`description.is.null,${templatedDescFilter},and(coordinates->lat.lt.1,coordinates->lat.gt.-1,coordinates->lng.lt.1,coordinates->lng.gt.-1)`);
     if (countError) throw countError;
-
-    const dirtyActivities = (allActivities || []).filter(isDirty);
-    const totalDirty = dirtyActivities.length;
+    const dirtyCount = totalDirty ?? 0;
 
     // Get batch to process (for live runs, always start from 0 since dirty pool shrinks)
     const effectiveOffset = dryRun ? offset : 0;
-    const batch = dirtyActivities.slice(effectiveOffset, effectiveOffset + limit);
+    
+    // Fetch dirty records with proper pagination
+    const { data: batch, error: batchError } = await supabase
+      .from("activities")
+      .select("id, name, description, category, destination_id, coordinates, best_times, accessibility_info")
+      .or(`description.is.null,${templatedDescFilter},and(coordinates->lat.lt.1,coordinates->lat.gt.-1,coordinates->lng.lt.1,coordinates->lng.gt.-1)`)
+      .range(effectiveOffset, effectiveOffset + limit - 1);
+
+    if (batchError) throw batchError;
 
     if (batch.length === 0) {
       return new Response(
@@ -208,7 +220,7 @@ serve(async (req) => {
           nextOffset: 0,
           complete: true, // Signal completion
           hasMore: false,
-          totalCount: totalDirty,
+          totalCount: dirtyCount,
           stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
           results: [],
         }),
@@ -287,7 +299,7 @@ serve(async (req) => {
 
     // Calculate if complete
     const hasMore = dryRun 
-      ? effectiveOffset + results.length < totalDirty 
+      ? effectiveOffset + results.length < dirtyCount 
       : cleaned > 0; // For live runs, continue if we cleaned anything
 
     return new Response(
@@ -300,7 +312,7 @@ serve(async (req) => {
         nextOffset: dryRun ? effectiveOffset + results.length : 0,
         complete: !hasMore, // UI expects 'complete' flag
         hasMore,
-        totalCount: totalDirty,
+        totalCount: dirtyCount,
         stats: {
           processed: results.length,
           cleaned,
