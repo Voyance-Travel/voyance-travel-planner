@@ -937,93 +937,6 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            {/* Day Navigation Bar with Progress */}
-            <div className="flex items-center gap-4">
-              {/* Trip Progress Card */}
-              <Card className="w-48 shrink-0">
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-medium">Trip Progress</span>
-                  </div>
-                  <Progress value={progressPercent} className="h-2" />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {feedbackCount} of {totalActivities} reviewed
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Horizontal Date Picker */}
-              <div className="flex items-center gap-2 flex-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedDayIndex(prev => Math.max(0, prev - 1))}
-                  disabled={!canGoPrev}
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </Button>
-
-                <div className="flex-1 overflow-x-auto">
-                  <div className="flex gap-2 justify-center">
-                    {days.map((day, index) => {
-                      const dayDate = day.date ? parseISO(day.date) : null;
-                      const isSelected = index === selectedDayIndex;
-                      const isTodayDay = dayDate ? isToday(dayDate) : false;
-                      
-                      return (
-                        <button
-                          key={day.dayNumber}
-                          onClick={() => {
-                            setSelectedDayIndex(index);
-                            // Also expand this day
-                            if (!expandedDays.includes(day.dayNumber)) {
-                              setExpandedDays([day.dayNumber]);
-                            }
-                          }}
-                          className={cn(
-                            'flex flex-col items-center px-4 py-2 rounded-lg transition-all min-w-[80px]',
-                            isSelected 
-                              ? 'bg-primary text-primary-foreground' 
-                              : 'bg-muted/50 hover:bg-muted',
-                            isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2'
-                          )}
-                        >
-                          {dayDate && (
-                            <>
-                              <span className="text-xs font-medium">
-                                {format(dayDate, 'EEE')}
-                              </span>
-                              <span className="text-lg font-bold">
-                                {format(dayDate, 'd')}
-                              </span>
-                            </>
-                          )}
-                          {!dayDate && (
-                            <span className="text-lg font-bold">Day {day.dayNumber}</span>
-                          )}
-                          {isTodayDay && (
-                            <Badge variant="secondary" className="text-[10px] mt-1">
-                              Today
-                            </Badge>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedDayIndex(prev => Math.min(days.length - 1, prev + 1))}
-                  disabled={!canGoNext}
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </Button>
-              </div>
-            </div>
-
             {/* Airport Game Plan - Show before Day 1 */}
             {flightSelection?.outbound && (
               <AirportGamePlan 
@@ -1032,31 +945,101 @@ export function EditorialItinerary({
                 destination={destination}
               />
             )}
+
+            {/* Day Navigation Bar */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedDayIndex(prev => Math.max(0, prev - 1))}
+                disabled={!canGoPrev}
+                className="shrink-0"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </Button>
+
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex gap-2 justify-center">
+                  {days.map((day, index) => {
+                    const dayDate = day.date ? parseISO(day.date) : null;
+                    const isSelected = index === selectedDayIndex;
+                    const isTodayDay = dayDate ? isToday(dayDate) : false;
+                    
+                    return (
+                      <button
+                        key={day.dayNumber}
+                        onClick={() => {
+                          setSelectedDayIndex(index);
+                          setExpandedDays([day.dayNumber]);
+                        }}
+                        className={cn(
+                          'flex flex-col items-center px-3 py-2 rounded-lg transition-all min-w-[60px]',
+                          isSelected 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted/50 hover:bg-muted',
+                          isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2'
+                        )}
+                      >
+                        {dayDate && (
+                          <>
+                            <span className="text-xs font-medium">
+                              {format(dayDate, 'EEE')}
+                            </span>
+                            <span className="text-lg font-bold">
+                              {format(dayDate, 'd')}
+                            </span>
+                          </>
+                        )}
+                        {!dayDate && (
+                          <span className="text-lg font-bold">Day {day.dayNumber}</span>
+                        )}
+                        {isTodayDay && (
+                          <Badge variant="secondary" className="text-[10px] mt-1">
+                            Today
+                          </Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedDayIndex(prev => Math.min(days.length - 1, prev + 1))}
+                disabled={!canGoNext}
+                className="shrink-0"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </Button>
+            </div>
             
-            {days.map((day, dayIndex) => (
+            {/* Show only selected day */}
+            {days[selectedDayIndex] && (
               <DayCard
-                key={day.dayNumber}
-                day={day}
-                dayIndex={dayIndex}
+                key={days[selectedDayIndex].dayNumber}
+                day={days[selectedDayIndex]}
+                dayIndex={selectedDayIndex}
                 travelers={travelers}
                 budgetTier={budgetTier}
                 destination={destination}
-                isExpanded={expandedDays.includes(day.dayNumber)}
-                isRegenerating={regeneratingDay === day.dayNumber}
+                isExpanded={true}
+                isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                 isEditable={isEditable}
                 tripId={tripId}
                 getPaymentForItem={getPaymentForItem}
                 refreshPayments={refreshPayments}
-                onToggle={() => toggleDay(day.dayNumber)}
+                onToggle={() => {}}
                 onActivityLock={handleActivityLock}
                 onActivityMove={handleActivityMove}
                 onActivityRemove={handleActivityRemove}
                 onDayLock={handleDayLock}
-                onDayRegenerate={() => handleDayRegenerate(dayIndex)}
-                onAddActivity={() => setAddActivityModal({ dayIndex })}
+                onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
+                onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
                 onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
               />
-            ))}
+            )}
           </motion.div>
         )}
 
