@@ -20,12 +20,13 @@ import {
   Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
-  CreditCard, Library
+  CreditCard, Library, TrendingUp
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -33,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isToday } from 'date-fns';
 import type { ActivityType, WeatherCondition } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
@@ -403,6 +404,7 @@ export function EditorialItinerary({
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
   const [activeTab, setActiveTab] = useState<'itinerary' | 'payments' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -414,6 +416,15 @@ export function EditorialItinerary({
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [showCreditPrompt, setShowCreditPrompt] = useState(false);
   const [pendingRegenerateDay, setPendingRegenerateDay] = useState<number | null>(null);
+
+  // Calculate trip progress for feedback tracking
+  const totalActivities = days.reduce((sum, day) => sum + day.activities.length, 0);
+  const feedbackCount = payments.filter(p => p.status === 'paid').length;
+  const progressPercent = totalActivities > 0 ? Math.min((feedbackCount / totalActivities) * 100, 100) : 0;
+
+  // Day navigation
+  const canGoPrev = selectedDayIndex > 0;
+  const canGoNext = selectedDayIndex < days.length - 1;
 
   // Get entitlements for credit checking
   const { data: entitlements, isPaid } = useEntitlements();
@@ -941,6 +952,93 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+            {/* Day Navigation Bar with Progress */}
+            <div className="flex items-center gap-4">
+              {/* Trip Progress Card */}
+              <Card className="w-48 shrink-0">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-medium">Trip Progress</span>
+                  </div>
+                  <Progress value={progressPercent} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {feedbackCount} of {totalActivities} reviewed
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Horizontal Date Picker */}
+              <div className="flex items-center gap-2 flex-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedDayIndex(prev => Math.max(0, prev - 1))}
+                  disabled={!canGoPrev}
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </Button>
+
+                <div className="flex-1 overflow-x-auto">
+                  <div className="flex gap-2 justify-center">
+                    {days.map((day, index) => {
+                      const dayDate = day.date ? parseISO(day.date) : null;
+                      const isSelected = index === selectedDayIndex;
+                      const isTodayDay = dayDate ? isToday(dayDate) : false;
+                      
+                      return (
+                        <button
+                          key={day.dayNumber}
+                          onClick={() => {
+                            setSelectedDayIndex(index);
+                            // Also expand this day
+                            if (!expandedDays.includes(day.dayNumber)) {
+                              setExpandedDays([day.dayNumber]);
+                            }
+                          }}
+                          className={cn(
+                            'flex flex-col items-center px-4 py-2 rounded-lg transition-all min-w-[80px]',
+                            isSelected 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'bg-muted/50 hover:bg-muted',
+                            isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2'
+                          )}
+                        >
+                          {dayDate && (
+                            <>
+                              <span className="text-xs font-medium">
+                                {format(dayDate, 'EEE')}
+                              </span>
+                              <span className="text-lg font-bold">
+                                {format(dayDate, 'd')}
+                              </span>
+                            </>
+                          )}
+                          {!dayDate && (
+                            <span className="text-lg font-bold">Day {day.dayNumber}</span>
+                          )}
+                          {isTodayDay && (
+                            <Badge variant="secondary" className="text-[10px] mt-1">
+                              Today
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedDayIndex(prev => Math.min(days.length - 1, prev + 1))}
+                  disabled={!canGoNext}
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
             {/* Airport Game Plan - Show before Day 1 */}
             {flightSelection?.outbound && (
               <AirportGamePlan 
