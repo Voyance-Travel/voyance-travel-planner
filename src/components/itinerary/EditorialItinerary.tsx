@@ -477,7 +477,7 @@ export function EditorialItinerary({
   onBookingAdded,
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
-  const [expandedDays, setExpandedDays] = useState<number[]>([1]);
+  const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   const [activeTab, setActiveTab] = useState<'itinerary' | 'payments' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -1217,13 +1217,13 @@ export function EditorialItinerary({
                 budgetTier={budgetTier}
                 tripCurrency={tripCurrency}
                 destination={destination}
-                isExpanded={true}
+                isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
                 isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                 isEditable={isEditable}
                 tripId={tripId}
                 getPaymentForItem={getPaymentForItem}
                 refreshPayments={refreshPayments}
-                onToggle={() => {}}
+                onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
                 onActivityLock={handleActivityLock}
                 onActivityMove={handleActivityMove}
                 onActivityRemove={handleActivityRemove}
