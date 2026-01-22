@@ -1044,17 +1044,19 @@ export default function Start() {
                     }}
                     disabled={!isFormValid}
                     className={cn(
-                      "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed transition-all",
-                      "border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50",
-                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary/5"
+                      "w-full flex flex-col items-center justify-center gap-1 px-4 py-4 rounded-xl border-2 transition-all",
+                      "border-primary bg-primary/10 hover:bg-primary/20",
+                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary/10"
                     )}
                   >
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium text-primary">
-                      Just Build My Itinerary
-                    </span>
-                    <span className="text-xs text-muted-foreground ml-1">
-                      (I'll book flights & hotels later)
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                      <span className="text-base font-semibold text-primary">
+                        Just Build My Itinerary
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Already have flights & hotel? Skip straight to your personalized itinerary
                     </span>
                   </button>
                 )}
