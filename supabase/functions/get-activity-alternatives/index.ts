@@ -46,8 +46,22 @@ serve(async (req) => {
       searchQuery,
     });
 
-    // Generate contextual alternatives based on the current activity
-    const alternatives = generateAlternatives(currentActivity, destination, searchQuery);
+    // Try AI-powered alternatives first, fall back to templates
+    let alternatives: AlternativeActivity[];
+    
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    
+    if (LOVABLE_API_KEY) {
+      try {
+        alternatives = await getAIAlternatives(currentActivity, destination, searchQuery, LOVABLE_API_KEY);
+      } catch (aiError) {
+        console.error('[get-activity-alternatives] AI fallback to templates:', aiError);
+        alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery);
+      }
+    } else {
+      console.log('[get-activity-alternatives] No API key, using templates');
+      alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery);
+    }
 
     return new Response(
       JSON.stringify({
@@ -80,7 +94,103 @@ serve(async (req) => {
   }
 });
 
-function generateAlternatives(
+// AI-powered alternatives using Lovable AI
+async function getAIAlternatives(
+  activity: RequestBody['currentActivity'],
+  destination?: string,
+  searchQuery?: string,
+  apiKey?: string
+): Promise<AlternativeActivity[]> {
+  const locationName = destination || 'the destination';
+  const activityType = activity.type || 'activity';
+  
+  const userPrompt = searchQuery 
+    ? `The user is looking for: "${searchQuery}". Find activities matching this request in ${locationName}.`
+    : `Find 4 alternative activities similar to "${activity.name}" (${activityType}) in ${locationName}.`;
+
+  const systemPrompt = `You are a travel activity recommendation expert. Generate creative, real-world activity alternatives for travelers.
+  
+For ${locationName}, suggest actual places and experiences that exist or could realistically exist there.
+Consider the local culture, popular attractions, and hidden gems.
+Vary the price points and experience types (premium, budget-friendly, unique local, group-friendly).`;
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "suggest_activities",
+            description: "Return 4 alternative activity suggestions for the traveler.",
+            parameters: {
+              type: "object",
+              properties: {
+                activities: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", description: "Activity name" },
+                      description: { type: "string", description: "Brief description (1-2 sentences)" },
+                      category: { type: "string", description: "Category like dining, cultural, adventure, relaxation, shopping" },
+                      estimatedDuration: { type: "string", description: "Duration like '2 hours' or '3.5 hours'" },
+                      estimatedCost: { type: "number", description: "Cost in USD" },
+                      location: { type: "string", description: "Specific location or area name" },
+                      rating: { type: "number", description: "Rating from 4.0 to 5.0" },
+                      matchScore: { type: "number", description: "How well it matches the request, 70-99" },
+                      whyRecommended: { type: "string", description: "One sentence explaining why this is recommended" }
+                    },
+                    required: ["name", "description", "category", "estimatedDuration", "estimatedCost", "location", "rating", "matchScore", "whyRecommended"],
+                    additionalProperties: false
+                  }
+                }
+              },
+              required: ["activities"],
+              additionalProperties: false
+            }
+          }
+        }
+      ],
+      tool_choice: { type: "function", function: { name: "suggest_activities" } },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[get-activity-alternatives] AI error:', response.status, errorText);
+    throw new Error(`AI request failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  
+  // Extract tool call result
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall?.function?.arguments) {
+    throw new Error('No tool call response from AI');
+  }
+
+  const parsed = JSON.parse(toolCall.function.arguments);
+  const activities = parsed.activities || [];
+
+  // Add unique IDs
+  return activities.map((act: Omit<AlternativeActivity, 'id'>, idx: number) => ({
+    ...act,
+    id: `ai-alt-${Date.now()}-${idx}`,
+  }));
+}
+
+// Template-based alternatives as fallback
+function generateTemplateAlternatives(
   activity: RequestBody['currentActivity'],
   destination?: string,
   searchQuery?: string
@@ -88,13 +198,55 @@ function generateAlternatives(
   const activityType = activity.type?.toLowerCase() || 'activity';
   const locationName = destination || 'the area';
 
-  // Base templates for different activity types
+  // If there's a search query, generate search-based results
+  if (searchQuery) {
+    return [
+      {
+        id: `search-1-${Date.now()}`,
+        name: `${searchQuery} Experience in ${locationName}`,
+        description: `A curated experience based on your search for "${searchQuery}".`,
+        category: activityType,
+        estimatedDuration: '2-3 hours',
+        estimatedCost: 75,
+        location: locationName,
+        rating: 4.6,
+        matchScore: 90,
+        whyRecommended: `Matches your search for "${searchQuery}"`,
+      },
+      {
+        id: `search-2-${Date.now()}`,
+        name: `Premium ${searchQuery} Tour`,
+        description: `An upscale version of your requested experience with VIP access.`,
+        category: activityType,
+        estimatedDuration: '3-4 hours',
+        estimatedCost: 150,
+        location: `Central ${locationName}`,
+        rating: 4.9,
+        matchScore: 85,
+        whyRecommended: 'Premium option with exclusive access',
+      },
+      {
+        id: `search-3-${Date.now()}`,
+        name: `Local ${searchQuery} Discovery`,
+        description: `Off-the-beaten-path experience led by local experts.`,
+        category: activityType,
+        estimatedDuration: '2 hours',
+        estimatedCost: 45,
+        location: 'Local neighborhood',
+        rating: 4.7,
+        matchScore: 82,
+        whyRecommended: 'Authentic local experience',
+      },
+    ];
+  }
+
+  // Category-based templates
   const templates: Record<string, AlternativeActivity[]> = {
     dining: [
       {
         id: `alt-dining-1-${Date.now()}`,
         name: `Fine Dining Experience in ${locationName}`,
-        description: 'Upscale restaurant featuring local cuisine with a modern twist, complete with sommelier service.',
+        description: 'Upscale restaurant featuring local cuisine with a modern twist.',
         category: 'dining',
         estimatedDuration: '2 hours',
         estimatedCost: 120,
@@ -106,7 +258,7 @@ function generateAlternatives(
       {
         id: `alt-dining-2-${Date.now()}`,
         name: 'Local Food Market Tour',
-        description: 'Explore vibrant food stalls and taste authentic local dishes with a knowledgeable guide.',
+        description: 'Explore vibrant food stalls and taste authentic local dishes.',
         category: 'dining',
         estimatedDuration: '3 hours',
         estimatedCost: 45,
@@ -118,7 +270,7 @@ function generateAlternatives(
       {
         id: `alt-dining-3-${Date.now()}`,
         name: 'Cooking Class with Local Chef',
-        description: 'Learn to prepare traditional dishes in an interactive cooking session.',
+        description: 'Learn to prepare traditional dishes in an interactive session.',
         category: 'dining',
         estimatedDuration: '3.5 hours',
         estimatedCost: 85,
@@ -132,7 +284,7 @@ function generateAlternatives(
       {
         id: `alt-cultural-1-${Date.now()}`,
         name: `Private Museum Tour in ${locationName}`,
-        description: 'Skip-the-line access with a private guide explaining the collections in depth.',
+        description: 'Skip-the-line access with a private guide explaining the collections.',
         category: 'cultural',
         estimatedDuration: '2.5 hours',
         estimatedCost: 95,
@@ -143,163 +295,108 @@ function generateAlternatives(
       },
       {
         id: `alt-cultural-2-${Date.now()}`,
-        name: 'Historic Walking Tour',
-        description: 'Discover hidden gems and local history through cobblestone streets and ancient landmarks.',
+        name: 'Historical Walking Tour',
+        description: 'Discover hidden stories and architectural gems with a historian guide.',
         category: 'cultural',
-        estimatedDuration: '2 hours',
+        estimatedDuration: '3 hours',
         estimatedCost: 35,
         location: 'Old Town',
-        rating: 4.6,
-        matchScore: 86,
-        whyRecommended: 'Budget-friendly with great storytelling',
+        rating: 4.7,
+        matchScore: 90,
+        whyRecommended: 'Budget-friendly with excellent reviews',
       },
       {
         id: `alt-cultural-3-${Date.now()}`,
-        name: 'Art Gallery Hop',
-        description: 'Visit curated contemporary and traditional art galleries with an art historian.',
+        name: 'Art Gallery & Studio Visit',
+        description: 'Meet local artists and see their creative process firsthand.',
         category: 'cultural',
-        estimatedDuration: '3 hours',
+        estimatedDuration: '2 hours',
         estimatedCost: 55,
         location: 'Arts District',
-        rating: 4.7,
+        rating: 4.6,
         matchScore: 82,
-        whyRecommended: 'Perfect for art enthusiasts',
+        whyRecommended: 'Unique behind-the-scenes access',
       },
     ],
-    activity: [
+    adventure: [
       {
-        id: `alt-activity-1-${Date.now()}`,
-        name: `Adventure Experience in ${locationName}`,
-        description: 'Thrilling outdoor activity with professional guides and all equipment included.',
-        category: 'activity',
+        id: `alt-adventure-1-${Date.now()}`,
+        name: `Scenic Hiking Adventure near ${locationName}`,
+        description: 'Guided trek through stunning landscapes with panoramic views.',
+        category: 'adventure',
         estimatedDuration: '4 hours',
-        estimatedCost: 110,
-        location: 'Adventure Park',
+        estimatedCost: 65,
+        location: 'Nearby Nature Reserve',
         rating: 4.8,
-        matchScore: 90,
-        whyRecommended: 'Adrenaline-pumping alternative',
+        matchScore: 91,
+        whyRecommended: 'Best views and expert local guide',
       },
       {
-        id: `alt-activity-2-${Date.now()}`,
-        name: 'Scenic Nature Walk',
-        description: 'Peaceful trail through beautiful landscapes with photo opportunities.',
-        category: 'activity',
-        estimatedDuration: '2 hours',
-        estimatedCost: 25,
-        location: 'Nature Reserve',
-        rating: 4.5,
-        matchScore: 85,
-        whyRecommended: 'Relaxing option with stunning views',
-      },
-      {
-        id: `alt-activity-3-${Date.now()}`,
-        name: 'Local Sports Experience',
-        description: 'Try the popular local sport with experienced instructors.',
-        category: 'activity',
-        estimatedDuration: '2 hours',
-        estimatedCost: 60,
-        location: 'Sports Complex',
-        rating: 4.6,
-        matchScore: 78,
-        whyRecommended: 'Unique cultural sports experience',
-      },
-    ],
-    relaxation: [
-      {
-        id: `alt-relaxation-1-${Date.now()}`,
-        name: 'Luxury Spa Day',
-        description: 'Full-service spa with massage, thermal baths, and wellness treatments.',
-        category: 'relaxation',
-        estimatedDuration: '4 hours',
-        estimatedCost: 180,
-        location: 'Wellness Resort',
-        rating: 4.9,
-        matchScore: 95,
-        whyRecommended: 'Ultimate relaxation experience',
-      },
-      {
-        id: `alt-relaxation-2-${Date.now()}`,
-        name: 'Yoga & Meditation Session',
-        description: 'Guided yoga class in a serene setting with meditation practice.',
-        category: 'relaxation',
-        estimatedDuration: '1.5 hours',
-        estimatedCost: 40,
-        location: 'Wellness Studio',
-        rating: 4.7,
-        matchScore: 88,
-        whyRecommended: 'Mindful and rejuvenating',
-      },
-      {
-        id: `alt-relaxation-3-${Date.now()}`,
-        name: 'Beach Day Package',
-        description: 'Reserved beach cabana with refreshments and water activities included.',
-        category: 'relaxation',
-        estimatedDuration: '5 hours',
-        estimatedCost: 95,
-        location: 'Beachfront',
-        rating: 4.6,
-        matchScore: 82,
-        whyRecommended: 'Perfect for sun and sea lovers',
-      },
-    ],
-    shopping: [
-      {
-        id: `alt-shopping-1-${Date.now()}`,
-        name: 'Personal Shopping Experience',
-        description: 'Private shopping guide to the best boutiques and local artisan shops.',
-        category: 'shopping',
+        id: `alt-adventure-2-${Date.now()}`,
+        name: 'Water Sports Experience',
+        description: 'Try kayaking, paddleboarding, or sailing with professional instruction.',
+        category: 'adventure',
         estimatedDuration: '3 hours',
-        estimatedCost: 75,
-        location: 'Fashion District',
-        rating: 4.8,
-        matchScore: 92,
-        whyRecommended: 'Curated shopping with expert guidance',
+        estimatedCost: 85,
+        location: 'Waterfront',
+        rating: 4.7,
+        matchScore: 86,
+        whyRecommended: 'Active fun on the water',
       },
       {
-        id: `alt-shopping-2-${Date.now()}`,
-        name: 'Artisan Market Tour',
-        description: 'Explore local crafts, handmade goods, and unique souvenirs.',
-        category: 'shopping',
-        estimatedDuration: '2 hours',
-        estimatedCost: 20,
-        location: 'Market Square',
-        rating: 4.5,
-        matchScore: 85,
-        whyRecommended: 'Authentic local goods at great prices',
-      },
-      {
-        id: `alt-shopping-3-${Date.now()}`,
-        name: 'Antique District Walking Tour',
-        description: 'Discover vintage treasures and collectibles with a knowledgeable guide.',
-        category: 'shopping',
-        estimatedDuration: '2.5 hours',
-        estimatedCost: 35,
-        location: 'Antique Quarter',
+        id: `alt-adventure-3-${Date.now()}`,
+        name: 'Bike Tour of Hidden Gems',
+        description: 'Cycle through scenic routes and discover local secrets.',
+        category: 'adventure',
+        estimatedDuration: '3 hours',
+        estimatedCost: 45,
+        location: 'City & Surroundings',
         rating: 4.6,
-        matchScore: 80,
-        whyRecommended: 'Perfect for collectors and history buffs',
+        matchScore: 84,
+        whyRecommended: 'Eco-friendly and active exploration',
       },
     ],
   };
 
-  // Get alternatives based on activity type, default to general activities
-  let alternatives = templates[activityType] || templates.activity;
+  // Return matching category or default activity templates
+  const categoryTemplates = templates[activityType] || [
+    {
+      id: `alt-default-1-${Date.now()}`,
+      name: `Premium ${activity.name || 'Experience'}`,
+      description: `An enhanced version with exclusive access and personalized service.`,
+      category: activityType,
+      estimatedDuration: '2 hours',
+      estimatedCost: 100,
+      location: locationName,
+      rating: 4.8,
+      matchScore: 90,
+      whyRecommended: 'Upgraded experience with VIP treatment',
+    },
+    {
+      id: `alt-default-2-${Date.now()}`,
+      name: `Local ${activityType} Discovery`,
+      description: 'Authentic experience led by passionate local guides.',
+      category: activityType,
+      estimatedDuration: '2.5 hours',
+      estimatedCost: 50,
+      location: 'Local Area',
+      rating: 4.6,
+      matchScore: 85,
+      whyRecommended: 'Great value with local expertise',
+    },
+    {
+      id: `alt-default-3-${Date.now()}`,
+      name: `Group ${activityType} Adventure`,
+      description: 'Join fellow travelers for a social and engaging experience.',
+      category: activityType,
+      estimatedDuration: '3 hours',
+      estimatedCost: 40,
+      location: 'Meeting Point',
+      rating: 4.5,
+      matchScore: 80,
+      whyRecommended: 'Perfect for meeting new people',
+    },
+  ];
 
-  // If search query provided, filter by name/description match
-  if (searchQuery) {
-    const query = searchQuery.toLowerCase();
-    alternatives = alternatives.filter(
-      alt => 
-        alt.name.toLowerCase().includes(query) ||
-        alt.description.toLowerCase().includes(query) ||
-        alt.category.toLowerCase().includes(query)
-    );
-
-    // If no matches, return general alternatives
-    if (alternatives.length === 0) {
-      alternatives = templates.activity;
-    }
-  }
-
-  return alternatives.slice(0, 5);
+  return categoryTemplates;
 }

@@ -35,9 +35,10 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isToday } from 'date-fns';
-import type { ActivityType, WeatherCondition } from '@/types/itinerary';
+import type { ActivityType, ItineraryActivity, WeatherCondition } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
+import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { WeatherForecast } from './WeatherForecast';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
@@ -497,7 +498,11 @@ export function EditorialItinerary({
   const [inviteCopied, setInviteCopied] = useState(false);
   const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
 
-  // Calculate trip progress for feedback tracking
+  // AI Swap (Activity Alternatives) state
+  const [swapDrawerOpen, setSwapDrawerOpen] = useState(false);
+  const [swapTarget, setSwapTarget] = useState<{ dayIndex: number; activityId: string } | null>(null);
+  const [swapDrawerActivity, setSwapDrawerActivity] = useState<ItineraryActivity | null>(null);
+
   const totalActivities = days.reduce((sum, day) => sum + day.activities.length, 0);
   const feedbackCount = payments.filter(p => p.status === 'paid').length;
   const progressPercent = totalActivities > 0 ? Math.min((feedbackCount / totalActivities) * 100, 100) : 0;
@@ -566,7 +571,81 @@ export function EditorialItinerary({
     );
   };
 
-  // Auto-save when there are changes (debounced)
+  // Open the AI swap drawer for an activity
+  const openSwapDrawer = useCallback((dayIndex: number, activity: EditorialActivity) => {
+    if (activity.isLocked) {
+      toast.error('Unlock this activity first to find alternatives');
+      return;
+    }
+
+    // Normalize to ItineraryActivity format for the shared drawer component
+    const time = activity.time || activity.startTime || '09:00';
+    const cost = getActivityCost(activity, travelers, budgetTier);
+    const type = (activity.type || (activity.category as ActivityType) || 'activity') as ActivityType;
+    const locName = activity.location?.name || activity.location?.address || 'Location';
+    const locAddress = activity.location?.address || activity.location?.name || 'Location';
+    const ratingVal = typeof activity.rating === 'number' ? activity.rating : (activity.rating as any)?.value;
+
+    setSwapTarget({ dayIndex, activityId: activity.id });
+    setSwapDrawerActivity({
+      id: activity.id,
+      title: activity.title || 'Activity',
+      description: activity.description || '',
+      time,
+      duration: activity.duration || '2 hours',
+      type,
+      cost,
+      location: { name: locName, address: locAddress },
+      rating: ratingVal,
+      tags: activity.tags || [],
+      isLocked: !!activity.isLocked,
+    });
+    setSwapDrawerOpen(true);
+  }, [travelers, budgetTier]);
+
+  // Handle selecting an alternative from the drawer
+  const handleSelectSwapAlternative = useCallback((newActivity: ItineraryActivity) => {
+    if (!swapTarget) return;
+
+    setDays(prev => prev.map((day, dIdx) => {
+      if (dIdx !== swapTarget.dayIndex) return day;
+      return {
+        ...day,
+        activities: day.activities.map(a => {
+          if (a.id !== swapTarget.activityId) return a;
+
+          const preservedTime = a.time || a.startTime || newActivity.time;
+          const preservedStartTime = a.startTime || preservedTime;
+
+          return {
+            ...a,
+            title: newActivity.title,
+            description: newActivity.description,
+            category: newActivity.type,
+            type: newActivity.type,
+            time: preservedTime,
+            startTime: preservedStartTime,
+            duration: newActivity.duration,
+            cost: { amount: newActivity.cost, currency: tripCurrency },
+            location: {
+              name: newActivity.location?.name,
+              address: newActivity.location?.address,
+            },
+            rating: newActivity.rating ?? a.rating,
+            tags: newActivity.tags,
+            isLocked: false,
+          } satisfies EditorialActivity;
+        }),
+      };
+    }));
+
+    setHasChanges(true);
+    setSwapDrawerOpen(false);
+    setSwapTarget(null);
+    setSwapDrawerActivity(null);
+    toast.success(`Swapped to "${newActivity.title}"`);
+  }, [swapTarget, tripCurrency]);
+
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
     if (!hasChanges || !isEditable) return;
@@ -1224,6 +1303,7 @@ export function EditorialItinerary({
                 getPaymentForItem={getPaymentForItem}
                 refreshPayments={refreshPayments}
                 onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
+                onActivitySwap={openSwapDrawer}
                 onActivityLock={handleActivityLock}
                 onActivityMove={handleActivityMove}
                 onActivityRemove={handleActivityRemove}
@@ -1714,6 +1794,19 @@ export function EditorialItinerary({
         onClose={() => setHotelGalleryOpen(false)}
         images={hotelSelection?.images || []}
         hotelName={hotelSelection?.name}
+      />
+
+      {/* Activity Alternatives Drawer (AI Swap) */}
+      <ActivityAlternativesDrawer
+        open={swapDrawerOpen}
+        onClose={() => {
+          setSwapDrawerOpen(false);
+          setSwapTarget(null);
+          setSwapDrawerActivity(null);
+        }}
+        activity={swapDrawerActivity}
+        destination={destination}
+        onSelectAlternative={handleSelectSwapAlternative}
       />
 
       {/* Share Trip Modal */}
@@ -2918,6 +3011,7 @@ interface DayCardProps {
   getPaymentForItem: (itemType: 'flight' | 'hotel' | 'activity', itemId: string) => TripPayment | undefined;
   refreshPayments: () => void;
   onToggle: () => void;
+  onActivitySwap?: (dayIndex: number, activity: EditorialActivity) => void;
   onActivityLock: (dayIndex: number, activityId: string) => void;
   onActivityMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onActivityRemove: (dayIndex: number, activityId: string) => void;
@@ -2943,6 +3037,7 @@ function DayCard({
   getPaymentForItem,
   refreshPayments,
   onToggle,
+  onActivitySwap,
   onActivityLock,
   onActivityMove,
   onActivityRemove,
@@ -3067,6 +3162,7 @@ function DayCard({
                   existingPayment={getPaymentForItem('activity', activity.id)}
                   onPaymentSuccess={refreshPayments}
                   onLock={onActivityLock}
+                  onSwap={onActivitySwap}
                   onMove={onActivityMove}
                   onRemove={onActivityRemove}
                   onTimeEdit={onTimeEdit}
@@ -3134,6 +3230,7 @@ interface ActivityRowProps {
   existingPayment?: TripPayment;
   onPaymentSuccess: () => void;
   onLock: (dayIndex: number, activityId: string) => void;
+  onSwap?: (dayIndex: number, activity: EditorialActivity) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onRemove: (dayIndex: number, activityId: string) => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
@@ -3156,6 +3253,7 @@ function ActivityRow({
   existingPayment,
   onPaymentSuccess,
   onLock,
+  onSwap,
   onMove,
   onRemove,
   onTimeEdit,
@@ -3469,7 +3567,7 @@ function ActivityRow({
                   {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                 </button>
                 <button
-                  onClick={() => toast.info('AI swap: Find similar activities coming soon!')}
+                  onClick={() => onSwap?.(dayIndex, activity)}
                   className="p-1.5 rounded transition-colors hover:bg-primary/10 text-muted-foreground hover:text-primary"
                   title="Find alternative"
                 >
