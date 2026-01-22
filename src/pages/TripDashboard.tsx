@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -16,7 +16,10 @@ import {
   Eye,
   ArrowRight,
   Compass,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen
 } from 'lucide-react';
 
 import MainLayout from '@/components/layout/MainLayout';
@@ -26,9 +29,53 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getDestinationImage } from '@/utils/destinationImages';
+
+// Extract base destination name (e.g., "Rome (FCO)" -> "Rome", "Paris, France" -> "Paris")
+function getBaseDestination(destination: string): string {
+  // Remove parenthetical suffixes like (FCO), (JFK)
+  let base = destination.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  // Take first part before comma (city name)
+  base = base.split(',')[0].trim();
+  return base;
+}
+
+// Region mapping for grouping
+const REGION_MAP: Record<string, string> = {
+  // Europe
+  'Paris': 'Europe', 'London': 'Europe', 'Rome': 'Europe', 'Barcelona': 'Europe',
+  'Amsterdam': 'Europe', 'Berlin': 'Europe', 'Vienna': 'Europe', 'Prague': 'Europe',
+  'Lisbon': 'Europe', 'Madrid': 'Europe', 'Athens': 'Europe', 'Dublin': 'Europe',
+  'Munich': 'Europe', 'Venice': 'Europe', 'Florence': 'Europe', 'Milan': 'Europe',
+  'Zurich': 'Europe', 'Brussels': 'Europe', 'Copenhagen': 'Europe', 'Stockholm': 'Europe',
+  // Asia
+  'Tokyo': 'Asia', 'Kyoto': 'Asia', 'Bangkok': 'Asia', 'Singapore': 'Asia',
+  'Hong Kong': 'Asia', 'Seoul': 'Asia', 'Bali': 'Asia', 'Dubai': 'Middle East',
+  'Mumbai': 'Asia', 'Delhi': 'Asia', 'Shanghai': 'Asia', 'Beijing': 'Asia',
+  // Americas
+  'New York': 'North America', 'Los Angeles': 'North America', 'Miami': 'North America',
+  'San Francisco': 'North America', 'Chicago': 'North America', 'Las Vegas': 'North America',
+  'Toronto': 'North America', 'Vancouver': 'North America', 'Mexico City': 'North America',
+  'Cancun': 'North America', 'Rio de Janeiro': 'South America', 'Buenos Aires': 'South America',
+  // Africa & Oceania
+  'Cape Town': 'Africa', 'Marrakech': 'Africa', 'Cairo': 'Africa',
+  'Sydney': 'Oceania', 'Melbourne': 'Oceania', 'Auckland': 'Oceania',
+};
+
+function getRegion(destination: string): string {
+  const base = getBaseDestination(destination);
+  return REGION_MAP[base] || 'Other';
+}
+
+interface TripGroup {
+  key: string;
+  label: string;
+  trips: Trip[];
+  region: string;
+}
 
 type TabValue = 'all' | 'upcoming' | 'drafts' | 'completed';
 type TripStatus = 'draft' | 'planning' | 'booked' | 'completed' | 'cancelled';
@@ -327,8 +374,21 @@ export default function TripDashboard() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   // Fetch trips directly from Supabase
   useEffect(() => {
@@ -400,6 +460,44 @@ export default function TripDashboard() {
   const upcomingCount = filterTrips('upcoming').length;
   const draftsCount = filterTrips('drafts').length;
   const completedCount = filterTrips('completed').length;
+
+  // Group trips by destination
+  const groupedTrips = useMemo(() => {
+    const groups: Record<string, TripGroup> = {};
+    
+    filteredTrips.forEach(trip => {
+      const baseDestination = getBaseDestination(trip.destination);
+      const region = getRegion(trip.destination);
+      
+      if (!groups[baseDestination]) {
+        groups[baseDestination] = {
+          key: baseDestination,
+          label: baseDestination,
+          trips: [],
+          region,
+        };
+      }
+      groups[baseDestination].trips.push(trip);
+    });
+
+    // Sort groups: multi-trip groups first, then alphabetically
+    return Object.values(groups).sort((a, b) => {
+      if (a.trips.length > 1 && b.trips.length <= 1) return -1;
+      if (b.trips.length > 1 && a.trips.length <= 1) return 1;
+      return a.label.localeCompare(b.label);
+    });
+  }, [filteredTrips]);
+
+  // Check if we should show grouped view (when there are destination duplicates)
+  const hasMultipleSameDestination = groupedTrips.some(g => g.trips.length > 1);
+
+  // Auto-expand groups with multiple trips on first load
+  useEffect(() => {
+    if (hasMultipleSameDestination && expandedGroups.size === 0) {
+      const multiGroups = groupedTrips.filter(g => g.trips.length > 1).map(g => g.key);
+      setExpandedGroups(new Set(multiGroups));
+    }
+  }, [groupedTrips, hasMultipleSameDestination]);
 
   return (
     <MainLayout>
@@ -511,11 +609,79 @@ export default function TripDashboard() {
                     <motion.div 
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                      className="space-y-6"
                     >
-                      {filteredTrips.map((trip, i) => (
-                        <TripCard key={trip.id} trip={trip} index={i} />
-                      ))}
+                      {hasMultipleSameDestination ? (
+                        // Grouped view
+                        groupedTrips.map((group, groupIndex) => (
+                          group.trips.length > 1 ? (
+                            // Collapsible folder for multiple trips
+                            <Collapsible
+                              key={group.key}
+                              open={expandedGroups.has(group.key)}
+                              onOpenChange={() => toggleGroup(group.key)}
+                            >
+                              <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: groupIndex * 0.05 }}
+                                className="bg-card border border-border rounded-xl overflow-hidden"
+                              >
+                                <CollapsibleTrigger asChild>
+                                  <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                                        <FolderOpen className="h-5 w-5 text-primary" />
+                                      </div>
+                                      <div className="text-left">
+                                        <h3 className="font-semibold text-foreground">{group.label}</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                          {group.trips.length} trips • {group.region}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary" className="text-xs">
+                                        {group.trips.length}
+                                      </Badge>
+                                      {expandedGroups.has(group.key) ? (
+                                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                                      ) : (
+                                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                                      )}
+                                    </div>
+                                  </button>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {group.trips.map((trip, i) => (
+                                      <TripCard key={trip.id} trip={trip} index={i} />
+                                    ))}
+                                  </div>
+                                </CollapsibleContent>
+                              </motion.div>
+                            </Collapsible>
+                          ) : (
+                            // Single trip - show as regular card
+                            <motion.div
+                              key={group.key}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: groupIndex * 0.05 }}
+                              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                            >
+                              <TripCard trip={group.trips[0]} index={0} />
+                            </motion.div>
+                          )
+                        ))
+                      ) : (
+                        // Flat view when no duplicates
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {filteredTrips.map((trip, i) => (
+                            <TripCard key={trip.id} trip={trip} index={i} />
+                          ))}
+                        </div>
+                      )}
                     </motion.div>
                   ) : (
                     <EmptyState tab={activeTab} />
