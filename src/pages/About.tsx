@@ -422,9 +422,9 @@ export default function About() {
                 <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-8">
                   <Heart className="w-8 h-8 text-primary" />
                 </div>
-                <h3 className="font-serif text-2xl md:text-3xl font-bold mb-4">Anti-Influencer</h3>
+                <h3 className="font-serif text-2xl md:text-3xl font-bold mb-4">Anti-Hype</h3>
                 <p className="text-muted-foreground leading-relaxed text-lg">
-                  Real recommendations based on your preferences, not paid partnerships or sponsored content. 
+                  Real recommendations based on your preferences, not tourist traps or sponsored content. 
                   <span className="block mt-4 text-foreground font-medium">Transparency is non-negotiable.</span>
                 </p>
                 <div className="absolute bottom-8 right-8 w-24 h-24 rounded-full bg-primary/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
