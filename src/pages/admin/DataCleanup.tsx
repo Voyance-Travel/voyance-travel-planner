@@ -643,6 +643,11 @@ function CleanupPanel({
                   <span>Remaining dirty: ~{progress.remaining}</span>
                   <span>{Math.round((progress.current / progress.total) * 100)}% complete</span>
                 </div>
+                {!dryRun && target === 'attractions' && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Note: “Attempts” can be higher than total if some records fail and get retried.
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -668,7 +673,7 @@ function CleanupPanel({
               </div>
               <div className="text-center p-4 bg-muted/50 rounded-lg">
                 <div className="text-2xl font-bold">{stats.processed}</div>
-                <div className="text-sm text-muted-foreground">Total Processed</div>
+                <div className="text-sm text-muted-foreground">Attempts</div>
               </div>
             </div>
           </CardContent>
