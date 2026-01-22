@@ -3068,10 +3068,11 @@ function ActivityRow({
   const time = activity.startTime || activity.time;
   
   // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
-  const isDowntime = activity.timeBlockType === 'downtime' || activity.title.toLowerCase().includes('free time');
+  const titleLower = (activity.title || '').toLowerCase();
+  const isDowntime = activity.timeBlockType === 'downtime' || titleLower.includes('free time');
   const isTransport = activityType === 'transportation' || activityType === 'transport';
-  const isCheckIn = activity.title.toLowerCase().includes('check-in') || activity.title.toLowerCase().includes('check in');
-  const isAirport = activity.title.toLowerCase().includes('airport') || activity.title.toLowerCase().includes('transfer');
+  const isCheckIn = titleLower.includes('check-in') || titleLower.includes('check in');
+  const isAirport = titleLower.includes('airport') || titleLower.includes('transfer');
   const isAccommodation = activityType === 'accommodation';
   const showThumbnail = !isTransport && !isDowntime;
   
