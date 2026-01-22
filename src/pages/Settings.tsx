@@ -510,7 +510,7 @@ export default function Settings() {
               </Card>
             </motion.div>
 
-            {/* Travel Agent Mode Section */}
+            {/* Travel Agent Mode Section - DISABLED
             <motion.div variants={itemVariants}>
               <Card className="border-primary/20">
                 <CardHeader>
@@ -525,77 +525,11 @@ export default function Settings() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="travel-agent-mode" className="text-sm font-medium">
-                        Enable Travel Agent Mode
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Access CRM tools to manage clients and build itineraries for them
-                      </p>
-                    </div>
-                    <Switch
-                      id="travel-agent-mode"
-                      checked={travelAgentMode}
-                      onCheckedChange={async (checked) => {
-                        setTravelAgentMode(checked);
-                        await savePreference('travel_agent_mode', checked);
-                        // Refresh user data so nav menu updates immediately
-                        await refreshUserData();
-                      }}
-                      disabled={saving}
-                    />
-                  </div>
-                  
-                  {travelAgentMode && (
-                    <>
-                      <Separator />
-                      
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="agent-business-name" className="text-sm font-medium">
-                            Business Name (optional)
-                          </Label>
-                          <Input
-                            id="agent-business-name"
-                            placeholder="Your Travel Agency"
-                            value={agentBusinessName}
-                            onChange={(e) => setAgentBusinessName(e.target.value)}
-                            onBlur={() => {
-                              if (agentBusinessName !== '') {
-                                savePreference('agent_business_name', agentBusinessName);
-                              }
-                            }}
-                          />
-                        </div>
-                        
-                        <div className="flex flex-col sm:flex-row gap-3">
-                          <Button 
-                            onClick={() => navigate('/agent')}
-                            className="gap-2"
-                          >
-                            <Users className="h-4 w-4" />
-                            Open Client Dashboard
-                          </Button>
-                          <Button 
-                            variant="outline"
-                            onClick={() => navigate('/agent/clients/new')}
-                            className="gap-2"
-                          >
-                            Add New Client
-                          </Button>
-                        </div>
-                        
-                        <p className="text-xs text-muted-foreground">
-                          Manage your travel clients, store their preferences, and build custom itineraries. 
-                          Track bookings and revenue to grow your travel business.
-                        </p>
-                      </div>
-                    </>
-                  )}
+                  ... Agent settings content ...
                 </CardContent>
               </Card>
             </motion.div>
+            */}
 
             {/* Linked Accounts Section - Only Google */}
             <motion.div variants={itemVariants}>

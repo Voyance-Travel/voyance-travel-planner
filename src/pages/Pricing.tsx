@@ -497,7 +497,7 @@ export default function Pricing() {
               </div>
             </div>
 
-            {/* Agent CTA */}
+            {/* Agent CTA - DISABLED
             <div className="text-center mt-8">
               <p className="text-sm text-muted-foreground mb-3">
                 Already using spreadsheets + email chaos? See how Voyance replaces your workflow.
@@ -506,6 +506,7 @@ export default function Pricing() {
                 Explore the Trip Workspace <ArrowRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
+            */}
           </motion.div>
         </div>
       </section>
