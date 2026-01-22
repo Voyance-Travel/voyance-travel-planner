@@ -24,8 +24,8 @@ export default function DataCleanup() {
   const [, startTransition] = useTransition();
 
   // Maintain independent checkpoints per target so switching tabs mid-run can't corrupt the active run's checkpoint.
-  const destinationsCheckpoint = useCleanupCheckpoint('destinations', dryRun);
-  const attractionsCheckpoint = useCleanupCheckpoint('attractions', dryRun);
+  const destinationsCheckpoint = useCleanupCheckpoint('destinations');
+  const attractionsCheckpoint = useCleanupCheckpoint('attractions');
 
   const getCheckpointApi = (target: CleanupTarget) =>
     target === 'destinations' ? destinationsCheckpoint : attractionsCheckpoint;
@@ -66,12 +66,18 @@ export default function DataCleanup() {
 
   const addLog = (message: string) => addLogs([message]);
 
-  const runCleanup = async (target: CleanupTarget, opts?: { resume?: boolean }) => {
+  const runCleanup = async (
+    target: CleanupTarget,
+    opts?: { resume?: boolean; dryRunOverride?: boolean }
+  ) => {
     const resume = !!opts?.resume;
 
     const checkpointApi = getCheckpointApi(target);
     const { checkpoint, saveCheckpoint, clearCheckpoint } = checkpointApi;
     runningTargetRef.current = target;
+
+    // When resuming, prefer the checkpoint's mode unless explicitly overridden.
+    const runDryRun = opts?.dryRunOverride ?? (resume && checkpoint ? checkpoint.dryRun : dryRun);
 
     setIsRunning(true);
     setResults([]);
@@ -96,7 +102,7 @@ export default function DataCleanup() {
     }
     
     setProgress({ current: 0, total: totalCount });
-    addLog(`Starting ${target} cleanup of ${totalCount} items (${dryRun ? 'DRY RUN' : 'LIVE'})`);
+    addLog(`Starting ${target} cleanup of ${totalCount} items (${runDryRun ? 'DRY RUN' : 'LIVE'})`);
 
     const shouldResume = resume && !!checkpoint;
     if (!shouldResume) {
@@ -113,7 +119,9 @@ export default function DataCleanup() {
     if (shouldResume) {
       setStats(statsTotal);
       setProgress({ current: processedTotal, total: totalCount });
-      addLog(`Resuming dry run from offset ${offset} (processed ${processedTotal}/${totalCount})`);
+      addLog(
+        `Resuming ${runDryRun ? 'dry run' : 'run'} from offset ${offset} (processed ${processedTotal}/${totalCount})`
+      );
     }
 
     const functionName = target === 'destinations' ? 'cleanup-destinations' : 'cleanup-attractions';
@@ -123,7 +131,7 @@ export default function DataCleanup() {
         addLog(`Processing batch starting at offset ${offset}...`);
         
         const { data, error } = await supabase.functions.invoke(functionName, {
-          body: { batchSize, offset, dryRun }
+          body: { batchSize, offset, dryRun: runDryRun }
         });
 
         if (error) {
@@ -150,7 +158,7 @@ export default function DataCleanup() {
 
         // Persist progress after each batch so a crash/refresh can resume without re-processing.
         checkpointRef.current = {
-          dryRun,
+          dryRun: runDryRun,
           offset: nextOffset,
           processedTotal,
           totalCount,
@@ -267,12 +275,17 @@ export default function DataCleanup() {
                 dryRun={dryRun}
                 setDryRun={setDryRun}
                 hasCheckpoint={destinationsCheckpoint.hasCheckpoint}
+                checkpointDryRun={destinationsCheckpoint.checkpoint?.dryRun ?? null}
                 progress={progress}
                 stats={stats}
                 logs={logs}
                 results={results}
                 onRun={() => runCleanup('destinations')}
-                onResume={() => runCleanup('destinations', { resume: true })}
+                onResume={() => {
+                  const mode = destinationsCheckpoint.checkpoint?.dryRun;
+                  if (typeof mode === 'boolean') setDryRun(mode);
+                  return runCleanup('destinations', { resume: true, dryRunOverride: mode });
+                }}
                 getStatusIcon={getStatusIcon}
                 getStatusBadge={getStatusBadge}
               />
@@ -288,12 +301,17 @@ export default function DataCleanup() {
                 dryRun={dryRun}
                 setDryRun={setDryRun}
                 hasCheckpoint={attractionsCheckpoint.hasCheckpoint}
+                checkpointDryRun={attractionsCheckpoint.checkpoint?.dryRun ?? null}
                 progress={progress}
                 stats={stats}
                 logs={logs}
                 results={results}
                 onRun={() => runCleanup('attractions')}
-                onResume={() => runCleanup('attractions', { resume: true })}
+                onResume={() => {
+                  const mode = attractionsCheckpoint.checkpoint?.dryRun;
+                  if (typeof mode === 'boolean') setDryRun(mode);
+                  return runCleanup('attractions', { resume: true, dryRunOverride: mode });
+                }}
                 getStatusIcon={getStatusIcon}
                 getStatusBadge={getStatusBadge}
               />
@@ -312,6 +330,7 @@ interface CleanupPanelProps {
   dryRun: boolean;
   setDryRun: (v: boolean) => void;
   hasCheckpoint: boolean;
+  checkpointDryRun: boolean | null;
   progress: { current: number; total: number };
   stats: CleanupStats;
   logs: string[];
@@ -329,6 +348,7 @@ function CleanupPanel({
   dryRun,
   setDryRun,
   hasCheckpoint,
+  checkpointDryRun,
   progress,
   stats,
   logs,
@@ -391,7 +411,11 @@ function CleanupPanel({
                 onClick={onResume}
                 className="w-full"
               >
-                {dryRun ? 'Resume Dry Run' : 'Resume Run'}
+                {checkpointDryRun === true
+                  ? 'Resume Dry Run'
+                  : checkpointDryRun === false
+                    ? 'Resume Run'
+                    : 'Resume'}
               </Button>
             )}
 

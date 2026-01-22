@@ -39,7 +39,8 @@ function safeParse(raw: string | null): CleanupCheckpoint | null {
   }
 }
 
-export function useCleanupCheckpoint(target: CleanupTarget, dryRun: boolean) {
+// Keep the second arg optional for backwards-compat with older call sites/types.
+export function useCleanupCheckpoint(target: CleanupTarget, _dryRun?: boolean) {
   const [checkpoint, setCheckpoint] = useState<CleanupCheckpoint | null>(null);
   const storageKey = getStorageKey(target);
 
@@ -47,13 +48,9 @@ export function useCleanupCheckpoint(target: CleanupTarget, dryRun: boolean) {
     if (typeof window === "undefined") return;
     const raw = window.localStorage.getItem(storageKey);
     const parsed = safeParse(raw);
-    // Allow both dryRun=true and dryRun=false checkpoints; only reject mismatched mode.
-    if (!parsed || parsed.dryRun !== dryRun) {
-      setCheckpoint(null);
-      return;
-    }
+    // Load whatever checkpoint exists for this target (dry or live).
     setCheckpoint(parsed);
-  }, [dryRun, storageKey]);
+  }, [storageKey]);
 
   const hasCheckpoint = !!checkpoint;
 
@@ -64,11 +61,13 @@ export function useCleanupCheckpoint(target: CleanupTarget, dryRun: boolean) {
       updatedAt: new Date().toISOString(),
     };
     window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    setCheckpoint(payload);
   }, [storageKey]);
 
   const clearCheckpoint = useCallback(() => {
     if (typeof window === "undefined") return;
     window.localStorage.removeItem(storageKey);
+    setCheckpoint(null);
   }, [storageKey]);
 
   return {
