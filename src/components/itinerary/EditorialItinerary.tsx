@@ -254,18 +254,28 @@ function formatTime(time: string | undefined): string {
   return `${displayHours}:${minutes} ${period}`;
 }
 
-function formatCurrency(amount: number | null | undefined): string {
+function formatCurrency(amount: number | null | undefined, currency: string = 'USD'): string {
   if (amount === null || amount === undefined) {
     return '-'; // Should never happen with smart estimation
   }
   if (amount === 0) {
     return 'Free';
   }
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-  }).format(amount);
+  // Use the provided currency (from activity data) for proper localization
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+      minimumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    // Fallback if currency code is invalid
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+    }).format(amount);
+  }
 }
 
 // Smart cost estimation by category when no explicit cost is provided
@@ -462,6 +472,11 @@ export function EditorialItinerary({
   const flightCost = (flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0);
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   const totalCost = totalActivityCost + flightCost + hotelCost;
+  
+  // Derive trip currency from destination info or first activity with currency data
+  const tripCurrency = destinationInfo?.currency 
+    || days.flatMap(d => d.activities).find(a => a.cost?.currency)?.cost?.currency 
+    || 'USD';
 
   const toggleDay = (dayNumber: number) => {
     setExpandedDays(prev =>
@@ -921,7 +936,7 @@ export function EditorialItinerary({
             )}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/20 text-sm">
               <span className="text-muted-foreground">Total:</span>
-              <span className="font-semibold text-primary">${totalCost.toLocaleString()}</span>
+              <span className="font-semibold text-primary">{formatCurrency(totalCost, tripCurrency)}</span>
             </div>
             
             {/* Share Button */}
@@ -1104,6 +1119,7 @@ export function EditorialItinerary({
                 dayIndex={selectedDayIndex}
                 travelers={travelers}
                 budgetTier={budgetTier}
+                tripCurrency={tripCurrency}
                 destination={destination}
                 isExpanded={true}
                 isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
@@ -2797,6 +2813,7 @@ interface DayCardProps {
   dayIndex: number;
   travelers: number;
   budgetTier?: string;
+  tripCurrency: string; // Currency for cost formatting
   destination: string; // For real photo lookup
   isExpanded: boolean;
   isRegenerating: boolean;
@@ -2821,6 +2838,7 @@ function DayCard({
   dayIndex,
   travelers,
   budgetTier,
+  tripCurrency,
   destination,
   isExpanded,
   isRegenerating,
@@ -2880,7 +2898,7 @@ function DayCard({
           <div className="flex items-center gap-2">
             {totalCost > 0 && (
               <Badge variant="outline" className="text-sm font-semibold border-primary/30 bg-primary/5 text-primary">
-                ${totalCost.toLocaleString()}
+                {formatCurrency(totalCost, tripCurrency)}
               </Badge>
             )}
             {day.weather && (
@@ -3064,6 +3082,7 @@ function ActivityRow({
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
   const cost = getActivityCost(activity, travelers, budgetTier);
+  const costCurrency = activity.cost?.currency || 'USD';
   const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
   
@@ -3282,7 +3301,7 @@ function ActivityRow({
                     <span>• {activity.transportation.distance}</span>
                   )}
                   {activity.transportation.estimatedCost?.amount && activity.transportation.estimatedCost.amount > 0 && (
-                    <span>• ~${activity.transportation.estimatedCost.amount}</span>
+                    <span>• ~{formatCurrency(activity.transportation.estimatedCost.amount, activity.transportation.estimatedCost.currency || costCurrency)}</span>
                   )}
                 </div>
                 {activity.transportation.instructions && (
@@ -3296,7 +3315,7 @@ function ActivityRow({
 
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
-            <span className="font-medium">{formatCurrency(cost)}</span>
+            <span className="font-medium">{formatCurrency(cost, costCurrency)}</span>
             {/* Booking state actions - replaces static vendor links */}
             <InlineBookingActions
               activity={{
