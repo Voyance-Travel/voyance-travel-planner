@@ -97,12 +97,12 @@ serve(async (req) => {
 
     for (const attraction of attractions) {
       const attrStartTime = Date.now();
-      
-      // Check if we're running low on time (45 second safety margin)
+
+      // Stop early when we're close to the function time budget.
+      // IMPORTANT: Don't count unprocessed items as "processed" (avoids inflated attempts/retries).
       if (Date.now() - startTime > 45000) {
-        console.log(`[cleanup-attractions] Time limit approaching, stopping early`);
-        results.push({ id: attraction.id, name: attraction.name, status: 'skipped_timeout' });
-        continue;
+        console.log(`[cleanup-attractions] Time limit approaching, stopping batch early after ${results.length} items`);
+        break;
       }
 
       try {
@@ -217,11 +217,11 @@ serve(async (req) => {
     console.log(`[cleanup-attractions] Batch complete: ${results.length} processed in ${totalTime}ms`);
 
     return new Response(JSON.stringify({
-      message: `Processed ${attractions.length} attractions`,
+      message: `Processed ${results.length} attractions`,
       dryRun,
-      processed: attractions.length,
+      processed: results.length,
       offset,
-      nextOffset: offset + batchSize,
+      nextOffset: offset + results.length,
       results,
       executionTimeMs: totalTime
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
