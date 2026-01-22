@@ -7,8 +7,6 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
-  UserPlus, 
-  Search, 
   Check, 
   X, 
   Clock,
@@ -16,7 +14,7 @@ import {
   Loader2,
   Send,
   Link2,
-  ChevronRight
+  Mail
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,12 +26,11 @@ import {
   useFriends as useSupabaseFriends,
   usePendingRequests,
   useOutgoingRequests,
-  useSendFriendRequest,
+  useSendFriendRequestByEmail,
   useAcceptFriendRequest,
   useDeclineFriendRequest,
   useRemoveFriend
 } from '@/services/supabase/friends';
-import { useSearchProfiles } from '@/services/supabase/profiles';
 import LinkToTripModal from './LinkToTripModal';
 import FriendProfileCard from './FriendProfileCard';
 import FriendsActivityFeed from './FriendsActivityFeed';
@@ -44,8 +41,9 @@ interface FriendsSectionProps {
 }
 
 export default function FriendsSection({ userId, className }: FriendsSectionProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [inviteStatus, setInviteStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<'friends' | 'pending' | 'sent' | 'activity'>('friends');
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<{
@@ -59,20 +57,44 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
   const { data: friends, isLoading: isLoadingFriends } = useSupabaseFriends();
   const { data: pendingRequests, isLoading: isLoadingPending } = usePendingRequests();
   const { data: outgoingRequests } = useOutgoingRequests();
-  const { data: searchResults, isLoading: isSearchLoading } = useSearchProfiles(searchQuery);
 
   // Mutations
-  const sendRequest = useSendFriendRequest();
+  const sendRequestByEmail = useSendFriendRequestByEmail();
   const acceptRequest = useAcceptFriendRequest();
   const declineRequest = useDeclineFriendRequest();
   const removeFriend = useRemoveFriend();
 
-  const handleSendRequest = async (handle: string) => {
+  const handleSendInvite = async () => {
+    const email = emailInput.trim().toLowerCase();
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      setInviteStatus('error');
+      setStatusMessage('Please enter a valid email address');
+      return;
+    }
+
+    setInviteStatus('loading');
+    setStatusMessage('');
+
     try {
-      await sendRequest.mutateAsync(handle);
-      setSearchQuery('');
-    } catch (error) {
-      // Error handled in mutation
+      const result = await sendRequestByEmail.mutateAsync(email);
+      setInviteStatus('success');
+      if (result.status === 'accepted') {
+        setStatusMessage('Friend added!');
+      } else {
+        setStatusMessage('Friend request sent!');
+      }
+      setEmailInput('');
+      // Reset status after a delay
+      setTimeout(() => {
+        setInviteStatus('idle');
+        setStatusMessage('');
+      }, 3000);
+    } catch (error: any) {
+      setInviteStatus('error');
+      setStatusMessage(error.message || 'No user found with this email');
     }
   };
 
@@ -150,104 +172,73 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
         </div>
       </motion.div>
 
-      {/* Search Bar - Clean and minimal */}
-      <div className="relative max-w-md">
-        <div className={cn(
-          "relative border rounded-lg transition-all duration-200",
-          isSearchFocused ? "border-foreground shadow-sm" : "border-border"
-        )}>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by @handle or name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-            className="pl-10 pr-4 h-11 border-0 bg-transparent focus-visible:ring-0 text-sm"
-          />
-          {isSearchLoading && (
-            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-          )}
+      {/* Email Invite Form - Clean and minimal */}
+      <div className="max-w-md">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="email"
+              placeholder="Enter friend's email address..."
+              value={emailInput}
+              onChange={(e) => {
+                setEmailInput(e.target.value);
+                if (inviteStatus !== 'idle') {
+                  setInviteStatus('idle');
+                  setStatusMessage('');
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && emailInput.trim()) {
+                  handleSendInvite();
+                }
+              }}
+              disabled={inviteStatus === 'loading'}
+              className="pl-10 pr-4 h-11 text-sm"
+            />
+          </div>
+          <Button
+            onClick={handleSendInvite}
+            disabled={!emailInput.trim() || inviteStatus === 'loading'}
+            className="h-11 px-4"
+          >
+            {inviteStatus === 'loading' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Send Invite
+              </>
+            )}
+          </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-1.5">
-          Tip: Ask friends to share their @handle from their profile
-        </p>
         
-        {/* Search Results Dropdown */}
-        <AnimatePresence>
-          {isSearchFocused && searchQuery.length >= 2 && searchResults && searchResults.length > 0 && (
+        {/* Status Message */}
+        <AnimatePresence mode="wait">
+          {statusMessage && (
             <motion.div
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="absolute top-full left-0 right-0 mt-2 bg-background border border-border rounded-lg shadow-lg z-20 overflow-hidden"
+              className={cn(
+                "mt-2 text-sm flex items-center gap-2",
+                inviteStatus === 'success' && "text-emerald-600",
+                inviteStatus === 'error' && "text-destructive"
+              )}
             >
-              {searchResults.map((user, idx) => {
-                const isFriend = friends?.some(f => f.friend?.id === user.id);
-                const hasPending = outgoingRequests?.some(r => r.addressee?.id === user.id);
-                
-                return (
-                  <motion.div
-                    key={user.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: idx * 0.03 }}
-                    className="flex items-center justify-between p-3 hover:bg-muted/50 transition-colors border-b border-border last:border-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={user.avatar_url || undefined} />
-                        <AvatarFallback className="bg-muted text-muted-foreground text-sm font-medium">
-                          {(user.display_name || user.handle || '?')[0].toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {user.display_name || user.handle}
-                        </p>
-                        {user.handle && (
-                          <p className="text-xs text-muted-foreground">@{user.handle}</p>
-                        )}
-                      </div>
-                    </div>
-                    {isFriend ? (
-                      <Badge variant="secondary" className="text-xs font-normal">
-                        <Check className="h-3 w-3 mr-1" />
-                        Connected
-                      </Badge>
-                    ) : hasPending ? (
-                      <Badge variant="outline" className="text-xs font-normal">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Pending
-                      </Badge>
-                    ) : user.handle ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleSendRequest(user.handle!)}
-                        disabled={sendRequest.isPending}
-                        className="h-8 text-xs"
-                      >
-                        <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                        Add
-                      </Button>
-                    ) : null}
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          )}
-          {isSearchFocused && searchQuery.length >= 2 && searchResults?.length === 0 && !isSearchLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="absolute top-full left-0 right-0 mt-2 bg-background border border-border rounded-lg shadow-lg z-20 p-6 text-center"
-            >
-              <p className="text-sm text-muted-foreground">No users found</p>
+              {inviteStatus === 'success' ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <X className="h-4 w-4" />
+              )}
+              {statusMessage}
             </motion.div>
           )}
         </AnimatePresence>
+        
+        <p className="text-xs text-muted-foreground mt-2">
+          Enter the exact email address your friend uses on Voyance
+        </p>
       </div>
 
       {/* Sub-tabs - Editorial style */}

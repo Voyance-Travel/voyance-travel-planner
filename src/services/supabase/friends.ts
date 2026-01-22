@@ -105,6 +105,59 @@ export async function sendFriendRequest(handle: string): Promise<{ success: bool
 }
 
 /**
+ * Send a friend request by email (exact match only)
+ */
+export async function sendFriendRequestByEmail(email: string): Promise<{ success: boolean; status: FriendshipStatus }> {
+  const currentUserId = await getCurrentUserId();
+
+  // Find the user by email using the secure RPC function
+  // Cast to unknown first since the types aren't regenerated yet
+  const { data: targetUserId, error: profileError } = await supabase
+    .rpc('get_user_id_by_email' as any, { lookup_email: email.toLowerCase().trim() }) as { data: string | null; error: any };
+
+  if (profileError) throw new Error('Failed to lookup user');
+  if (!targetUserId) throw new Error('No user found with this email');
+  if (targetUserId === currentUserId) throw new Error('Cannot friend yourself');
+
+  // Check if friendship already exists
+  const { data: existing } = await supabase
+    .from('friendships')
+    .select('id, status, requester_id')
+    .or(`and(requester_id.eq.${currentUserId},addressee_id.eq.${targetUserId}),and(requester_id.eq.${targetUserId},addressee_id.eq.${currentUserId})`)
+    .maybeSingle();
+
+  if (existing) {
+    if (existing.status === 'accepted') {
+      throw new Error('Already friends');
+    }
+    if (existing.status === 'pending' && existing.requester_id === currentUserId) {
+      throw new Error('Friend request already sent');
+    }
+    // If they sent us a request, accept it
+    if (existing.status === 'pending' && existing.requester_id === targetUserId) {
+      const { error } = await supabase
+        .from('friendships')
+        .update({ status: 'accepted' })
+        .eq('id', existing.id);
+      if (error) throw error;
+      return { success: true, status: 'accepted' };
+    }
+  }
+
+  // Create new friend request
+  const { error } = await supabase
+    .from('friendships')
+    .insert({
+      requester_id: currentUserId,
+      addressee_id: targetUserId,
+      status: 'pending' as const,
+    });
+
+  if (error) throw error;
+  return { success: true, status: 'pending' };
+}
+
+/**
  * Accept a friend request
  */
 export async function acceptFriendRequest(friendshipId: string): Promise<void> {
@@ -291,6 +344,27 @@ export function useSendFriendRequest() {
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to send friend request');
+    },
+  });
+}
+
+export function useSendFriendRequestByEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: sendFriendRequestByEmail,
+    onSuccess: (result) => {
+      if (result.status === 'accepted') {
+        toast.success('Friend added!');
+      } else {
+        toast.success('Friend request sent!');
+      }
+      queryClient.invalidateQueries({ queryKey: ['friends'] });
+      queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
+    },
+    onError: (error: Error) => {
+      // Don't show toast here - let the component handle it for better UX
+      throw error;
     },
   });
 }
