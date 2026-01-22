@@ -439,6 +439,22 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
       >
+        {/* Legend Key */}
+        <div className="flex flex-wrap gap-4 mb-4 pb-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-emerald-500" />
+            <span className="text-xs text-muted-foreground">Visited</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-blue-500" />
+            <span className="text-xs text-muted-foreground">Upcoming</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-gray-500" />
+            <span className="text-xs text-muted-foreground">Draft / Planning</span>
+          </div>
+        </div>
+
         <div className="space-y-4">
           {/* Visited Destinations */}
           {destinations.filter(d => d.visited).length > 0 && (
@@ -482,6 +498,31 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                     {d.name} • {d.upcomingDate}
                   </span>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Draft/Planning Destinations */}
+          {destinations.filter(d => !d.visited && !d.upcoming).length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full bg-gray-500" />
+                <span className="text-sm font-medium text-foreground">Draft / Planning ({destinations.filter(d => !d.visited && !d.upcoming).length})</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {destinations.filter(d => !d.visited && !d.upcoming).slice(0, 8).map(d => (
+                  <span 
+                    key={d.id}
+                    className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs font-medium"
+                  >
+                    {d.name}
+                  </span>
+                ))}
+                {destinations.filter(d => !d.visited && !d.upcoming).length > 8 && (
+                  <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs">
+                    +{destinations.filter(d => !d.visited && !d.upcoming).length - 8} more
+                  </span>
+                )}
               </div>
             </div>
           )}
