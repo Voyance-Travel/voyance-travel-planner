@@ -153,9 +153,21 @@ export default function Planner() {
 
   // Check if we have basic trip info, if not check localStorage or redirect with destination preserved
   useEffect(() => {
-    const destinationParam = searchParams.get('destination');
-    
     if (!formData.destination || !formData.startDate || !formData.endDate) {
+      const destinationParam = searchParams.get('destination');
+
+      // If a destination is explicitly provided in the URL, treat this as a new planning intent.
+      // Do NOT restore an unrelated previous trip from localStorage (prevents "stuck" destinations).
+      if (destinationParam) {
+        const destinationData = getDestinationById(destinationParam);
+        const destinationName = destinationData?.city || destinationParam;
+        if (!formData.destination || formData.destination !== destinationName) {
+          setFormData(prev => ({ ...prev, destination: destinationName }));
+        }
+        navigate(`/start?destination=${encodeURIComponent(destinationName)}`);
+        return;
+      }
+
       // Check localStorage for saved trip
       const savedTrip = localStorage.getItem('voyance-current-trip');
       if (savedTrip) {
