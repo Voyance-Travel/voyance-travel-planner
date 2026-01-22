@@ -119,7 +119,14 @@ export default function DataCleanup() {
       clearCheckpoint();
     }
 
-    let offset = shouldResume ? checkpoint.offset : 0;
+    // IMPORTANT: For LIVE runs (not dry runs), records get updated and no longer match the 
+    // "dirty records" filter. This means the result set shrinks after each batch.
+    // Therefore, we should always start at offset 0 for live runs - the remaining dirty
+    // records are always at the beginning of the filtered result set.
+    // Only dry runs should use checkpoint offset since they don't modify data.
+    const useCheckpointOffset = shouldResume && checkpoint.dryRun;
+    
+    let offset = useCheckpointOffset ? checkpoint.offset : 0;
     const batchSize = 3;
     let processedTotal = shouldResume ? checkpoint.processedTotal : 0;
     let statsTotal: CleanupStats = shouldResume
@@ -128,10 +135,16 @@ export default function DataCleanup() {
 
     if (shouldResume) {
       setStats(statsTotal);
-      setProgress({ current: processedTotal, total: totalCount });
-      addLog(
-        `Resuming ${runDryRun ? 'dry run' : 'run'} from offset ${offset} (processed ${processedTotal}/${totalCount})`
-      );
+      setProgress({ current: processedTotal, total: checkpoint.totalCount });
+      if (useCheckpointOffset) {
+        addLog(
+          `Resuming dry run from offset ${offset} (processed ${processedTotal}/${checkpoint.totalCount})`
+        );
+      } else {
+        addLog(
+          `Resuming live run (processed ${processedTotal} so far, ${totalCount} dirty records remaining)`
+        );
+      }
     }
 
     const functionName = target === 'destinations' ? 'cleanup-destinations' : target === 'attractions' ? 'cleanup-attractions' : 'enrich-destinations';
