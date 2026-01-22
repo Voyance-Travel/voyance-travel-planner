@@ -37,6 +37,129 @@ interface CleanedAttraction {
   average_rating: number;
 }
 
+interface ProcessResult {
+  id: string;
+  name: string;
+  status: string;
+  changes?: object;
+}
+
+// Process a single attraction with AI
+async function processAttraction(
+  attraction: Attraction,
+  destinationMap: Map<string, Destination>,
+  supabase: any,
+  apiKey: string,
+  dryRun: boolean
+): Promise<ProcessResult> {
+  try {
+    const locationHint = attraction.address || attraction.name.split(' ').slice(-2).join(' ');
+    
+    let matchedDestination: Destination | null = null;
+    if (attraction.address) {
+      for (const dest of destinationMap.values()) {
+        if (attraction.address.toLowerCase().includes(dest.city.toLowerCase())) {
+          matchedDestination = dest;
+          break;
+        }
+      }
+    }
+
+    const cleaned = await cleanAttractionWithAI(attraction, locationHint, matchedDestination, apiKey);
+    
+    if (!cleaned) {
+      return { id: attraction.id, name: attraction.name, status: 'ai_failed' };
+    }
+
+    const updates: Record<string, unknown> = {};
+    let hasChanges = false;
+
+    // Check if description is generic (case-insensitive)
+    const isGenericDescription =
+      typeof attraction.description === 'string' &&
+      /^popular\s/i.test(attraction.description.trimStart());
+
+    if (isGenericDescription) {
+      const nextDescription =
+        typeof cleaned.description === 'string' && /^popular\s/i.test(cleaned.description.trimStart())
+          ? `${attraction.name} is ${cleaned.description.replace(/^popular\s+/i, '').trim()}`
+          : cleaned.description;
+
+      updates.description = nextDescription;
+      hasChanges = true;
+    }
+
+    // Fix near-zero coordinates
+    if (Math.abs(attraction.latitude || 0) < 1 && Math.abs(attraction.longitude || 0) < 1) {
+      updates.latitude = cleaned.latitude;
+      updates.longitude = cleaned.longitude;
+      hasChanges = true;
+    }
+
+    // Update address if it's just a city name
+    if (attraction.address && !attraction.address.includes(',') && cleaned.address) {
+      updates.address = cleaned.address;
+      hasChanges = true;
+    }
+
+    // Link to valid destination if orphaned
+    if (attraction.destination_id && !destinationMap.has(attraction.destination_id) && matchedDestination) {
+      updates.destination_id = matchedDestination.id;
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      updates.updated_at = new Date().toISOString();
+      
+      if (!dryRun) {
+        const { error: updateError } = await supabase
+          .from('attractions')
+          .update(updates as any)
+          .eq('id', attraction.id);
+        
+        if (updateError) {
+          console.error(`[cleanup-attractions] Update error for ${attraction.name}:`, updateError);
+          return { id: attraction.id, name: attraction.name, status: 'error', changes: { error: updateError.message } };
+        }
+      }
+      
+      return {
+        id: attraction.id,
+        name: attraction.name,
+        status: dryRun ? 'would_update' : 'updated',
+        changes: updates
+      };
+    } else {
+      return { id: attraction.id, name: attraction.name, status: 'no_changes_needed' };
+    }
+  } catch (error) {
+    console.error(`[cleanup-attractions] Error processing ${attraction.name}:`, error);
+    return { 
+      id: attraction.id, 
+      name: attraction.name, 
+      status: 'error',
+      changes: { error: error instanceof Error ? error.message : 'Unknown error' }
+    };
+  }
+}
+
+// Process attractions in parallel chunks
+async function processInParallel<T, R>(
+  items: T[],
+  processor: (item: T) => Promise<R>,
+  concurrency: number
+): Promise<R[]> {
+  const results: R[] = [];
+  
+  for (let i = 0; i < items.length; i += concurrency) {
+    const chunk = items.slice(i, i + concurrency);
+    const chunkResults = await Promise.all(chunk.map(processor));
+    results.push(...chunkResults);
+  }
+  
+  return results;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -55,13 +178,11 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { batchSize = 5, offset = 0, dryRun = true } = await req.json();
+    // Increased default batch size for faster processing
+    const { batchSize = 15, offset = 0, dryRun = true } = await req.json();
     console.log(`[cleanup-attractions] Processing batch: offset=${offset}, batchSize=${batchSize}, dryRun=${dryRun}`);
 
-    // Fetch attractions that need cleanup:
-    // - Generic descriptions (starting with "Popular")
-    // - Near-zero coordinates (invalid)
-    // - Orphaned destination_ids
+    // Fetch attractions that need cleanup
     const { data: attractions, error: fetchError } = await supabase
       .from('attractions')
       .select('id, name, description, address, latitude, longitude, category, subcategory, destination_id, visit_duration_mins, average_rating')
@@ -92,125 +213,26 @@ serve(async (req) => {
     const destinationMap = new Map<string, Destination>();
     (destinations || []).forEach(d => destinationMap.set(d.id, d));
 
-    console.log(`[cleanup-attractions] Found ${attractions.length} attractions to process`);
-    const results: { id: string; name: string; status: string; changes?: object }[] = [];
+    console.log(`[cleanup-attractions] Found ${attractions.length} attractions to process in parallel`);
 
-    for (const attraction of attractions) {
-      const attrStartTime = Date.now();
-
-      // Stop early when we're close to the function time budget.
-      // IMPORTANT: Don't count unprocessed items as "processed" (avoids inflated attempts/retries).
-      if (Date.now() - startTime > 45000) {
-        console.log(`[cleanup-attractions] Time limit approaching, stopping batch early after ${results.length} items`);
+    // Process 4 attractions in parallel at a time
+    const CONCURRENCY = 4;
+    const results: ProcessResult[] = [];
+    
+    for (let i = 0; i < attractions.length; i += CONCURRENCY) {
+      // Check time limit before starting next parallel chunk
+      if (Date.now() - startTime > 50000) {
+        console.log(`[cleanup-attractions] Time limit approaching, stopping after ${results.length} items`);
         break;
       }
-
-      try {
-        // Extract location from address or name for AI context
-        const locationHint = attraction.address || attraction.name.split(' ').slice(-2).join(' ');
-        
-        // Find a valid destination to link to based on address
-        let matchedDestination: Destination | null = null;
-        if (attraction.address) {
-          for (const dest of destinationMap.values()) {
-            if (attraction.address.toLowerCase().includes(dest.city.toLowerCase())) {
-              matchedDestination = dest;
-              break;
-            }
-          }
-        }
-
-        console.log(`[cleanup-attractions] Processing: ${attraction.name} (${locationHint})`);
-        
-        // Analyze and clean with AI
-        const cleaned = await cleanAttractionWithAI(
-          attraction, 
-          locationHint,
-          matchedDestination,
-          LOVABLE_API_KEY
-        );
-        
-        if (cleaned) {
-          const updates: Record<string, unknown> = {};
-          let hasChanges = false;
-
-          // Check if description is generic (case-insensitive)
-          const isGenericDescription =
-            typeof attraction.description === 'string' &&
-            /^popular\s/i.test(attraction.description.trimStart());
-
-          if (isGenericDescription) {
-            // Ensure we don't keep a "Popular ..." placeholder after cleaning
-            const nextDescription =
-              typeof cleaned.description === 'string' && /^popular\s/i.test(cleaned.description.trimStart())
-                ? `${attraction.name} is ${cleaned.description.replace(/^popular\s+/i, '').trim()}`
-                : cleaned.description;
-
-            updates.description = nextDescription;
-            hasChanges = true;
-          }
-
-          // Fix near-zero coordinates
-          if (Math.abs(attraction.latitude || 0) < 1 && Math.abs(attraction.longitude || 0) < 1) {
-            updates.latitude = cleaned.latitude;
-            updates.longitude = cleaned.longitude;
-            hasChanges = true;
-          }
-
-          // Update address if it's just a city name
-          if (attraction.address && !attraction.address.includes(',') && cleaned.address) {
-            updates.address = cleaned.address;
-            hasChanges = true;
-          }
-
-          // Link to valid destination if orphaned
-          if (attraction.destination_id && !destinationMap.has(attraction.destination_id) && matchedDestination) {
-            updates.destination_id = matchedDestination.id;
-            hasChanges = true;
-          }
-
-          if (hasChanges) {
-            // Always set updated_at when making changes
-            updates.updated_at = new Date().toISOString();
-            
-            if (!dryRun) {
-              const { error: updateError } = await supabase
-                .from('attractions')
-                .update(updates)
-                .eq('id', attraction.id);
-              
-              if (updateError) {
-                console.error(`[cleanup-attractions] Update error for ${attraction.name}:`, updateError);
-                throw updateError;
-              }
-            }
-            
-            const elapsed = Date.now() - attrStartTime;
-            console.log(`[cleanup-attractions] ${attraction.name}: ${Object.keys(updates).length} fields updated (${elapsed}ms)`);
-            
-            results.push({
-              id: attraction.id,
-              name: attraction.name,
-              status: dryRun ? 'would_update' : 'updated',
-              changes: updates
-            });
-          } else {
-            console.log(`[cleanup-attractions] ${attraction.name}: no changes needed`);
-            results.push({ id: attraction.id, name: attraction.name, status: 'no_changes_needed' });
-          }
-        } else {
-          console.log(`[cleanup-attractions] ${attraction.name}: AI returned null`);
-          results.push({ id: attraction.id, name: attraction.name, status: 'ai_failed' });
-        }
-      } catch (attrError) {
-        console.error(`[cleanup-attractions] Error processing ${attraction.name}:`, attrError);
-        results.push({ 
-          id: attraction.id, 
-          name: attraction.name, 
-          status: 'error',
-          changes: { error: attrError instanceof Error ? attrError.message : 'Unknown error' }
-        });
-      }
+      
+      const chunk = attractions.slice(i, i + CONCURRENCY);
+      const chunkResults = await Promise.all(
+        chunk.map(attr => processAttraction(attr, destinationMap, supabase, LOVABLE_API_KEY, dryRun))
+      );
+      results.push(...chunkResults);
+      
+      console.log(`[cleanup-attractions] Processed ${results.length}/${attractions.length} (chunk ${Math.floor(i / CONCURRENCY) + 1})`);
     }
 
     const totalTime = Date.now() - startTime;
@@ -247,33 +269,27 @@ async function cleanAttractionWithAI(
     ? `${matchedDestination.city}, ${matchedDestination.country}`
     : locationHint;
 
-  const prompt = `You are a travel data specialist. Clean and improve this attraction data for "${attraction.name}" located in/near "${locationContext}".
+  // Shorter, more focused prompt for faster responses
+  const prompt = `Clean this attraction data for "${attraction.name}" in "${locationContext}".
 
-Current data:
-- Name: ${attraction.name}
-- Description: ${attraction.description || 'Missing'}
-- Address: ${attraction.address || 'Missing'}
-- Coordinates: ${attraction.latitude}, ${attraction.longitude}
-- Category: ${attraction.category || 'Missing'}
-- Subcategory: ${attraction.subcategory || 'Missing'}
+Current: ${attraction.description || 'Missing description'}, coords: ${attraction.latitude},${attraction.longitude}
 
-Please provide improved, accurate data. Return a JSON object with these fields:
-1. "description": A compelling 2-3 sentence description that's unique to this specific attraction. Mention what makes it special, its history, or why tourists visit.
-2. "address": A realistic street address for this attraction (or best approximation if it's a natural landmark)
-3. "latitude": Accurate latitude coordinate (decimal degrees, e.g., 48.8584)
-4. "longitude": Accurate longitude coordinate (decimal degrees, e.g., 2.2945)
-5. "category": One of: museum, landmark, park, entertainment, religious, nature, shopping, food, nightlife, sports
-6. "subcategory": A more specific subcategory (e.g., "art museum", "historic church", "botanical garden")
-7. "visit_duration_mins": Recommended visit duration in minutes (integer)
-8. "average_rating": A realistic rating between 3.5 and 5.0
+Return JSON with:
+- description: 2 compelling sentences about this specific place
+- address: realistic street address
+- latitude: accurate decimal (e.g., 48.8584)
+- longitude: accurate decimal (e.g., 2.2945)
+- category: museum|landmark|park|entertainment|religious|nature|shopping|food|nightlife|sports
+- subcategory: specific type
+- visit_duration_mins: integer
+- average_rating: 3.5-5.0
 
-IMPORTANT: Provide real, accurate coordinates for the actual location. Do NOT use placeholder or zero coordinates.
-
-Only return valid JSON, no markdown or explanation.`;
+Return ONLY valid JSON.`;
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    // Shorter timeout for faster failure detection
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -282,12 +298,13 @@ Only return valid JSON, no markdown or explanation.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        // Use faster model
+        model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: "You are a travel data specialist. Always return valid JSON only. For coordinates, provide real accurate values - never use 0 or placeholder values." },
+          { role: "system", content: "Travel data specialist. Return valid JSON only. Use real coordinates, never 0 or placeholders." },
           { role: "user", content: prompt }
         ],
-        temperature: 0.5,
+        temperature: 0.3, // Lower for more consistent outputs
       }),
       signal: controller.signal
     });

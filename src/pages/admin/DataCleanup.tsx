@@ -142,7 +142,8 @@ export default function DataCleanup() {
     const useCheckpointOffset = shouldResume && runDryRun;
     
     let offset = useCheckpointOffset ? checkpoint.offset : 0;
-    const batchSize = 5;
+    // Larger batch size for attractions (parallel processing), smaller for others
+    const batchSize = target === 'attractions' ? 15 : 5;
 
     const processedTotalAtStart = shouldResume ? checkpoint.processedTotal : 0;
     // For progress UI we need a stable total across resumes.
@@ -284,7 +285,8 @@ export default function DataCleanup() {
         // because the result set shrinks as records are cleaned.
         offset = runDryRun ? nextOffset : 0;
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Shorter delay for attractions (parallel processing handles rate limiting)
+        await new Promise(resolve => setTimeout(resolve, target === 'attractions' ? 500 : 2000));
       }
 
       toast.success(`Cleanup complete! Processed ${processedTotal} ${target}.`);
