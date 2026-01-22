@@ -31,7 +31,7 @@ const steps = [
   {
     icon: Plane,
     title: 'Book Everything in One Place',
-    description: 'Flights, hotels, activities—all seamlessly bookable in one place. Get ready for an unforgettable journey.',
+    description: 'Flights, hotels, and activities, all seamlessly bookable in one place. Get ready for an unforgettable journey.',
     image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&q=80',
     color: 'from-orange-500 to-rose-600',
   },
