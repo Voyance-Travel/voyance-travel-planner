@@ -88,18 +88,25 @@ async function scheduleTripNotifications(
         for (const activity of day.activities) {
           if (!activity.startTime) continue;
           
-          // Get activity name - support both 'name' and 'title' fields
-          const activityName = activity.title || activity.name || 'Activity';
+          // Get activity name - support multiple field names
+          const activityName = activity.title || activity.name || 'Upcoming activity';
           
-          // Get location string - handle both string and object formats
+          // Get location string - handle all possible formats
           let locationStr = '';
           if (activity.location) {
             if (typeof activity.location === 'string') {
               locationStr = activity.location;
-            } else if (activity.location.name) {
-              locationStr = activity.location.name;
-            } else if (activity.location.address) {
-              locationStr = activity.location.address;
+            } else if (typeof activity.location === 'object') {
+              // Try various property names that might contain the location
+              const loc = activity.location as Record<string, unknown>;
+              locationStr = (
+                loc.name || 
+                loc.address || 
+                loc.venue || 
+                loc.place || 
+                loc.formatted_address ||
+                ''
+              ) as string;
             }
           }
           
@@ -120,7 +127,9 @@ async function scheduleTripNotifications(
               userId,
               type: 'activity_reminder',
               title: `Coming up: ${activityName}`,
-              message: `Your next activity starts in 30 minutes${locationStr ? ` at ${locationStr}` : ''}. Time to get ready!`,
+              message: locationStr 
+                ? `Your next activity starts in 30 minutes at ${locationStr}. Time to get ready!`
+                : `Your next activity "${activityName}" starts in 30 minutes. Time to get ready!`,
               activityId: activity.id,
               scheduledFor: reminderTime.toISOString(),
               sent: false
