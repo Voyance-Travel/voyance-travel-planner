@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, CheckCircle, XCircle, AlertCircle, Database, Sparkles, MapPin, Building, Compass } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, AlertCircle, Database, Sparkles, MapPin, Building, Compass, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import MainLayout from '@/components/layout/MainLayout';
@@ -28,10 +28,12 @@ export default function DataCleanup() {
   const destinationsCheckpoint = useCleanupCheckpoint('destinations');
   const attractionsCheckpoint = useCleanupCheckpoint('attractions');
   const localKnowledgeCheckpoint = useCleanupCheckpoint('local-knowledge');
+  const activitiesCheckpoint = useCleanupCheckpoint('activities');
 
   const getCheckpointApi = (target: CleanupTarget) => {
     if (target === 'destinations') return destinationsCheckpoint;
     if (target === 'attractions') return attractionsCheckpoint;
+    if (target === 'activities') return activitiesCheckpoint;
     return localKnowledgeCheckpoint;
   };
 
@@ -55,7 +57,7 @@ export default function DataCleanup() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isRunning, destinationsCheckpoint.saveCheckpoint, attractionsCheckpoint.saveCheckpoint, localKnowledgeCheckpoint.saveCheckpoint]);
+  }, [isRunning, destinationsCheckpoint.saveCheckpoint, attractionsCheckpoint.saveCheckpoint, localKnowledgeCheckpoint.saveCheckpoint, activitiesCheckpoint.saveCheckpoint]);
 
   const MAX_LOG_LINES = 400;
   const MAX_RESULTS = 200;
@@ -128,6 +130,23 @@ export default function DataCleanup() {
         .select('*', { count: 'exact', head: true })
         .or('default_transport_modes.is.null,default_transport_modes.eq.[]');
       totalCount = count || 0;
+    } else if (target === 'activities') {
+      // Activities cleanup - edge function handles the complex dirty filter
+      // Just get total count here, the function will return exact dirty count
+      const { count: allCount } = await supabase
+        .from('activities')
+        .select('*', { count: 'exact', head: true });
+      
+      totalCount = allCount || 0;
+      overallCount = allCount ?? null;
+
+      if (typeof overallCount === 'number') {
+        setDatasetCounts({
+          total: overallCount,
+          dirty: totalCount, // Will be updated by first batch response
+          clean: 0,
+        });
+      }
     }
     const shouldResume = resume && !!checkpoint;
     if (!shouldResume) {
@@ -142,8 +161,8 @@ export default function DataCleanup() {
     const useCheckpointOffset = shouldResume && runDryRun;
     
     let offset = useCheckpointOffset ? checkpoint.offset : 0;
-    // Larger batch size for attractions (parallel processing), smaller for others
-      const batchSize = target === 'attractions' ? 15 : 10;
+    // Larger batch size for attractions/activities (parallel processing), smaller for others
+    const batchSize = (target === 'attractions' || target === 'activities') ? 15 : 10;
 
     const processedTotalAtStart = shouldResume ? checkpoint.processedTotal : 0;
     // For progress UI we need a stable total across resumes.
@@ -181,7 +200,7 @@ export default function DataCleanup() {
       }
     }
 
-    const functionName = target === 'destinations' ? 'cleanup-destinations' : target === 'attractions' ? 'cleanup-attractions' : 'enrich-destinations';
+    const functionName = target === 'destinations' ? 'cleanup-destinations' : target === 'attractions' ? 'cleanup-attractions' : target === 'activities' ? 'cleanup-activities' : 'enrich-destinations';
 
     try {
       while (true) {
@@ -201,8 +220,18 @@ export default function DataCleanup() {
 
         const nextOffset = response.nextOffset ?? offset + batchSize;
 
-        const batchUpdated = response.results.filter(r => r.status === 'updated' || r.status === 'would_update').length;
-        const batchClean = response.results.filter(r => r.status === 'no_changes_needed').length;
+        // Update dataset counts from activities response (first batch gives accurate dirty count)
+        if (target === 'activities' && response.totalCount && typeof response.totalCount === 'number') {
+          const dirtyCount = response.totalCount;
+          setDatasetCounts(prev => ({
+            total: prev?.total ?? dirtyCount,
+            dirty: dirtyCount,
+            clean: Math.max(0, (prev?.total ?? dirtyCount) - dirtyCount),
+          }));
+        }
+
+        const batchUpdated = response.results.filter(r => r.status === 'updated' || r.status === 'would_update' || r.status === 'cleaned').length;
+        const batchClean = response.results.filter(r => r.status === 'no_changes_needed' || r.status === 'skipped').length;
         const batchErrors = response.results.filter(r => r.status === 'error' || r.status === 'ai_failed').length;
         processedTotal += response.processed;
 
@@ -230,20 +259,23 @@ export default function DataCleanup() {
           ? Math.max(0, baselineTotal - processedTotal)
           : Math.max(0, baselineTotal - statsTotal.updated);
 
-        // For Attractions LIVE: refresh remaining dirty from the DB every ~10 batches.
+        // For Attractions/Activities LIVE: refresh remaining dirty from the DB every ~10 batches.
         // This keeps the UI aligned with the shrinking dirty pool.
-        if (!runDryRun && target === 'attractions' && (processedTotal % (batchSize * 10) === 0)) {
-          const { count: liveDirtyCount } = await supabase
-            .from('attractions')
-            .select('*', { count: 'exact', head: true })
-            .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1,longitude.lt.1,longitude.gt.-1)');
-          if (typeof liveDirtyCount === 'number') {
-            nextRemaining = liveDirtyCount;
-            setDatasetCounts(prev => {
-              if (!prev) return prev;
-              return { ...prev, dirty: liveDirtyCount, clean: Math.max(0, prev.total - liveDirtyCount) };
-            });
+        if (!runDryRun && (target === 'attractions' || target === 'activities') && (processedTotal % (batchSize * 10) === 0)) {
+          if (target === 'attractions') {
+            const { count: liveDirtyCount } = await supabase
+              .from('attractions')
+              .select('*', { count: 'exact', head: true })
+              .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1,longitude.lt.1,longitude.gt.-1)');
+            if (typeof liveDirtyCount === 'number') {
+              nextRemaining = liveDirtyCount;
+              setDatasetCounts(prev => {
+                if (!prev) return prev;
+                return { ...prev, dirty: liveDirtyCount, clean: Math.max(0, prev.total - liveDirtyCount) };
+              });
+            }
           }
+          // Activities dirty count comes from the edge function response
         }
 
         const cleanedSoFar = runDryRun
@@ -286,7 +318,7 @@ export default function DataCleanup() {
         offset = runDryRun ? nextOffset : 0;
 
         // Shorter delay for attractions (parallel processing handles rate limiting)
-        await new Promise(resolve => setTimeout(resolve, target === 'attractions' ? 500 : 2000));
+        await new Promise(resolve => setTimeout(resolve, (target === 'attractions' || target === 'activities') ? 500 : 2000));
       }
 
       toast.success(`Cleanup complete! Processed ${processedTotal} ${target}.`);
@@ -356,6 +388,10 @@ export default function DataCleanup() {
             <TabsTrigger value="local-knowledge" className="flex items-center gap-2">
               <Compass className="h-4 w-4" />
               Local Knowledge
+            </TabsTrigger>
+            <TabsTrigger value="activities" className="flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              Activities
             </TabsTrigger>
           </TabsList>
 
@@ -461,6 +497,45 @@ export default function DataCleanup() {
               />
             </div>
           </TabsContent>
+
+          <TabsContent value="activities">
+            <div>
+              <CleanupPanel
+                target="activities"
+                description="Clean activity data (descriptions, coordinates, best times, accessibility)"
+                isRunning={isRunning}
+                dryRun={dryRun}
+                setDryRun={setDryRun}
+                hasCheckpoint={activitiesCheckpoint.hasCheckpoint}
+                checkpointDryRun={activitiesCheckpoint.checkpoint?.dryRun ?? null}
+                checkpointProcessed={activitiesCheckpoint.checkpoint?.processedTotal ?? null}
+                progress={progress}
+                datasetCounts={datasetCounts}
+                stats={stats}
+                logs={logs}
+                results={results}
+                onRun={() => runCleanup('activities')}
+                onResume={() => {
+                  const mode = activitiesCheckpoint.checkpoint?.dryRun;
+                  if (typeof mode === 'boolean') setDryRun(mode);
+                  return runCleanup('activities', { resume: true, dryRunOverride: mode });
+                }}
+                onUpdateCheckpoint={(processedTotal: number) => {
+                  const current = activitiesCheckpoint.checkpoint;
+                  if (current) {
+                    activitiesCheckpoint.saveCheckpoint({
+                      ...current,
+                      processedTotal,
+                      stats: { ...current.stats, processed: processedTotal }
+                    });
+                    toast.success(`Checkpoint updated to ${processedTotal} processed`);
+                  }
+                }}
+                getStatusIcon={getStatusIcon}
+                getStatusBadge={getStatusBadge}
+              />
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
     </MainLayout>
@@ -518,7 +593,7 @@ function CleanupPanel({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
-              {target === 'destinations' ? 'Destination' : target === 'attractions' ? 'Attraction' : 'Local Knowledge'} Cleanup
+              {target === 'destinations' ? 'Destination' : target === 'attractions' ? 'Attraction' : target === 'activities' ? 'Activity' : 'Local Knowledge'} Cleanup
             </CardTitle>
             <CardDescription>{description}</CardDescription>
           </CardHeader>
@@ -630,7 +705,7 @@ function CleanupPanel({
 
             {progress.total > 0 && (
               <div className="space-y-3">
-                {target === 'attractions' && datasetCounts && (
+                {(target === 'attractions' || target === 'activities') && datasetCounts && (
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="rounded-md bg-muted/50 p-2">
                       <div className="text-muted-foreground">Total records</div>
