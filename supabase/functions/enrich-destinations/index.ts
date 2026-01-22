@@ -201,32 +201,51 @@ async function enrichWithLocalKnowledge(
   dest: Destination, 
   apiKey: string
 ): Promise<EnrichedData | null> {
+  // Use existing data to ground the AI and reduce hallucinations
+  const existingContext = `
+EXISTING VERIFIED DATA (use this to ground your response):
+- City: ${dest.city}
+- Country: ${dest.country}
+- Region: ${dest.region || 'Unknown'}
+- Current description: ${dest.description || 'None'}
+- Known for: ${JSON.stringify(dest.known_for || [])}
+- Points of interest: ${JSON.stringify(dest.points_of_interest || [])}
+`;
+
   const prompt = `You are an expert local travel guide for "${dest.city}, ${dest.country}". Provide practical, insider knowledge that helps travelers navigate like a local.
 
-IMPORTANT: Be specific and accurate. Include real app names, actual prices, genuine local customs. Avoid generic advice.
+${existingContext}
+
+CRITICAL INSTRUCTIONS TO AVOID HALLUCINATIONS:
+1. ONLY provide information you are confident is accurate for THIS specific destination
+2. For transport apps: Only mention apps that ACTUALLY operate in this country (e.g., Grab is Southeast Asia only, inDrive is popular in Middle East/Africa/Latin America, Bolt is Europe/Africa)
+3. For emergency numbers: Use the REAL emergency numbers for this country (verify: most of Europe is 112, US is 911, etc.)
+4. For scams: Only mention scams that are DOCUMENTED for this destination, not generic travel scams
+5. If unsure about something specific, provide general but accurate regional guidance instead
+6. DO NOT invent specific business names, addresses, or prices you're not sure about
 
 Return a JSON object with:
 
-1. "description": Compelling 3-4 sentence description highlighting what makes this destination unique. Be specific, evocative.
+1. "description": Compelling 3-4 sentence description highlighting what makes this destination unique. Build on existing description if available.
 
-2. "transportModes": Array of transport options, each with:
-   - "mode": Transport type (e.g., "Metro", "inDrive", "Grab", "Uber", "Petit taxi", "Tuk-tuk", "Cyclo")
+2. "transportModes": Array of transport options ACTUALLY AVAILABLE in ${dest.country}, each with:
+   - "mode": Transport type (Metro, Bus, Taxi, Ride-share app name, Tuk-tuk, etc.)
    - "recommended": true/false - is this the BEST option for tourists?
-   - "notes": Practical advice (e.g., "Insist on meter", "Download app before arrival", "Negotiate before boarding")
-   - "appName": If app-based, the app name (e.g., "Grab", "Gojek", "inDrive", "Bolt")
-   - "estimatedCost": Typical cost range (e.g., "$2-5 for city center", "€1.90 per ride")
+   - "notes": Practical advice (be specific but accurate)
+   - "appName": ONLY if a specific app operates here (Grab, Gojek, inDrive, Bolt, Uber, Lyft, Didi, etc.)
+   - "estimatedCost": General cost range if known
 
-3. "localTips": Array of 5-7 insider tips locals would tell friends visiting (NOT generic travel advice)
+3. "localTips": Array of 5-7 insider tips specific to ${dest.city} (NOT generic travel advice)
 
 4. "safetyTips": Array of 3-5 safety considerations specific to this destination
 
 5. "gettingAround": 2-3 sentence summary of best way to navigate the city
 
-6. "knownFor": Array of 7-10 specific things this destination is famous for
+6. "knownFor": Array of 7-10 specific things this destination is famous for (build on existing if available)
 
-7. "pointsOfInterest": Array of 8-12 must-visit specific attractions/landmarks
+7. "pointsOfInterest": Array of 8-12 REAL, VERIFIABLE attractions/landmarks (build on existing if available)
 
-8. "bestNeighborhoods": Array of 4-6 neighborhoods for different traveler types (with brief description)
+8. "bestNeighborhoods": Array of 4-6 REAL neighborhoods for different traveler types
 
 9. "foodScene": 2-3 sentences about the food culture and what to try
 
@@ -234,11 +253,14 @@ Return a JSON object with:
 
 11. "dressCode": Local dress expectations/customs
 
-12. "tippingCustom": Specific tipping guidance for this destination
+12. "tippingCustom": Accurate tipping guidance for ${dest.country}
 
-13. "commonScams": Array of 2-4 scams tourists should watch for (if any)
+13. "commonScams": Array of 2-4 DOCUMENTED scams for this destination (or empty array if none known)
 
-14. "emergencyNumbers": Object with "police", "ambulance", "tourist" (tourist police or help line if exists)
+14. "emergencyNumbers": Object with REAL numbers for ${dest.country}:
+    - "police": National police number
+    - "ambulance": Emergency medical number
+    - "tourist": Tourist police or help line if exists (or "N/A")
 
 Return ONLY valid JSON, no markdown or explanations.`;
 
@@ -255,10 +277,13 @@ Return ONLY valid JSON, no markdown or explanations.`;
       body: JSON.stringify({
         model: "google/gemini-2.5-flash", // Use better model for quality local knowledge
         messages: [
-          { role: "system", content: "You are an expert travel consultant with deep local knowledge. Always return valid JSON only. Be specific and practical, not generic." },
+          { 
+            role: "system", 
+            content: "You are an expert travel consultant with deep local knowledge. CRITICAL: Only provide factual, verifiable information. If you're not sure about something, say so or provide general regional guidance. Never invent specific details. Always return valid JSON only." 
+          },
           { role: "user", content: prompt }
         ],
-        temperature: 0.7,
+        temperature: 0.4, // Lower temperature for more factual responses
       }),
       signal: controller.signal
     });
@@ -286,9 +311,15 @@ Return ONLY valid JSON, no markdown or explanations.`;
 
     const parsed = JSON.parse(jsonStr);
     
+    // Validate transport modes - filter out obviously wrong apps for regions
+    const validatedTransport = validateTransportModes(parsed.transportModes || [], dest.country);
+    
+    // Validate emergency numbers format
+    const emergencyNumbers = validateEmergencyNumbers(parsed.emergencyNumbers, dest.country);
+    
     return {
       description: parsed.description || '',
-      transportModes: parsed.transportModes || [],
+      transportModes: validatedTransport,
       localTips: parsed.localTips || [],
       safetyTips: parsed.safetyTips || [],
       knownFor: parsed.knownFor || [],
@@ -300,7 +331,7 @@ Return ONLY valid JSON, no markdown or explanations.`;
       dressCode: parsed.dressCode || '',
       tippingCustom: parsed.tippingCustom || '',
       commonScams: parsed.commonScams || [],
-      emergencyNumbers: parsed.emergencyNumbers || { police: '', ambulance: '', tourist: '' }
+      emergencyNumbers
     };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
@@ -310,4 +341,87 @@ Return ONLY valid JSON, no markdown or explanations.`;
     }
     return null;
   }
+}
+
+// Validate transport apps are actually available in the country
+function validateTransportModes(modes: TransportMode[], country: string): TransportMode[] {
+  // Regional app availability (simplified but helps catch obvious errors)
+  const appRegions: Record<string, string[]> = {
+    'Grab': ['Indonesia', 'Malaysia', 'Thailand', 'Vietnam', 'Philippines', 'Singapore', 'Cambodia', 'Myanmar'],
+    'Gojek': ['Indonesia', 'Singapore', 'Vietnam'],
+    'inDrive': ['Morocco', 'Egypt', 'Nigeria', 'Kenya', 'South Africa', 'Colombia', 'Mexico', 'Brazil', 'Pakistan', 'India', 'Russia', 'Kazakhstan', 'Turkey'],
+    'Bolt': ['Estonia', 'Latvia', 'Lithuania', 'Poland', 'Czech Republic', 'Hungary', 'Romania', 'Bulgaria', 'Croatia', 'Slovenia', 'Slovakia', 'Austria', 'Germany', 'France', 'Spain', 'Portugal', 'Italy', 'UK', 'United Kingdom', 'Ireland', 'Sweden', 'Finland', 'Norway', 'Belgium', 'Netherlands', 'South Africa', 'Nigeria', 'Kenya', 'Ghana', 'Tanzania', 'Uganda'],
+    'Uber': ['United States', 'USA', 'Canada', 'UK', 'United Kingdom', 'France', 'Germany', 'Spain', 'Italy', 'Netherlands', 'Belgium', 'Australia', 'New Zealand', 'Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'South Africa', 'India', 'Japan'],
+    'Lyft': ['United States', 'USA', 'Canada'],
+    'Didi': ['China', 'Mexico', 'Brazil', 'Chile', 'Colombia', 'Costa Rica', 'Dominican Republic', 'Ecuador', 'Panama', 'Peru'],
+    'Careem': ['United Arab Emirates', 'UAE', 'Saudi Arabia', 'Egypt', 'Jordan', 'Pakistan', 'Qatar', 'Bahrain', 'Kuwait', 'Oman', 'Iraq', 'Morocco'],
+    'Yandex': ['Russia', 'Kazakhstan', 'Belarus', 'Armenia', 'Georgia', 'Azerbaijan', 'Uzbekistan'],
+  };
+  
+  return modes.map(mode => {
+    if (mode.appName) {
+      const validCountries = appRegions[mode.appName];
+      if (validCountries && !validCountries.some(c => country.toLowerCase().includes(c.toLowerCase()))) {
+        // App not available in this country - remove app name but keep mode
+        console.log(`[validate] Removing ${mode.appName} from ${country} - not available in region`);
+        return { ...mode, appName: undefined, notes: mode.notes + ' (App availability varies)' };
+      }
+    }
+    return mode;
+  });
+}
+
+// Validate and fix emergency numbers
+function validateEmergencyNumbers(numbers: { police: string; ambulance: string; tourist: string } | undefined, country: string): { police: string; ambulance: string; tourist: string } {
+  // Common emergency numbers by country/region
+  const knownNumbers: Record<string, { police: string; ambulance: string }> = {
+    'United States': { police: '911', ambulance: '911' },
+    'USA': { police: '911', ambulance: '911' },
+    'Canada': { police: '911', ambulance: '911' },
+    'United Kingdom': { police: '999', ambulance: '999' },
+    'UK': { police: '999', ambulance: '999' },
+    'Australia': { police: '000', ambulance: '000' },
+    'New Zealand': { police: '111', ambulance: '111' },
+    // EU countries use 112
+    'Germany': { police: '110', ambulance: '112' },
+    'France': { police: '17', ambulance: '15' },
+    'Spain': { police: '112', ambulance: '112' },
+    'Italy': { police: '112', ambulance: '118' },
+    'Netherlands': { police: '112', ambulance: '112' },
+    'Belgium': { police: '112', ambulance: '112' },
+    'Portugal': { police: '112', ambulance: '112' },
+    'Greece': { police: '100', ambulance: '166' },
+    // Asia
+    'Japan': { police: '110', ambulance: '119' },
+    'China': { police: '110', ambulance: '120' },
+    'India': { police: '100', ambulance: '102' },
+    'Thailand': { police: '191', ambulance: '1669' },
+    'Indonesia': { police: '110', ambulance: '118' },
+    'Malaysia': { police: '999', ambulance: '999' },
+    'Singapore': { police: '999', ambulance: '995' },
+    'Vietnam': { police: '113', ambulance: '115' },
+    'Philippines': { police: '117', ambulance: '911' },
+    // Middle East & Africa
+    'UAE': { police: '999', ambulance: '998' },
+    'United Arab Emirates': { police: '999', ambulance: '998' },
+    'Morocco': { police: '19', ambulance: '15' },
+    'Egypt': { police: '122', ambulance: '123' },
+    'South Africa': { police: '10111', ambulance: '10177' },
+    // Americas
+    'Mexico': { police: '911', ambulance: '911' },
+    'Brazil': { police: '190', ambulance: '192' },
+    'Argentina': { police: '911', ambulance: '107' },
+  };
+  
+  const defaults = knownNumbers[country] || { police: '112', ambulance: '112' }; // 112 is international standard
+  
+  if (!numbers) {
+    return { ...defaults, tourist: 'N/A' };
+  }
+  
+  return {
+    police: numbers.police || defaults.police,
+    ambulance: numbers.ambulance || defaults.ambulance,
+    tourist: numbers.tourist || 'N/A'
+  };
 }

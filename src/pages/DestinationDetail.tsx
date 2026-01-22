@@ -72,10 +72,59 @@ export default function DestinationDetail() {
     staleTime: 1000 * 60 * 10,
   });
   
-  // Convert database destination to match static format
+  // Convert database destination to match static format with all available fields
   const destination: Destination | undefined = useMemo(() => {
     if (staticDestination) return staticDestination;
     if (!dbDestination) return undefined;
+    
+    // Parse transport modes if available
+    const transportModes = dbDestination.default_transport_modes as Array<{
+      mode: string;
+      recommended: boolean;
+      notes: string;
+      appName?: string;
+    }> | null;
+    
+    // Build getting around text from transport modes
+    let gettingAroundText = '';
+    if (transportModes && Array.isArray(transportModes) && transportModes.length > 0) {
+      const recommended = transportModes.filter(t => t.recommended);
+      const notRecommended = transportModes.filter(t => !t.recommended);
+      
+      if (recommended.length > 0) {
+        gettingAroundText = recommended.map(t => {
+          let text = t.mode;
+          if (t.appName) text += ` (${t.appName})`;
+          if (t.notes) text += ` - ${t.notes}`;
+          return text;
+        }).join('. ') + '.';
+      }
+      if (notRecommended.length > 0) {
+        gettingAroundText += ' Avoid: ' + notRecommended.map(t => `${t.mode}${t.notes ? ` (${t.notes})` : ''}`).join(', ') + '.';
+      }
+    }
+    
+    // Parse best time to visit - handle both formats "April to September" and "Apr, May, Jun"
+    let bestMonths: string[] | undefined;
+    if (dbDestination.best_time_to_visit) {
+      const btv = dbDestination.best_time_to_visit;
+      if (btv.includes(' to ')) {
+        // Range format - just display as-is in the description
+        bestMonths = [btv];
+      } else {
+        // Comma-separated months
+        bestMonths = btv.split(',').map((m: string) => m.trim());
+      }
+    }
+    
+    // Build climate text from temperature range and seasonality
+    let climateText = '';
+    if (dbDestination.temperature_range) {
+      climateText = `Temperature: ${dbDestination.temperature_range}. `;
+    }
+    if (dbDestination.seasonality) {
+      climateText += dbDestination.seasonality;
+    }
     
     return {
       id: dbDestination.id,
@@ -88,8 +137,10 @@ export default function DestinationDetail() {
       currency: dbDestination.currency_code || '',
       imageUrl: dbDestination.stock_image_url || '',
       images: dbDestination.stock_image_url ? [dbDestination.stock_image_url] : [],
-      climate: dbDestination.seasonality || undefined,
-      bestMonths: dbDestination.best_time_to_visit?.split(',').map((m: string) => m.trim()) || undefined,
+      climate: climateText || undefined,
+      bestMonths,
+      gettingAround: gettingAroundText || undefined,
+      localTips: undefined, // Will use fallback
     };
   }, [staticDestination, dbDestination]);
   
