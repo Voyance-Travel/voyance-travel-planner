@@ -541,7 +541,7 @@ export default function Profile() {
                   </Button>
                 </div>
                 <div className="grid gap-4">
-                  {upcomingTrips.map((trip) => (
+                  {upcomingTrips.slice(0, 3).map((trip) => (
                     <Link
                       key={trip.id}
                       to={`/trip/${trip.id}`}
