@@ -18,7 +18,7 @@ export default function DataCleanup() {
   const [isRunning, setIsRunning] = useState(false);
   const [dryRun, setDryRun] = useState(true);
   const [results, setResults] = useState<CleanupResult[]>([]);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [progress, setProgress] = useState({ current: 0, total: 0, remaining: 0 });
   const [logs, setLogs] = useState<string[]>([]);
   const [stats, setStats] = useState<CleanupStats>({ updated: 0, clean: 0, errors: 0, processed: 0 });
   const [, startTransition] = useTransition();
@@ -86,7 +86,7 @@ export default function DataCleanup() {
     setIsRunning(true);
     setResults([]);
     setLogs([]);
-    setProgress({ current: 0, total: 0 });
+    setProgress({ current: 0, total: 0, remaining: 0 });
     setStats({ updated: 0, clean: 0, errors: 0, processed: 0 });
 
     // Get total count based on target
@@ -138,21 +138,21 @@ export default function DataCleanup() {
       ? checkpoint!.stats
       : { updated: 0, clean: 0, errors: 0, processed: 0 };
 
-    setProgress({ current: processedTotal, total: baselineTotal });
+    setProgress({ current: processedTotal, total: baselineTotal, remaining: totalCount });
     addLog(
-      `Starting ${target} cleanup of ${totalCount} items (${runDryRun ? 'DRY RUN' : 'LIVE'})`
+      `Starting ${target} cleanup: ${totalCount} dirty records remaining (baseline: ${baselineTotal}) [${runDryRun ? 'DRY RUN' : 'LIVE'}]`
     );
 
     if (shouldResume) {
       setStats(statsTotal);
-      setProgress({ current: processedTotal, total: baselineTotal });
+      setProgress({ current: processedTotal, total: baselineTotal, remaining: totalCount });
       if (useCheckpointOffset) {
         addLog(
           `Resuming dry run from offset ${offset} (processed ${processedTotal}/${baselineTotal})`
         );
       } else {
         addLog(
-          `Resuming live run (processed ${processedTotal} so far, ${totalCount} dirty records remaining)`
+          `Resuming live run: ${stats.updated} cleaned so far, ${totalCount} dirty records remaining`
         );
       }
     }
@@ -201,6 +201,12 @@ export default function DataCleanup() {
         };
         saveCheckpoint(checkpointRef.current);
 
+        // For live runs, estimate remaining dirty = baseline - updated so far
+        // (This is an estimate; exact count would require re-querying the DB each batch)
+        const estimatedRemaining = runDryRun
+          ? baselineTotal - processedTotal
+          : Math.max(0, baselineTotal - statsTotal.updated);
+
         startTransition(() => {
           setStats(statsTotal);
 
@@ -211,7 +217,7 @@ export default function DataCleanup() {
             return next.length > MAX_RESULTS ? next.slice(-MAX_RESULTS) : next;
           });
 
-          setProgress({ current: processedTotal, total: baselineTotal });
+          setProgress({ current: statsTotal.updated, total: baselineTotal, remaining: estimatedRemaining });
         });
 
         const batchLogs: string[] = [];
@@ -413,7 +419,7 @@ interface CleanupPanelProps {
   hasCheckpoint: boolean;
   checkpointDryRun: boolean | null;
   checkpointProcessed?: number | null;
-  progress: { current: number; total: number };
+  progress: { current: number; total: number; remaining: number };
   stats: CleanupStats;
   logs: string[];
   results: CleanupResult[];
@@ -564,12 +570,18 @@ function CleanupPanel({
             )}
 
             {progress.total > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span>Progress</span>
-                  <span>{progress.current} / {progress.total}</span>
+                  <span className="font-medium">Cleaned</span>
+                  <span className="text-green-600 font-semibold">
+                    {progress.current} / {progress.total} dirty
+                  </span>
                 </div>
                 <Progress value={(progress.current / progress.total) * 100} />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Remaining dirty: ~{progress.remaining}</span>
+                  <span>{Math.round((progress.current / progress.total) * 100)}% complete</span>
+                </div>
               </div>
             )}
           </CardContent>
