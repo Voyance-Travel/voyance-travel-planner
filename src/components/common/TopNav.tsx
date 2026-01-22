@@ -141,7 +141,7 @@ export default function TopNav() {
                   <NotificationBell />
                 </div>
 
-                {/* Plan Full Trip Link */}
+                {/* Plan Trip + Hotels Link */}
                 <Link
                   to={ROUTES.START}
                   className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${
@@ -149,7 +149,7 @@ export default function TopNav() {
                   }`}
                 >
                   <Calendar className="h-3.5 w-3.5" />
-                  Plan Full Trip
+                  Plan Trip
                 </Link>
 
                 {/* Quick Itinerary Button */}
@@ -397,7 +397,7 @@ export default function TopNav() {
                         className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
                       >
                         <Calendar className="h-4 w-4" />
-                        Plan Full Trip
+                        Plan Trip
                       </Link>
                       <Button
                         className="w-full gap-2"
