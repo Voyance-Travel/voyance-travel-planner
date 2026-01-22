@@ -10,7 +10,7 @@ import { CONTACT_CONFIG } from '@/config/contact';
 export const companyInfo = {
   name: 'Voyance',
   tagline: 'AI-Powered Travel Planning',
-  founded: '2024',
+  founded: '2025',
   headquarters: 'Atlanta, GA',
   website: 'https://travelwithvoyance.com',
   mission: 'To revolutionize travel planning by combining artificial intelligence with deep personalization, helping every traveler discover experiences that resonate with who they are.',
@@ -19,16 +19,16 @@ export const companyInfo = {
 
 export const keyStats = [
   { label: 'Curated Destinations', value: '500+' },
-  { label: 'Travel DNA Archetypes', value: '16' },
+  { label: 'Travel DNA Archetypes', value: '25' },
   { label: 'Personalization Signals', value: '50+' },
   { label: 'AI Itinerary Engines', value: '3' },
 ];
 
 export const platformCapabilities = [
-  'Unique itineraries generated from 16 distinct Travel DNA profiles',
+  'Unique itineraries generated from 25 distinct Travel DNA profiles',
   'Multi-factor personalization using 50+ preference signals',
   'Day-by-day activity scheduling with time-optimized routing',
-  'Real-time flight and hotel integration via Amadeus APIs',
+  'Flight and hotel booking integration',
   'Adaptive recommendations based on budget, pace, and interests',
   'Destination matching using proprietary scoring algorithms',
 ];
@@ -99,7 +99,7 @@ export async function generatePressKitPDF(): Promise<void> {
   
   pdf.setFontSize(14);
   pdf.setFont('helvetica', 'normal');
-  pdf.text('Press Kit 2024', pageWidth / 2, 42, { align: 'center' });
+  pdf.text('Press Kit 2025', pageWidth / 2, 42, { align: 'center' });
   
   y = 80;
   pdf.setTextColor(0, 0, 0);
