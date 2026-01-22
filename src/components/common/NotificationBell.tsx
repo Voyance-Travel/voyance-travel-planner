@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, ChevronRight, MessageSquare, Plane, Flag, Cloud, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,21 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
+// Sanitize notification text to clean up any undefined/object issues from old data
+function sanitizeNotificationText(text: string): string {
+  if (!text) return 'Activity';
+  
+  // Replace common issues from old data
+  return text
+    .replace(/undefined/gi, 'Activity')
+    .replace(/\[object Object\]/gi, '')
+    .replace(/Coming up: Activity$/i, 'Upcoming Activity')
+    .replace(/How was Activity\?/i, 'How was your activity?')
+    .replace(/at\s*\.\s*Time/gi, 'Time') // Clean "at . Time" 
+    .replace(/at\s+Time/gi, 'Time') // Clean "at Time"
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+}
 const iconMap = {
   activity_reminder: Bell,
   weather_alert: Cloud,
@@ -42,8 +57,17 @@ export function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const { data: notifications = [], isLoading } = useUserNotifications(user?.id || null);
+  const { data: rawNotifications = [], isLoading } = useUserNotifications(user?.id || null);
   const dismissMutation = useDismissNotification();
+
+  // Sanitize notifications to clean up any bad data from old notifications
+  const notifications = useMemo(() => {
+    return rawNotifications.map(n => ({
+      ...n,
+      title: sanitizeNotificationText(n.title),
+      message: sanitizeNotificationText(n.message)
+    }));
+  }, [rawNotifications]);
 
   const unreadCount = notifications.filter(n => !n.sent).length;
 
