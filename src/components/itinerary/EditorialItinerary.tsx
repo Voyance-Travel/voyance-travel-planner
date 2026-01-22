@@ -430,6 +430,7 @@ export function EditorialItinerary({
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
 
   // Calculate trip progress for feedback tracking
   const totalActivities = days.reduce((sum, day) => sum + day.activities.length, 0);
@@ -473,10 +474,13 @@ export function EditorialItinerary({
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   const totalCost = totalActivityCost + flightCost + hotelCost;
   
-  // Derive trip currency from destination info or first activity with currency data
-  const tripCurrency = destinationInfo?.currency 
+  // Derive local currency from destination info or first activity with currency data
+  const localCurrency = destinationInfo?.currency 
     || days.flatMap(d => d.activities).find(a => a.cost?.currency)?.cost?.currency 
-    || 'USD';
+    || 'EUR';
+  
+  // Display currency based on user preference toggle
+  const tripCurrency = showLocalCurrency ? localCurrency : 'USD';
 
   const toggleDay = (dayNumber: number) => {
     setExpandedDays(prev =>
@@ -934,9 +938,25 @@ export function EditorialItinerary({
                 Unsaved
               </Badge>
             )}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/20 text-sm">
-              <span className="text-muted-foreground">Total:</span>
-              <span className="font-semibold text-primary">{formatCurrency(totalCost, tripCurrency)}</span>
+            {/* Currency Toggle + Total */}
+            <div className="flex items-center gap-0">
+              <button
+                onClick={() => setShowLocalCurrency(!showLocalCurrency)}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
+                title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
+              >
+                <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
+                  {localCurrency}
+                </span>
+                <span className="text-muted-foreground/50">/</span>
+                <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
+                  USD
+                </span>
+              </button>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-r-md bg-primary/10 border border-primary/20 text-sm">
+                <span className="text-muted-foreground">Total:</span>
+                <span className="font-semibold text-primary">{formatCurrency(totalCost, tripCurrency)}</span>
+              </div>
             </div>
             
             {/* Share Button */}
