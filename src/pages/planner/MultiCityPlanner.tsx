@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, ArrowRight, Sparkles } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, ArrowRight, Sparkles, ArrowLeft } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -218,6 +218,17 @@ export default function MultiCityPlanner() {
       {/* Planning Form */}
       <section className="relative pb-16 -mt-8">
         <div className="max-w-3xl mx-auto px-6">
+          {/* Back Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="mb-4 gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
