@@ -1,0 +1,284 @@
+/**
+ * Accept Trip Invite Page
+ * Handles trip invite link acceptance with auth flow
+ */
+
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { MapPin, Calendar, Users, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { format, parseISO } from 'date-fns';
+import MainLayout from '@/components/layout/MainLayout';
+
+interface InviteInfo {
+  valid: boolean;
+  error?: string;
+  tripName?: string;
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  inviterName?: string;
+  inviterAvatar?: string;
+  spotsRemaining?: number;
+}
+
+interface AcceptResult {
+  success: boolean;
+  error?: string;
+  requiresAuth?: boolean;
+  tripId?: string;
+}
+
+export default function AcceptInvite() {
+  const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
+  const { user, isLoading: authLoading } = useAuth();
+  
+  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [accepting, setAccepting] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch invite info
+  useEffect(() => {
+    if (!token) {
+      setError('Invalid invite link');
+      setLoading(false);
+      return;
+    }
+
+    const fetchInviteInfo = async () => {
+      try {
+        const { data, error: fetchError } = await supabase.rpc('get_trip_invite_info', {
+          p_token: token,
+        });
+
+        if (fetchError) throw fetchError;
+
+        if (data) {
+          const info = data as unknown as InviteInfo;
+          setInviteInfo(info);
+          if (!info.valid) {
+            setError(info.error || 'Invalid invite');
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching invite:', err);
+        setError('Unable to load invite details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInviteInfo();
+  }, [token]);
+
+  const handleAccept = async () => {
+    if (!token) return;
+
+    setAccepting(true);
+
+    try {
+      const { data, error: acceptError } = await supabase.rpc('accept_trip_invite', {
+        p_token: token,
+      });
+
+      if (acceptError) throw acceptError;
+
+      const result = data as unknown as AcceptResult;
+
+      if (result?.success) {
+        setAccepted(true);
+        toast.success('You\'ve joined the trip!');
+        
+        // Navigate to trip after a short delay
+        setTimeout(() => {
+          navigate(`/trip/${result.tripId}`);
+        }, 1500);
+      } else if (result?.requiresAuth) {
+        // Store token and redirect to login
+        sessionStorage.setItem('pendingInviteToken', token);
+        navigate('/signin?redirect=/invite/' + token);
+      } else {
+        setError(result?.error || 'Failed to accept invite');
+      }
+    } catch (err) {
+      console.error('Error accepting invite:', err);
+      setError('Failed to accept invite. Please try again.');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const handleSignIn = () => {
+    sessionStorage.setItem('pendingInviteToken', token || '');
+    navigate('/signin?redirect=/invite/' + token);
+  };
+
+  const handleSignUp = () => {
+    sessionStorage.setItem('pendingInviteToken', token || '');
+    navigate('/signup?redirect=/invite/' + token);
+  };
+
+  if (loading || authLoading) {
+    return (
+      <MainLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (error || !inviteInfo?.valid) {
+    return (
+      <MainLayout>
+        <div className="min-h-[60vh] flex items-center justify-center px-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="pt-8 pb-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+              </div>
+              <h1 className="text-xl font-semibold mb-2">Invite Not Valid</h1>
+              <p className="text-muted-foreground mb-6">
+                {error || inviteInfo?.error || 'This invite link is no longer valid.'}
+              </p>
+              <Button onClick={() => navigate('/')}>
+                Go Home
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (accepted) {
+    return (
+      <MainLayout>
+        <div className="min-h-[60vh] flex items-center justify-center px-4">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="text-center"
+          >
+            <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="h-10 w-10 text-green-600" />
+            </div>
+            <h1 className="text-2xl font-semibold mb-2">You're In!</h1>
+            <p className="text-muted-foreground mb-2">
+              Welcome to {inviteInfo.tripName}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Redirecting to your trip...
+            </p>
+          </motion.div>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <div className="min-h-[60vh] flex items-center justify-center px-4 py-12">
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="max-w-md w-full"
+        >
+          <Card className="overflow-hidden">
+            {/* Header with gradient */}
+            <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-accent/20 p-6 text-center">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                {inviteInfo.inviterAvatar ? (
+                  <Avatar className="h-10 w-10 border-2 border-background">
+                    <AvatarImage src={inviteInfo.inviterAvatar} />
+                    <AvatarFallback>{inviteInfo.inviterName?.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-primary" />
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mb-1">
+                {inviteInfo.inviterName || 'Someone'} invited you to join
+              </p>
+              <h1 className="text-2xl font-serif font-semibold">
+                {inviteInfo.tripName}
+              </h1>
+            </div>
+
+            <CardContent className="p-6 space-y-4">
+              {/* Trip Details */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-sm">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  <span>{inviteInfo.destination}</span>
+                </div>
+                {inviteInfo.startDate && inviteInfo.endDate && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Calendar className="h-4 w-4 text-primary" />
+                    <span>
+                      {format(parseISO(inviteInfo.startDate), 'MMM d')} - {format(parseISO(inviteInfo.endDate), 'MMM d, yyyy')}
+                    </span>
+                  </div>
+                )}
+                {inviteInfo.spotsRemaining !== undefined && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Users className="h-4 w-4 text-primary" />
+                    <span>{inviteInfo.spotsRemaining} spot{inviteInfo.spotsRemaining !== 1 ? 's' : ''} remaining</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              {user ? (
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={handleAccept}
+                  disabled={accepting}
+                >
+                  {accepting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Joining...
+                    </>
+                  ) : (
+                    'Join This Trip'
+                  )}
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-center text-muted-foreground">
+                    Sign in or create an account to join this trip
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button variant="outline" onClick={handleSignIn}>
+                      Sign In
+                    </Button>
+                    <Button onClick={handleSignUp}>
+                      Create Account
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-center text-muted-foreground">
+                By joining, you'll be able to view the itinerary and collaborate on planning.
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    </MainLayout>
+  );
+}

@@ -3681,6 +3681,59 @@ export type Database = {
           },
         ]
       }
+      trip_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string | null
+          expires_at: string | null
+          id: string
+          invited_by: string
+          max_uses: number | null
+          role: string
+          token: string
+          trip_id: string
+          uses_count: number | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string | null
+          expires_at?: string | null
+          id?: string
+          invited_by: string
+          max_uses?: number | null
+          role?: string
+          token?: string
+          trip_id: string
+          uses_count?: number | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string | null
+          expires_at?: string | null
+          id?: string
+          invited_by?: string
+          max_uses?: number | null
+          role?: string
+          token?: string
+          trip_id?: string
+          uses_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_invites_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_members: {
         Row: {
           accepted_at: string | null
@@ -4837,6 +4890,7 @@ export type Database = {
       }
     }
     Functions: {
+      accept_trip_invite: { Args: { p_token: string }; Returns: Json }
       cleanup_expired_search_cache: { Args: never; Returns: number }
       generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
@@ -4846,6 +4900,7 @@ export type Database = {
         Args: { p_share_token: string }
         Returns: Json
       }
+      get_trip_invite_info: { Args: { p_token: string }; Returns: Json }
       get_user_id_by_email: { Args: { lookup_email: string }; Returns: string }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }

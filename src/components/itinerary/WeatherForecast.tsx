@@ -39,7 +39,7 @@ interface WeatherData {
     precipitation: number;
   };
   forecast: WeatherDay[];
-  source: 'weatherstack' | 'fallback';
+  source: 'open-meteo' | 'weatherstack' | 'fallback';
 }
 
 interface WeatherForecastProps {
@@ -199,16 +199,25 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
 
           {/* Forecast Grid */}
           <div className="px-6 pb-6">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
-              {tripDays}-Day Forecast
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Your Trip Forecast
+              </p>
+              {weather.source === 'fallback' && (
+                <Badge variant="outline" className="text-xs">
+                  Seasonal Estimates
+                </Badge>
+              )}
+            </div>
             <div className={cn(
               "grid gap-2",
-              tripDays <= 4 ? "grid-cols-4" : tripDays <= 5 ? "grid-cols-5" : "grid-cols-7"
+              tripDays <= 4 ? "grid-cols-4" : tripDays <= 5 ? "grid-cols-5" : tripDays <= 7 ? "grid-cols-7" : "grid-cols-8"
             )}>
-              {weather.forecast.slice(0, Math.min(tripDays, 7)).map((day, idx) => {
+              {weather.forecast.slice(0, Math.min(tripDays, 8)).map((day, idx) => {
                 const dayDate = parseISO(day.date);
-                const isToday = idx === 0;
+                const todayDate = new Date();
+                const isTodayActual = format(dayDate, 'yyyy-MM-dd') === format(todayDate, 'yyyy-MM-dd');
+                const dayNumber = idx + 1;
                 
                 return (
                   <motion.div
@@ -218,16 +227,21 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
                     transition={{ delay: idx * 0.05 }}
                     className={cn(
                       "rounded-xl p-3 text-center transition-all",
-                      isToday 
+                      isTodayActual 
                         ? "bg-primary/10 border-2 border-primary/30 shadow-md" 
                         : "bg-background/60 hover:bg-background/80"
                     )}
                   >
                     <p className={cn(
-                      "text-xs font-medium mb-2",
-                      isToday ? "text-primary" : "text-muted-foreground"
+                      "text-[10px] font-medium text-muted-foreground mb-0.5"
                     )}>
-                      {isToday ? 'Today' : format(dayDate, 'EEE')}
+                      Day {dayNumber}
+                    </p>
+                    <p className={cn(
+                      "text-xs font-medium mb-2",
+                      isTodayActual ? "text-primary" : "text-foreground"
+                    )}>
+                      {format(dayDate, 'MMM d')}
                     </p>
                     <div className="flex justify-center mb-2">
                       {getWeatherIcon(day.condition, 'sm')}
@@ -241,6 +255,11 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
                         <Droplets className="h-3 w-3" />
                         <span className="text-xs">{day.precipitation}%</span>
                       </div>
+                    )}
+                    {isTodayActual && (
+                      <Badge variant="secondary" className="text-[9px] mt-1 px-1.5">
+                        Today
+                      </Badge>
                     )}
                   </motion.div>
                 );
