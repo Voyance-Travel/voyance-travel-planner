@@ -183,42 +183,90 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Build SQL filter for dirty records - must match isDirty() logic
-    // Dirty = templated description OR description too short OR bad coordinates OR no description
-    const templatedDescFilter = TEMPLATED_DESCRIPTIONS
-      .map(d => `description.ilike.%${d.substring(0, 30)}%`)
-      .join(',');
+    // Use RPC or simpler approach - fetch in batches and filter
+    // The complex JSON path filtering doesn't work well in PostgREST .or()
     
-    // Get total dirty count first
-    const { count: totalDirty, error: countError } = await supabase
+    // First get a rough count of potentially dirty records (null descriptions or all)
+    const { count: totalCount, error: countError } = await supabase
       .from("activities")
-      .select("*", { count: "exact", head: true })
-      .or(`description.is.null,${templatedDescFilter},and(coordinates->lat.lt.1,coordinates->lat.gt.-1,coordinates->lng.lt.1,coordinates->lng.gt.-1)`);
+      .select("*", { count: "exact", head: true });
+    
     if (countError) throw countError;
-    const dirtyCount = totalDirty ?? 0;
-
-    // Get batch to process (for live runs, always start from 0 since dirty pool shrinks)
+    
+    // Fetch a larger batch and filter in JS (more reliable than complex PostgREST filters)
+    // For efficiency, paginate through all records
+    const pageSize = 500; // Fetch more, filter down
     const effectiveOffset = dryRun ? offset : 0;
     
-    // Fetch dirty records with proper pagination
-    const { data: batch, error: batchError } = await supabase
-      .from("activities")
-      .select("id, name, description, category, destination_id, coordinates, best_times, accessibility_info")
-      .or(`description.is.null,${templatedDescFilter},and(coordinates->lat.lt.1,coordinates->lat.gt.-1,coordinates->lng.lt.1,coordinates->lng.gt.-1)`)
-      .range(effectiveOffset, effectiveOffset + limit - 1);
-
-    if (batchError) throw batchError;
-
+    // Calculate which page of raw data we need
+    const rawPage = Math.floor(effectiveOffset / pageSize);
+    
+    let allDirtyActivities: Activity[] = [];
+    let currentPage = 0;
+    let scannedTotal = 0;
+    
+    // Scan through pages until we have enough dirty records
+    while (allDirtyActivities.length < effectiveOffset + limit) {
+      const { data: pageData, error: pageError } = await supabase
+        .from("activities")
+        .select("id, name, description, category, destination_id, coordinates, best_times, accessibility_info")
+        .range(currentPage * pageSize, (currentPage + 1) * pageSize - 1)
+        .order("id");
+      
+      if (pageError) throw pageError;
+      if (!pageData || pageData.length === 0) break;
+      
+      scannedTotal += pageData.length;
+      
+      // Filter for dirty records
+      const dirtyInPage = pageData.filter(isDirty);
+      allDirtyActivities = allDirtyActivities.concat(dirtyInPage);
+      
+      currentPage++;
+      
+      // Safety: don't scan forever
+      if (currentPage > 50) break;
+    }
+    
+    const dirtyCount = allDirtyActivities.length;
+    
+    // Get batch to process
+    const batch = allDirtyActivities.slice(effectiveOffset, effectiveOffset + limit);
+    
     if (batch.length === 0) {
+      // If we haven't scanned everything, there might be more
+      const hasMore = scannedTotal < (totalCount ?? 0);
+      
+      if (hasMore && dryRun) {
+        // There might be dirty records in unscanned pages
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Scanned batch complete, more pages may exist",
+            dryRun,
+            processed: 0,
+            offset: effectiveOffset,
+            nextOffset: scannedTotal,
+            complete: false,
+            hasMore: true,
+            totalCount: dirtyCount,
+            stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
+            results: [],
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // No more dirty records
       return new Response(
         JSON.stringify({
           success: true,
           message: "No dirty activities to process",
           dryRun,
-          processed: 0, // Top-level for UI compatibility
+          processed: 0,
           offset: 0,
           nextOffset: 0,
-          complete: true, // Signal completion
+          complete: true,
           hasMore: false,
           totalCount: dirtyCount,
           stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
