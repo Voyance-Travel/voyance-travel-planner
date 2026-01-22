@@ -2993,6 +2993,7 @@ function DayCard({
                   isEditable={isEditable}
                   travelers={travelers}
                   budgetTier={budgetTier}
+                  tripCurrency={tripCurrency}
                   tripId={tripId}
                   existingPayment={getPaymentForItem('activity', activity.id)}
                   onPaymentSuccess={refreshPayments}
@@ -3031,7 +3032,7 @@ function DayCard({
                     </Button>
                   )}
                   <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                    Day Total: {totalCost > 0 ? `$${totalCost.toLocaleString()}` : 'Free'}
+                    Day Total: {formatCurrency(totalCost, tripCurrency)}
                   </span>
                 </div>
               </div>
@@ -3066,6 +3067,7 @@ interface ActivityRowProps {
   isEditable: boolean;
   travelers: number;
   budgetTier?: string;
+  tripCurrency: string; // User's preferred display currency
   tripId: string;
   existingPayment?: TripPayment;
   onPaymentSuccess: () => void;
@@ -3087,6 +3089,7 @@ function ActivityRow({
   isEditable,
   travelers,
   budgetTier,
+  tripCurrency,
   tripId,
   existingPayment,
   onPaymentSuccess,
@@ -3101,7 +3104,7 @@ function ActivityRow({
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
   const cost = getActivityCost(activity, travelers, budgetTier);
-  const costCurrency = activity.cost?.currency || 'USD';
+  // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
   
@@ -3320,7 +3323,7 @@ function ActivityRow({
                     <span>• {activity.transportation.distance}</span>
                   )}
                   {activity.transportation.estimatedCost?.amount && activity.transportation.estimatedCost.amount > 0 && (
-                    <span>• ~{formatCurrency(activity.transportation.estimatedCost.amount, activity.transportation.estimatedCost.currency || costCurrency)}</span>
+                    <span>• ~{formatCurrency(activity.transportation.estimatedCost.amount, activity.transportation.estimatedCost.currency || tripCurrency)}</span>
                   )}
                 </div>
                 {activity.transportation.instructions && (
@@ -3334,7 +3337,7 @@ function ActivityRow({
 
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
-            <span className="font-medium">{formatCurrency(cost, costCurrency)}</span>
+            <span className="font-medium">{formatCurrency(cost, tripCurrency)}</span>
             {/* Booking state actions - replaces static vendor links */}
             <InlineBookingActions
               activity={{
