@@ -601,7 +601,7 @@ export default function TripDetail() {
       <Head title={`${trip.name} | Voyance`} />
       
       {/* Hero Destination Image */}
-      <div className="relative h-48 md:h-64 -mt-16">
+      <div className="relative h-56 md:h-72 -mt-16">
         <DynamicDestinationPhotos
           destination={trip.destination}
           startDate={trip.start_date}
@@ -611,25 +611,26 @@ export default function TripDetail() {
           hideOverlayText
           className="!rounded-none"
         />
-        {/* Subtle bottom fade for content transition - avoid washing out the image */}
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
-      </div>
-      
-      <section className="pb-16 -mt-8 relative z-10">
-        <div className="max-w-4xl mx-auto px-4">
-          {/* Back Button */}
+        {/* Back Button - positioned on hero */}
+        <div className="absolute top-20 left-4 md:left-8 z-20">
           <Button
             variant="ghost"
-            onClick={() => navigate(-1)}
-            className="mb-6 bg-background/80 backdrop-blur-sm"
+            onClick={() => navigate('/profile')}
+            className="bg-background/90 backdrop-blur-sm hover:bg-background shadow-sm"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
-
-          {/* Status Badge for non-active trips */}
+        </div>
+        {/* Subtle bottom fade for content transition */}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-background to-transparent" />
+      </div>
+      
+      <section className="pb-16 pt-6 relative z-10">
+        <div className="max-w-4xl mx-auto px-4">
+          {/* Status Badge and Actions for non-active trips */}
           {!isLiveTrip && (
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex flex-wrap items-center gap-3 mb-8">
               <Badge 
                 variant={
                   trip.status === 'completed' ? 'secondary' : 
@@ -646,16 +647,17 @@ export default function TripDetail() {
                 {format(parseISO(trip.start_date), 'MMM d')} - {format(parseISO(trip.end_date), 'MMM d, yyyy')}
               </div>
 
-              {trip.status === 'draft' || trip.status === 'planning' ? (
+              {(trip.status === 'draft' || trip.status === 'planning') && (
                 <Button 
                   variant="outline" 
                   size="sm"
                   onClick={() => navigate(`/planner?tripId=${trip.id}`)}
+                  className="ml-auto"
                 >
                   <Edit className="w-4 h-4 mr-2" />
                   Continue Planning
                 </Button>
-              ) : null}
+              )}
             </div>
           )}
 
