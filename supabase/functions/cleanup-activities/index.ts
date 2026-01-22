@@ -202,8 +202,14 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           message: "No dirty activities to process",
-          stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
+          dryRun,
+          processed: 0, // Top-level for UI compatibility
+          offset: 0,
+          nextOffset: 0,
+          complete: true, // Signal completion
+          hasMore: false,
           totalCount: totalDirty,
+          stats: { processed: 0, cleaned: 0, skipped: 0, errors: 0 },
           results: [],
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -279,22 +285,32 @@ serve(async (req) => {
       }
     }
 
+    // Calculate if complete
+    const hasMore = dryRun 
+      ? effectiveOffset + results.length < totalDirty 
+      : cleaned > 0; // For live runs, continue if we cleaned anything
+
     return new Response(
       JSON.stringify({
         success: true,
+        message: `Processed ${results.length} activities`,
         dryRun,
+        processed: results.length, // Top-level for UI compatibility
+        offset: effectiveOffset,
+        nextOffset: dryRun ? effectiveOffset + results.length : 0,
+        complete: !hasMore, // UI expects 'complete' flag
+        hasMore,
+        totalCount: totalDirty,
         stats: {
           processed: results.length,
           cleaned,
           skipped,
           errors,
         },
-        totalCount: totalDirty,
-        nextOffset: dryRun ? effectiveOffset + results.length : 0,
-        hasMore: dryRun 
-          ? effectiveOffset + results.length < totalDirty 
-          : cleaned > 0, // For live runs, continue if we cleaned anything
-        results,
+        results: results.map(r => ({
+          ...r,
+          status: r.status === 'cleaned' ? 'updated' : r.status === 'skipped' ? 'no_changes_needed' : r.status,
+        })), // Map statuses to match UI expectations
         executionTimeMs: Date.now() - startTime,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
