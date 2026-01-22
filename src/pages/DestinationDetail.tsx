@@ -28,6 +28,8 @@ import { Badge } from '@/components/ui/badge';
 import { ActivityModal } from '@/components/ActivityModal';
 import { getDestinationById, getActivitiesByDestination, type Activity, type Destination } from '@/lib/destinations';
 import { getDestinationByCity } from '@/services/supabase/destinations';
+import { getAttractionsByDestination } from '@/services/supabase/attractions';
+import { getActivitiesByDestination as getDbActivities } from '@/services/supabase/activities';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 
@@ -43,7 +45,7 @@ export default function DestinationDetail() {
   
   // First try static destinations
   const staticDestination = getDestinationById(slug || '');
-  const activities = getActivitiesByDestination(slug || '');
+  const staticActivities = getActivitiesByDestination(slug || '');
   
   // If not found in static, try database (by city name from slug)
   const cityName = slug?.replace(/-/g, ' ') || '';
@@ -52,6 +54,22 @@ export default function DestinationDetail() {
     queryFn: () => getDestinationByCity(cityName),
     enabled: !staticDestination && !!slug,
     staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+  });
+  
+  // Fetch database attractions when we have a DB destination
+  const { data: dbAttractions } = useQuery({
+    queryKey: ['attractions-by-destination', dbDestination?.id],
+    queryFn: () => getAttractionsByDestination(dbDestination!.id, 50),
+    enabled: !!dbDestination?.id && !staticDestination,
+    staleTime: 1000 * 60 * 10,
+  });
+  
+  // Fetch database activities when we have a DB destination
+  const { data: dbActivities } = useQuery({
+    queryKey: ['activities-by-destination', dbDestination?.id],
+    queryFn: () => getDbActivities(dbDestination!.id, 50),
+    enabled: !!dbDestination?.id && !staticDestination,
+    staleTime: 1000 * 60 * 10,
   });
   
   // Convert database destination to match static format
@@ -74,6 +92,49 @@ export default function DestinationDetail() {
       bestMonths: dbDestination.best_time_to_visit?.split(',').map((m: string) => m.trim()) || undefined,
     };
   }, [staticDestination, dbDestination]);
+  
+  // Combine activities: use static if available, else convert DB attractions + activities
+  const activities: Activity[] = useMemo(() => {
+    // If we have static activities, use those
+    if (staticActivities.length > 0) return staticActivities;
+    
+    // Convert DB attractions to Activity format
+    const attractionsAsActivities: Activity[] = (dbAttractions || []).map(attr => ({
+      id: attr.id,
+      destinationId: attr.destination_id,
+      title: attr.name,
+      description: attr.description || '',
+      category: (attr.category?.toLowerCase() || 'culture') as Activity['category'],
+      duration: attr.visit_duration_mins ? `${Math.round(attr.visit_duration_mins / 60)}h` : undefined,
+      priceTier: 'moderate' as const, // Default since attractions don't have price_level
+      neighborhood: attr.address || undefined,
+    }));
+    
+    // Convert DB activities to Activity format
+    const activitiesAsActivities: Activity[] = (dbActivities || []).map(act => ({
+      id: act.id,
+      destinationId: act.destination_id,
+      title: act.name,
+      description: act.description || '',
+      category: (act.category?.toLowerCase() || 'culture') as Activity['category'],
+      duration: act.duration_minutes ? `${Math.round(act.duration_minutes / 60)}h` : undefined,
+      priceTier: 'moderate' as const,
+    }));
+    
+    // Merge and deduplicate by title
+    const seen = new Set<string>();
+    const combined: Activity[] = [];
+    
+    for (const act of [...attractionsAsActivities, ...activitiesAsActivities]) {
+      const key = act.title.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(act);
+      }
+    }
+    
+    return combined;
+  }, [staticActivities, dbAttractions, dbActivities]);
   
   // Loading state for database fetch
   if (!staticDestination && isLoadingDb) {
