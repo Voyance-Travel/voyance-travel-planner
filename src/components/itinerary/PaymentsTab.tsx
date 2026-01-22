@@ -79,6 +79,8 @@ export function PaymentsTab({
   const [markingPaid, setMarkingPaid] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>('essentials');
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
 
   // Mock group members - would come from trip_members table
   const [groupMembers] = useState<GroupMember[]>([
@@ -631,11 +633,58 @@ export function PaymentsTab({
             <div>
               <Label>Invite by Email</Label>
               <div className="flex gap-2 mt-2">
-                <Input placeholder="friend@email.com" className="flex-1" />
-                <Button>Send Invite</Button>
+                <Input 
+                  placeholder="friend@email.com" 
+                  className="flex-1"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                />
+                <Button 
+                  disabled={isSendingInvite || !inviteEmail.includes('@')}
+                  onClick={async () => {
+                    setIsSendingInvite(true);
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) {
+                        toast.error('Please sign in to invite members');
+                        return;
+                      }
+                      
+                      // Create invite with email
+                      const { data: invite, error } = await supabase
+                        .from('trip_invites')
+                        .insert({
+                          trip_id: tripId,
+                          invited_by: user.id,
+                          email: inviteEmail,
+                          max_uses: 1,
+                          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                        })
+                        .select('token')
+                        .single();
+                      
+                      if (error) throw error;
+                      
+                      const inviteLink = `${window.location.origin}/invite/${invite.token}`;
+                      
+                      // Open email client with invite
+                      window.open(`mailto:${inviteEmail}?subject=Join my trip!&body=You're invited to join my trip! Click here: ${encodeURIComponent(inviteLink)}`, '_blank');
+                      
+                      toast.success(`Invite created for ${inviteEmail}`);
+                      setInviteEmail('');
+                    } catch (err) {
+                      console.error('Failed to create invite:', err);
+                      toast.error('Failed to send invite');
+                    } finally {
+                      setIsSendingInvite(false);
+                    }
+                  }}
+                >
+                  {isSendingInvite ? 'Sending...' : 'Send Invite'}
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                They'll be able to view the itinerary and track their share of expenses.
+                They'll receive a link to join this trip and track their share of expenses.
               </p>
             </div>
 
@@ -646,9 +695,9 @@ export function PaymentsTab({
                   <div className="font-medium mb-1">Equal Split</div>
                   <p className="text-xs text-muted-foreground">Divide all costs evenly</p>
                 </button>
-                <button className="p-4 rounded-lg border border-border hover:border-primary/50 text-left transition-colors">
+                <button className="p-4 rounded-lg border border-border hover:border-primary/50 text-left transition-colors opacity-50 cursor-not-allowed">
                   <div className="font-medium mb-1">Custom Split</div>
-                  <p className="text-xs text-muted-foreground">Assign specific items to members</p>
+                  <p className="text-xs text-muted-foreground">Coming soon</p>
                 </button>
               </div>
             </div>
@@ -656,13 +705,7 @@ export function PaymentsTab({
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGroupModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => {
-              toast.success('Group payment feature coming soon!');
-              setShowGroupModal(false);
-            }}>
-              Save Configuration
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>
