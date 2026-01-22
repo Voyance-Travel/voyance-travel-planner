@@ -473,6 +473,17 @@ interface FlightHotelContextResult {
   hotelAddress?: string;
 }
 
+// Airport transfer fare data from database
+interface AirportTransferFare {
+  taxiCostMin: number | null;
+  taxiCostMax: number | null;
+  trainCost: number | null;
+  busCost: number | null;
+  currency: string;
+  currencySymbol: string;
+  taxiIsFixedPrice: boolean;
+}
+
 function parseTimeToMinutes(timeStr: string): number | null {
   if (!timeStr) return null;
   const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -503,6 +514,45 @@ function normalizeTo24h(timeStr: string): string | null {
   const mins = parseTimeToMinutes(timeStr);
   if (mins === null) return null;
   return minutesToHHMM(mins);
+}
+
+/**
+ * Fetch airport transfer fare from database to sync with Airport Game Plan
+ */
+async function getAirportTransferFare(supabase: any, city: string, airportCode?: string): Promise<AirportTransferFare | null> {
+  try {
+    let query = supabase
+      .from('airport_transfer_fares')
+      .select('taxi_cost_min, taxi_cost_max, train_cost, bus_cost, currency, currency_symbol, taxi_is_fixed_price')
+      .ilike('city', city);
+    
+    if (airportCode) {
+      query = query.eq('airport_code', airportCode.toUpperCase());
+    }
+    
+    const { data, error } = await query.limit(1);
+    
+    if (error || !data?.length) {
+      console.log(`[AirportFare] No fare found for ${city}${airportCode ? ` (${airportCode})` : ''}`);
+      return null;
+    }
+    
+    const fare = data[0];
+    console.log(`[AirportFare] Found fare for ${city}: taxi €${fare.taxi_cost_min}-${fare.taxi_cost_max}, train €${fare.train_cost}`);
+    
+    return {
+      taxiCostMin: fare.taxi_cost_min,
+      taxiCostMax: fare.taxi_cost_max,
+      trainCost: fare.train_cost,
+      busCost: fare.bus_cost,
+      currency: fare.currency || 'EUR',
+      currencySymbol: fare.currency_symbol || '€',
+      taxiIsFixedPrice: fare.taxi_is_fixed_price || false,
+    };
+  } catch (e) {
+    console.error('[AirportFare] Error fetching fare:', e);
+    return null;
+  }
 }
 
 async function getFlightHotelContext(supabase: any, tripId: string): Promise<FlightHotelContextResult> {
@@ -2103,19 +2153,28 @@ serve(async (req) => {
         }
       }
       
+      // =======================================================================
+      // AIRPORT TRANSFER FARE - Fetch from database to sync with Airport Game Plan
+      // =======================================================================
+      console.log("[Stage 1.5] Fetching airport transfer fares from database...");
+      const airportFare = await getAirportTransferFare(supabase, context.destination);
+      if (airportFare) {
+        console.log(`[Stage 1.5] Found airport fare: taxi ${airportFare.currencySymbol}${airportFare.taxiCostMin}-${airportFare.taxiCostMax}`);
+      }
+      
       // Build raw preference context (structured data)
       const rawPreferenceContext = buildPreferenceContext(insights, prefs);
       
-      // STAGE 1.5: AI-Enrich preferences ("fluffing" layer)
+      // STAGE 1.6: AI-Enrich preferences ("fluffing" layer)
       // Transform raw preferences into rich, detailed AI guidance
-      console.log("[Stage 1.5] Enriching preferences with AI...");
+      console.log("[Stage 1.6] Enriching preferences with AI...");
       let enrichedPreferenceContext = "";
       if (prefs && Object.values(prefs).some(v => v !== null)) {
         try {
           enrichedPreferenceContext = await enrichPreferencesWithAI(prefs, context.destination, LOVABLE_API_KEY);
-          console.log("[Stage 1.5] Preference enrichment complete");
+          console.log("[Stage 1.6] Preference enrichment complete");
         } catch (enrichError) {
-          console.warn("[Stage 1.5] Preference enrichment failed, using raw context:", enrichError);
+          console.warn("[Stage 1.6] Preference enrichment failed, using raw context:", enrichError);
         }
       }
       
@@ -2141,6 +2200,67 @@ serve(async (req) => {
           JSON.stringify({ error: "No itinerary generated" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+      
+      // =======================================================================
+      // STAGE 2.5: Apply real airport transfer costs from database
+      // This syncs the "Airport Transfer to Hotel" activity cost with Airport Game Plan
+      // =======================================================================
+      if (airportFare && aiResult.days.length > 0) {
+        console.log("[Stage 2.5] Applying real airport transfer costs to Day 1...");
+        const day1 = aiResult.days[0];
+        day1.activities = day1.activities.map((act: StrictActivity) => {
+          // Match airport transfer activities by title or category
+          const isAirportTransfer = 
+            act.title.toLowerCase().includes('airport transfer') ||
+            act.title.toLowerCase().includes('transfer to hotel') ||
+            act.title.toLowerCase().includes('transfer from airport') ||
+            (act.category === 'transport' && act.title.toLowerCase().includes('airport'));
+          
+          if (isAirportTransfer) {
+            // Use taxi cost as default (most common transfer option)
+            const transferCost = airportFare.taxiCostMax ?? airportFare.taxiCostMin ?? 50;
+            console.log(`[Stage 2.5] Setting "${act.title}" cost to ${airportFare.currencySymbol}${transferCost} (from database)`);
+            return {
+              ...act,
+              cost: {
+                amount: transferCost,
+                currency: airportFare.currency,
+                formatted: `${airportFare.currencySymbol}${transferCost} ${airportFare.currency}`,
+                source: 'database' // Mark as sourced from verified database
+              }
+            };
+          }
+          return act;
+        });
+        aiResult.days[0] = day1;
+        
+        // Also apply to last day for return transfer
+        if (aiResult.days.length > 1) {
+          const lastDay = aiResult.days[aiResult.days.length - 1];
+          lastDay.activities = lastDay.activities.map((act: StrictActivity) => {
+            const isAirportTransfer = 
+              act.title.toLowerCase().includes('transfer to airport') ||
+              act.title.toLowerCase().includes('airport transfer') ||
+              (act.category === 'transport' && act.title.toLowerCase().includes('airport'));
+            
+            if (isAirportTransfer) {
+              const transferCost = airportFare.taxiCostMax ?? airportFare.taxiCostMin ?? 50;
+              console.log(`[Stage 2.5] Setting "${act.title}" cost to ${airportFare.currencySymbol}${transferCost} (from database)`);
+              return {
+                ...act,
+                cost: {
+                  amount: transferCost,
+                  currency: airportFare.currency,
+                  formatted: `${airportFare.currencySymbol}${transferCost} ${airportFare.currency}`,
+                  source: 'database'
+                }
+              };
+            }
+            return act;
+          });
+          aiResult.days[aiResult.days.length - 1] = lastDay;
+        }
       }
 
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
