@@ -43,6 +43,30 @@ const destinationImages: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1552733407-5d5c46c3bb3b?w=1200',
     'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=1200',
   ],
+  'Kyoto, Japan': [
+    'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200',
+    'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=1200',
+    'https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=1200',
+    'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=1200',
+  ],
+  'Santorini, Greece': [
+    'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=1200',
+    'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1200',
+    'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1200',
+    'https://images.unsplash.com/photo-1601581875039-e899893d520c?w=1200',
+  ],
+  'Reykjavik, Iceland': [
+    'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=1200',
+    'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=1200',
+    'https://images.unsplash.com/photo-1490726486817-f92820e65d98?w=1200',
+    'https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=1200',
+  ],
+  'Tokyo, Japan': [
+    'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=1200',
+    'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200',
+    'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=1200',
+    'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=1200',
+  ],
 };
 
 export default function SampleItinerary() {

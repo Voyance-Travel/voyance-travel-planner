@@ -171,7 +171,7 @@ export default function ItineraryShowcase() {
               
               <div className="flex gap-3">
                 <Button variant="outline" size="sm" className="font-sans text-sm" asChild>
-                  <Link to={ROUTES.ITINERARY.SAMPLE}>
+                  <Link to={`${ROUTES.ITINERARY.SAMPLE}?destination=${activeItinerary.id}`}>
                     View Details
                     <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
                   </Link>
