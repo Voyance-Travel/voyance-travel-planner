@@ -1524,6 +1524,96 @@ export type Database = {
         }
         Relationships: []
       }
+      airport_transfer_fares: {
+        Row: {
+          airport_code: string | null
+          airport_name: string | null
+          bus_cost: number | null
+          bus_duration_max: number | null
+          bus_duration_min: number | null
+          bus_notes: string | null
+          city: string
+          confidence_score: number | null
+          created_at: string
+          currency: string
+          currency_symbol: string
+          destination_zone: string | null
+          id: string
+          last_verified_at: string
+          source: string | null
+          taxi_cost_max: number | null
+          taxi_cost_min: number | null
+          taxi_duration_max: number | null
+          taxi_duration_min: number | null
+          taxi_is_fixed_price: boolean | null
+          taxi_notes: string | null
+          train_cost: number | null
+          train_duration_max: number | null
+          train_duration_min: number | null
+          train_line: string | null
+          train_notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          airport_code?: string | null
+          airport_name?: string | null
+          bus_cost?: number | null
+          bus_duration_max?: number | null
+          bus_duration_min?: number | null
+          bus_notes?: string | null
+          city: string
+          confidence_score?: number | null
+          created_at?: string
+          currency?: string
+          currency_symbol?: string
+          destination_zone?: string | null
+          id?: string
+          last_verified_at?: string
+          source?: string | null
+          taxi_cost_max?: number | null
+          taxi_cost_min?: number | null
+          taxi_duration_max?: number | null
+          taxi_duration_min?: number | null
+          taxi_is_fixed_price?: boolean | null
+          taxi_notes?: string | null
+          train_cost?: number | null
+          train_duration_max?: number | null
+          train_duration_min?: number | null
+          train_line?: string | null
+          train_notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          airport_code?: string | null
+          airport_name?: string | null
+          bus_cost?: number | null
+          bus_duration_max?: number | null
+          bus_duration_min?: number | null
+          bus_notes?: string | null
+          city?: string
+          confidence_score?: number | null
+          created_at?: string
+          currency?: string
+          currency_symbol?: string
+          destination_zone?: string | null
+          id?: string
+          last_verified_at?: string
+          source?: string | null
+          taxi_cost_max?: number | null
+          taxi_cost_min?: number | null
+          taxi_duration_max?: number | null
+          taxi_duration_min?: number | null
+          taxi_is_fixed_price?: boolean | null
+          taxi_notes?: string | null
+          train_cost?: number | null
+          train_duration_max?: number | null
+          train_duration_min?: number | null
+          train_line?: string | null
+          train_notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       airports: {
         Row: {
           city: string | null
