@@ -60,7 +60,7 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { batchSize = 3, offset = 0, dryRun = true, priorityOnly = false } = await req.json();
+    const { batchSize = 10, offset = 0, dryRun = true, priorityOnly = false } = await req.json();
     console.log(`[enrich-destinations] Processing batch: offset=${offset}, batchSize=${batchSize}, dryRun=${dryRun}`);
 
     // Fetch destinations needing transport/local knowledge enrichment
@@ -96,81 +96,83 @@ serve(async (req) => {
     console.log(`[enrich-destinations] Found ${destinations.length} destinations to enrich`);
     const results: { id: string; city: string; status: string; changes?: object }[] = [];
 
-    for (const dest of destinations) {
-      const destStartTime = Date.now();
-      
-      // Check if we're running low on time (45 second safety margin)
-      if (Date.now() - startTime > 45000) {
+    // Process in parallel batches of 4 for speed
+    const PARALLEL_SIZE = 4;
+    for (let i = 0; i < destinations.length; i += PARALLEL_SIZE) {
+      // Check if we're running low on time (50s safety margin)
+      if (Date.now() - startTime > 50000) {
         console.log(`[enrich-destinations] Time limit approaching, stopping early`);
-        results.push({ id: dest.id, city: dest.city, status: 'skipped_timeout' });
-        continue;
-      }
-
-      try {
-        console.log(`[enrich-destinations] Enriching: ${dest.city}, ${dest.country}`);
-        
-        // Get comprehensive local knowledge from AI
-        const enriched = await enrichWithLocalKnowledge(dest, LOVABLE_API_KEY);
-        
-        if (enriched) {
-          const updates: Record<string, unknown> = {
-            default_transport_modes: enriched.transportModes,
-            updated_at: new Date().toISOString()
-          };
-
-          // Update description if current one is weak
-          if (!dest.description || dest.description.length < 100) {
-            updates.description = enriched.description;
-          }
-
-          // Enrich known_for if sparse
-          if (!dest.known_for || dest.known_for.length < 5) {
-            updates.known_for = enriched.knownFor;
-          }
-
-          // Enrich points_of_interest if sparse
-          if (!dest.points_of_interest || dest.points_of_interest.length < 5) {
-            updates.points_of_interest = enriched.pointsOfInterest;
-          }
-
-          if (!dryRun) {
-            const { error: updateError } = await supabase
-              .from('destinations')
-              .update(updates)
-              .eq('id', dest.id);
-            
-            if (updateError) {
-              console.error(`[enrich-destinations] Update error for ${dest.city}:`, updateError);
-              throw updateError;
-            }
-          }
-          
-          const elapsed = Date.now() - destStartTime;
-          console.log(`[enrich-destinations] ${dest.city}: enriched with ${enriched.transportModes.length} transport modes (${elapsed}ms)`);
-          
-          results.push({
-            id: dest.id,
-            city: dest.city,
-            status: dryRun ? 'would_update' : 'updated',
-            changes: {
-              transportModes: enriched.transportModes,
-              localTips: enriched.localTips,
-              gettingAround: enriched.gettingAround
-            }
-          });
-        } else {
-          console.log(`[enrich-destinations] ${dest.city}: AI returned null`);
-          results.push({ id: dest.id, city: dest.city, status: 'ai_failed' });
+        for (let j = i; j < destinations.length; j++) {
+          results.push({ id: destinations[j].id, city: destinations[j].city, status: 'skipped_timeout' });
         }
-      } catch (destError) {
-        console.error(`[enrich-destinations] Error processing ${dest.city}:`, destError);
-        results.push({ 
-          id: dest.id, 
-          city: dest.city, 
-          status: 'error',
-          changes: { error: destError instanceof Error ? destError.message : 'Unknown error' }
-        });
+        break;
       }
+
+      const batch = destinations.slice(i, i + PARALLEL_SIZE);
+      const batchResults = await Promise.all(batch.map(async (dest) => {
+        const destStartTime = Date.now();
+        try {
+          console.log(`[enrich-destinations] Enriching: ${dest.city}, ${dest.country}`);
+          
+          const enriched = await enrichWithLocalKnowledge(dest, LOVABLE_API_KEY);
+          
+          if (enriched) {
+            const updates: Record<string, unknown> = {
+              default_transport_modes: enriched.transportModes,
+              updated_at: new Date().toISOString()
+            };
+
+            if (!dest.description || dest.description.length < 100) {
+              updates.description = enriched.description;
+            }
+            if (!dest.known_for || dest.known_for.length < 5) {
+              updates.known_for = enriched.knownFor;
+            }
+            if (!dest.points_of_interest || dest.points_of_interest.length < 5) {
+              updates.points_of_interest = enriched.pointsOfInterest;
+            }
+
+            if (!dryRun) {
+              const { error: updateError } = await supabase
+                .from('destinations')
+                .update(updates)
+                .eq('id', dest.id);
+              
+              if (updateError) {
+                console.error(`[enrich-destinations] Update error for ${dest.city}:`, updateError);
+                throw updateError;
+              }
+            }
+            
+            const elapsed = Date.now() - destStartTime;
+            console.log(`[enrich-destinations] ${dest.city}: enriched with ${enriched.transportModes.length} transport modes (${elapsed}ms)`);
+            
+            return {
+              id: dest.id,
+              city: dest.city,
+              status: dryRun ? 'would_update' : 'updated',
+              changes: {
+                transportModes: enriched.transportModes,
+                localTips: enriched.localTips,
+                gettingAround: enriched.gettingAround
+              }
+            };
+          } else {
+            console.log(`[enrich-destinations] ${dest.city}: AI returned null`);
+            return { id: dest.id, city: dest.city, status: 'ai_failed' };
+          }
+        } catch (destError) {
+          console.error(`[enrich-destinations] Error processing ${dest.city}:`, destError);
+          return { 
+            id: dest.id, 
+            city: dest.city, 
+            status: 'error',
+            changes: { error: destError instanceof Error ? destError.message : 'Unknown error' }
+          };
+        }
+      }));
+      
+      results.push(...batchResults);
     }
 
     const totalTime = Date.now() - startTime;
@@ -266,7 +268,7 @@ Return ONLY valid JSON, no markdown or explanations.`;
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -275,7 +277,7 @@ Return ONLY valid JSON, no markdown or explanations.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash", // Use better model for quality local knowledge
+        model: "google/gemini-2.5-flash-lite", // Fast model for bulk processing
         messages: [
           { 
             role: "system", 
