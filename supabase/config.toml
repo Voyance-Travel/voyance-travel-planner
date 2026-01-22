@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.cleanup-destinations]
 verify_jwt = false
+
+[functions.transfer-pricing]
+verify_jwt = false

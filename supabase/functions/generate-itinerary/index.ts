@@ -38,7 +38,7 @@ interface StrictActivity {
     address: string;
     coordinates?: { lat: number; lng: number };
   };
-  cost: { amount: number; currency: string; formatted?: string };
+  cost: { amount: number; currency: string; formatted?: string; source?: 'viator' | 'database' | 'estimated' | 'google' };
   description: string;
   tags: string[];
   bookingRequired: boolean;
@@ -517,7 +517,80 @@ function normalizeTo24h(timeStr: string): string | null {
 }
 
 /**
+ * Dynamic transfer pricing result from transfer-pricing edge function
+ */
+interface DynamicTransferResult {
+  recommendedOption?: {
+    mode: string;
+    priceTotal: number;
+    currency: string;
+    priceFormatted: string;
+    isBookable: boolean;
+    bookingUrl?: string;
+    productCode?: string;
+    source: string;
+    durationMinutes: number;
+  };
+  options: Array<{
+    id: string;
+    mode: string;
+    priceTotal: number;
+    currency: string;
+    priceFormatted: string;
+    isBookable: boolean;
+    bookingUrl?: string;
+    productCode?: string;
+    source: string;
+  }>;
+  source: 'live' | 'database' | 'estimated';
+}
+
+/**
+ * Fetch dynamic transfer pricing from transfer-pricing edge function
+ * This combines Viator, Google Maps, and database fares for accurate pricing
+ */
+async function getDynamicTransferPricing(
+  supabaseUrl: string,
+  origin: string,
+  destination: string,
+  city: string,
+  travelers: number = 2,
+  date?: string
+): Promise<DynamicTransferResult | null> {
+  try {
+    console.log(`[TransferPricing] Fetching dynamic pricing for ${origin} → ${destination}`);
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/transfer-pricing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        origin,
+        destination,
+        city,
+        travelers,
+        date,
+        transferType: origin.toLowerCase().includes('airport') ? 'airport_arrival' : 'point_to_point',
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn('[TransferPricing] Edge function error:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log(`[TransferPricing] Got ${data.options?.length || 0} options, source: ${data.source}`);
+    
+    return data;
+  } catch (e) {
+    console.error('[TransferPricing] Error:', e);
+    return null;
+  }
+}
+
+/**
  * Fetch airport transfer fare from database to sync with Airport Game Plan
+ * Falls back to database query if dynamic pricing fails
  */
 async function getAirportTransferFare(supabase: any, city: string, airportCode?: string): Promise<AirportTransferFare | null> {
   try {
@@ -2154,12 +2227,35 @@ serve(async (req) => {
       }
       
       // =======================================================================
-      // AIRPORT TRANSFER FARE - Fetch from database to sync with Airport Game Plan
+      // AIRPORT TRANSFER FARE - Dynamic pricing with Viator + database + Google Maps
       // =======================================================================
-      console.log("[Stage 1.5] Fetching airport transfer fares from database...");
+      console.log("[Stage 1.5] Fetching dynamic transfer pricing...");
+      
+      // Get hotel address from flight/hotel context for accurate distance calculation
+      const hotelDestination = flightHotelResult.hotelAddress || `${context.destination} city center`;
+      const airportOrigin = `${context.destination} Airport`;
+      
+      // Try dynamic pricing first (Viator + Google Maps + database)
+      let dynamicTransfer: DynamicTransferResult | null = null;
+      try {
+        dynamicTransfer = await getDynamicTransferPricing(
+          supabaseUrl,
+          airportOrigin,
+          hotelDestination,
+          context.destination,
+          context.travelers || 2,
+          context.startDate
+        );
+      } catch (e) {
+        console.warn("[Stage 1.5] Dynamic pricing failed, falling back to database:", e);
+      }
+      
+      // Fallback to database-only if dynamic pricing fails
       const airportFare = await getAirportTransferFare(supabase, context.destination);
-      if (airportFare) {
-        console.log(`[Stage 1.5] Found airport fare: taxi ${airportFare.currencySymbol}${airportFare.taxiCostMin}-${airportFare.taxiCostMax}`);
+      if (dynamicTransfer?.recommendedOption) {
+        console.log(`[Stage 1.5] Dynamic pricing: ${dynamicTransfer.recommendedOption.priceFormatted} (${dynamicTransfer.source})`);
+      } else if (airportFare) {
+        console.log(`[Stage 1.5] Database fare: taxi ${airportFare.currencySymbol}${airportFare.taxiCostMin}-${airportFare.taxiCostMax}`);
       }
       
       // Build raw preference context (structured data)
@@ -2203,63 +2299,89 @@ serve(async (req) => {
       }
       
       // =======================================================================
-      // STAGE 2.5: Apply real airport transfer costs from database
-      // This syncs the "Airport Transfer to Hotel" activity cost with Airport Game Plan
+      // STAGE 2.5: Apply dynamic transfer pricing to airport transfers
+      // Priority: Viator bookable > database verified > estimated
       // =======================================================================
-      if (airportFare && aiResult.days.length > 0) {
-        console.log("[Stage 2.5] Applying real airport transfer costs to Day 1...");
-        const day1 = aiResult.days[0];
-        day1.activities = day1.activities.map((act: StrictActivity) => {
-          // Match airport transfer activities by title or category
+      if (aiResult.days.length > 0) {
+        console.log("[Stage 2.5] Applying dynamic transfer costs...");
+        
+        // Helper to apply transfer pricing to an activity
+        const applyTransferPricing = (act: StrictActivity, isReturn: boolean = false): StrictActivity => {
+          const titleLower = act.title.toLowerCase();
           const isAirportTransfer = 
-            act.title.toLowerCase().includes('airport transfer') ||
-            act.title.toLowerCase().includes('transfer to hotel') ||
-            act.title.toLowerCase().includes('transfer from airport') ||
-            (act.category === 'transport' && act.title.toLowerCase().includes('airport'));
+            titleLower.includes('airport transfer') ||
+            titleLower.includes('transfer to hotel') ||
+            titleLower.includes('transfer from airport') ||
+            titleLower.includes('transfer to airport') ||
+            (act.category === 'transport' && titleLower.includes('airport'));
           
-          if (isAirportTransfer) {
-            // Use taxi cost as default (most common transfer option)
+          if (!isAirportTransfer) return act;
+          
+          // Use dynamic pricing if available (includes Viator bookable options)
+          if (dynamicTransfer?.recommendedOption) {
+            const opt = dynamicTransfer.recommendedOption;
+            console.log(`[Stage 2.5] Setting "${act.title}" to ${opt.priceFormatted} (${opt.source}${opt.isBookable ? ', bookable' : ''})`);
+            
+            const updatedAct: StrictActivity = {
+              ...act,
+              cost: {
+                amount: opt.priceTotal,
+                currency: opt.currency,
+                formatted: opt.priceFormatted,
+                source: opt.source as any,
+              },
+              // Add booking info if Viator product available
+              ...(opt.isBookable && opt.bookingUrl && {
+                bookingRequired: true,
+                tips: act.tips 
+                  ? `${act.tips} • Book your transfer in advance for best rates.`
+                  : 'Book your transfer in advance for best rates.',
+              }),
+            };
+            
+            // Store booking URL in a way the frontend can access
+            if (opt.isBookable && opt.productCode) {
+              (updatedAct as any).viatorProductCode = opt.productCode;
+              (updatedAct as any).bookingUrl = opt.bookingUrl;
+            }
+            
+            return updatedAct;
+          }
+          
+          // Fallback to database fare
+          if (airportFare) {
             const transferCost = airportFare.taxiCostMax ?? airportFare.taxiCostMin ?? 50;
-            console.log(`[Stage 2.5] Setting "${act.title}" cost to ${airportFare.currencySymbol}${transferCost} (from database)`);
+            console.log(`[Stage 2.5] Setting "${act.title}" to ${airportFare.currencySymbol}${transferCost} (database)`);
             return {
               ...act,
               cost: {
                 amount: transferCost,
                 currency: airportFare.currency,
                 formatted: `${airportFare.currencySymbol}${transferCost} ${airportFare.currency}`,
-                source: 'database' // Mark as sourced from verified database
+                source: 'database' as any,
               }
             };
           }
+          
           return act;
-        });
+        };
+        
+        // Apply to Day 1 (arrival transfer)
+        const day1 = aiResult.days[0];
+        day1.activities = day1.activities.map((act: StrictActivity) => applyTransferPricing(act, false));
         aiResult.days[0] = day1;
         
-        // Also apply to last day for return transfer
+        // Apply to last day (departure transfer)
         if (aiResult.days.length > 1) {
           const lastDay = aiResult.days[aiResult.days.length - 1];
-          lastDay.activities = lastDay.activities.map((act: StrictActivity) => {
-            const isAirportTransfer = 
-              act.title.toLowerCase().includes('transfer to airport') ||
-              act.title.toLowerCase().includes('airport transfer') ||
-              (act.category === 'transport' && act.title.toLowerCase().includes('airport'));
-            
-            if (isAirportTransfer) {
-              const transferCost = airportFare.taxiCostMax ?? airportFare.taxiCostMin ?? 50;
-              console.log(`[Stage 2.5] Setting "${act.title}" cost to ${airportFare.currencySymbol}${transferCost} (from database)`);
-              return {
-                ...act,
-                cost: {
-                  amount: transferCost,
-                  currency: airportFare.currency,
-                  formatted: `${airportFare.currencySymbol}${transferCost} ${airportFare.currency}`,
-                  source: 'database'
-                }
-              };
-            }
-            return act;
-          });
+          lastDay.activities = lastDay.activities.map((act: StrictActivity) => applyTransferPricing(act, true));
           aiResult.days[aiResult.days.length - 1] = lastDay;
+        }
+        
+        // Log summary
+        if (dynamicTransfer) {
+          const bookableCount = dynamicTransfer.options.filter(o => o.isBookable).length;
+          console.log(`[Stage 2.5] Transfer pricing complete: ${dynamicTransfer.options.length} options, ${bookableCount} bookable via Viator`);
         }
       }
 
