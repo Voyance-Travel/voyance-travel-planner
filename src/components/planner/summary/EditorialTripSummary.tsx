@@ -230,18 +230,18 @@ export default function EditorialTripSummary({
             </motion.div>
           </div>
           
-          {/* Countdown Badge */}
+          {/* Countdown Badge - positioned within safe bounds */}
           {daysUntilTrip > 0 && (
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.4 }}
-              className="absolute top-6 right-6 md:top-8 md:right-8"
+              className="absolute top-20 md:top-24 right-4 md:right-8 z-10"
             >
-              <div className="bg-white/95 backdrop-blur-md rounded-full px-5 py-3 shadow-xl">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Departing in</p>
-                <p className="text-2xl font-light text-foreground">
-                  {daysUntilTrip} <span className="text-sm">days</span>
+              <div className="bg-background/95 backdrop-blur-md rounded-lg px-4 py-2.5 shadow-lg border border-border/50">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Departing in</p>
+                <p className="text-xl font-semibold text-foreground">
+                  {daysUntilTrip} <span className="text-xs font-normal text-muted-foreground">days</span>
                 </p>
               </div>
             </motion.div>
