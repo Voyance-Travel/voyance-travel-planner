@@ -489,7 +489,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                 <span className="text-sm font-medium text-foreground">Upcoming ({upcomingCount})</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {destinations.filter(d => d.upcoming).map(d => (
+                {destinations.filter(d => d.upcoming).slice(0, 4).map(d => (
                   <span 
                     key={d.id}
                     className="px-3 py-1 bg-blue-500/10 text-blue-700 dark:text-blue-400 rounded-full text-xs font-medium flex items-center gap-1"
@@ -498,6 +498,11 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                     {d.name} • {d.upcomingDate}
                   </span>
                 ))}
+                {destinations.filter(d => d.upcoming).length > 4 && (
+                  <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs">
+                    +{destinations.filter(d => d.upcoming).length - 4} more
+                  </span>
+                )}
               </div>
             </div>
           )}
