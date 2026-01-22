@@ -278,6 +278,71 @@ function formatCurrency(amount: number | null | undefined, currency: string = 'U
   }
 }
 
+function normalizeCurrencyCode(input: unknown): string | null {
+  if (!input) return null;
+  const raw = String(input).trim();
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+
+  // Common symbols / names → ISO 4217 codes
+  const map: Record<string, string> = {
+    '$': 'USD',
+    'USD': 'USD',
+    'US DOLLAR': 'USD',
+    'DOLLAR': 'USD',
+
+    '€': 'EUR',
+    'EUR': 'EUR',
+    'EURO': 'EUR',
+
+    '£': 'GBP',
+    'GBP': 'GBP',
+    'POUND': 'GBP',
+    'POUNDS': 'GBP',
+
+    '¥': 'JPY',
+    'JPY': 'JPY',
+    'YEN': 'JPY',
+  };
+
+  return map[upper] ?? (upper.length === 3 ? upper : null);
+}
+
+function inferCurrencyFromCountry(country?: string): string | null {
+  if (!country) return null;
+  const c = country.trim().toLowerCase();
+
+  const eurozone = new Set([
+    'austria', 'belgium', 'croatia', 'cyprus', 'estonia', 'finland', 'france',
+    'germany', 'greece', 'ireland', 'italy', 'latvia', 'lithuania', 'luxembourg',
+    'malta', 'netherlands', 'portugal', 'slovakia', 'slovenia', 'spain',
+  ]);
+
+  if (eurozone.has(c)) return 'EUR';
+  if (c === 'united kingdom' || c === 'uk' || c === 'england' || c === 'scotland' || c === 'wales' || c === 'northern ireland') return 'GBP';
+  if (c === 'united states' || c === 'usa' || c === 'us') return 'USD';
+  if (c === 'japan') return 'JPY';
+
+  return null;
+}
+
+function inferCurrencyFromDays(days: EditorialDay[]): string | null {
+  const counts = new Map<string, number>();
+
+  for (const day of days) {
+    for (const act of day.activities ?? []) {
+      const cur = normalizeCurrencyCode((act as any)?.cost?.currency);
+      if (cur) counts.set(cur, (counts.get(cur) ?? 0) + 1);
+    }
+  }
+
+  let best: { cur: string; n: number } | null = null;
+  for (const [cur, n] of counts.entries()) {
+    if (!best || n > best.n) best = { cur, n };
+  }
+  return best?.cur ?? null;
+}
+
 // Smart cost estimation by category when no explicit cost is provided
 // Base costs are per-person, will be multiplied by travelers
 const CATEGORY_COST_ESTIMATES: Record<string, { base: number; budgetMod: Record<string, number> }> = {
@@ -474,10 +539,13 @@ export function EditorialItinerary({
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   const totalCost = totalActivityCost + flightCost + hotelCost;
   
-  // Derive local currency from destination info or first activity with currency data
-  const localCurrency = destinationInfo?.currency 
-    || days.flatMap(d => d.activities).find(a => a.cost?.currency)?.cost?.currency 
-    || 'EUR';
+  // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
+  const localCurrency =
+    normalizeCurrencyCode(destinationInfo?.currency) ||
+    normalizeCurrencyCode(destinationInfo?.currencySymbol) ||
+    inferCurrencyFromCountry(destinationCountry) ||
+    inferCurrencyFromDays(days) ||
+    'EUR';
   
   // Display currency based on user preference toggle
   const tripCurrency = showLocalCurrency ? localCurrency : 'USD';
@@ -941,16 +1009,17 @@ export function EditorialItinerary({
             {/* Currency Toggle + Total */}
             <div className="flex items-center gap-0">
               <button
-                onClick={() => setShowLocalCurrency(!showLocalCurrency)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
+                onClick={() => setShowLocalCurrency((v) => !v)}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
                 title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
               >
-                <span className="text-primary font-semibold">
-                  {tripCurrency}
+                <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
+                  {localCurrency}
                 </span>
-                <svg className="h-3 w-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
+                <span className="text-muted-foreground/50">/</span>
+                <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
+                  USD
+                </span>
               </button>
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-r-md bg-primary/10 border border-primary/20 text-sm">
                 <span className="text-muted-foreground">Total:</span>
