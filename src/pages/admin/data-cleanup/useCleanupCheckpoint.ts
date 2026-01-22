@@ -1,7 +1,7 @@
 import { useCallback, useState, useEffect } from "react";
 import type { CleanupStats } from "./cleanupTypes";
 
-export type CleanupTarget = 'destinations' | 'attractions';
+export type CleanupTarget = 'destinations' | 'attractions' | 'local-knowledge';
 
 type CleanupCheckpoint = {
   dryRun: boolean;
