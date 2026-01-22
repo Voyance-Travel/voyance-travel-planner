@@ -485,52 +485,85 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
     let returnDepartureTimeStr: string | undefined;
     let latestLastActivity: string | undefined;
 
-    // Parse flight information
-    const flight = trip.flight_selection as {
-      airline?: string;
-      departureTime?: string;
-      arrivalTime?: string;
-      departureAirport?: string;
-      arrivalAirport?: string;
-      returnDepartureTime?: string;
-      returnArrivalTime?: string;
-    } | null;
+    // Parse flight information - handle both flat and nested structures
+    // Flat: { arrivalTime, returnDepartureTime }
+    // Nested: { departure: { arrivalTime }, return: { departureTime } }
+    const flightRaw = trip.flight_selection as Record<string, unknown> | null;
     
-    if (flight) {
+    if (flightRaw) {
       const flightInfo: string[] = [];
-      if (flight.departureAirport && flight.arrivalAirport) {
-        flightInfo.push(`✈️ Outbound: ${flight.departureAirport} → ${flight.arrivalAirport}`);
+      
+      // Extract arrival time for Day 1 (when we land at destination)
+      // Nested structure: departure.arrivalTime (outbound flight arrives at destination)
+      // Flat structure: arrivalTime
+      const nestedDeparture = flightRaw.departure as Record<string, unknown> | undefined;
+      const nestedReturn = flightRaw.return as Record<string, unknown> | undefined;
+      
+      const outboundArrival = (nestedDeparture?.arrivalTime as string) || (flightRaw.arrivalTime as string);
+      const returnDeparture = (nestedReturn?.departureTime as string) || (flightRaw.returnDepartureTime as string);
+      
+      // Airport info
+      const departureAirport = flightRaw.departureAirport as string | undefined;
+      const arrivalAirport = flightRaw.arrivalAirport as string | undefined;
+      
+      if (departureAirport && arrivalAirport) {
+        flightInfo.push(`✈️ Outbound: ${departureAirport} → ${arrivalAirport}`);
       }
-      if (flight.departureTime) {
-        const dept = new Date(flight.departureTime);
-        flightInfo.push(`  Departure: ${dept.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+      
+      // Outbound departure time
+      const outboundDeparture = (nestedDeparture?.departureTime as string) || (flightRaw.departureTime as string);
+      if (outboundDeparture) {
+        flightInfo.push(`  Departure: ${outboundDeparture}`);
       }
-      if (flight.arrivalTime) {
-        const arr = new Date(flight.arrivalTime);
-        arrivalTimeStr = arr.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      
+      // Day 1 arrival - CRITICAL for first activity timing
+      if (outboundArrival) {
+        // Parse the time string (could be "06:35 PM" or ISO date)
+        let arrivalDate: Date;
+        if (outboundArrival.includes('AM') || outboundArrival.includes('PM')) {
+          // Time string like "06:35 PM" - parse it
+          const [time, period] = outboundArrival.split(' ');
+          const [hours, minutes] = time.split(':').map(Number);
+          const adjustedHours = period === 'PM' && hours !== 12 ? hours + 12 : (period === 'AM' && hours === 12 ? 0 : hours);
+          arrivalDate = new Date();
+          arrivalDate.setHours(adjustedHours, minutes, 0, 0);
+        } else {
+          arrivalDate = new Date(outboundArrival);
+        }
+        
+        arrivalTimeStr = outboundArrival; // Keep original format for display
         flightInfo.push(`  Arrival: ${arrivalTimeStr}`);
         
         // Calculate earliest first activity: arrival + 4 hours buffer
-        // This accounts for: landing, taxiing, deplaning (30 min), customs/immigration (1-2 hours),
-        // baggage claim (30 min), transport to hotel (45-60 min), hotel check-in (30 min)
         const ARRIVAL_BUFFER_HOURS = 4;
-        const earliestActivityTime = new Date(arr.getTime() + ARRIVAL_BUFFER_HOURS * 60 * 60 * 1000);
-        earliestFirstActivity = `${earliestActivityTime.getHours().toString().padStart(2, '0')}:${earliestActivityTime.getMinutes().toString().padStart(2, '0')}`;
+        const earliestHours = arrivalDate.getHours() + ARRIVAL_BUFFER_HOURS;
+        const earliestMins = arrivalDate.getMinutes();
+        earliestFirstActivity = `${(earliestHours % 24).toString().padStart(2, '0')}:${earliestMins.toString().padStart(2, '0')}`;
         
-        console.log(`[FlightContext] Arrival at ${arrivalTimeStr}, earliest first activity: ${earliestFirstActivity}`);
+        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", parsed arrival: ${arrivalTimeStr}, earliest first activity: ${earliestFirstActivity}`);
       }
       
-      if (flight.returnDepartureTime) {
-        const retDept = new Date(flight.returnDepartureTime);
-        returnDepartureTimeStr = retDept.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      // Last day - return flight departure
+      if (returnDeparture) {
+        let returnDate: Date;
+        if (returnDeparture.includes('AM') || returnDeparture.includes('PM')) {
+          const [time, period] = returnDeparture.split(' ');
+          const [hours, minutes] = time.split(':').map(Number);
+          const adjustedHours = period === 'PM' && hours !== 12 ? hours + 12 : (period === 'AM' && hours === 12 ? 0 : hours);
+          returnDate = new Date();
+          returnDate.setHours(adjustedHours, minutes, 0, 0);
+        } else {
+          returnDate = new Date(returnDeparture);
+        }
+        
+        returnDepartureTimeStr = returnDeparture;
         flightInfo.push(`✈️ Return departure: ${returnDepartureTimeStr}`);
         
         // Calculate latest last activity: return departure - 3 hours buffer
-        // This accounts for: hotel checkout (30 min), transport to airport (45-60 min), 
-        // check-in/security (1.5-2 hours for international)
         const DEPARTURE_BUFFER_HOURS = 3;
-        const latestActivityTime = new Date(retDept.getTime() - DEPARTURE_BUFFER_HOURS * 60 * 60 * 1000);
-        latestLastActivity = `${latestActivityTime.getHours().toString().padStart(2, '0')}:${latestActivityTime.getMinutes().toString().padStart(2, '0')}`;
+        const latestHours = returnDate.getHours() - DEPARTURE_BUFFER_HOURS;
+        const latestMins = returnDate.getMinutes();
+        latestLastActivity = `${((latestHours + 24) % 24).toString().padStart(2, '0')}:${latestMins.toString().padStart(2, '0')}`;
         
         console.log(`[FlightContext] Return at ${returnDepartureTimeStr}, latest last activity: ${latestLastActivity}`);
       }
