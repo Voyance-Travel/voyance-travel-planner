@@ -101,7 +101,7 @@ export default function DataCleanup() {
       const { count } = await supabase
         .from('attractions')
         .select('*', { count: 'exact', head: true })
-        .or('description.ilike.Popular %,latitude.lt.1,latitude.gt.-1');
+        .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1)');
       totalCount = count || 0;
     } else if (target === 'local-knowledge') {
       const { count } = await supabase
