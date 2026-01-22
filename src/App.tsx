@@ -88,6 +88,7 @@ import AgentSettings from "./pages/agent/AgentSettings";
 import AgentDocuments from "./pages/agent/AgentDocuments";
 import AgentPayouts from "./pages/agent/AgentPayouts";
 import ClientIntakeForm from "./pages/agent/ClientIntakeForm";
+import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -129,6 +130,7 @@ const App = () => (
                 {/* Public Share Routes */}
                 <Route path="/share/:shareToken" element={<TripShare />} />
                 <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
+                <Route path="/invite/:token" element={<AcceptInvite />} />
                 
                 {/* Auth Routes */}
                 <Route path="/signin" element={<SignIn />} />
