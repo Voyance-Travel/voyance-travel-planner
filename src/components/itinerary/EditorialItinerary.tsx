@@ -3067,8 +3067,11 @@ function ActivityRow({
   const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
   
+  // Normalize title: use title, fallback to name (backend may return either)
+  const activityTitle = activity.title || (activity as { name?: string }).name || 'Activity';
+  
   // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
-  const titleLower = (activity.title || '').toLowerCase();
+  const titleLower = activityTitle.toLowerCase();
   const isDowntime = activity.timeBlockType === 'downtime' || titleLower.includes('free time');
   const isTransport = activityType === 'transportation' || activityType === 'transport';
   const isCheckIn = titleLower.includes('check-in') || titleLower.includes('check in');
@@ -3121,7 +3124,7 @@ function ActivityRow({
   };
 
   const venueNameForDining = isDiningActivity
-    ? (activity.location?.name?.trim() || extractVenueFromText(activity.title) || extractVenueFromText(activity.description) || null)
+    ? (activity.location?.name?.trim() || extractVenueFromText(activityTitle) || extractVenueFromText(activity.description) || null)
     : null;
 
   // Determine the best search term for images:
@@ -3130,7 +3133,7 @@ function ActivityRow({
   // 3. Fall back to activity title
   const imageSearchTerm = (venueNameForDining && venueNameForDining.length > 3)
     ? venueNameForDining
-    : (activity.location?.name && activity.location.name.length > 3 ? activity.location.name : activity.title);
+    : (activity.location?.name && activity.location.name.length > 3 ? activity.location.name : activityTitle);
 
   // Use useActivityImage hook for real place photos with deduplication
   // This fetches from Google Places / TripAdvisor with caching
@@ -3181,7 +3184,7 @@ function ActivityRow({
             <>
               <img
                 src={thumbnailUrl}
-                alt={activity.title}
+                alt={activityTitle}
                 className="w-full h-full object-cover transition-transform group-hover/activity:scale-105"
                 loading="lazy"
                 onError={() => setThumbnailError(true)}
@@ -3225,7 +3228,7 @@ function ActivityRow({
                 return (
                   <>
                     <h4 className="font-serif text-lg font-medium text-foreground">{venue}</h4>
-                    <p className="text-sm text-muted-foreground mt-0.5 italic">{activity.title}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5 italic">{activityTitle}</p>
                     {hasAddress && address !== venue && (
                       <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
                         <MapPin className="h-3.5 w-3.5 text-primary/60 mt-0.5" />
@@ -3238,7 +3241,7 @@ function ActivityRow({
 
               return (
                 <>
-                  <h4 className="font-serif text-lg font-medium text-foreground">{activity.title}</h4>
+                  <h4 className="font-serif text-lg font-medium text-foreground">{activityTitle}</h4>
                   {activity.description && (
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
                   )}

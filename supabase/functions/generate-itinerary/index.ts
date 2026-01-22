@@ -2179,7 +2179,7 @@ serve(async (req) => {
     }
 
     // ==========================================================================
-    // ACTION: generate-day - Single day generation (legacy support)
+    // ACTION: generate-day - Single day generation with flight/hotel awareness
     // ==========================================================================
     if (action === 'generate-day') {
       const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, userId } = params;
@@ -2189,13 +2189,54 @@ serve(async (req) => {
       const userPrefs = userId ? await getUserPreferences(supabase, userId) : null;
       const preferenceContext = buildPreferenceContext(insights, userPrefs);
 
-      const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary with 4-6 activities.
+      // CRITICAL: Fetch flight/hotel context for Day 1 and last day timing
+      const flightContext = tripId ? await getFlightHotelContext(supabase, tripId) : { context: '' };
+      const isFirstDay = dayNumber === 1;
+      const isLastDay = dayNumber === totalDays;
+      
+      console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}`);
+      if (flightContext.arrivalTime) {
+        console.log(`[generate-day] Flight arrival: ${flightContext.arrivalTime}, earliest activity: ${flightContext.earliestFirstActivityTime}`);
+      }
+      if (flightContext.returnDepartureTime) {
+        console.log(`[generate-day] Return departure: ${flightContext.returnDepartureTime}, latest activity: ${flightContext.latestLastActivityTime}`);
+      }
+
+      // Build day-specific constraints
+      let dayConstraints = '';
+      if (isFirstDay && flightContext.arrivalTime) {
+        dayConstraints = `
+🚨 ARRIVAL DAY REQUIREMENTS:
+- This is the ARRIVAL day. Flight lands at ${flightContext.arrivalTime}.
+- You MUST start with these 3 activities in order:
+  1. "Arrival at Airport" (category: transport) at ${flightContext.arrivalTime}
+  2. "Airport Transfer to Hotel" (category: transport) - 45-60 min after arrival
+  3. "Hotel Check-in" (category: accommodation) - after transfer
+- The EARLIEST sightseeing/dining activity can start at ${flightContext.earliestFirstActivityTime || '14:00'} (4 hours after landing for customs/baggage/transfer/check-in)
+- If arrival is after 6 PM, only include dinner and rest - no sightseeing
+- DO NOT start with breakfast or morning activities - the traveler is arriving!`;
+      } else if (isLastDay && flightContext.returnDepartureTime) {
+        dayConstraints = `
+🚨 DEPARTURE DAY REQUIREMENTS:
+- This is the DEPARTURE day. Return flight departs at ${flightContext.returnDepartureTime}.
+- You MUST end with these activities in order:
+  1. "Hotel Checkout" (category: accommodation)
+  2. "Transfer to Airport" (category: transport)
+  3. "Departure from Airport" (category: transport) at ${flightContext.returnDepartureTime}
+- The LATEST activity before checkout should end by ${flightContext.latestLastActivityTime || '12:00'} (3 hours before flight for checkout/transfer/security)
+- Plan only morning activities, keep the afternoon clear for airport`;
+      }
+
+      const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
 Requirements:
 - Include FULL street addresses for all locations
-- Provide realistic cost estimates
+- Provide realistic cost estimates in local currency
 - Account for travel time between activities
 - Include meals (breakfast, lunch, dinner as appropriate)
-- Start around 9:00 AM, end by 9:00-10:00 PM`;
+${isFirstDay ? '- This is ARRIVAL day - start with airport arrival, NOT breakfast!' : ''}
+${isLastDay ? '- This is DEPARTURE day - end with airport departure!' : ''}
+${!isFirstDay && !isLastDay ? '- Start around 9:00 AM, end by 9:00-10:00 PM' : ''}
+- Every activity MUST have a "title" field (the display name)`;
 
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
 
@@ -2204,9 +2245,12 @@ Travelers: ${travelers}
 Budget: ${budgetTier || 'standard'}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferenceContext}
+${dayConstraints}
 ${previousDayActivities?.length ? `\nAvoid repeating: ${previousDayActivities.join(', ')}` : ''}
 
-Generate 4-6 activities with full details including addresses, costs, and transportation.`;
+Generate activities with full details including addresses, costs, and transportation.
+${isFirstDay ? 'Remember: Start with Arrival at Airport, then Transfer, then Hotel Check-in!' : ''}
+${isLastDay ? 'Remember: End with Hotel Checkout, then Transfer to Airport, then Departure!' : ''}`;
 
       try {
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -2232,26 +2276,35 @@ Generate 4-6 activities with full details including addresses, costs, and transp
                     dayNumber: { type: "number" },
                     date: { type: "string" },
                     theme: { type: "string" },
+                    title: { type: "string", description: "Day title like 'Arrival Day' or 'Historic Exploration'" },
                     activities: {
                       type: "array",
                       items: {
                         type: "object",
                         properties: {
                           id: { type: "string" },
-                          name: { type: "string" },
+                          title: { type: "string", description: "Activity display name (REQUIRED)" },
+                          name: { type: "string", description: "Alias for title" },
                           description: { type: "string" },
-                          category: { type: "string" },
-                          startTime: { type: "string" },
-                          endTime: { type: "string" },
+                          category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
+                          startTime: { type: "string", description: "HH:MM format (24-hour)" },
+                          endTime: { type: "string", description: "HH:MM format (24-hour)" },
                           duration: { type: "string" },
-                          location: { type: "string" },
+                          location: { 
+                            type: "object",
+                            properties: {
+                              name: { type: "string" },
+                              address: { type: "string" }
+                            }
+                          },
                           estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
+                          cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
                           bookingRequired: { type: "boolean" },
                           tips: { type: "string" },
                           coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
                           type: { type: "string" }
                         },
-                        required: ["id", "name", "description", "category", "startTime", "endTime", "duration", "location", "estimatedCost", "bookingRequired"]
+                        required: ["title", "category", "startTime", "endTime", "location"]
                       }
                     },
                     narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
@@ -2290,13 +2343,44 @@ Generate 4-6 activities with full details including addresses, costs, and transp
 
         const generatedDay = JSON.parse(toolCall.function.arguments);
 
-        // Add unique IDs and enhancements
-        generatedDay.activities = generatedDay.activities.map((act: { id?: string; startTime?: string; endTime?: string; category?: string }, idx: number) => ({
-          ...act,
-          id: act.id || `day${dayNumber}-act${idx + 1}-${Date.now()}`,
-          durationMinutes: act.startTime && act.endTime ? calculateDuration(act.startTime, act.endTime) : 60,
-          categoryIcon: getCategoryIcon(act.category || 'activity')
-        }));
+        // Normalize activities: ensure title exists, add IDs and enhancements
+        generatedDay.activities = generatedDay.activities.map((act: { 
+          id?: string; 
+          title?: string; 
+          name?: string; 
+          startTime?: string; 
+          endTime?: string; 
+          category?: string;
+          estimatedCost?: { amount: number; currency: string };
+          cost?: { amount: number; currency: string };
+          location?: string | { name?: string; address?: string };
+        }, idx: number) => {
+          // Normalize title: use title, fallback to name
+          const normalizedTitle = act.title || act.name || `Activity ${idx + 1}`;
+          
+          // Normalize cost: use cost or estimatedCost
+          const normalizedCost = act.cost || act.estimatedCost || { amount: 0, currency: 'USD' };
+          
+          // Normalize location: convert string to object if needed
+          let normalizedLocation = act.location;
+          if (typeof act.location === 'string') {
+            normalizedLocation = { name: act.location, address: act.location };
+          }
+          
+          return {
+            ...act,
+            id: act.id || `day${dayNumber}-act${idx + 1}-${Date.now()}`,
+            title: normalizedTitle,
+            name: normalizedTitle, // Keep both for compatibility
+            cost: normalizedCost,
+            location: normalizedLocation,
+            durationMinutes: act.startTime && act.endTime ? calculateDuration(act.startTime, act.endTime) : 60,
+            categoryIcon: getCategoryIcon(act.category || 'activity')
+          };
+        });
+
+        // Ensure day has a title
+        generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
 
         return new Response(
           JSON.stringify({
@@ -2304,7 +2388,8 @@ Generate 4-6 activities with full details including addresses, costs, and transp
             day: generatedDay,
             dayNumber,
             totalDays,
-            usedPersonalization: !!preferenceContext
+            usedPersonalization: !!preferenceContext,
+            flightAware: !!(flightContext.arrivalTime || flightContext.returnDepartureTime)
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
