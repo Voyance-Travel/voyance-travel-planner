@@ -21,33 +21,44 @@ export default function PlannerSummary() {
   const { state, setBasics, saveTrip, loadTrip } = useTripPlanner();
   const [activitiesBudget, setActivitiesBudget] = useState(state.basics.budgetAmount || 0);
 
-  // Load trip from tripId in URL if context is empty
+  // Load trip from tripId in URL (prevents "stuck" summaries when context has old data)
   useEffect(() => {
     const tripIdFromUrl = searchParams.get('tripId');
-    if (tripIdFromUrl && !state.tripId && !state.basics.destination) {
+    if (tripIdFromUrl && tripIdFromUrl !== state.tripId) {
       loadTrip(tripIdFromUrl);
     }
   }, [searchParams, state.tripId, state.basics.destination, loadTrip]);
 
-  // Ensure basics are set even if user refreshes
+  // Ensure basics are aligned with URL params (even if user refreshes or deep-links)
   useEffect(() => {
-    const destination = searchParams.get('destination');
-    const origin = searchParams.get('origin');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-    const travelers = searchParams.get('travelers');
+    const destination = searchParams.get('destination') || undefined;
+    const originCity = searchParams.get('origin') || undefined;
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
+    const travelersParam = searchParams.get('travelers');
+    const tripTypeParam = searchParams.get('tripType') || undefined;
 
-    if (destination && (!state.basics.destination || state.basics.destination !== destination)) {
-      setBasics({
-        destination,
-        originCity: origin || state.basics.originCity,
-        startDate: startDate || state.basics.startDate,
-        endDate: endDate || state.basics.endDate,
-        travelers: travelers ? Number(travelers) : state.basics.travelers,
-      });
+    const nextBasics: Record<string, unknown> = {};
+
+    if (destination && destination !== state.basics.destination) nextBasics.destination = destination;
+    if (originCity && originCity !== state.basics.originCity) nextBasics.originCity = originCity;
+    if (startDate && startDate !== state.basics.startDate) nextBasics.startDate = startDate;
+    if (endDate && endDate !== state.basics.endDate) nextBasics.endDate = endDate;
+
+    const travelers = travelersParam ? Number(travelersParam) : undefined;
+    if (typeof travelers === 'number' && !Number.isNaN(travelers) && travelers !== state.basics.travelers) {
+      nextBasics.travelers = travelers;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+
+    if (tripTypeParam && tripTypeParam !== state.basics.tripType) {
+      // NOTE: TripBasics.tripType is narrower than our planner trip types; allow runtime values.
+      nextBasics.tripType = tripTypeParam;
+    }
+
+    if (Object.keys(nextBasics).length > 0) {
+      setBasics(nextBasics as any);
+    }
+  }, [searchParams, setBasics, state.basics]);
 
   const travelers = state.basics.travelers || 1;
   const nights = calculateNights(state.basics.startDate, state.basics.endDate);
