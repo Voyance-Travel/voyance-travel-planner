@@ -6,9 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BATCH_SIZE = 15;
-const PARALLEL_SIZE = 4;
-const AI_TIMEOUT_MS = 20000;
+const BATCH_SIZE = 30;
+const PARALLEL_SIZE = 8;
+const AI_TIMEOUT_MS = 15000;
 const SAFETY_MARGIN_MS = 50000;
 
 // Known templated/placeholder descriptions that need cleanup
