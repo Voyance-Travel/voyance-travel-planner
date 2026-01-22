@@ -673,7 +673,7 @@ export default function Start() {
             alt=""
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/85 to-background" />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/70 to-background" />
         </div>
         
         <div className="relative max-w-4xl mx-auto px-6 text-center">
