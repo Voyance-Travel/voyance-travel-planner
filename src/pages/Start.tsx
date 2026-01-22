@@ -661,86 +661,69 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* Hero Section - Full width background image */}
-      <section className="relative min-h-[50vh] flex items-center justify-center overflow-hidden">
-        {/* Background Image */}
-        <div className="absolute inset-0">
-          <img 
-            src={itineraryOnlyMode 
-              ? "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80"
-              : "https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=1920&q=80"
-            }
-            alt=""
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate/40 via-slate/60 to-background" />
-        </div>
-
-        {/* Hero Content */}
-        <div className="relative z-10 w-full max-w-4xl mx-auto px-8 md:px-16 py-16 text-center">
+      {/* Editorial Hero Section - Clean and modern */}
+      <section className="relative pt-24 pb-8 md:pt-32 md:pb-12 bg-background">
+        <div className="max-w-4xl mx-auto px-6 text-center">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-white"
+            transition={{ duration: 0.6 }}
           >
             {/* Eyebrow */}
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <div className="w-8 h-px bg-white/40" />
-              <span className="text-xs tracking-[0.3em] uppercase text-white/60 font-sans">
-                {itineraryOnlyMode ? 'Quick Itinerary' : 'Plan Your Trip'}
-              </span>
-              <div className="w-8 h-px bg-white/40" />
-            </div>
+            <p className="text-xs tracking-[0.25em] uppercase text-primary font-medium mb-4">
+              {itineraryOnlyMode ? 'Quick Itinerary' : 'Trip Planner'}
+            </p>
             
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-normal mb-4 leading-[0.95]">
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-light text-foreground mb-5 leading-[1.1]">
               {itineraryOnlyMode ? (
-                <>Build your <em className="font-normal italic">itinerary</em></>
+                <>Create your perfect <br className="hidden md:block" /><em className="italic">day-by-day</em> itinerary</>
               ) : (
-                <>Find your <em className="font-normal italic">hotel</em></>
+                <>Where will your next <br className="hidden md:block" /><em className="italic">adventure</em> take you?</>
               )}
             </h1>
             
-            <p className="text-base text-white/70 font-sans font-light leading-relaxed max-w-lg mx-auto">
+            <p className="text-lg text-muted-foreground font-light leading-relaxed max-w-xl mx-auto">
               {itineraryOnlyMode 
-                ? "Already have your flights and hotel booked? We'll generate a personalized day-by-day itinerary for your trip."
-                : "Book your flight anywhere you prefer, then let us find your perfect hotel and build a personalized itinerary."
+                ? "Already have your flights and hotel? We'll craft a personalized itinerary tailored to your interests."
+                : "Tell us your destination and dates. We'll find the perfect hotel and build an unforgettable experience."
               }
             </p>
           </motion.div>
         </div>
       </section>
 
-      {/* Planning Form - Centered Below Hero */}
-      <section className="relative pb-16 -mt-8">
-        <div className="max-w-2xl mx-auto px-6">
+      {/* Planning Form - Clean editorial card */}
+      <section className="relative pb-16 pt-6">
+        <div className="max-w-xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="bg-card p-6 md:p-8 shadow-elevated rounded-2xl border border-border"
+            transition={{ duration: 0.6, delay: 0.15 }}
+            className="bg-card p-8 md:p-10 rounded-2xl border border-border/60 shadow-sm"
           >
-            <div className="space-y-5">
-              {/* Origin - Only show for full trip planning (need for hotel search context) */}
+            <div className="space-y-6">
+              {/* Departure City - Now FIRST */}
               {!itineraryOnlyMode && (
-                <div>
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Plane className="h-4 w-4 text-muted-foreground" />
                     Departing from
                   </label>
                   <AirportAutocomplete
                     value={originSelection.display}
                     onChange={setOriginSelection}
-                    placeholder="Your city or airport"
+                    placeholder="Your home city"
                     icon={Plane}
                   />
                 </div>
               )}
               
-              {/* Destination */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans">
-                    {itineraryOnlyMode ? 'Where are you going?' : 'Destination'}
+              {/* Destination - Now SECOND */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    {itineraryOnlyMode ? 'Destination' : 'Flying to'}
                   </label>
                   {!itineraryOnlyMode && (
                     <Link 
@@ -748,7 +731,7 @@ export default function Start() {
                       className="flex items-center gap-1.5 text-xs text-primary hover:underline"
                     >
                       <Globe className="h-3.5 w-3.5" />
-                      Planning multiple cities?
+                      Multiple cities?
                     </Link>
                   )}
                 </div>
@@ -756,7 +739,7 @@ export default function Start() {
                   <DestinationAutocomplete
                     value={destinationSelection.display}
                     onChange={setDestinationSelection}
-                    placeholder="City you're visiting"
+                    placeholder="Where are you going?"
                   />
                 ) : (
                   <AirportAutocomplete
@@ -770,21 +753,22 @@ export default function Start() {
 
               {/* Dates Row */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
-                    {itineraryOnlyMode ? 'Arrival Date' : 'Departure'}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    {itineraryOnlyMode ? 'Arriving' : 'Depart'}
                   </label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         className={cn(
-                          "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
+                          "w-full h-11 justify-between text-left font-normal",
                           !startDate && "text-muted-foreground"
                         )}
                       >
                         {startDate ? format(startDate, "MMM d, yyyy") : "Select date"}
-                        <CalendarIcon className="h-4 w-4 opacity-60" />
+                        <CalendarIcon className="h-4 w-4 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -806,21 +790,22 @@ export default function Start() {
                   </Popover>
                 </div>
                 
-                <div>
-                  <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
-                    {itineraryOnlyMode ? 'Departure Date' : 'Return'}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    {itineraryOnlyMode ? 'Leaving' : 'Return'}
                   </label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         className={cn(
-                          "w-full h-12 justify-between text-left font-sans border-0 border-b border-border rounded-none hover:bg-transparent hover:border-primary px-0",
+                          "w-full h-11 justify-between text-left font-normal",
                           !endDate && "text-muted-foreground"
                         )}
                       >
                         {endDate ? format(endDate, "MMM d, yyyy") : "Select date"}
-                        <CalendarIcon className="h-4 w-4 opacity-60" />
+                        <CalendarIcon className="h-4 w-4 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -840,67 +825,63 @@ export default function Start() {
                 </div>
               </div>
 
-              {/* Travelers Row */}
-              <div>
-                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
+              {/* Travelers */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Users className="h-4 w-4 text-muted-foreground" />
                   Travelers
                 </label>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <div className="flex items-center gap-2 border-b border-border pb-2 flex-1">
-                      {[1, 2, 3, 4].map((num) => (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => setTravelers(num)}
-                          className={cn(
-                            "w-10 h-10 rounded-full border transition-all font-sans text-sm",
-                            travelers === num
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border text-muted-foreground hover:border-primary/50"
-                          )}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                      <span className="text-sm text-muted-foreground ml-2">
-                        {travelers > 1 && (
-                          <button 
-                            onClick={handleAddGuest}
-                            className="flex items-center gap-1 text-primary hover:underline"
-                          >
-                            <UserPlus className="h-3.5 w-3.5" />
-                            {linkedGuests.length > 0 
-                              ? `${linkedGuests.length} linked` 
-                              : 'Link guests'}
-                          </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 flex-1">
+                    {[1, 2, 3, 4].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setTravelers(num)}
+                        className={cn(
+                          "w-11 h-11 rounded-lg border-2 transition-all text-sm font-medium",
+                          travelers === num
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                         )}
-                      </span>
-                    </div>
+                      >
+                        {num}
+                      </button>
+                    ))}
                   </div>
+                  {travelers > 1 && (
+                    <button 
+                      onClick={handleAddGuest}
+                      className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      {linkedGuests.length > 0 
+                        ? `${linkedGuests.length} linked` 
+                        : 'Link guests'}
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Trip Type Selection */}
-              <div>
-                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-3">
-                  Trip Type
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  Trip Style
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {tripTypes.map((type) => (
                     <button
                       key={type.id}
                       type="button"
                       onClick={() => setTripType(type.id)}
                       className={cn(
-                        "flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all min-h-[60px]",
+                        "flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all text-sm font-medium",
                         tripType === type.id
                           ? "bg-primary/10 border-primary text-primary"
-                          : "border-border text-muted-foreground hover:border-primary/50"
+                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       )}
                     >
-                      <span className="text-sm font-medium">{type.label}</span>
+                      {type.label}
                     </button>
                   ))}
                 </div>
