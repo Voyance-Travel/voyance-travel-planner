@@ -470,18 +470,54 @@ export default function Profile() {
             {/* Travel Map */}
             <TravelMap userId={user?.id || ''} />
 
-            {/* Quick Create Itinerary Card */}
-            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl border border-primary/20 p-6">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="h-6 w-6 text-white" />
+            {/* Quick Actions with Images */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Plan Trip Card */}
+              <div className="group relative overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="absolute inset-0">
+                  <img 
+                    src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800" 
+                    alt="Plan your trip"
+                    className="w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-105 transition-all duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />
                 </div>
-                <div className="flex-1">
+                <div className="relative p-6">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center mb-4">
+                    <Compass className="h-6 w-6 text-white" />
+                  </div>
+                  <h3 className="font-semibold text-foreground mb-1">Plan a New Trip</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Find flights, hotels, and build a complete itinerary with AI assistance.
+                  </p>
+                  <Button asChild>
+                    <Link to="/start">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Start Planning
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Quick Itinerary Card */}
+              <div className="group relative overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="absolute inset-0">
+                  <img 
+                    src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800" 
+                    alt="Quick itinerary"
+                    className="w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-105 transition-all duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />
+                </div>
+                <div className="relative p-6">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center mb-4">
+                    <Sparkles className="h-6 w-6 text-white" />
+                  </div>
                   <h3 className="font-semibold text-foreground mb-1">Quick Itinerary Builder</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Just want an AI-generated itinerary? Skip the flight & hotel search — add them later or bring your own.
+                    Just want an AI-generated itinerary? Skip the flight & hotel search.
                   </p>
-                  <Button asChild size="sm">
+                  <Button asChild variant="secondary">
                     <Link to="/start?mode=itinerary">
                       <Zap className="h-4 w-4 mr-2" />
                       Build Itinerary Only
