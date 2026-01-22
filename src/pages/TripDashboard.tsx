@@ -46,6 +46,7 @@ interface Trip {
   flightSelection: any;
   hotelSelection: any;
   metadata: Record<string, any> | null;
+  hasItineraryData: boolean;
 }
 
 function mapToDisplayStatus(status: TripStatus): DisplayStatus {
@@ -89,14 +90,15 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
   // Use curated destination images
   const imageUrl = getDestinationImage(trip.destination);
   
-  // Check for booking status - use direct properties or metadata
-  const hasItinerary = !!trip.metadata?.itinerary || trip.metadata?.itineraryGenerationStatus === 'completed';
+  // Check for booking status - use direct properties
+  const hasItinerary = !!trip.hasItineraryData;
   const hasFlight = !!trip.flightSelection;
   const hasHotel = !!trip.hotelSelection;
   const travelersCount = typeof trip.travelers === 'number' ? trip.travelers : 1;
 
   const handleCardClick = () => {
-    if (displayStatus === 'upcoming' || displayStatus === 'completed') {
+    // Only go to itinerary view if there's actual itinerary data
+    if (hasItinerary && (displayStatus === 'upcoming' || displayStatus === 'completed')) {
       navigate(`/itinerary/${trip.id}`);
     } else {
       navigate(`/trip/${trip.id}`);
@@ -179,7 +181,7 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
 
         {/* Actions */}
         <div className="flex gap-2 pt-2">
-          {displayStatus === 'upcoming' || displayStatus === 'completed' ? (
+          {hasItinerary ? (
             <Button 
               onClick={handleCardClick} 
               variant="default" 
@@ -198,16 +200,14 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
                 <Edit3 className="h-4 w-4" />
                 Continue Planning
               </Button>
-              {!hasItinerary && (
-                <Button 
-                  onClick={() => navigate(`/trip/${trip.id}/itinerary`)} 
-                  variant="outline" 
-                  size="icon"
-                  title="Generate Itinerary"
-                >
-                  <Sparkles className="h-4 w-4" />
-                </Button>
-              )}
+              <Button 
+                onClick={() => navigate(`/trip/${trip.id}/itinerary`)} 
+                variant="outline" 
+                size="icon"
+                title="Generate Itinerary"
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
             </>
           )}
         </div>
@@ -361,6 +361,7 @@ export default function TripDashboard() {
           flightSelection: row.flight_selection,
           hotelSelection: row.hotel_selection,
           metadata: row.metadata as Record<string, any> | null,
+          hasItineraryData: !!row.itinerary_data,
         }));
 
         setTrips(mappedTrips);
