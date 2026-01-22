@@ -74,8 +74,8 @@ import {
 import { format, differenceInDays, isPast } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import ShareTripModal from '@/components/agent/ShareTripModal';
-import CloneTripModal from '@/components/agent/CloneTripModal';
-import LibraryModal from '@/components/agent/LibraryModal';
+// CloneTripModal removed - agent features disabled
+// LibraryModal removed - agent features disabled
 import ImportBookingModal from '@/components/agent/ImportBookingModal';
 import DocumentUploadModal from '@/components/agent/DocumentUploadModal';
 import TaskModal from '@/components/agent/TaskModal';
@@ -129,8 +129,7 @@ export default function TripWorkspace() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [shareModalOpen, setShareModalOpen] = useState(false);
-  const [cloneModalOpen, setCloneModalOpen] = useState(false);
-  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+  // Library/Clone states removed - agent features disabled
   const [importBookingModalOpen, setImportBookingModalOpen] = useState(false);
   const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -421,14 +420,7 @@ export default function TripWorkspace() {
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Trip
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setCloneModalOpen(true)}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Clone Trip
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLibraryModalOpen(true)}>
-                  <Library className="h-4 w-4 mr-2" />
-                  My Library
-                </DropdownMenuItem>
+                {/* Clone/Library menu items removed - agent features disabled */}
                 <DropdownMenuItem onClick={handleExportPdf}>
                   <Download className="h-4 w-4 mr-2" />
                   Export PDF
@@ -582,9 +574,9 @@ export default function TripWorkspace() {
                   <p className="text-muted-foreground mb-4">
                     Build a day-by-day itinerary for this trip
                   </p>
-                  <Button onClick={() => setLibraryModalOpen(true)}>
-                    <Library className="h-4 w-4 mr-2" />
-                    Browse Library
+                  <Button onClick={() => toast({ title: 'Start creating your itinerary', description: 'Add activities and bookings to get started.' })}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Itinerary
                   </Button>
                 </CardContent>
               </Card>
@@ -1109,18 +1101,7 @@ export default function TripWorkspace() {
         tripName={trip.name}
       />
 
-      <CloneTripModal
-        open={cloneModalOpen}
-        onOpenChange={setCloneModalOpen}
-        tripId={trip.id}
-        originalName={trip.name}
-      />
-
-      <LibraryModal
-        open={libraryModalOpen}
-        onOpenChange={setLibraryModalOpen}
-        mode="browse"
-      />
+      {/* CloneTripModal and LibraryModal removed - agent features disabled */}
 
       <ImportBookingModal
         open={importBookingModalOpen}
