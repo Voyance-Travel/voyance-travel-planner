@@ -160,6 +160,9 @@ serve(async (req) => {
           }
 
           if (hasChanges) {
+            // Always set updated_at when making changes
+            updates.updated_at = new Date().toISOString();
+            
             if (!dryRun) {
               const { error: updateError } = await supabase
                 .from('attractions')
