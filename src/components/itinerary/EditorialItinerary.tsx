@@ -20,7 +20,7 @@ import {
   Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
-  CreditCard, Library, TrendingUp
+  CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { Badge } from '@/components/ui/badge';
@@ -416,6 +416,10 @@ export function EditorialItinerary({
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [showCreditPrompt, setShowCreditPrompt] = useState(false);
   const [pendingRegenerateDay, setPendingRegenerateDay] = useState<number | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Calculate trip progress for feedback tracking
   const totalActivities = days.reduce((sum, day) => sum + day.activities.length, 0);
@@ -831,6 +835,61 @@ export function EditorialItinerary({
     toast.success('Activity time updated');
   }, []);
 
+  // Create and copy invite link
+  const handleCreateShareLink = useCallback(async () => {
+    setIsCreatingInvite(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Please sign in to share your trip');
+        return;
+      }
+
+      // Check if an invite already exists for this trip
+      const { data: existingInvite } = await supabase
+        .from('trip_invites')
+        .select('token')
+        .eq('trip_id', tripId)
+        .eq('invited_by', user.id)
+        .is('email', null)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      let token = existingInvite?.token;
+
+      if (!token) {
+        // Create new invite
+        const { data: newInvite, error } = await supabase
+          .from('trip_invites')
+          .insert({
+            trip_id: tripId,
+            invited_by: user.id,
+            max_uses: travelers - 1, // Allow remaining travelers to join
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+          })
+          .select('token')
+          .single();
+
+        if (error) throw error;
+        token = newInvite.token;
+      }
+
+      const link = `${window.location.origin}/invite/${token}`;
+      setShareLink(link);
+      
+      // Copy to clipboard
+      await navigator.clipboard.writeText(link);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+      toast.success('Invite link copied!');
+    } catch (err) {
+      console.error('Failed to create share link:', err);
+      toast.error('Failed to create invite link');
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  }, [tripId, travelers]);
+
   // ===========================================================================
   // RENDER
   // ===========================================================================
@@ -864,6 +923,18 @@ export function EditorialItinerary({
               <span className="text-muted-foreground">Total:</span>
               <span className="font-semibold text-primary">${totalCost.toLocaleString()}</span>
             </div>
+            
+            {/* Share Button */}
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowShareModal(true)}
+              className="gap-1.5 h-8 text-xs"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              Share
+            </Button>
+            
             {isEditable && (
               <>
                 <Button 
@@ -1566,6 +1637,130 @@ export function EditorialItinerary({
         images={hotelSelection?.images || []}
         hotelName={hotelSelection?.name}
       />
+
+      {/* Share Trip Modal */}
+      <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-5 w-5 text-primary" />
+              Share Your Trip
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Invite travel companions to view and collaborate on this trip. They'll be able to see the itinerary and join as group members.
+            </p>
+            
+            {/* Trip Preview */}
+            <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <MapPin className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h4 className="font-semibold">{destination}</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {startDate} • {travelers} {travelers === 1 ? 'traveler' : 'travelers'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Invite Link */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Invite Link</label>
+              <div className="flex gap-2">
+                <Input
+                  value={shareLink || 'Click to generate link...'}
+                  readOnly
+                  className="flex-1 text-sm"
+                  onClick={!shareLink ? handleCreateShareLink : undefined}
+                />
+                <Button 
+                  onClick={async () => {
+                    if (shareLink) {
+                      await navigator.clipboard.writeText(shareLink);
+                      setInviteCopied(true);
+                      setTimeout(() => setInviteCopied(false), 2000);
+                      toast.success('Link copied!');
+                    } else {
+                      handleCreateShareLink();
+                    }
+                  }}
+                  disabled={isCreatingInvite}
+                  className="gap-1.5"
+                >
+                  {isCreatingInvite ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : inviteCopied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  {inviteCopied ? 'Copied!' : shareLink ? 'Copy' : 'Generate'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Link expires in 7 days. Up to {travelers - 1} {travelers - 1 === 1 ? 'person' : 'people'} can join.
+              </p>
+            </div>
+
+            {/* Share Methods */}
+            <div className="pt-2 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-3">Or share via:</p>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={async () => {
+                    if (!shareLink) await handleCreateShareLink();
+                    const link = shareLink || '';
+                    const text = `Join me on a trip to ${destination}!`;
+                    window.open(`mailto:?subject=${encodeURIComponent(text)}&body=${encodeURIComponent(link)}`, '_blank');
+                  }}
+                >
+                  Email
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={async () => {
+                    if (!shareLink) await handleCreateShareLink();
+                    const link = shareLink || '';
+                    const text = `Join me on a trip to ${destination}! ${link}`;
+                    window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
+                  }}
+                >
+                  Message
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={async () => {
+                    if (!shareLink) await handleCreateShareLink();
+                    const link = shareLink || '';
+                    const text = `Join me on a trip to ${destination}!`;
+                    window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + link)}`, '_blank');
+                  }}
+                >
+                  WhatsApp
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowShareModal(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
