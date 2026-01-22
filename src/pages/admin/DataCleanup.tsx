@@ -19,6 +19,7 @@ export default function DataCleanup() {
   const [dryRun, setDryRun] = useState(true);
   const [results, setResults] = useState<CleanupResult[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0, remaining: 0 });
+  const [datasetCounts, setDatasetCounts] = useState<{ total: number; dirty: number; clean: number } | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [stats, setStats] = useState<CleanupStats>({ updated: 0, clean: 0, errors: 0, processed: 0 });
   const [, startTransition] = useTransition();
@@ -87,10 +88,12 @@ export default function DataCleanup() {
     setResults([]);
     setLogs([]);
     setProgress({ current: 0, total: 0, remaining: 0 });
+    setDatasetCounts(null);
     setStats({ updated: 0, clean: 0, errors: 0, processed: 0 });
 
     // Get total count based on target
     let totalCount = 0;
+    let overallCount: number | null = null;
     if (target === 'destinations') {
       const { count } = await supabase
         .from('destinations')
@@ -98,11 +101,27 @@ export default function DataCleanup() {
         .or('currency_code.is.null,timezone.is.null,cost_tier.is.null');
       totalCount = count || 0;
     } else if (target === 'attractions') {
-      const { count } = await supabase
-        .from('attractions')
-        .select('*', { count: 'exact', head: true })
-        .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1,longitude.lt.1,longitude.gt.-1)');
-      totalCount = count || 0;
+      const [{ count: dirtyCount }, { count: allCount }] = await Promise.all([
+        supabase
+          .from('attractions')
+          .select('*', { count: 'exact', head: true })
+          .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1,longitude.lt.1,longitude.gt.-1)'),
+        supabase
+          .from('attractions')
+          .select('*', { count: 'exact', head: true })
+      ]);
+
+      totalCount = dirtyCount || 0;
+      overallCount = allCount ?? null;
+
+      if (typeof overallCount === 'number') {
+        setDatasetCounts({
+          total: overallCount,
+          dirty: totalCount,
+          clean: Math.max(0, overallCount - totalCount),
+        });
+      }
+      // totalCount is the dirty count.
     } else if (target === 'local-knowledge') {
       const { count } = await supabase
         .from('destinations')
@@ -138,14 +157,18 @@ export default function DataCleanup() {
       ? checkpoint!.stats
       : { updated: 0, clean: 0, errors: 0, processed: 0 };
 
-    setProgress({ current: processedTotal, total: baselineTotal, remaining: totalCount });
+    // Progress for LIVE runs should reflect how many dirty records are now clean.
+    // Using (baseline - remaining) avoids confusing "processed" counts.
+    const initialCleaned = runDryRun ? processedTotal : Math.max(0, baselineTotal - totalCount);
+    setProgress({ current: initialCleaned, total: baselineTotal, remaining: totalCount });
     addLog(
       `Starting ${target} cleanup: ${totalCount} dirty records remaining (baseline: ${baselineTotal}) [${runDryRun ? 'DRY RUN' : 'LIVE'}]`
     );
 
     if (shouldResume) {
       setStats(statsTotal);
-      setProgress({ current: processedTotal, total: baselineTotal, remaining: totalCount });
+      const resumedCleaned = runDryRun ? processedTotal : Math.max(0, baselineTotal - totalCount);
+      setProgress({ current: resumedCleaned, total: baselineTotal, remaining: totalCount });
       if (useCheckpointOffset) {
         addLog(
           `Resuming dry run from offset ${offset} (processed ${processedTotal}/${baselineTotal})`
@@ -201,11 +224,30 @@ export default function DataCleanup() {
         };
         saveCheckpoint(checkpointRef.current);
 
-        // For live runs, estimate remaining dirty = baseline - updated so far
-        // (This is an estimate; exact count would require re-querying the DB each batch)
-        const estimatedRemaining = runDryRun
-          ? baselineTotal - processedTotal
+        // Remaining dirty: exact for attractions LIVE (periodically re-count), otherwise an estimate.
+        let nextRemaining = runDryRun
+          ? Math.max(0, baselineTotal - processedTotal)
           : Math.max(0, baselineTotal - statsTotal.updated);
+
+        // For Attractions LIVE: refresh remaining dirty from the DB every ~10 batches.
+        // This keeps the UI aligned with the shrinking dirty pool.
+        if (!runDryRun && target === 'attractions' && (processedTotal % (batchSize * 10) === 0)) {
+          const { count: liveDirtyCount } = await supabase
+            .from('attractions')
+            .select('*', { count: 'exact', head: true })
+            .or('description.ilike.Popular %,and(latitude.lt.1,latitude.gt.-1,longitude.lt.1,longitude.gt.-1)');
+          if (typeof liveDirtyCount === 'number') {
+            nextRemaining = liveDirtyCount;
+            setDatasetCounts(prev => {
+              if (!prev) return prev;
+              return { ...prev, dirty: liveDirtyCount, clean: Math.max(0, prev.total - liveDirtyCount) };
+            });
+          }
+        }
+
+        const cleanedSoFar = runDryRun
+          ? processedTotal
+          : Math.max(0, baselineTotal - nextRemaining);
 
         startTransition(() => {
           setStats(statsTotal);
@@ -217,7 +259,7 @@ export default function DataCleanup() {
             return next.length > MAX_RESULTS ? next.slice(-MAX_RESULTS) : next;
           });
 
-          setProgress({ current: statsTotal.updated, total: baselineTotal, remaining: estimatedRemaining });
+          setProgress({ current: cleanedSoFar, total: baselineTotal, remaining: nextRemaining });
         });
 
         const batchLogs: string[] = [];
@@ -353,6 +395,7 @@ export default function DataCleanup() {
                 checkpointDryRun={attractionsCheckpoint.checkpoint?.dryRun ?? null}
                 checkpointProcessed={attractionsCheckpoint.checkpoint?.processedTotal ?? null}
                 progress={progress}
+                datasetCounts={datasetCounts}
                 stats={stats}
                 logs={logs}
                 results={results}
@@ -420,6 +463,7 @@ interface CleanupPanelProps {
   checkpointDryRun: boolean | null;
   checkpointProcessed?: number | null;
   progress: { current: number; total: number; remaining: number };
+  datasetCounts?: { total: number; dirty: number; clean: number } | null;
   stats: CleanupStats;
   logs: string[];
   results: CleanupResult[];
@@ -440,6 +484,7 @@ function CleanupPanel({
   checkpointDryRun,
   checkpointProcessed,
   progress,
+  datasetCounts,
   stats,
   logs,
   results,
@@ -571,8 +616,24 @@ function CleanupPanel({
 
             {progress.total > 0 && (
               <div className="space-y-3">
+                {target === 'attractions' && datasetCounts && (
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Total records</div>
+                      <div className="font-semibold">{datasetCounts.total}</div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Clean (not dirty)</div>
+                      <div className="font-semibold">{datasetCounts.clean}</div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Dirty remaining</div>
+                      <div className="font-semibold">{datasetCounts.dirty}</div>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
-                  <span className="font-medium">Cleaned</span>
+                  <span className="font-medium">Cleaned (dirty → clean)</span>
                   <span className="text-green-600 font-semibold">
                     {progress.current} / {progress.total} dirty
                   </span>
