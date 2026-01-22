@@ -156,22 +156,19 @@ export function AddFlightInline({
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="text-center py-6">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-            <Plane className="h-6 w-6 text-primary" />
-          </div>
-          <p className="text-sm text-muted-foreground mb-1">Book your flight anywhere you like</p>
-          <p className="text-muted-foreground mb-4">Then add your details to sync your itinerary</p>
-          
-          <div className="flex flex-col gap-2">
-            <Button onClick={() => setShowManualEntry(true)} className="w-full">
-              <Plus className="h-4 w-4 mr-2" />
-              Add My Flight Details
-            </Button>
-          </div>
-        </div>
-      </div>
+      <Button 
+        onClick={() => setShowManualEntry(true)} 
+        data-add-flight-trigger
+        className="hidden"
+      >
+        Add Flight
+      </Button>
+      
+      {/* Visible trigger for inline use */}
+      <Button onClick={() => setShowManualEntry(true)}>
+        <Plus className="h-4 w-4 mr-2" />
+        Add Flight Details
+      </Button>
 
       {/* Manual Entry Dialog */}
       <Dialog open={showManualEntry} onOpenChange={setShowManualEntry}>
@@ -388,26 +385,14 @@ export function AddHotelInline({
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="text-center py-6">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-            <Hotel className="h-6 w-6 text-primary" />
-          </div>
-          <p className="text-muted-foreground mb-4">No hotel added yet</p>
-          
-          <div className="flex flex-col gap-2">
-            <Button onClick={handleBrowseHotels} className="w-full">
-              <Plus className="h-4 w-4 mr-2" />
-              Browse & Book Hotels
-            </Button>
-            <button
-              onClick={() => setShowManualEntry(true)}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-            >
-              I already have a hotel — enter details
-            </button>
-          </div>
-        </div>
+      <div className="flex gap-2">
+        <Button onClick={handleBrowseHotels}>
+          <Plus className="h-4 w-4 mr-2" />
+          Browse Hotels
+        </Button>
+        <Button variant="outline" onClick={() => setShowManualEntry(true)}>
+          Enter Details
+        </Button>
       </div>
 
       {/* Manual Entry Dialog */}

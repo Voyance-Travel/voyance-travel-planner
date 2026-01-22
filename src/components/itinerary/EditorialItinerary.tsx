@@ -1149,221 +1149,238 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-8"
           >
-            {/* FLIGHT SECTION */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Plane className="h-5 w-5 text-primary" />
+            {/* FLIGHT SECTION - Editorial Style */}
+            <section className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+                    <Plane className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-lg font-semibold text-foreground">Flights</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {flightSelection?.outbound ? 'Your booked flights' : 'Add your flight details'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-serif text-xl font-semibold text-foreground">Your Flights</h3>
-                  <p className="text-sm text-muted-foreground">Round-trip journey</p>
-                </div>
+                {flightCost > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Total</p>
+                    <p className="font-serif text-xl font-semibold text-foreground">${flightCost.toLocaleString()}</p>
+                  </div>
+                )}
               </div>
               
               {flightSelection?.outbound ? (
-                <div className="grid md:grid-cols-2 gap-4">
-                  {/* Outbound Flight Card */}
-                  <div className="group relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-card to-secondary/10 p-5 transition-all hover:shadow-soft hover:border-primary/30">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
-                    
-                    <div className="relative space-y-4">
-                      {/* Header */}
-                      <div className="flex items-center justify-between">
-                        <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-0">
-                          <Plane className="h-3 w-3 mr-1" />
-                          Outbound
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {flightSelection.outbound.departure?.date || startDate}
-                        </span>
-                      </div>
+                <div className="space-y-3">
+                  {/* Outbound Flight */}
+                  <div className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-soft transition-shadow">
+                    <div className="flex items-stretch">
+                      {/* Left accent */}
+                      <div className="w-1.5 bg-gradient-to-b from-primary to-primary/50 shrink-0" />
                       
-                      {/* Airline Info */}
-                      <div className="flex items-center gap-3">
-                        <AirlineLogo 
-                          code={flightSelection.outbound.airlineCode || flightSelection.outbound.airline?.substring(0, 2) || ''} 
-                          name={flightSelection.outbound.airline}
-                          size="md"
-                        />
-                        <div>
-                          <p className="font-medium text-foreground">{flightSelection.outbound.airline}</p>
-                          <p className="text-xs text-muted-foreground">{flightSelection.outbound.flightNumber}</p>
-                        </div>
-                      </div>
-                      
-                      {/* Route Display */}
-                      <div className="flex items-center justify-between py-3">
-                        <div className="text-left">
-                          <p className="text-2xl font-semibold text-foreground tracking-tight">
-                            {flightSelection.outbound.departure?.time || '--:--'}
-                          </p>
-                          <p className="text-sm font-medium text-primary">
-                            {flightSelection.outbound.departure?.airport || 'DEP'}
-                          </p>
-                        </div>
-                        
-                        <div className="flex-1 mx-4 flex flex-col items-center gap-1">
-                          <div className="flex items-center w-full">
-                            <div className="h-2 w-2 rounded-full bg-primary" />
-                            <div className="flex-1 h-px bg-gradient-to-r from-primary via-border to-primary" />
-                            <Plane className="h-4 w-4 text-primary mx-1" />
-                            <div className="flex-1 h-px bg-gradient-to-r from-primary via-border to-primary" />
-                            <div className="h-2 w-2 rounded-full bg-primary" />
+                      <div className="flex-1 p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs font-medium">
+                              Outbound
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {flightSelection.outbound.departure?.date || startDate}
+                            </span>
                           </div>
-                          {(flightSelection.outbound as Record<string, unknown>).duration && (
-                            <span className="text-xs text-muted-foreground">{(flightSelection.outbound as Record<string, unknown>).duration as string}</span>
-                          )}
-                        </div>
-                        
-                        <div className="text-right">
-                          <p className="text-2xl font-semibold text-foreground tracking-tight">
-                            {flightSelection.outbound.arrival?.time || '--:--'}
-                          </p>
-                          <p className="text-sm font-medium text-primary">
-                            {flightSelection.outbound.arrival?.airport || 'ARR'}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Tags */}
-                      {(flightSelection.outbound.cabinClass || flightSelection.outbound.seat) && (
-                        <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-                          {flightSelection.outbound.cabinClass && (
-                            <Badge variant="secondary" className="text-xs">{flightSelection.outbound.cabinClass}</Badge>
-                          )}
-                          {flightSelection.outbound.seat && (
-                            <span className="text-xs text-muted-foreground">Seat {flightSelection.outbound.seat}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Return Flight Card */}
-                  {flightSelection.return && (
-                    <div className="group relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-card to-secondary/10 p-5 transition-all hover:shadow-soft hover:border-primary/30">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-accent/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
-                      
-                      <div className="relative space-y-4">
-                        {/* Header */}
-                        <div className="flex items-center justify-between">
-                          <Badge className="bg-accent/10 text-accent hover:bg-accent/20 border-0">
-                            <Plane className="h-3 w-3 mr-1 rotate-180" />
-                            Return
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {flightSelection.return.departure?.date || endDate}
-                          </span>
-                        </div>
-                        
-                        {/* Airline Info */}
-                        <div className="flex items-center gap-3">
-                          <AirlineLogo 
-                            code={flightSelection.return.airlineCode || flightSelection.return.airline?.substring(0, 2) || ''} 
-                            name={flightSelection.return.airline}
-                            size="md"
-                          />
-                          <div>
-                            <p className="font-medium text-foreground">{flightSelection.return.airline}</p>
-                            <p className="text-xs text-muted-foreground">{flightSelection.return.flightNumber}</p>
+                          <div className="flex items-center gap-2">
+                            <AirlineLogo 
+                              code={flightSelection.outbound.airlineCode || flightSelection.outbound.airline?.substring(0, 2) || ''} 
+                              name={flightSelection.outbound.airline}
+                              size="sm"
+                            />
+                            <span className="text-sm font-medium">{flightSelection.outbound.airline}</span>
+                            <span className="text-xs text-muted-foreground">{flightSelection.outbound.flightNumber}</span>
                           </div>
                         </div>
                         
-                        {/* Route Display */}
-                        <div className="flex items-center justify-between py-3">
-                          <div className="text-left">
-                            <p className="text-2xl font-semibold text-foreground tracking-tight">
-                              {flightSelection.return.departure?.time || '--:--'}
-                            </p>
-                            <p className="text-sm font-medium text-accent">
-                              {flightSelection.return.departure?.airport || 'DEP'}
-                            </p>
+                        {/* Route */}
+                        <div className="flex items-center gap-4">
+                          <div className="text-center min-w-[60px]">
+                            <p className="text-xl font-semibold tracking-tight">{flightSelection.outbound.departure?.time || '--:--'}</p>
+                            <p className="text-xs font-medium text-primary">{flightSelection.outbound.departure?.airport || 'DEP'}</p>
                           </div>
                           
-                          <div className="flex-1 mx-4 flex flex-col items-center gap-1">
-                            <div className="flex items-center w-full">
-                              <div className="h-2 w-2 rounded-full bg-accent" />
-                              <div className="flex-1 h-px bg-gradient-to-r from-accent via-border to-accent" />
-                              <Plane className="h-4 w-4 text-accent mx-1 rotate-180" />
-                              <div className="flex-1 h-px bg-gradient-to-r from-accent via-border to-accent" />
-                              <div className="h-2 w-2 rounded-full bg-accent" />
+                          <div className="flex-1 flex items-center gap-2">
+                            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                            <div className="flex-1 relative">
+                              <div className="h-px bg-gradient-to-r from-primary/60 via-border to-primary/60" />
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2">
+                                {(flightSelection.outbound as Record<string, unknown>).duration ? (
+                                  <span className="text-[10px] text-muted-foreground">{(flightSelection.outbound as Record<string, unknown>).duration as string}</span>
+                                ) : (
+                                  <Plane className="h-3 w-3 text-muted-foreground" />
+                                )}
+                              </div>
                             </div>
-                            {(flightSelection.return as Record<string, unknown>).duration && (
-                              <span className="text-xs text-muted-foreground">{(flightSelection.return as Record<string, unknown>).duration as string}</span>
-                            )}
+                            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
                           </div>
                           
-                          <div className="text-right">
-                            <p className="text-2xl font-semibold text-foreground tracking-tight">
-                              {flightSelection.return.arrival?.time || '--:--'}
-                            </p>
-                            <p className="text-sm font-medium text-accent">
-                              {flightSelection.return.arrival?.airport || 'ARR'}
-                            </p>
+                          <div className="text-center min-w-[60px]">
+                            <p className="text-xl font-semibold tracking-tight">{flightSelection.outbound.arrival?.time || '--:--'}</p>
+                            <p className="text-xs font-medium text-primary">{flightSelection.outbound.arrival?.airport || 'ARR'}</p>
                           </div>
                         </div>
                         
-                        {/* Tags */}
-                        {(flightSelection.return.cabinClass || flightSelection.return.seat) && (
-                          <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-                            {flightSelection.return.cabinClass && (
-                              <Badge variant="secondary" className="text-xs">{flightSelection.return.cabinClass}</Badge>
+                        {(flightSelection.outbound.cabinClass || flightSelection.outbound.seat) && (
+                          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                            {flightSelection.outbound.cabinClass && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{flightSelection.outbound.cabinClass}</span>
                             )}
-                            {flightSelection.return.seat && (
-                              <span className="text-xs text-muted-foreground">Seat {flightSelection.return.seat}</span>
+                            {flightSelection.outbound.seat && (
+                              <span className="text-xs text-muted-foreground">Seat {flightSelection.outbound.seat}</span>
                             )}
                           </div>
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Return Flight */}
+                  {flightSelection.return && (
+                    <div className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-soft transition-shadow">
+                      <div className="flex items-stretch">
+                        {/* Left accent */}
+                        <div className="w-1.5 bg-gradient-to-b from-accent to-accent/50 shrink-0" />
+                        
+                        <div className="flex-1 p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs font-medium border-accent/30 text-accent">
+                                Return
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {flightSelection.return.departure?.date || endDate}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <AirlineLogo 
+                                code={flightSelection.return.airlineCode || flightSelection.return.airline?.substring(0, 2) || ''} 
+                                name={flightSelection.return.airline}
+                                size="sm"
+                              />
+                              <span className="text-sm font-medium">{flightSelection.return.airline}</span>
+                              <span className="text-xs text-muted-foreground">{flightSelection.return.flightNumber}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Route */}
+                          <div className="flex items-center gap-4">
+                            <div className="text-center min-w-[60px]">
+                              <p className="text-xl font-semibold tracking-tight">{flightSelection.return.departure?.time || '--:--'}</p>
+                              <p className="text-xs font-medium text-accent">{flightSelection.return.departure?.airport || 'DEP'}</p>
+                            </div>
+                            
+                            <div className="flex-1 flex items-center gap-2">
+                              <div className="h-1.5 w-1.5 rounded-full bg-accent" />
+                              <div className="flex-1 relative">
+                                <div className="h-px bg-gradient-to-r from-accent/60 via-border to-accent/60" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2">
+                                  {(flightSelection.return as Record<string, unknown>).duration ? (
+                                    <span className="text-[10px] text-muted-foreground">{(flightSelection.return as Record<string, unknown>).duration as string}</span>
+                                  ) : (
+                                    <Plane className="h-3 w-3 text-muted-foreground rotate-180" />
+                                  )}
+                                </div>
+                              </div>
+                              <div className="h-1.5 w-1.5 rounded-full bg-accent" />
+                            </div>
+                            
+                            <div className="text-center min-w-[60px]">
+                              <p className="text-xl font-semibold tracking-tight">{flightSelection.return.arrival?.time || '--:--'}</p>
+                              <p className="text-xs font-medium text-accent">{flightSelection.return.arrival?.airport || 'ARR'}</p>
+                            </div>
+                          </div>
+                          
+                          {(flightSelection.return.cabinClass || flightSelection.return.seat) && (
+                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                              {flightSelection.return.cabinClass && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{flightSelection.return.cabinClass}</span>
+                              )}
+                              {flightSelection.return.seat && (
+                                <span className="text-xs text-muted-foreground">Seat {flightSelection.return.seat}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               ) : (
-                <div className="rounded-xl border-2 border-dashed border-border bg-secondary/5 p-8">
-                  <AddFlightInline
-                    tripId={tripId}
-                    destination={destination}
-                    startDate={startDate}
-                    endDate={endDate}
-                    travelers={travelers}
-                    origin={originCity}
-                    onFlightAdded={onBookingAdded}
-                  />
-                </div>
-              )}
-              
-              {/* Flight Price Summary */}
-              {flightCost > 0 && (
-                <div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/10">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Plane className="h-4 w-4 text-primary" />
+                /* Empty State - Add Flight CTA */
+                <div className="rounded-xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-6">
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <Plane className="h-7 w-7 text-primary" />
                     </div>
-                    <span className="text-sm text-muted-foreground">Flight Total</span>
+                    <div className="flex-1 text-center sm:text-left">
+                      <h4 className="font-medium text-foreground mb-1">No flights added yet</h4>
+                      <p className="text-sm text-muted-foreground">Book your flight anywhere, then add the details here to sync your itinerary.</p>
+                    </div>
+                    <Button 
+                      onClick={() => {
+                        // Trigger the AddFlightInline dialog
+                        const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
+                        btn?.click();
+                      }}
+                      className="shrink-0"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Flight
+                    </Button>
                   </div>
-                  <span className="font-serif text-2xl font-semibold text-foreground">${flightCost.toLocaleString()}</span>
+                  {/* Hidden AddFlightInline for the dialog */}
+                  <div className="hidden">
+                    <AddFlightInline
+                      tripId={tripId}
+                      destination={destination}
+                      startDate={startDate}
+                      endDate={endDate}
+                      travelers={travelers}
+                      origin={originCity}
+                      onFlightAdded={onBookingAdded}
+                    />
+                  </div>
                 </div>
               )}
-            </div>
+            </section>
 
-            {/* DIVIDER */}
-            <div className="flex items-center gap-4">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground uppercase tracking-widest">Accommodation</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            {/* HOTEL SECTION */}
-            <div className="space-y-4">
+            {/* HOTEL SECTION - Editorial Style */}
+            <section className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+                    <Hotel className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-lg font-semibold text-foreground">Accommodation</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {hotelSelection?.name ? `${hotelSelection.nights || days.length} nights` : 'Where you\'ll stay'}
+                    </p>
+                  </div>
+                </div>
+                {hotelCost > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Total</p>
+                    <p className="font-serif text-xl font-semibold text-foreground">${hotelCost.toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+              
               {hotelSelection?.name ? (
-                <div className="rounded-xl border border-border overflow-hidden bg-card">
-                  {/* Hotel Hero Image */}
+                <div className="rounded-xl border border-border bg-card overflow-hidden group">
+                  {/* Hotel Image Header */}
                   <div 
-                    className="relative h-56 bg-muted/30 group cursor-pointer" 
+                    className="relative h-48 bg-muted/30 cursor-pointer overflow-hidden" 
                     onClick={() => {
-                      const images = hotelSelection?.images;
-                      if (images && images.length > 0) {
+                      if (hotelSelection?.images && hotelSelection.images.length > 0) {
                         setHotelGalleryOpen(true);
                       }
                     }}
@@ -1387,210 +1404,149 @@ export function EditorialItinerary({
                         }}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Hotel className="h-16 w-16 text-muted-foreground/20" />
+                      <div className="w-full h-full flex items-center justify-center bg-secondary/50">
+                        <Hotel className="h-12 w-12 text-muted-foreground/30" />
                       </div>
                     )}
                     
-                    {/* Elegant gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    {/* Gradient Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                     
-                    {/* Photo count badge */}
+                    {/* Photo count */}
                     {hotelSelection?.images && hotelSelection.images.length > 1 && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setHotelGalleryOpen(true);
                         }}
-                        className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-white text-xs font-medium border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-white/20"
+                        className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-sm text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <Images className="h-3.5 w-3.5" />
-                        {hotelSelection.images.length} Photos
+                        <Images className="h-3 w-3" />
+                        {hotelSelection.images.length}
                       </button>
                     )}
                     
-                    {/* Hotel Info Overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-2">
-                          <h3 className="font-serif text-2xl font-semibold text-white drop-shadow-lg">
-                            {hotelSelection.name}
-                          </h3>
-                          {hotelSelection.rating && (
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-0.5">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <Star 
-                                    key={star} 
-                                    className={cn(
-                                      "h-4 w-4",
-                                      star <= Math.floor(hotelSelection.rating || 0) 
-                                        ? "text-amber-400 fill-amber-400" 
-                                        : "text-white/30"
-                                    )} 
-                                  />
-                                ))}
-                              </div>
-                              <span className="text-white/90 text-sm font-medium">{hotelSelection.rating}</span>
-                              {hotelSelection.reviewCount && (
-                                <span className="text-white/60 text-sm">({hotelSelection.reviewCount.toLocaleString()} reviews)</span>
-                              )}
-                            </div>
-                          )}
+                    {/* Hotel Name Overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 p-4">
+                      <h4 className="font-serif text-xl font-semibold text-white mb-1">{hotelSelection.name}</h4>
+                      {hotelSelection.rating && (
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star 
+                                key={star} 
+                                className={cn(
+                                  "h-3.5 w-3.5",
+                                  star <= Math.floor(hotelSelection.rating || 0) 
+                                    ? "text-amber-400 fill-amber-400" 
+                                    : "text-white/30"
+                                )} 
+                              />
+                            ))}
+                          </div>
+                          <span className="text-white/80 text-xs">{hotelSelection.rating}</span>
                         </div>
-                        
-                        {/* Price badge */}
-                        <div className="text-right">
-                          <p className="font-serif text-3xl font-semibold text-white">${hotelCost.toLocaleString()}</p>
-                          <p className="text-white/60 text-sm">{hotelSelection.nights || days.length} nights</p>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                   
                   {/* Hotel Details */}
-                  <div className="p-6 space-y-5">
-                    {/* Quick Info Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {/* Check-in */}
-                      <div className="p-3 rounded-lg bg-secondary/30 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Check-in</p>
-                        <p className="font-medium text-foreground">{hotelSelection.checkIn || '3:00 PM'}</p>
+                  <div className="p-4 space-y-4">
+                    {/* Quick Info */}
+                    <div className="flex flex-wrap gap-2">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 text-sm">
+                        <span className="text-muted-foreground">Check-in:</span>
+                        <span className="font-medium">{hotelSelection.checkIn || '3:00 PM'}</span>
                       </div>
-                      {/* Check-out */}
-                      <div className="p-3 rounded-lg bg-secondary/30 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Check-out</p>
-                        <p className="font-medium text-foreground">{hotelSelection.checkOut || '11:00 AM'}</p>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 text-sm">
+                        <span className="text-muted-foreground">Check-out:</span>
+                        <span className="font-medium">{hotelSelection.checkOut || '11:00 AM'}</span>
                       </div>
-                      {/* Room Type */}
-                      {(hotelSelection as Record<string, unknown>).roomType && (
-                        <div className="p-3 rounded-lg bg-secondary/30 text-center">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Room</p>
-                          <p className="font-medium text-foreground text-sm truncate">{(hotelSelection as Record<string, unknown>).roomType as string}</p>
-                        </div>
-                      )}
-                      {/* Price per night */}
                       {hotelSelection.pricePerNight && (
-                        <div className="p-3 rounded-lg bg-primary/5 text-center border border-primary/10">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Per Night</p>
-                          <p className="font-semibold text-primary">${hotelSelection.pricePerNight}</p>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-sm border border-primary/10">
+                          <span className="font-medium text-primary">${hotelSelection.pricePerNight}/night</span>
                         </div>
                       )}
                     </div>
                     
                     {/* Address */}
                     {hotelSelection.address && (
-                      <div className="flex items-start gap-3 p-4 rounded-lg bg-secondary/20">
-                        <MapPin className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Location</p>
-                          <p className="text-foreground">{hotelSelection.address}</p>
-                        </div>
+                      <div className="flex items-start gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <span className="text-muted-foreground">{hotelSelection.address}</span>
                       </div>
                     )}
                     
                     {/* Amenities */}
                     {hotelSelection.amenities && hotelSelection.amenities.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Amenities</p>
-                        <div className="flex flex-wrap gap-2">
-                          {hotelSelection.amenities.slice(0, 8).map((amenity, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs font-normal px-3 py-1">
-                              {amenity}
-                            </Badge>
-                          ))}
-                          {hotelSelection.amenities.length > 8 && (
-                            <Badge variant="outline" className="text-xs font-normal px-3 py-1">
-                              +{hotelSelection.amenities.length - 8} more
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Photo Gallery Thumbnails */}
-                    {hotelSelection.images && hotelSelection.images.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gallery</p>
-                        <div className="grid grid-cols-6 gap-2">
-                          {hotelSelection.images.slice(0, 6).map((img, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setHotelGalleryOpen(true)}
-                              className="relative aspect-square rounded-lg overflow-hidden group"
-                            >
-                              <img
-                                src={img}
-                                alt={`${hotelSelection.name} - Photo ${idx + 1}`}
-                                className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
-                                onError={(e) => {
-                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=100';
-                                }}
-                              />
-                              {idx === 5 && hotelSelection.images && hotelSelection.images.length > 6 && (
-                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                                  <span className="text-white text-sm font-medium">+{hotelSelection.images.length - 6}</span>
-                                </div>
-                              )}
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-                            </button>
-                          ))}
-                        </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {hotelSelection.amenities.slice(0, 6).map((amenity, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs font-normal">
+                            {amenity}
+                          </Badge>
+                        ))}
+                        {hotelSelection.amenities.length > 6 && (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            +{hotelSelection.amenities.length - 6}
+                          </Badge>
+                        )}
                       </div>
                     )}
                     
                     {/* Actions */}
-                    <div className="flex items-center gap-3 pt-4 border-t border-border">
-                      {(hotelSelection.website || hotelSelection.googleMapsUrl) && (
-                        <a
-                          href={hotelSelection.website || hotelSelection.googleMapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-border hover:bg-secondary/50 transition-colors"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          {hotelSelection.website ? 'Visit Website' : 'View on Maps'}
-                        </a>
-                      )}
-                      {hotelCost > 0 && (
-                        <VendorBookingLink
-                          activityName={hotelSelection.name || 'Hotel'}
-                          destination={destination}
-                          estimatedPrice={hotelCost}
-                          preferredVendor="tripadvisor"
-                          className="flex-1"
-                        >
-                          Search Similar
-                        </VendorBookingLink>
-                      )}
-                    </div>
+                    {(hotelSelection.website || hotelSelection.googleMapsUrl || hotelCost > 0) && (
+                      <div className="flex items-center gap-2 pt-3 border-t border-border">
+                        {(hotelSelection.website || hotelSelection.googleMapsUrl) && (
+                          <a
+                            href={hotelSelection.website || hotelSelection.googleMapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-border hover:bg-secondary/50 transition-colors"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            {hotelSelection.website ? 'Website' : 'Maps'}
+                          </a>
+                        )}
+                        {hotelCost > 0 && (
+                          <VendorBookingLink
+                            activityName={hotelSelection.name || 'Hotel'}
+                            destination={destination}
+                            estimatedPrice={hotelCost}
+                            preferredVendor="tripadvisor"
+                            className="flex-1 text-xs"
+                          >
+                            Find Similar
+                          </VendorBookingLink>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Hotel className="h-5 w-5 text-primary" />
+                /* Empty State - Add Hotel CTA */
+                <div className="rounded-xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-6">
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <Hotel className="h-7 w-7 text-primary" />
                     </div>
-                    <div>
-                      <h3 className="font-serif text-xl font-semibold text-foreground">Your Stay</h3>
-                      <p className="text-sm text-muted-foreground">Where you'll rest</p>
+                    <div className="flex-1 text-center sm:text-left">
+                      <h4 className="font-medium text-foreground mb-1">No accommodation added</h4>
+                      <p className="text-sm text-muted-foreground">Find and book a hotel, or add your existing reservation details.</p>
                     </div>
-                  </div>
-                  
-                  <div className="rounded-xl border-2 border-dashed border-border bg-secondary/5 p-8">
-                    <AddHotelInline
-                      tripId={tripId}
-                      destination={destination}
-                      startDate={startDate}
-                      endDate={endDate}
-                      travelers={travelers}
-                      onHotelAdded={onBookingAdded}
-                    />
+                    <div className="flex gap-2 shrink-0">
+                      <AddHotelInline
+                        tripId={tripId}
+                        destination={destination}
+                        startDate={startDate}
+                        endDate={endDate}
+                        travelers={travelers}
+                        onHotelAdded={onBookingAdded}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
+            </section>
           </motion.div>
         )}
 
