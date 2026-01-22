@@ -17,7 +17,9 @@ import {
   Crown,
   RefreshCw,
   Sparkles,
-  Zap
+  Zap,
+  Plane,
+  CheckCircle
 } from 'lucide-react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
@@ -530,90 +532,126 @@ export default function Profile() {
             {/* Surprise Trip Card */}
             <SurpriseTripCard isPremium={!!subscription?.subscribed} />
 
-            {/* Upcoming Trips */}
-            {upcomingTrips.length > 0 && (
+            {/* Trip Timeline */}
+            {(upcomingTrips.length > 0 || completedTrips.length > 0) && (
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">Upcoming Trip</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold text-foreground">My Trips</h2>
                   <Button variant="ghost" size="sm" onClick={() => setActiveTab('trips')}>
                     View all
                     <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
-                <div className="grid gap-4">
-                  {upcomingTrips.slice(0, 3).map((trip) => (
-                    <Link
-                      key={trip.id}
-                      to={`/trip/${trip.id}`}
-                      className="group flex gap-4 p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {trip.destination}
-                        </h3>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                          <Calendar className="h-3 w-3" />
-                          {trip.dates}
-                        </p>
-                        {trip.progress && (
-                          <div className="mt-3">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                              <span>Planning progress</span>
-                              <span>{trip.progress}%</span>
-                            </div>
-                            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-primary rounded-full transition-all"
-                                style={{ width: `${trip.progress}%` }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Recent Trips */}
-            {completedTrips.length > 0 && (
-              <div>
-                <h2 className="text-lg font-semibold text-foreground mb-4">Recent Adventures</h2>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {completedTrips.map((trip) => (
-                    <Link
-                      key={trip.id}
-                      to={`/trip/${trip.id}`}
-                      className="group block"
-                    >
-                      <div className="aspect-[16/10] rounded-lg overflow-hidden mb-3">
-                        <img 
-                          src={trip.image} 
-                          alt={trip.destination} 
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
+                {/* Timeline Container */}
+                <div className="relative">
+                  {/* Timeline Line */}
+                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+
+                  {/* Upcoming Section */}
+                  {upcomingTrips.length > 0 && (
+                    <div className="mb-8">
+                      <div className="flex items-center gap-3 mb-4 relative">
+                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center z-10">
+                          <Plane className="h-4 w-4 text-primary-foreground" />
+                        </div>
+                        <span className="text-sm font-medium text-primary uppercase tracking-wide">Upcoming</span>
                       </div>
-                      <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
-                        {trip.destination}
-                      </h3>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {trip.dates}
-                        </span>
-                        {trip.rating && (
-                          <span className="flex items-center gap-1">
-                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                            {trip.rating}
-                          </span>
+                      <div className="pl-12 space-y-3">
+                        {upcomingTrips.slice(0, 3).map((trip) => (
+                          <Link
+                            key={trip.id}
+                            to={`/trip/${trip.id}`}
+                            className="group flex items-center gap-4 p-3 bg-card border border-border rounded-xl hover:border-primary/50 hover:shadow-md transition-all"
+                          >
+                            <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                              <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                {trip.destination}
+                              </h3>
+                              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {trip.dates}
+                              </p>
+                            </div>
+                            {trip.progress && (
+                              <div className="hidden sm:flex items-center gap-2">
+                                <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-primary rounded-full"
+                                    style={{ width: `${trip.progress}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground">{trip.progress}%</span>
+                              </div>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </Link>
+                        ))}
+                        {upcomingTrips.length > 3 && (
+                          <button
+                            onClick={() => setActiveTab('trips')}
+                            className="text-sm text-primary hover:underline pl-2"
+                          >
+                            +{upcomingTrips.length - 3} more upcoming
+                          </button>
                         )}
                       </div>
-                    </Link>
-                  ))}
+                    </div>
+                  )}
+
+                  {/* Completed Section */}
+                  {completedTrips.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-3 mb-4 relative">
+                        <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center z-10">
+                          <CheckCircle className="h-4 w-4 text-white" />
+                        </div>
+                        <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Completed</span>
+                      </div>
+                      <div className="pl-12 space-y-3">
+                        {completedTrips.slice(0, 3).map((trip) => (
+                          <Link
+                            key={trip.id}
+                            to={`/trip/${trip.id}`}
+                            className="group flex items-center gap-4 p-3 bg-card border border-border rounded-xl hover:border-emerald-500/50 hover:shadow-md transition-all"
+                          >
+                            <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                              <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
+                                {trip.destination}
+                              </h3>
+                              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {trip.dates}
+                                </span>
+                                {trip.rating && (
+                                  <span className="flex items-center gap-1">
+                                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                                    {trip.rating}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
+                          </Link>
+                        ))}
+                        {completedTrips.length > 3 && (
+                          <button
+                            onClick={() => setActiveTab('trips')}
+                            className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline pl-2"
+                          >
+                            +{completedTrips.length - 3} more completed
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
