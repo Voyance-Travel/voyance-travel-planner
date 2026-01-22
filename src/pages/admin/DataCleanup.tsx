@@ -127,7 +127,7 @@ export default function DataCleanup() {
     const useCheckpointOffset = shouldResume && checkpoint.dryRun;
     
     let offset = useCheckpointOffset ? checkpoint.offset : 0;
-    const batchSize = 3;
+    const batchSize = 5;
     let processedTotal = shouldResume ? checkpoint.processedTotal : 0;
     let statsTotal: CleanupStats = shouldResume
       ? checkpoint!.stats
