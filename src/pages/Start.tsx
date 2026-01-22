@@ -661,9 +661,22 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* Editorial Hero Section - Clean and modern */}
-      <section className="relative pt-24 pb-8 md:pt-32 md:pb-12 bg-background">
-        <div className="max-w-4xl mx-auto px-6 text-center">
+      {/* Editorial Hero Section with Background Image */}
+      <section className="relative pt-24 pb-8 md:pt-32 md:pb-12 overflow-hidden">
+        {/* Hero Background Image */}
+        <div className="absolute inset-0">
+          <img 
+            src={itineraryOnlyMode 
+              ? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1600&q=80"
+              : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1600&q=80"
+            }
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/85 to-background" />
+        </div>
+        
+        <div className="relative max-w-4xl mx-auto px-6 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
