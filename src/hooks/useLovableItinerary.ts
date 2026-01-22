@@ -30,6 +30,10 @@ export interface GenerationPreferences {
   transportationModes?: string[];
   primaryTransport?: string;
   hasRentalCar?: boolean;
+  // Context for planning
+  hotelLocation?: string;
+  arrivalTime?: string;
+  departureTime?: string;
 }
 
 export interface LovableItineraryState {
