@@ -796,24 +796,34 @@ export default function TripDetail() {
               // but EditorialItinerary expects 'outbound' key
               const rawFlight = trip.flight_selection as Record<string, unknown> | null;
               
-              // Helper to safely extract nested properties
+              // Helper to safely extract nested properties with multiple format support
               const getFlightLeg = (source: Record<string, unknown> | undefined) => {
                 if (!source) return undefined;
-                const dep = source.departure as Record<string, unknown> | undefined;
-                const arr = source.arrival as Record<string, unknown> | undefined;
+                
+                // Handle nested format: { departure: { time, airport }, arrival: { time, airport } }
+                const nestedDep = source.departure as Record<string, unknown> | undefined;
+                const nestedArr = source.arrival as Record<string, unknown> | undefined;
+                
+                // Handle flat format: { departureTime, arrivalTime } (from TripPlannerContext)
+                const flatDepartureTime = source.departureTime as string | undefined;
+                const flatArrivalTime = source.arrivalTime as string | undefined;
+                
                 return {
                   airline: source.airline as string | undefined,
+                  airlineCode: source.airline as string | undefined,
                   flightNumber: source.flightNumber as string | undefined,
                   departure: {
-                    time: (dep?.time as string) || (source.departureTime as string) || undefined,
-                    airport: dep?.airport as string | undefined,
+                    time: (nestedDep?.time as string) || flatDepartureTime || undefined,
+                    airport: (nestedDep?.airport as string) || undefined,
                     date: undefined as string | undefined,
                   },
                   arrival: {
-                    time: (arr?.time as string) || (source.arrivalTime as string) || undefined,
-                    airport: arr?.airport as string | undefined,
+                    // CRITICAL: Check flat format first since that's what TripPlannerContext uses
+                    time: flatArrivalTime || (nestedArr?.time as string) || undefined,
+                    airport: (nestedArr?.airport as string) || undefined,
                   },
                   price: source.price as number | undefined,
+                  cabinClass: source.cabin as string | undefined,
                 };
               };
 
