@@ -536,7 +536,10 @@ export default function Start() {
         {/* Background Image */}
         <div className="absolute inset-0">
           <img 
-            src="https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=1920&q=80"
+            src={itineraryOnlyMode 
+              ? "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80"
+              : "https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=1920&q=80"
+            }
             alt=""
             className="w-full h-full object-cover"
           />
