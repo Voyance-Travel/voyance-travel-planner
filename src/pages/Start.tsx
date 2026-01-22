@@ -697,14 +697,14 @@ export default function Start() {
               {itineraryOnlyMode ? (
                 <>Build your <em className="font-normal italic">itinerary</em></>
               ) : (
-                <>Plan your <em className="font-normal italic">trip</em></>
+                <>Find your <em className="font-normal italic">hotel</em></>
               )}
             </h1>
             
             <p className="text-base text-white/70 font-sans font-light leading-relaxed max-w-lg mx-auto">
               {itineraryOnlyMode 
                 ? "Already have your flights and hotel booked? We'll generate a personalized day-by-day itinerary for your trip."
-                : "Search and compare hotels, add your own flight details, and get an AI-crafted itinerary for your destination."
+                : "Search and compare hotels, then add your own flight details. We'll craft an AI-powered itinerary for your destination."
               }
             </p>
           </motion.div>
