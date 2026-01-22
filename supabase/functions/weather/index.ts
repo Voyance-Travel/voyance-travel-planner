@@ -215,14 +215,31 @@ async function geocodeDestination(destination: string): Promise<{ lat: number; l
   }
 }
 
-async function fetchOpenMeteo(destination: string, days: number = 7): Promise<WeatherData | null> {
+async function fetchOpenMeteo(destination: string, startDate: string, days: number = 7): Promise<WeatherData | null> {
   const geo = await geocodeDestination(destination);
   if (!geo) return null;
 
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum&timezone=auto&forecast_days=${Math.min(days, 16)}&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch`;
+    // Calculate how many days from today until trip start
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tripStart = new Date(startDate);
+    tripStart.setHours(0, 0, 0, 0);
+    const daysUntilTrip = Math.floor((tripStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Open-Meteo only provides 16 days of forecast
+    // If trip starts more than 16 days out, we can't get real data
+    if (daysUntilTrip >= 16) {
+      console.log('[Weather] Trip too far in future, Open-Meteo only covers 16 days');
+      return null; // Will fall back to seasonal estimates
+    }
+    
+    // Request enough days to cover from today through the trip
+    const totalDaysNeeded = Math.min(daysUntilTrip + days, 16);
+    
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum&timezone=auto&forecast_days=${totalDaysNeeded}&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch`;
 
-    console.log('[Weather] Fetching Open-Meteo for:', geo.name);
+    console.log('[Weather] Fetching Open-Meteo for:', geo.name, 'daysUntilTrip:', daysUntilTrip, 'tripDays:', days);
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -237,29 +254,40 @@ async function fetchOpenMeteo(destination: string, days: number = 7): Promise<We
       return null;
     }
 
-    const current = data.current;
     const daily = data.daily;
+    
+    // Filter forecast to only include trip dates
+    const tripStartStr = tripStart.toISOString().split('T')[0];
+    const startIndex = daily.time.findIndex(d => d >= tripStartStr);
+    
+    if (startIndex === -1) {
+      console.error('[Weather] Could not find trip start date in forecast');
+      return null;
+    }
 
-    const forecast = daily.time.map((date, i) => ({
+    const forecast = daily.time.slice(startIndex, startIndex + days).map((date, i) => ({
       date,
-      high: Math.round(daily.temperature_2m_max[i]),
-      low: Math.round(daily.temperature_2m_min[i]),
-      condition: getConditionFromCode(daily.weather_code[i]),
-      icon: getWeatherIcon(daily.weather_code[i]),
-      precipitation: Math.round(daily.precipitation_sum[i] || 0),
+      high: Math.round(daily.temperature_2m_max[startIndex + i]),
+      low: Math.round(daily.temperature_2m_min[startIndex + i]),
+      condition: getConditionFromCode(daily.weather_code[startIndex + i]),
+      icon: getWeatherIcon(daily.weather_code[startIndex + i]),
+      precipitation: Math.round(daily.precipitation_sum[startIndex + i] || 0),
     }));
+
+    // Use the first trip day's weather as "current" for the trip
+    const tripDayWeather = {
+      temp: Math.round((daily.temperature_2m_max[startIndex] + daily.temperature_2m_min[startIndex]) / 2),
+      feelsLike: Math.round((daily.temperature_2m_max[startIndex] + daily.temperature_2m_min[startIndex]) / 2 - 2),
+      condition: getConditionFromCode(daily.weather_code[startIndex]),
+      icon: getWeatherIcon(daily.weather_code[startIndex]),
+      humidity: 55, // Estimated since daily doesn't include humidity
+      windSpeed: 10, // Estimated
+      precipitation: Math.round(daily.precipitation_sum[startIndex] || 0),
+    };
 
     return {
       destination: geo.name,
-      current: {
-        temp: Math.round(current.temperature_2m),
-        feelsLike: Math.round(current.apparent_temperature),
-        condition: getConditionFromCode(current.weather_code),
-        icon: getWeatherIcon(current.weather_code),
-        humidity: current.relative_humidity_2m,
-        windSpeed: Math.round(current.wind_speed_10m),
-        precipitation: Math.round(current.precipitation || 0),
-      },
+      current: tripDayWeather,
       forecast,
       source: 'open-meteo',
     };
@@ -290,19 +318,20 @@ serve(async (req) => {
     }
 
     let weather: WeatherData;
+    const tripStartDate = startDate || new Date().toISOString().split('T')[0];
 
-    // Try Open-Meteo (free, no API key)
-    const realWeather = await fetchOpenMeteo(destination, days || 7);
+    // Try Open-Meteo (free, no API key) - pass startDate to filter forecast
+    const realWeather = await fetchOpenMeteo(destination, tripStartDate, days || 7);
     if (realWeather) {
       weather = realWeather;
       console.log('[Weather] ✅ Using Open-Meteo data for:', destination);
     } else {
       weather = generateFallbackForecast(
         destination,
-        startDate || new Date().toISOString().split('T')[0],
+        tripStartDate,
         days || 7
       );
-      console.log('[Weather] ⚠️ Open-Meteo failed, using fallback for:', destination);
+      console.log('[Weather] ⚠️ Open-Meteo failed or trip too far out, using fallback for:', destination);
     }
 
     return new Response(JSON.stringify({ weather, success: true }), {
