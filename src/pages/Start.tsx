@@ -637,7 +637,7 @@ export default function Start() {
       return;
     }
 
-    navigate(`${ROUTES.PLANNER.FLIGHT}?${params.toString()}`);
+    navigate(`${ROUTES.PLANNER.HOTEL}?${params.toString()}`);
   };
 
   // Guest link modal state
