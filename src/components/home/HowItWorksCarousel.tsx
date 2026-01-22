@@ -13,7 +13,7 @@ const steps = [
   {
     number: '2',
     icon: Map,
-    title: 'AI Builds Your Itinerary',
+    title: 'AI Crafts Your Customized Itinerary',
     description: 'Our AI crafts a personalized day-by-day plan with hotels, activities, restaurants, and hidden gems matched to your preferences.',
     image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
   },
