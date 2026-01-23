@@ -1408,43 +1408,92 @@ serve(async (req) => {
         const estimateNoCoords = (from: Activity, to: Activity, seed: string): TransportData => {
           const fromCat = (from.category || from.type || '').toLowerCase();
           const toCat = (to.category || to.type || '').toLowerCase();
+          const destName = to.location?.name || to.title;
 
-          // Defaults: reasonable, but not identical for every leg
-          let method: 'walk' | 'metro' | 'uber' = 'walk';
-          let durationMins = hashRange(seed, 8, 18);
-          let cost = 0;
-          let instructions = `Walk to ${to.location?.name || to.title}`;
-
-          const isMajor = (c: string) => ['sightseeing', 'cultural', 'museum'].includes(c);
+          // Check if AI already provided distanceKm in transportation data
+          const aiDistanceKm = (from.transportation as any)?.distanceKm || null;
+          
+          // Estimate distance based on activity categories and context
+          let estimatedDistanceKm: number;
+          
+          const isTransport = (c: string) => ['transport', 'accommodation'].includes(c);
+          const isMajor = (c: string) => ['sightseeing', 'cultural', 'museum', 'landmark'].includes(c);
           const isDiningish = (c: string) => ['dining', 'cafe', 'coffee', 'breakfast', 'lunch', 'dinner', 'relaxation'].includes(c);
-
-          // Dining/relaxation tends to be nearby
-          if (isDiningish(fromCat) || isDiningish(toCat)) {
-            method = 'walk';
-            durationMins = hashRange(seed, 5, 14);
-            instructions = `Short walk to ${to.location?.name || to.title}`;
+          const isNightlife = (c: string) => ['nightlife', 'entertainment', 'bar', 'club'].includes(c);
+          
+          // Use AI-provided distance if available
+          if (aiDistanceKm && aiDistanceKm > 0) {
+            estimatedDistanceKm = aiDistanceKm;
           }
-          // Between major attractions: assume public transit more often
+          // Airport/hotel transfers are typically 15-40km
+          else if (isTransport(fromCat) || isTransport(toCat)) {
+            estimatedDistanceKm = hashRange(seed, 15, 35) / 10 * 3; // 4.5-10.5km for city, more for airport
+            if (from.title?.toLowerCase().includes('airport') || to.title?.toLowerCase().includes('airport')) {
+              estimatedDistanceKm = hashRange(seed, 15, 40); // 15-40km for airport transfers
+            }
+          }
+          // Same category attractions may cluster but not always
           else if (isMajor(fromCat) && isMajor(toCat)) {
-            method = 'metro';
-            durationMins = hashRange(seed, 12, 28);
-            cost = 3;
-            instructions = `Take public transit to ${to.location?.name || to.title}`;
+            estimatedDistanceKm = hashRange(seed, 15, 50) / 10; // 1.5-5km between major sights
           }
-          // Late-night / farther hops: occasional rideshare
-          else if (['nightlife', 'entertainment'].includes(fromCat) || ['nightlife', 'entertainment'].includes(toCat)) {
+          // Dining near attractions is walkable
+          else if (isDiningish(toCat) && isMajor(fromCat)) {
+            estimatedDistanceKm = hashRange(seed, 3, 12) / 10; // 0.3-1.2km
+          }
+          // Nightlife tends to cluster in areas
+          else if (isNightlife(fromCat) && isNightlife(toCat)) {
+            estimatedDistanceKm = hashRange(seed, 5, 15) / 10; // 0.5-1.5km
+          }
+          // Default: assume moderate urban distance
+          else {
+            estimatedDistanceKm = hashRange(seed, 15, 40) / 10; // 1.5-4km
+          }
+          
+          // SMART MODE SELECTION based on distance
+          let method: 'walk' | 'metro' | 'uber' | 'taxi' | 'train' = 'walk';
+          let durationMins: number;
+          let cost = 0;
+          let instructions: string;
+          
+          if (estimatedDistanceKm < 1.0) {
+            // Under 1km: always walk
+            method = 'walk';
+            durationMins = Math.round(estimatedDistanceKm * 12); // ~5 km/h walking
+            cost = 0;
+            instructions = `${Math.round(durationMins)} minute walk to ${destName}`;
+          } else if (estimatedDistanceKm < 8.0) {
+            // 1-8km: prefer transit in cities
+            method = 'metro';
+            durationMins = Math.round(5 + estimatedDistanceKm * 2.5); // Wait + travel
+            cost = 3;
+            instructions = `Take public transit to ${destName} (${estimatedDistanceKm.toFixed(1)}km)`;
+          } else if (estimatedDistanceKm < 20) {
+            // 8-20km: rideshare or taxi
             method = 'uber';
-            durationMins = hashRange(seed, 10, 22);
-            cost = Math.round(8 + durationMins * 0.6);
-            instructions = `Take a rideshare to ${to.location?.name || to.title}`;
+            durationMins = Math.round(estimatedDistanceKm * 2); // ~30km/h in city
+            cost = Math.round(5 + estimatedDistanceKm * 1.5);
+            instructions = `Take a rideshare to ${destName} (${estimatedDistanceKm.toFixed(1)}km, ~${cost} USD)`;
+          } else {
+            // 20km+: likely airport or inter-city, use taxi/train
+            method = 'taxi';
+            durationMins = Math.round(estimatedDistanceKm * 1.5); // Faster on highways
+            cost = Math.round(30 + (estimatedDistanceKm - 20) * 1.2);
+            instructions = `Take a taxi to ${destName} (${estimatedDistanceKm.toFixed(1)}km, ~${cost} USD)`;
+          }
+          
+          // Override for late night (after dinner going to nightlife or hotel)
+          if (isNightlife(toCat) || (isDiningish(fromCat) && toCat === 'accommodation')) {
+            if (method === 'metro' && estimatedDistanceKm > 2) {
+              method = 'uber';
+              cost = Math.round(8 + estimatedDistanceKm * 1.2);
+              instructions = `Take a rideshare to ${destName} (late night, safer option)`;
+            }
           }
 
-          // Convert duration -> distance using mode-specific speeds
-          const speedMetersPerMin = method === 'walk' ? 80 : method === 'metro' ? 400 : 650;
-          const distanceMeters = durationMins * speedMetersPerMin;
+          const distanceMeters = Math.round(estimatedDistanceKm * 1000);
           const distanceText = distanceMeters < 1000
             ? `${distanceMeters}m`
-            : `${(distanceMeters / 1000).toFixed(1)}km`;
+            : `${estimatedDistanceKm.toFixed(1)}km`;
 
           return {
             method,
