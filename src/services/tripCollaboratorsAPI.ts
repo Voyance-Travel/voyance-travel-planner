@@ -13,11 +13,13 @@ import type { Profile } from '@/services/supabase/profiles';
 // TYPES
 // ============================================================================
 
+export type CollaboratorPermission = 'viewer' | 'editor' | 'contributor';
+
 export interface TripCollaborator {
   id: string;
   trip_id: string;
   user_id: string;
-  permission: 'viewer' | 'editor' | 'contributor';
+  permission: CollaboratorPermission;
   invited_by: string | null;
   accepted_at: string | null;
   created_at: string;
@@ -27,12 +29,38 @@ export interface TripCollaborator {
 export interface AddCollaboratorRequest {
   tripId: string;
   userId: string;
-  permission?: 'viewer' | 'editor' | 'contributor';
+  permission?: CollaboratorPermission;
+}
+
+export interface TripPermission {
+  isOwner: boolean;
+  permission: string | null;
+  canEdit: boolean;
 }
 
 // ============================================================================
 // API FUNCTIONS
 // ============================================================================
+
+/**
+ * Get current user's permission for a trip
+ */
+export async function getTripPermission(tripId: string): Promise<TripPermission> {
+  const { data, error } = await supabase.rpc('get_trip_permission', { p_trip_id: tripId });
+  
+  if (error) {
+    console.error('[TripCollaborators] Error getting permission:', error);
+    return { isOwner: false, permission: null, canEdit: false };
+  }
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = data as any;
+  return {
+    isOwner: result?.isOwner ?? false,
+    permission: result?.permission ?? null,
+    canEdit: result?.canEdit ?? false,
+  };
+}
 
 /**
  * Get collaborators for a trip
@@ -59,7 +87,7 @@ export async function getTripCollaborators(tripId: string): Promise<TripCollabor
 
   return (data || []).map(c => ({
     ...c,
-    permission: c.permission as 'viewer' | 'editor' | 'contributor',
+    permission: c.permission as CollaboratorPermission,
     profile: c.profile as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
   }));
 }
@@ -111,8 +139,33 @@ export async function addTripCollaborator({ tripId, userId, permission = 'contri
 
   return {
     ...data,
-    permission: data.permission as 'viewer' | 'editor' | 'contributor',
+    permission: data.permission as CollaboratorPermission,
     profile: data.profile as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
+  };
+}
+
+/**
+ * Update a collaborator's permission
+ */
+export async function updateCollaboratorPermission(
+  collaboratorId: string, 
+  permission: CollaboratorPermission
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('update_collaborator_permission', {
+    p_collaborator_id: collaboratorId,
+    p_permission: permission,
+  });
+
+  if (error) {
+    console.error('[TripCollaborators] Error updating permission:', error);
+    return { success: false, error: error.message };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = data as any;
+  return { 
+    success: result?.success ?? false, 
+    error: result?.error 
   };
 }
 
@@ -186,6 +239,15 @@ export async function getCollaboratorPreferences(tripId: string): Promise<any[]>
 // REACT QUERY HOOKS
 // ============================================================================
 
+export function useTripPermission(tripId: string | undefined) {
+  return useQuery({
+    queryKey: ['trip-permission', tripId],
+    queryFn: () => getTripPermission(tripId!),
+    enabled: !!tripId,
+    staleTime: 30_000,
+  });
+}
+
 export function useTripCollaborators(tripId: string | undefined) {
   return useQuery({
     queryKey: ['trip-collaborators', tripId],
@@ -206,6 +268,26 @@ export function useAddTripCollaborator() {
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to add collaborator');
+    },
+  });
+}
+
+export function useUpdateCollaboratorPermission() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ collaboratorId, permission }: { collaboratorId: string; permission: CollaboratorPermission }) =>
+      updateCollaboratorPermission(collaboratorId, permission),
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success('Permission updated');
+        queryClient.invalidateQueries({ queryKey: ['trip-collaborators'] });
+      } else {
+        toast.error(result.error || 'Failed to update permission');
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to update permission');
     },
   });
 }
