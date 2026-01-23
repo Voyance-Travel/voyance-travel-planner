@@ -516,6 +516,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "agency_communications_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts_intake"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "agency_communications_traveler_id_fkey"
             columns: ["traveler_id"]
             isOneToOne: false
@@ -599,6 +606,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_documents_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts_intake"
             referencedColumns: ["id"]
           },
           {
@@ -718,6 +732,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_invoices_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts_intake"
             referencedColumns: ["id"]
           },
           {
@@ -1144,6 +1165,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "agency_tasks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts_intake"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "agency_tasks_booking_segment_id_fkey"
             columns: ["booking_segment_id"]
             isOneToOne: false
@@ -1279,6 +1307,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_travelers_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts_intake"
             referencedColumns: ["id"]
           },
         ]
@@ -1420,6 +1455,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_trips_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts_intake"
             referencedColumns: ["id"]
           },
           {
@@ -4804,6 +4846,24 @@ export type Database = {
       }
     }
     Views: {
+      agency_accounts_intake: {
+        Row: {
+          id: string | null
+          intake_token: string | null
+          name: string | null
+        }
+        Insert: {
+          id?: string | null
+          intake_token?: string | null
+          name?: string | null
+        }
+        Update: {
+          id?: string | null
+          intake_token?: string | null
+          name?: string | null
+        }
+        Relationships: []
+      }
       finance_trip_profit_summary: {
         Row: {
           agent_earnings_cents: number | null
@@ -5003,6 +5063,13 @@ export type Database = {
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
       generate_share_token: { Args: never; Returns: string }
+      get_intake_account: {
+        Args: { p_intake_token: string }
+        Returns: {
+          id: string
+          name: string
+        }[]
+      }
       get_shared_trip_payload: {
         Args: { p_share_token: string }
         Returns: Json
