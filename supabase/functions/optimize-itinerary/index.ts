@@ -869,6 +869,45 @@ interface TransportResult {
   instructions: string;
 }
 
+// Extract transit details from Google Directions API response
+function extractTransitDetails(steps: any[]): { lines: string[]; summary: string } {
+  const transitSteps = steps.filter((s: any) => s.travel_mode === 'TRANSIT');
+  const lines: string[] = [];
+  
+  for (const step of transitSteps) {
+    const transit = step.transit_details;
+    if (!transit) continue;
+    
+    const lineName = transit.line?.short_name || transit.line?.name || '';
+    const vehicleType = transit.line?.vehicle?.type || 'TRANSIT';
+    const departureStop = transit.departure_stop?.name || '';
+    const arrivalStop = transit.arrival_stop?.name || '';
+    const numStops = transit.num_stops || 0;
+    
+    // Format: "Take M1 Metro from Gare du Nord to Châtelet (4 stops)"
+    const vehicleLabel = vehicleType === 'SUBWAY' || vehicleType === 'METRO' ? 'Metro' 
+      : vehicleType === 'TRAM' ? 'Tram'
+      : vehicleType === 'BUS' ? 'Bus'
+      : vehicleType === 'RAIL' || vehicleType === 'HEAVY_RAIL' ? 'Train'
+      : vehicleType === 'COMMUTER_TRAIN' ? 'Commuter Train'
+      : 'Transit';
+    
+    const lineLabel = lineName ? `${lineName} ${vehicleLabel}` : vehicleLabel;
+    
+    if (departureStop && arrivalStop) {
+      const stopInfo = numStops > 0 ? ` (${numStops} stop${numStops > 1 ? 's' : ''})` : '';
+      lines.push(`Take ${lineLabel} from ${departureStop} to ${arrivalStop}${stopInfo}`);
+    } else if (lineName) {
+      lines.push(`Take ${lineLabel}`);
+    }
+  }
+  
+  return {
+    lines,
+    summary: lines.length > 0 ? lines.join(' → ') : ''
+  };
+}
+
 async function getGoogleTransport(
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
@@ -881,6 +920,44 @@ async function getGoogleTransport(
   }
 
   try {
+    // Use Directions API for transit to get detailed route info
+    if (mode === 'transit') {
+      const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=transit&key=${apiKey}`;
+      const directionsResponse = await fetch(directionsUrl);
+      const directionsData = await directionsResponse.json();
+      
+      if (directionsData.status === 'OK' && directionsData.routes?.[0]?.legs?.[0]) {
+        const leg = directionsData.routes[0].legs[0];
+        const distanceMeters = leg.distance.value;
+        const durationMinutes = Math.round(leg.duration.value / 60);
+        
+        // Extract transit line details
+        const transitDetails = extractTransitDetails(leg.steps || []);
+        
+        // Transit cost varies by city, estimate $2-5
+        const costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
+        
+        // Build detailed instructions
+        let instructions: string;
+        if (transitDetails.summary) {
+          instructions = transitDetails.summary;
+        } else {
+          instructions = `Take public transit ${leg.distance.text} to ${destinationName}`;
+        }
+        
+        return {
+          method: 'metro',
+          duration: `${durationMinutes} min`,
+          durationMinutes,
+          distance: leg.distance.text,
+          distanceMeters,
+          estimatedCost: { amount: costAmount, currency: 'USD' },
+          instructions,
+        };
+      }
+    }
+    
+    // Use Distance Matrix API for walking/driving (simpler, no route details needed)
     const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.lat},${origin.lng}&destinations=${destination.lat},${destination.lng}&mode=${mode}&key=${apiKey}`;
     const response = await fetch(url);
     const data = await response.json();
@@ -906,11 +983,6 @@ async function getGoogleTransport(
       costAmount = 0;
       displayMethod = 'walk';
       instructions = `Walk ${element.distance.text} to ${destinationName}`;
-    } else if (mode === 'transit') {
-      // Transit cost varies by city, estimate $2-5
-      costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
-      displayMethod = 'metro';
-      instructions = `Take public transit ${element.distance.text} to ${destinationName}`;
     } else if (mode === 'driving') {
       // Rideshare: base fare + per-km rate
       const basefare = 3;
