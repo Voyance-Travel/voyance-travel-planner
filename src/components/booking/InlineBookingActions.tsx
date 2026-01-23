@@ -70,6 +70,14 @@ interface InlineBookingActionsProps {
   compact?: boolean;
 }
 
+// Activity types that cannot be booked on Viator (dining, restaurants, etc.)
+const DINING_KEYWORDS = ['dinner', 'lunch', 'breakfast', 'brunch', 'dining', 'restaurant', 'cafe', 'coffee', 'meal', 'eat at', 'food tour'];
+
+function isDiningActivity(title: string): boolean {
+  const lowerTitle = title.toLowerCase();
+  return DINING_KEYWORDS.some(keyword => lowerTitle.includes(keyword));
+}
+
 export function InlineBookingActions({
   activity,
   destination,
@@ -92,6 +100,9 @@ export function InlineBookingActions({
   
   const quoteValid = isQuoteValid(activity.quoteExpiresAt);
   const quoteTimeRemaining = getQuoteTimeRemaining(activity.quoteExpiresAt);
+  
+  // Hide Viator booking link for dining activities
+  const canShowViatorLink = showVendorLink && !isDiningActivity(activity.title);
 
   // Convert to BookableActivity format for the state machine
   const bookableActivity = {
@@ -174,8 +185,8 @@ export function InlineBookingActions({
   // Render based on booking state
   switch (bookingState) {
     case 'not_selected':
-      // Show "Add to Trip" or vendor link
-      if (showVendorLink && !activity.externalBookingUrl) {
+      // Show "Add to Trip" or vendor link (but not for dining activities)
+      if (canShowViatorLink && !activity.externalBookingUrl) {
         return (
           <div className="flex items-center gap-2">
             <Button
