@@ -923,26 +923,48 @@ async function getGoogleTransport(
     // Use Directions API for transit to get detailed route info
     if (mode === 'transit') {
       const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=transit&key=${apiKey}`;
+      console.log(`[Transit] Fetching directions from (${origin.lat},${origin.lng}) to (${destination.lat},${destination.lng})`);
+      
       const directionsResponse = await fetch(directionsUrl);
       const directionsData = await directionsResponse.json();
+      
+      console.log(`[Transit] API status: ${directionsData.status}`);
       
       if (directionsData.status === 'OK' && directionsData.routes?.[0]?.legs?.[0]) {
         const leg = directionsData.routes[0].legs[0];
         const distanceMeters = leg.distance.value;
         const durationMinutes = Math.round(leg.duration.value / 60);
         
+        // Log the steps for debugging
+        const steps = leg.steps || [];
+        console.log(`[Transit] Found ${steps.length} steps, transit steps: ${steps.filter((s: any) => s.travel_mode === 'TRANSIT').length}`);
+        
         // Extract transit line details
-        const transitDetails = extractTransitDetails(leg.steps || []);
+        const transitDetails = extractTransitDetails(steps);
+        console.log(`[Transit] Extracted details: ${transitDetails.summary || 'none'}`);
         
         // Transit cost varies by city, estimate $2-5
         const costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
         
-        // Build detailed instructions
+        // Build detailed instructions - use API's html_instructions as fallback
         let instructions: string;
         if (transitDetails.summary) {
           instructions = transitDetails.summary;
         } else {
-          instructions = `Take public transit ${leg.distance.text} to ${destinationName}`;
+          // Try to build instructions from step summaries
+          const stepInstructions: string[] = [];
+          for (const step of steps) {
+            if (step.travel_mode === 'TRANSIT' && step.html_instructions) {
+              // Clean HTML tags
+              const cleanInstruction = step.html_instructions.replace(/<[^>]*>/g, '');
+              stepInstructions.push(cleanInstruction);
+            }
+          }
+          if (stepInstructions.length > 0) {
+            instructions = stepInstructions.join(' → ');
+          } else {
+            instructions = `Take public transit (${leg.distance.text}) to ${destinationName}`;
+          }
         }
         
         return {
@@ -954,6 +976,11 @@ async function getGoogleTransport(
           estimatedCost: { amount: costAmount, currency: 'USD' },
           instructions,
         };
+      } else if (directionsData.status === 'ZERO_RESULTS') {
+        console.log(`[Transit] No transit routes found, falling back to driving`);
+        // No transit available, fall through to distance matrix for driving estimate
+      } else {
+        console.log(`[Transit] API error: ${directionsData.error_message || directionsData.status}`);
       }
     }
     
