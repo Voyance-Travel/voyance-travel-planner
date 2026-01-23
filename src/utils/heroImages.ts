@@ -38,7 +38,7 @@ const heroImages: Record<HeroPageType, HeroImageSet> = {
     alt: 'Discover amazing destinations with Voyance',
   },
   planning: {
-    primary: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1920&q=80',
+    primary: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920&q=80',
     fallbacks: [
       'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80',
       'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80',
