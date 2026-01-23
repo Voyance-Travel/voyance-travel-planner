@@ -1,14 +1,14 @@
 /**
  * Payments Tab Component - Editorial Redesign
- * Tracks all trip payments with group splitting support
+ * Tracks all trip payments with group splitting and member assignment support
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
   AlertCircle, CheckCircle2, Users, ChevronDown, Receipt,
-  Wallet, X, UserPlus, Split
+  Wallet, X, UserPlus, Split, User
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -26,6 +28,7 @@ import {
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
+import { useTripMembers, type TripMember } from '@/services/tripBudgetAPI';
 import { BookingButton } from '@/components/booking/BookingButton';
 import { toast } from 'sonner';
 import type { EditorialDay } from './EditorialItinerary';
@@ -53,15 +56,7 @@ interface PayableItem {
   amountCents: number;
   dayNumber?: number;
   payment?: TripPayment;
-}
-
-interface GroupMember {
-  id: string;
-  name: string;
-  email?: string;
-  amountOwed: number;
-  amountPaid: number;
-  isOrganizer?: boolean;
+  assignedMemberId?: string;
 }
 
 export function PaymentsTab({ 
@@ -76,16 +71,17 @@ export function PaymentsTab({
   const [loading, setLoading] = useState(true);
   const [markPaidModal, setMarkPaidModal] = useState<PayableItem | null>(null);
   const [externalRef, setExternalRef] = useState('');
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [markingPaid, setMarkingPaid] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>('essentials');
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [isSendingInvite, setIsSendingInvite] = useState(false);
-
-  // Mock group members - would come from trip_members table
-  const [groupMembers] = useState<GroupMember[]>([
-    { id: '1', name: 'You', isOrganizer: true, amountOwed: 0, amountPaid: 0 },
-  ]);
+  const [assigningItem, setAssigningItem] = useState<PayableItem | null>(null);
+  const [assignMemberId, setAssignMemberId] = useState<string>('');
+  
+  // Fetch real trip members
+  const { data: tripMembers = [], isLoading: membersLoading } = useTripMembers(tripId);
 
   // Fetch payments
   const fetchPayments = useCallback(async () => {
@@ -102,54 +98,64 @@ export function PaymentsTab({
   }, [fetchPayments]);
 
   // Build list of all payable items
-  const payableItems: PayableItem[] = [];
+  const payableItems: PayableItem[] = useMemo(() => {
+    const items: PayableItem[] = [];
 
-  // Flight
-  if (flightSelection?.totalPrice) {
-    const flightId = 'flight-selection';
-    const flightPayment = payments.find(p => p.item_type === 'flight' && p.item_id === flightId);
-    payableItems.push({
-      id: flightId,
-      type: 'flight',
-      name: `Round-trip Flight${flightSelection.outbound?.airline ? ` (${flightSelection.outbound.airline})` : ''}`,
-      amountCents: Math.round((flightSelection.totalPrice || 0) * 100),
-      payment: flightPayment,
-    });
-  }
+    // Flight
+    if (flightSelection?.totalPrice) {
+      const flightId = 'flight-selection';
+      const flightPayment = payments.find(p => p.item_type === 'flight' && p.item_id === flightId);
+      items.push({
+        id: flightId,
+        type: 'flight',
+        name: `Round-trip Flight${flightSelection.outbound?.airline ? ` (${flightSelection.outbound.airline})` : ''}`,
+        amountCents: Math.round((flightSelection.totalPrice || 0) * 100),
+        payment: flightPayment,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assignedMemberId: (flightPayment as any)?.assigned_member_id,
+      });
+    }
 
-  // Hotel
-  if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
-    const hotelId = 'hotel-selection';
-    const hotelPayment = payments.find(p => p.item_type === 'hotel' && p.item_id === hotelId);
-    const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * days.length;
-    payableItems.push({
-      id: hotelId,
-      type: 'hotel',
-      name: hotelSelection.name || 'Hotel Accommodation',
-      amountCents: Math.round(hotelPrice * 100),
-      payment: hotelPayment,
-    });
-  }
+    // Hotel
+    if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
+      const hotelId = 'hotel-selection';
+      const hotelPayment = payments.find(p => p.item_type === 'hotel' && p.item_id === hotelId);
+      const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * days.length;
+      items.push({
+        id: hotelId,
+        type: 'hotel',
+        name: hotelSelection.name || 'Hotel Accommodation',
+        amountCents: Math.round(hotelPrice * 100),
+        payment: hotelPayment,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assignedMemberId: (hotelPayment as any)?.assigned_member_id,
+      });
+    }
 
-  // Activities
-  days.forEach(day => {
-    day.activities.forEach(activity => {
-      if (activity.bookingRequired) {
-        const cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
-        if (cost > 0) {
-          const activityPayment = payments.find(p => p.item_type === 'activity' && p.item_id === activity.id);
-          payableItems.push({
-            id: activity.id,
-            type: 'activity',
-            name: activity.title,
-            amountCents: Math.round(cost * 100),
-            dayNumber: day.dayNumber,
-            payment: activityPayment,
-          });
+    // Activities
+    days.forEach(day => {
+      day.activities.forEach(activity => {
+        if (activity.bookingRequired) {
+          const cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
+          if (cost > 0) {
+            const activityPayment = payments.find(p => p.item_type === 'activity' && p.item_id === activity.id);
+            items.push({
+              id: activity.id,
+              type: 'activity',
+              name: activity.title,
+              amountCents: Math.round(cost * 100),
+              dayNumber: day.dayNumber,
+              payment: activityPayment,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              assignedMemberId: (activityPayment as any)?.assigned_member_id,
+            });
+          }
         }
-      }
+      });
     });
-  });
+
+    return items;
+  }, [flightSelection, hotelSelection, days, payments]);
 
   // Calculate totals
   const estimatedTotal = payableItems.reduce((sum, item) => sum + item.amountCents, 0);
@@ -163,6 +169,34 @@ export function PaymentsTab({
   const essentialItems = payableItems.filter(i => i.type === 'flight' || i.type === 'hotel');
   const activityItems = payableItems.filter(i => i.type === 'activity');
 
+  // Calculate per-member breakdown
+  const memberBreakdown = useMemo(() => {
+    const breakdown = new Map<string, { assigned: number; paid: number; items: PayableItem[] }>();
+    
+    // Initialize with all members
+    tripMembers.forEach(m => {
+      breakdown.set(m.id, { assigned: 0, paid: 0, items: [] });
+    });
+    
+    // Add "unassigned" category
+    breakdown.set('unassigned', { assigned: 0, paid: 0, items: [] });
+
+    payableItems.forEach(item => {
+      const memberId = item.assignedMemberId || 'unassigned';
+      const current = breakdown.get(memberId) || { assigned: 0, paid: 0, items: [] };
+      
+      current.assigned += item.amountCents;
+      if (item.payment?.status === 'paid') {
+        current.paid += item.amountCents;
+      }
+      current.items.push(item);
+      
+      breakdown.set(memberId, current);
+    });
+
+    return breakdown;
+  }, [tripMembers, payableItems]);
+
   const handleMarkAsPaid = async () => {
     if (!markPaidModal) return;
     setMarkingPaid(true);
@@ -171,7 +205,8 @@ export function PaymentsTab({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { error } = await supabase.from('trip_payments').insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('trip_payments').insert({
         trip_id: tripId,
         user_id: user.id,
         item_type: markPaidModal.type,
@@ -183,6 +218,7 @@ export function PaymentsTab({
         status: 'paid',
         external_provider: 'external',
         external_booking_id: externalRef || undefined,
+        assigned_member_id: selectedMemberId || null,
         paid_at: new Date().toISOString(),
       });
 
@@ -191,6 +227,7 @@ export function PaymentsTab({
       toast.success('Marked as paid');
       setMarkPaidModal(null);
       setExternalRef('');
+      setSelectedMemberId('');
       fetchPayments();
     } catch (err) {
       console.error('Error marking paid:', err);
@@ -219,6 +256,51 @@ export function PaymentsTab({
     }
   };
 
+  const handleAssignMember = async () => {
+    if (!assigningItem) return;
+    
+    try {
+      if (assigningItem.payment) {
+        // Update existing payment
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from('trip_payments')
+          .update({ assigned_member_id: assignMemberId || null })
+          .eq('id', assigningItem.payment.id);
+        
+        if (error) throw error;
+      } else {
+        // Create a pending payment record with assignment
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('trip_payments').insert({
+          trip_id: tripId,
+          user_id: user.id,
+          item_type: assigningItem.type,
+          item_id: assigningItem.id,
+          item_name: assigningItem.name,
+          amount_cents: assigningItem.amountCents,
+          currency: 'USD',
+          quantity: 1,
+          status: 'pending',
+          assigned_member_id: assignMemberId || null,
+        });
+
+        if (error) throw error;
+      }
+
+      toast.success('Assignment updated');
+      setAssigningItem(null);
+      setAssignMemberId('');
+      fetchPayments();
+    } catch (err) {
+      console.error('Error assigning member:', err);
+      toast.error('Failed to assign');
+    }
+  };
+
   const getItemIcon = (type: 'flight' | 'hotel' | 'activity') => {
     switch (type) {
       case 'flight': return <Plane className="h-4 w-4" />;
@@ -227,7 +309,19 @@ export function PaymentsTab({
     }
   };
 
-  if (loading) {
+  const getMemberName = (memberId: string) => {
+    const member = tripMembers.find(m => m.id === memberId);
+    return member?.name || member?.email?.split('@')[0] || 'Unknown';
+  };
+
+  const getMemberInitials = (member: TripMember) => {
+    if (member.name) {
+      return member.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    return member.email?.charAt(0).toUpperCase() || '?';
+  };
+
+  if (loading || membersLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
@@ -237,6 +331,7 @@ export function PaymentsTab({
 
   const renderPayableItem = (item: PayableItem) => {
     const isPaid = item.payment?.status === 'paid';
+    const assignedMember = item.assignedMemberId ? tripMembers.find(m => m.id === item.assignedMemberId) : null;
     
     return (
       <motion.div
@@ -260,6 +355,12 @@ export function PaymentsTab({
             </p>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {item.dayNumber && <span>Day {item.dayNumber}</span>}
+              {assignedMember && (
+                <span className="flex items-center gap-1 text-primary">
+                  <User className="h-3 w-3" />
+                  {getMemberName(assignedMember.id)}
+                </span>
+              )}
               {item.payment?.external_provider === 'external' && (
                 <span className="flex items-center gap-0.5">
                   <ExternalLink className="h-3 w-3" />
@@ -274,6 +375,22 @@ export function PaymentsTab({
           <span className={cn("font-medium text-sm", isPaid && "text-green-600")}>
             {formatCurrency(item.amountCents)}
           </span>
+          
+          {/* Assign button */}
+          {tripMembers.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-primary"
+              onClick={() => {
+                setAssigningItem(item);
+                setAssignMemberId(item.assignedMemberId || '');
+              }}
+              title="Assign to member"
+            >
+              <User className="h-3.5 w-3.5" />
+            </Button>
+          )}
           
           {isPaid ? (
             <Button
@@ -290,7 +407,10 @@ export function PaymentsTab({
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs"
-                onClick={() => setMarkPaidModal(item)}
+                onClick={() => {
+                  setMarkPaidModal(item);
+                  setSelectedMemberId(item.assignedMemberId || '');
+                }}
               >
                 <Check className="h-3 w-3 mr-1" />
                 Paid
@@ -514,30 +634,21 @@ export function PaymentsTab({
           )}
         </TabsContent>
 
-        <TabsContent value="group" className="mt-4">
-          <Card className="p-6">
-            <div className="text-center">
-              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <Split className="h-7 w-7 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Split the Bill</h3>
-              <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                Invite your travel companions and split costs evenly or assign specific expenses to each person.
-              </p>
-
-              {/* Current Members */}
-              <div className="flex items-center justify-center gap-2 mb-6">
-                {groupMembers.map((member, idx) => (
-                  <div 
-                    key={member.id}
-                    className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium",
-                      member.isOrganizer ? "bg-primary text-primary-foreground" : "bg-muted"
-                    )}
-                    title={member.name}
-                  >
-                    {member.name.charAt(0)}
-                  </div>
+        <TabsContent value="group" className="mt-4 space-y-4">
+          {/* Member Breakdown */}
+          {tripMembers.length > 0 ? (
+            <>
+              {/* Member Avatars */}
+              <div className="flex items-center justify-center gap-2 mb-4">
+                {tripMembers.map(member => (
+                  <Avatar key={member.id} className="h-10 w-10 border-2 border-background shadow-sm">
+                    <AvatarFallback className={cn(
+                      "text-sm font-medium",
+                      member.role === 'primary' ? "bg-primary text-primary-foreground" : "bg-muted"
+                    )}>
+                      {getMemberInitials(member)}
+                    </AvatarFallback>
+                  </Avatar>
                 ))}
                 <button 
                   onClick={() => setShowGroupModal(true)}
@@ -547,19 +658,76 @@ export function PaymentsTab({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" onClick={() => setShowGroupModal(true)}>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Invite Members
-                </Button>
-                <Button onClick={() => setShowGroupModal(true)}>
-                  <Split className="h-4 w-4 mr-2" />
-                  Configure Split
-                </Button>
+              {/* Per-Member Breakdown */}
+              <div className="space-y-3">
+                {tripMembers.map(member => {
+                  const breakdown = memberBreakdown.get(member.id);
+                  if (!breakdown || breakdown.items.length === 0) return null;
+                  
+                  const memberProgress = breakdown.assigned > 0 ? (breakdown.paid / breakdown.assigned) * 100 : 0;
+                  
+                  return (
+                    <Card key={member.id} className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className={cn(
+                              "text-xs font-medium",
+                              member.role === 'primary' ? "bg-primary text-primary-foreground" : "bg-muted"
+                            )}>
+                              {getMemberInitials(member)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-sm">{member.name || member.email?.split('@')[0]}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {breakdown.items.length} item{breakdown.items.length !== 1 ? 's' : ''} assigned
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{formatCurrency(breakdown.assigned)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(breakdown.paid)} paid
+                          </p>
+                        </div>
+                      </div>
+                      <Progress value={memberProgress} className="h-1.5" />
+                    </Card>
+                  );
+                })}
+                
+                {/* Unassigned Items */}
+                {(() => {
+                  const unassigned = memberBreakdown.get('unassigned');
+                  if (!unassigned || unassigned.items.length === 0) return null;
+                  
+                  return (
+                    <Card className="p-4 border-dashed">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm text-muted-foreground">Unassigned</p>
+                            <p className="text-xs text-muted-foreground">
+                              {unassigned.items.length} item{unassigned.items.length !== 1 ? 's' : ''} need assignment
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-muted-foreground">{formatCurrency(unassigned.assigned)}</p>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })()}
               </div>
 
+              {/* Equal Split Info */}
               {travelers > 1 && (
-                <div className="mt-6 pt-4 border-t border-border">
+                <div className="mt-4 pt-4 border-t border-border text-center">
                   <p className="text-sm text-muted-foreground mb-2">
                     If split equally among {travelers} travelers:
                   </p>
@@ -568,8 +736,45 @@ export function PaymentsTab({
                   </p>
                 </div>
               )}
-            </div>
-          </Card>
+            </>
+          ) : (
+            <Card className="p-6">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <Split className="h-7 w-7 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Split the Bill</h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+                  Invite your travel companions and split costs evenly or assign specific expenses to each person.
+                </p>
+
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <button 
+                    onClick={() => setShowGroupModal(true)}
+                    className="w-10 h-10 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary hover:text-primary transition-colors"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <Button onClick={() => setShowGroupModal(true)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Invite Members
+                </Button>
+
+                {travelers > 1 && (
+                  <div className="mt-6 pt-4 border-t border-border">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      If split equally among {travelers} travelers:
+                    </p>
+                    <p className="text-xl font-semibold text-primary">
+                      {formatCurrency(Math.round(estimatedTotal / travelers))} per person
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -592,6 +797,25 @@ export function PaymentsTab({
                 </div>
                 <span className="font-semibold">{formatCurrency(markPaidModal.amountCents)}</span>
               </div>
+
+              {tripMembers.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Paid by</Label>
+                  <Select value={selectedMemberId} onValueChange={setSelectedMemberId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select who paid" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tripMembers.map(member => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name || member.email?.split('@')[0]}
+                          {member.role === 'primary' && ' (Organizer)'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="externalRef">Confirmation Number (optional)</Label>
@@ -619,6 +843,57 @@ export function PaymentsTab({
         </DialogContent>
       </Dialog>
 
+      {/* Assign Member Modal */}
+      <Dialog open={!!assigningItem} onOpenChange={() => setAssigningItem(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign to Member</DialogTitle>
+            <DialogDescription>
+              Choose who is responsible for paying this item.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {assigningItem && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  {getItemIcon(assigningItem.type)}
+                  <span className="font-medium text-sm">{assigningItem.name}</span>
+                </div>
+                <span className="font-semibold">{formatCurrency(assigningItem.amountCents)}</span>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Assign to</Label>
+                <Select value={assignMemberId} onValueChange={setAssignMemberId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Unassigned</SelectItem>
+                    {tripMembers.map(member => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.name || member.email?.split('@')[0]}
+                        {member.role === 'primary' && ' (Organizer)'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setAssigningItem(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAssignMember}>
+              Save Assignment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Group Setup Modal */}
       <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
         <DialogContent className="sm:max-w-lg">
@@ -630,6 +905,36 @@ export function PaymentsTab({
           </DialogHeader>
           
           <div className="space-y-4 py-4">
+            {/* Current Members */}
+            {tripMembers.length > 0 && (
+              <div>
+                <Label className="mb-3 block">Current Members</Label>
+                <div className="space-y-2">
+                  {tripMembers.map(member => (
+                    <div key={member.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className={cn(
+                            "text-xs font-medium",
+                            member.role === 'primary' ? "bg-primary text-primary-foreground" : "bg-muted"
+                          )}>
+                            {getMemberInitials(member)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium">{member.name || member.email?.split('@')[0]}</p>
+                          <p className="text-xs text-muted-foreground">{member.email}</p>
+                        </div>
+                      </div>
+                      {member.role === 'primary' && (
+                        <Badge variant="secondary" className="text-xs">Organizer</Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <Label>Invite by Email</Label>
               <div className="flex gap-2 mt-2">
@@ -686,20 +991,6 @@ export function PaymentsTab({
               <p className="text-xs text-muted-foreground mt-1">
                 They'll receive a link to join this trip and track their share of expenses.
               </p>
-            </div>
-
-            <div className="pt-4 border-t border-border">
-              <Label className="mb-3 block">Split Method</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <button className="p-4 rounded-lg border-2 border-primary bg-primary/5 text-left">
-                  <div className="font-medium mb-1">Equal Split</div>
-                  <p className="text-xs text-muted-foreground">Divide all costs evenly</p>
-                </button>
-                <button className="p-4 rounded-lg border border-border hover:border-primary/50 text-left transition-colors opacity-50 cursor-not-allowed">
-                  <div className="font-medium mb-1">Custom Split</div>
-                  <p className="text-xs text-muted-foreground">Coming soon</p>
-                </button>
-              </div>
             </div>
           </div>
 

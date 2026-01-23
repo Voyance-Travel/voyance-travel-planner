@@ -3874,6 +3874,7 @@ export type Database = {
       trip_payments: {
         Row: {
           amount_cents: number
+          assigned_member_id: string | null
           created_at: string
           currency: string
           external_booking_id: string | null
@@ -3894,6 +3895,7 @@ export type Database = {
         }
         Insert: {
           amount_cents: number
+          assigned_member_id?: string | null
           created_at?: string
           currency?: string
           external_booking_id?: string | null
@@ -3914,6 +3916,7 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
+          assigned_member_id?: string | null
           created_at?: string
           currency?: string
           external_booking_id?: string | null
@@ -3933,6 +3936,20 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_payments_assigned_member_id_fkey"
+            columns: ["assigned_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_payments_assigned_member_id_fkey"
+            columns: ["assigned_member_id"]
+            isOneToOne: false
+            referencedRelation: "trip_members_safe"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trip_payments_trip_id_fkey"
             columns: ["trip_id"]
