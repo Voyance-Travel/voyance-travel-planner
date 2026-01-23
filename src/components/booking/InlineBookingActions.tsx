@@ -148,6 +148,11 @@ export function InlineBookingActions({
     return null;
   }
 
+  // Dining activities cannot be booked - no booking actions shown
+  if (isDiningActivity(activity.title)) {
+    return null;
+  }
+
   // Handle primary action based on state
   const handlePrimaryAction = async () => {
     switch (primaryAction.action) {
