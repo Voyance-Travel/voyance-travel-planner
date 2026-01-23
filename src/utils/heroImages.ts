@@ -38,10 +38,10 @@ const heroImages: Record<HeroPageType, HeroImageSet> = {
     alt: 'Discover amazing destinations with Voyance',
   },
   planning: {
-    primary: 'https://images.unsplash.com/photo-1522199670076-2852f80289c3?w=1920&q=80',
+    primary: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1920&q=80',
     fallbacks: [
-      'https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=1920&q=80',
-      'https://images.unsplash.com/photo-1494783367193-149034c05e8f?w=1920&q=80',
+      'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80',
+      'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80',
     ],
     alt: 'Plan your perfect journey with Voyance',
   },
