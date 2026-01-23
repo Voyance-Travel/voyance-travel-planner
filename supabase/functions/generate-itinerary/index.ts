@@ -206,8 +206,13 @@ const STRICT_ITINERARY_TOOL = {
                     transportation: {
                       type: "object",
                       properties: {
-                        method: { type: "string", enum: ["walk", "metro", "bus", "taxi", "uber", "tram", "train", "car"] },
+                        method: { 
+                          type: "string", 
+                          enum: ["walk", "metro", "bus", "taxi", "uber", "tram", "train", "car"],
+                          description: "SMART MODE SELECTION: walk (<1km), metro/tram/bus (1-8km in cities with transit), uber/taxi (>3km or no transit), train (inter-city)"
+                        },
                         duration: { type: "string" },
+                        distanceKm: { type: "number", description: "Estimated distance in kilometers between locations" },
                         estimatedCost: {
                           type: "object",
                           properties: {
@@ -216,7 +221,7 @@ const STRICT_ITINERARY_TOOL = {
                           },
                           required: ["amount", "currency"]
                         },
-                        instructions: { type: "string" }
+                        instructions: { type: "string", description: "Include specific transit lines, stations, or route details when applicable" }
                       },
                       required: ["method", "duration", "estimatedCost", "instructions"]
                     },
@@ -1450,7 +1455,12 @@ STRUCTURAL REQUIREMENTS:
    - If no flight info: start days around 9:00 AM
 3. End days by 9:00-10:00 PM (unless late arrival day - then end earlier)
 4. Account for travel time between activities
-5. Include transportation instructions between each activity
+5. SMART TRANSPORTATION SELECTION (CRITICAL - DO NOT DEFAULT TO WALK):
+   - WALK: Only for distances under 1km (about 10-15 min walk)
+   - METRO/TRAM/BUS: For 1-8km in cities with public transit (Paris, London, Tokyo, NYC, Berlin, Rome, etc.)
+   - UBER/TAXI: For 3km+ when no convenient transit, late night, or luggage
+   - TRAIN: For inter-city or airport-to-city transfers
+   - Include specific transit line names (e.g., "Take Metro Line 1 to Concorde station")
 6. DAY 1 MUST START with airport arrival and transfer to hotel (times based on actual flight if provided)
 7. LAST DAY MUST END with hotel checkout and transfer to airport (times based on return flight if provided)
 8. Include website URLs for popular venues when known`;
