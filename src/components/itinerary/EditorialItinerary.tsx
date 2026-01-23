@@ -47,7 +47,8 @@ import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
-// SaveToLibraryModal removed - agent features disabled
+import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
+import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 
 // =============================================================================
@@ -513,6 +514,13 @@ export function EditorialItinerary({
 
   // Get entitlements for credit checking
   const { data: entitlements, isPaid } = useEntitlements();
+  
+  // Get trip permission for current user
+  const { data: tripPermission } = useTripPermission(tripId);
+  const { data: collaborators = [] } = useTripCollaborators(tripId);
+  
+  // Determine effective editability based on permission
+  const effectiveIsEditable = isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
 
   // Fetch payments on mount
   useEffect(() => {
@@ -1811,118 +1819,110 @@ export function EditorialItinerary({
 
       {/* Share Trip Modal */}
       <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Share2 className="h-5 w-5 text-primary" />
-              Share Your Trip
+              Share & Manage Trip
             </DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <p className="text-sm text-muted-foreground">
-              Invite travel companions to view and collaborate on this trip. They'll be able to see the itinerary and join as group members.
-            </p>
-            
-            {/* Trip Preview */}
-            <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <MapPin className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h4 className="font-semibold">{destination}</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {startDate} • {travelers} {travelers === 1 ? 'traveler' : 'travelers'}
+            {/* Collaborators Panel */}
+            <TripCollaboratorsPanel
+              tripId={tripId}
+              ownerName={tripPermission?.isOwner ? 'You' : undefined}
+              onInviteClick={handleCreateShareLink}
+            />
+
+            {/* Invite Link Section - only for owner */}
+            {tripPermission?.isOwner && (
+              <>
+                <div className="pt-4 border-t border-border space-y-2">
+                  <label className="text-sm font-medium">Invite Link</label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={shareLink || 'Click to generate link...'}
+                      readOnly
+                      className="flex-1 text-sm"
+                      onClick={!shareLink ? handleCreateShareLink : undefined}
+                    />
+                    <Button 
+                      onClick={async () => {
+                        if (shareLink) {
+                          await navigator.clipboard.writeText(shareLink);
+                          setInviteCopied(true);
+                          setTimeout(() => setInviteCopied(false), 2000);
+                          toast.success('Link copied!');
+                        } else {
+                          handleCreateShareLink();
+                        }
+                      }}
+                      disabled={isCreatingInvite}
+                      className="gap-1.5"
+                    >
+                      {isCreatingInvite ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : inviteCopied ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      {inviteCopied ? 'Copied!' : shareLink ? 'Copy' : 'Generate'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Link expires in 7 days. Up to {travelers - 1} {travelers - 1 === 1 ? 'person' : 'people'} can join.
                   </p>
                 </div>
-              </div>
-            </div>
 
-            {/* Invite Link */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Invite Link</label>
-              <div className="flex gap-2">
-                <Input
-                  value={shareLink || 'Click to generate link...'}
-                  readOnly
-                  className="flex-1 text-sm"
-                  onClick={!shareLink ? handleCreateShareLink : undefined}
-                />
-                <Button 
-                  onClick={async () => {
-                    if (shareLink) {
-                      await navigator.clipboard.writeText(shareLink);
-                      setInviteCopied(true);
-                      setTimeout(() => setInviteCopied(false), 2000);
-                      toast.success('Link copied!');
-                    } else {
-                      handleCreateShareLink();
-                    }
-                  }}
-                  disabled={isCreatingInvite}
-                  className="gap-1.5"
-                >
-                  {isCreatingInvite ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : inviteCopied ? (
-                    <Check className="h-4 w-4" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  {inviteCopied ? 'Copied!' : shareLink ? 'Copy' : 'Generate'}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Link expires in 7 days. Up to {travelers - 1} {travelers - 1 === 1 ? 'person' : 'people'} can join.
-              </p>
-            </div>
-
-            {/* Share Methods */}
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs text-muted-foreground mb-3">Or share via:</p>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={async () => {
-                    if (!shareLink) await handleCreateShareLink();
-                    const link = shareLink || '';
-                    const text = `Join me on a trip to ${destination}!`;
-                    window.open(`mailto:?subject=${encodeURIComponent(text)}&body=${encodeURIComponent(link)}`, '_blank');
-                  }}
-                >
-                  Email
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={async () => {
-                    if (!shareLink) await handleCreateShareLink();
-                    const link = shareLink || '';
-                    const text = `Join me on a trip to ${destination}! ${link}`;
-                    window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
-                  }}
-                >
-                  Message
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={async () => {
-                    if (!shareLink) await handleCreateShareLink();
-                    const link = shareLink || '';
-                    const text = `Join me on a trip to ${destination}!`;
-                    window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + link)}`, '_blank');
-                  }}
-                >
-                  WhatsApp
-                </Button>
-              </div>
-            </div>
+                {/* Share Methods */}
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs text-muted-foreground mb-3">Or share via:</p>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={async () => {
+                        if (!shareLink) await handleCreateShareLink();
+                        const link = shareLink || '';
+                        const text = `Join me on a trip to ${destination}!`;
+                        window.open(`mailto:?subject=${encodeURIComponent(text)}&body=${encodeURIComponent(link)}`, '_blank');
+                      }}
+                    >
+                      Email
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={async () => {
+                        if (!shareLink) await handleCreateShareLink();
+                        const link = shareLink || '';
+                        const text = `Join me on a trip to ${destination}! ${link}`;
+                        window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
+                      }}
+                    >
+                      Message
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={async () => {
+                        if (!shareLink) await handleCreateShareLink();
+                        const link = shareLink || '';
+                        const text = `Join me on a trip to ${destination}!`;
+                        window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + link)}`, '_blank');
+                      }}
+                    >
+                      WhatsApp
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
