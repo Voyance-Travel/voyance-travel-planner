@@ -210,7 +210,6 @@ export default function TopNav() {
                         </div>
 
                         {/* Agent Dashboard Link - shown first if agent mode enabled */}
-                        {/* Agent Dashboard - DISABLED
                         {user?.travelAgentMode && (
                           <div className="py-2 border-b border-border">
                             <Link
@@ -227,7 +226,6 @@ export default function TopNav() {
                             </Link>
                           </div>
                         )}
-                        */}
 
                         {/* Menu Items */}
                         <div className="py-2">
@@ -366,7 +364,6 @@ export default function TopNav() {
               <div className="pt-4 border-t border-border space-y-1">
                 {isAuthenticated ? (
                   <>
-                    {/* Agent Dashboard - DISABLED
                     {user?.travelAgentMode && (
                       <Link
                         to={agentMenuItem.href}
@@ -380,7 +377,6 @@ export default function TopNav() {
                         {agentMenuItem.label}
                       </Link>
                     )}
-                    */}
                     {userMenuItems.map((item) => {
                       const Icon = item.icon;
                       return (
