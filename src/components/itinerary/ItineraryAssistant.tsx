@@ -58,6 +58,7 @@ export function ItineraryAssistant({
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [executingActionId, setExecutingActionId] = useState<string | null>(null); // Track which action is executing
   const [approvalMode, setApprovalMode] = useState(true); // Default to approval mode
   const [currentDays, setCurrentDays] = useState<ItineraryDay[]>(days);
   const [conversationId] = useState(generateConversationId);
@@ -208,7 +209,12 @@ export function ItineraryAssistant({
   }, [inputValue, isLoading, messages, itineraryContext, conversationId, approvalMode]);
 
   const handleActionApply = async (messageId: string, actionIndex: number, action: ItineraryAction) => {
+    const actionId = `${messageId}-${actionIndex}`;
     setIsExecuting(true);
+    setExecutingActionId(actionId);
+    
+    // Show immediate feedback that we're working on it
+    toast.loading('Applying changes...', { id: actionId, description: 'This may take a few seconds' });
     
     try {
       // Execute the action using the action executor
@@ -242,10 +248,12 @@ export function ItineraryAssistant({
         }
 
         toast.success('Action applied', {
+          id: actionId,
           description: result.message,
         });
       } else {
         toast.error('Action failed', {
+          id: actionId,
           description: result.message,
         });
       }
@@ -262,10 +270,12 @@ export function ItineraryAssistant({
       }));
 
       toast.error('Failed to execute action', {
+        id: actionId,
         description: error instanceof Error ? error.message : 'Unknown error',
       });
     } finally {
       setIsExecuting(false);
+      setExecutingActionId(null);
     }
   };
 
@@ -363,6 +373,8 @@ export function ItineraryAssistant({
                           const isPending = action.status === 'pending';
                           const isApplied = action.status === 'applied';
                           const isDeclined = action.status === 'declined';
+                          const actionId = `${message.id}-${idx}`;
+                          const isThisExecuting = executingActionId === actionId;
 
                           return (
                             <Card 
@@ -370,7 +382,8 @@ export function ItineraryAssistant({
                               className={cn(
                                 "transition-all",
                                 isApplied && "border-green-500/50 bg-green-500/5",
-                                isDeclined && "opacity-50"
+                                isDeclined && "opacity-50",
+                                isThisExecuting && "border-primary/50 animate-pulse"
                               )}
                             >
                               <CardContent className="p-3">
@@ -379,12 +392,16 @@ export function ItineraryAssistant({
                                     "p-2 rounded-lg",
                                     isApplied ? "bg-green-500/10 text-green-600" : "bg-primary/10 text-primary"
                                   )}>
-                                    {getActionIcon(displayInfo.icon)}
+                                    {isThisExecuting ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      getActionIcon(displayInfo.icon)
+                                    )}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="font-medium text-sm">{displayInfo.title}</p>
                                     <p className="text-xs text-muted-foreground line-clamp-2">
-                                      {displayInfo.description}
+                                      {isThisExecuting ? 'Applying changes...' : displayInfo.description}
                                     </p>
                                   </div>
                                 </div>
@@ -395,15 +412,26 @@ export function ItineraryAssistant({
                                       size="sm"
                                       onClick={() => handleActionApply(message.id, idx, action)}
                                       className="flex-1 gap-1.5"
+                                      disabled={isExecuting}
                                     >
-                                      <Check className="h-3.5 w-3.5" />
-                                      Apply
+                                      {isThisExecuting ? (
+                                        <>
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          Applying...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Check className="h-3.5 w-3.5" />
+                                          Apply
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       size="sm"
                                       variant="outline"
                                       onClick={() => handleActionDecline(message.id, idx)}
                                       className="gap-1.5"
+                                      disabled={isExecuting}
                                     >
                                       <ThumbsDown className="h-3.5 w-3.5" />
                                     </Button>
