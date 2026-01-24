@@ -761,7 +761,7 @@ const TENSION_PATTERNS: TensionPattern[] = [
   {
     condition: (t) => t.comfort >= 6 && t.budget >= 5,
     label: 'aspirational luxury',
-    explanation: 'You have refined tastes and seek the best value-for-quality deals—champagne experiences on a beer budget.',
+    explanation: 'You have refined tastes and love finding exceptional value—high-end feel with smart choices.',
   },
   // 2. premium adventure = 3 traits required (adventure + comfort + frugal)
   {
