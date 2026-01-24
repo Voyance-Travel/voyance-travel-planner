@@ -773,6 +773,56 @@
           "emotionalDrivers": ["connection", "pleasure", "presence"]
         }
       ]
+    },
+    {
+      "id": "q15",
+      "prompt": "How do you feel about meeting new people while traveling?",
+      "type": "single",
+      "answers": [
+        {
+          "id": "o1",
+          "label": "I recharge in solitude—other travelers drain me",
+          "mappings": [
+            { "trait": "solitudeEmbracer", "weight": 0.95 },
+            { "trait": "independentTraveler", "weight": 0.9 },
+            { "trait": "restorationSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["introvert", "solo", "private"],
+          "emotionalDrivers": ["peace", "autonomy", "restoration"]
+        },
+        {
+          "id": "o2",
+          "label": "Small, meaningful connections are enough—I prefer depth over breadth",
+          "mappings": [
+            { "trait": "depthOverBreadth", "weight": 0.85 },
+            { "trait": "connectionSeeker", "weight": 0.7 },
+            { "trait": "solitudeEmbracer", "weight": 0.5 }
+          ],
+          "toneTags": ["selective", "deep", "quality"],
+          "emotionalDrivers": ["meaning", "authenticity", "connection"]
+        },
+        {
+          "id": "o3",
+          "label": "I'm flexible—social or solo depending on my mood",
+          "mappings": [
+            { "trait": "adaptableTraveler", "weight": 0.8 },
+            { "trait": "flexibilityEmbracer", "weight": 0.75 }
+          ],
+          "toneTags": ["balanced", "adaptable", "flexible"],
+          "emotionalDrivers": ["freedom", "adaptability", "balance"]
+        },
+        {
+          "id": "o4",
+          "label": "I thrive on meeting people—strangers become friends",
+          "mappings": [
+            { "trait": "socialConnector", "weight": 0.95 },
+            { "trait": "groupTraveler", "weight": 0.85 },
+            { "trait": "funSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["extrovert", "social", "open"],
+          "emotionalDrivers": ["connection", "energy", "community"]
+        }
+      ]
     }
   ],
   "traitDefinitions": {

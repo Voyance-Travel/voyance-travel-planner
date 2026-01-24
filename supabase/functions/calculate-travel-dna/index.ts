@@ -488,15 +488,31 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   {
     id: 'balanced_story_collector',
     name: 'The Balanced Story Collector',
-    category: 'CONNECTOR',
+    category: 'EXPLORER',  // Changed from CONNECTOR - accepts low social scores
     tagline: 'Every journey adds a chapter worth reading.',
     primaryTraits: [
-      { trait: 'social', weight: 2, sweetSpot: 4, range: [0, 8] },
+      { trait: 'social', weight: 1, sweetSpot: 3, range: [-2, 7] },  // Reduced weight, lower sweetSpot
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
       { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 8] },
       { trait: 'pace', weight: 1, sweetSpot: 0, range: [-5, 5] },
     ],
     signatureAnswers: [],
+  },
+  
+  // NEW: Sanctuary Seeker - for high comfort + high planning + low social + low adventure travelers
+  {
+    id: 'sanctuary_seeker',
+    name: 'The Sanctuary Seeker',
+    category: 'RESTORER',
+    tagline: 'Travel is finding your perfect refuge.',
+    primaryTraits: [
+      { trait: 'comfort', weight: 3, sweetSpot: 8, range: [6, 10] },
+      { trait: 'planning', weight: 2, sweetSpot: 6, range: [4, 10] },
+      { trait: 'social', weight: 2, sweetSpot: -3, range: [-10, 2] },  // Explicitly low social
+      { trait: 'adventure', weight: 1, sweetSpot: 0, range: [-5, 4] },
+    ],
+    hardNo: [{ trait: 'social', range: [6, 10], penalty: -20 }],  // Hard no for very social people
+    signatureAnswers: ['o1', 'o3', 'h2', 'a1'],  // Solitude-focused answers
   },
   {
     id: 'flexible_wanderer',
@@ -536,11 +552,11 @@ interface AnswerDelta {
 
 // Map from answer_id to trait deltas (supports negative values for bipolar scoring)
 const ANSWER_DELTAS: Record<string, AnswerDelta> = {
-  // Q1: Morning routine
-  'a1': { deltas: { pace: -5, social: -3, transformation: 2 }, label: 'Quiet morning person' },
+  // Q1: Morning routine (STRENGTHENED social signals)
+  'a1': { deltas: { pace: -5, social: -5, transformation: 2 }, label: 'Quiet morning person' },  // Stronger solitude signal
   'a2': { deltas: { adventure: 5, pace: 4, planning: -2 }, label: 'Early explorer' },
   'a3': { deltas: { authenticity: 4, planning: 3 }, label: 'Food researcher' },
-  'a4': { deltas: { social: 5, planning: -2 }, label: 'Group-oriented' },
+  'a4': { deltas: { social: 6, planning: -2 }, label: 'Group-oriented' },  // Stronger group signal
   
 // Q2: Dream destination
   'b1': { deltas: { authenticity: 6, transformation: 3 }, label: 'History lover' },
@@ -567,10 +583,10 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'e3': { deltas: { planning: 2, comfort: 2 }, label: 'Delegator' },
   'e4': { deltas: { planning: -7, adventure: 5 }, label: 'Spontaneous' },
   
-  // Q6: Companions - BIPOLAR for social
-  'f1': { deltas: { social: -5, transformation: 3 }, label: 'Solo traveler' },
-  'f2': { deltas: { social: 2, comfort: 2 }, label: 'Romantic traveler' },
-  'f3': { deltas: { social: 5, adventure: 2 }, label: 'Group traveler' },
+  // Q6: Companions - BIPOLAR for social (STRENGTHENED penalties)
+  'f1': { deltas: { social: -7, transformation: 3 }, label: 'Solo traveler' },  // Stronger solo penalty
+  'f2': { deltas: { social: 1, comfort: 2 }, label: 'Romantic traveler' },  // Slightly reduced
+  'f3': { deltas: { social: 6, adventure: 2 }, label: 'Group traveler' },  // Slightly increased
   'f4': { deltas: { social: 4, planning: 3, comfort: 2 }, label: 'Family traveler' },
   
   // Q7: Activities
@@ -581,10 +597,10 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'g5': { deltas: { pace: -4, transformation: 4, comfort: 2 }, label: 'Wellness focus' },
   'g6': { deltas: { comfort: 2, authenticity: 2 }, label: 'Shopper' },
   
-  // Q8: Accommodation
+  // Q8: Accommodation (STRENGTHENED social signals)
   'h1': { deltas: { authenticity: 4, comfort: 2 }, label: 'Boutique hotel' },
-  'h2': { deltas: { comfort: 6, budget: -5 }, label: 'Luxury resort' },  // FIXED: negative = splurge
-  'h3': { deltas: { authenticity: 4, social: -2 }, label: 'Local rental' },
+  'h2': { deltas: { comfort: 6, budget: -5, social: -2 }, label: 'Luxury resort' },  // Private luxury implies less social
+  'h3': { deltas: { authenticity: 4, social: -4 }, label: 'Local rental' },  // Stronger solitude signal
   'h4': { deltas: { planning: 2, comfort: 2 }, label: 'Chain hotel' },
   'h5': { deltas: { adventure: 4, authenticity: 3 }, label: 'Unique stays' },
   
@@ -623,6 +639,12 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'n2': { deltas: { authenticity: 4, adventure: 3, planning: 2 }, label: 'Bucket list achiever' },
   'n3': { deltas: { adventure: 5, transformation: 5 }, label: 'Challenge seeker' },
   'n4': { deltas: { social: 4, pace: -3, authenticity: 3 }, label: 'Connection moment' },
+  
+  // Q15: Social energy - EXPLICIT introvert/extrovert disambiguation
+  'o1': { deltas: { social: -8, transformation: 2, comfort: 2 }, label: 'Solitude recharger' },  // Strong introvert signal
+  'o2': { deltas: { social: -3, comfort: 2 }, label: 'Small groups' },  // Mild introvert
+  'o3': { deltas: { social: 3 }, label: 'Flexible social' },  // Balanced
+  'o4': { deltas: { social: 8, adventure: 2 }, label: 'Extrovert energizer' },  // Strong extrovert signal
 };
 
 // ============================================================================
@@ -636,11 +658,11 @@ const LEGACY_ANSWER_MAPPINGS: Record<string, AnswerDelta> = {
   'curated_luxe': { deltas: { comfort: 6, planning: 4, budget: -5 }, label: 'Curated luxe' },  // FIXED: negative = splurge (luxury curator)
   'story_seeker': { deltas: { social: 5, authenticity: 4, transformation: 3 }, label: 'Story seeker' },
   
-  // Vibes
-  'coastal': { deltas: { pace: -2, comfort: 2 }, label: 'Coastal vibe' },
-  'urban': { deltas: { social: 3, pace: 2, adventure: 1 }, label: 'Urban vibe' },
-  'mountain': { deltas: { adventure: 4, authenticity: 2 }, label: 'Mountain vibe' },
-  'quiet': { deltas: { pace: -4, social: -2, comfort: 2 }, label: 'Quiet vibe' },
+  // Vibes (STRENGTHENED social signals)
+  'coastal': { deltas: { pace: -2, comfort: 2, social: -1 }, label: 'Coastal vibe' },  // Beach = less social
+  'urban': { deltas: { social: 4, pace: 2, adventure: 1 }, label: 'Urban vibe' },  // Stronger social signal
+  'mountain': { deltas: { adventure: 4, authenticity: 2, social: -2 }, label: 'Mountain vibe' },  // Remote = less social
+  'quiet': { deltas: { pace: -4, social: -5, comfort: 2 }, label: 'Quiet vibe' },  // Much stronger solitude signal
   'bold': { deltas: { adventure: 5, transformation: 2, pace: 2 }, label: 'Bold vibe' },
   'spiritual': { deltas: { transformation: 5, authenticity: 4, pace: -2 }, label: 'Spiritual vibe' },
   
