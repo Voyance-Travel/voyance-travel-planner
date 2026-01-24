@@ -2467,6 +2467,72 @@ async function fetchActivityImage(
   }
 }
 
+// Categories that should NOT get Viator matching (dining, downtime, etc.)
+const NON_BOOKABLE_CATEGORIES = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation', 'dining', 'restaurant', 'food'];
+const DINING_KEYWORDS = ['dinner', 'lunch', 'breakfast', 'brunch', 'restaurant', 'cafe', 'dining'];
+
+function isBookableActivity(activity: StrictActivity): boolean {
+  const category = (activity.category || '').toLowerCase();
+  const title = (activity.title || '').toLowerCase();
+  
+  // Skip non-bookable categories
+  if (NON_BOOKABLE_CATEGORIES.includes(category)) return false;
+  
+  // Skip dining activities
+  if (DINING_KEYWORDS.some(kw => title.includes(kw))) return false;
+  
+  // Bookable categories
+  const bookableCategories = ['sightseeing', 'cultural', 'adventure', 'tour', 'experience', 'entertainment', 'water', 'nature'];
+  return bookableCategories.some(bc => category.includes(bc)) || 
+         ['museum', 'palace', 'castle', 'tower', 'cathedral', 'basilica', 'gallery', 'tour', 'experience'].some(kw => title.includes(kw));
+}
+
+async function searchViatorForActivity(
+  activityTitle: string,
+  destination: string,
+  category: string,
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<{ productCode?: string; bookingUrl?: string; quotePriceCents?: number } | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/viator-search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        activityName: activityTitle,
+        destination: destination,
+        category: category,
+        limit: 1,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (data.success && data.bestMatch && data.bestMatch.matchScore >= 40) {
+      console.log(`[Stage 4] ✅ Viator match for "${activityTitle}": ${data.bestMatch.title} (score: ${data.bestMatch.matchScore})`);
+      return {
+        productCode: data.bestMatch.productCode,
+        bookingUrl: data.bestMatch.bookingUrl,
+        quotePriceCents: data.bestMatch.priceCents,
+      };
+    }
+    return null;
+  } catch (e) {
+    console.log(`[Stage 4] Viator search skipped for "${activityTitle}":`, e);
+    return null;
+  }
+}
+
 async function enrichActivity(
   activity: StrictActivity,
   destination: string,
@@ -2483,15 +2549,32 @@ async function enrichActivity(
     return enriched;
   }
 
-  // Run venue verification and photo fetch in parallel for speed
-  const [venueData, photoResult] = await Promise.all([
+  // Determine if this activity should get Viator matching
+  const shouldSearchViator = isBookableActivity(activity) && !(enriched as any).viatorProductCode;
+
+  // Run venue verification, photo fetch, and Viator search in parallel
+  const [venueData, photoResult, viatorMatch] = await Promise.all([
     // Verify venue with Google Places API v1
     verifyVenueWithGooglePlaces(activity.title, destination, GOOGLE_MAPS_API_KEY),
     // Fetch real venue photo using tiered approach
     !enriched.photos?.length 
       ? fetchActivityImage(activity.title, activity.category || 'sightseeing', destination, supabaseUrl, supabaseKey)
       : Promise.resolve(null),
+    // Search for bookable Viator product
+    shouldSearchViator
+      ? searchViatorForActivity(activity.title, destination, activity.category || 'sightseeing', supabaseUrl, supabaseKey)
+      : Promise.resolve(null),
   ]);
+
+  // Apply Viator booking data if found
+  if (viatorMatch) {
+    (enriched as any).viatorProductCode = viatorMatch.productCode;
+    (enriched as any).bookingUrl = viatorMatch.bookingUrl;
+    if (viatorMatch.quotePriceCents) {
+      (enriched as any).quotePriceCents = viatorMatch.quotePriceCents;
+    }
+    enriched.bookingRequired = true;
+  }
 
   // Apply venue verification data (coordinates, ratings, opening hours, etc.)
   if (venueData) {
