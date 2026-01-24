@@ -191,8 +191,8 @@ function getActivityLinkType(
 }
 
 /**
- * Generate a restaurant URL using Google Maps
- * Maps links work reliably and show location, hours, reviews, and website
+ * Generate a restaurant URL using Yelp search
+ * Yelp works reliably without blocking and shows reviews, hours, and reservation links
  */
 function generateRestaurantSearchUrl(restaurantName: string, destination: string): string {
   // Clean up the restaurant name (remove common prefixes like "Dinner at", "Lunch at", etc.)
@@ -201,9 +201,10 @@ function generateRestaurantSearchUrl(restaurantName: string, destination: string
     .replace(/\s*restaurant$/i, '')
     .trim();
   
-  // Use Google Maps search - works reliably and shows restaurant info, reviews, website
-  const searchQuery = encodeURIComponent(`${cleanName} restaurant ${destination}`);
-  return `https://www.google.com/maps/search/?api=1&query=${searchQuery}`;
+  // Use Yelp search - works reliably, shows reviews, hours, website, and reservation links
+  const searchQuery = encodeURIComponent(cleanName);
+  const location = encodeURIComponent(destination);
+  return `https://www.yelp.com/search?find_desc=${searchQuery}&find_loc=${location}`;
 }
 
 export function InlineBookingActions({
