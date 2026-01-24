@@ -3385,13 +3385,22 @@ function ActivityRow({
 
   // Use useActivityImage hook for real place photos with deduplication
   // This fetches from Google Places / TripAdvisor with caching
-  const shouldFetchRealPhoto = showThumbnail && !isCheckIn && !isAirport && !isAccommodation;
+  // For hotels: Extract hotel name from title/location and fetch real photo
+  const isHotelActivity = isCheckIn || isAccommodation;
+  const hotelName = isHotelActivity 
+    ? (activity.location?.name || activityTitle.replace(/check[\-\s]?(in|out)/gi, '').replace(/at\s+/gi, '').trim())
+    : null;
+  
+  // Fetch real photos for most activities, including hotels (but not generic check-ins without hotel name)
+  const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
+  const shouldFetchRealPhoto = showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
+  
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-    imageSearchTerm,
-    activityType,
+    isHotelActivity && hasHotelName ? `${hotelName} hotel` : imageSearchTerm,
+    isHotelActivity ? 'accommodation' : activityType,
     existingPhoto,
-    shouldFetchRealPhoto ? destination : undefined, // Only pass destination if we want real photos
-    activity.id // prevent cache collisions when destination is missing
+    shouldFetchRealPhoto ? destination : undefined,
+    activity.id
   );
 
   const thumbnailUrl = fetchedImageUrl;
