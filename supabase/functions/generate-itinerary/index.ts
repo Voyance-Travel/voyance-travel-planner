@@ -1430,13 +1430,26 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       const flightInfo: string[] = [];
       
       // Extract arrival time for Day 1 (when we land at destination)
-      // Nested structure: departure.arrivalTime (outbound flight arrives at destination)
-      // Flat structure: arrivalTime
+      // Handle multiple structures from different sources:
+      // 1. Manual entry: { departure: { arrival: { time } }, return: { departure: { time } } }
+      // 2. Flight search: { departure: { arrivalTime }, return: { departureTime } }
+      // 3. Flat legacy: { arrivalTime, returnDepartureTime }
       const nestedDeparture = flightRaw.departure as Record<string, unknown> | undefined;
       const nestedReturn = flightRaw.return as Record<string, unknown> | undefined;
       
-      const outboundArrival = (nestedDeparture?.arrivalTime as string) || (flightRaw.arrivalTime as string);
-      const returnDeparture = (nestedReturn?.departureTime as string) || (flightRaw.returnDepartureTime as string);
+      // Try all possible paths for outbound arrival time
+      const manualArrival = (nestedDeparture?.arrival as Record<string, unknown>)?.time as string | undefined;
+      const searchArrival = nestedDeparture?.arrivalTime as string | undefined;
+      const flatArrival = flightRaw.arrivalTime as string | undefined;
+      const outboundArrival = manualArrival || searchArrival || flatArrival;
+      
+      // Try all possible paths for return departure time
+      const manualReturnDep = (nestedReturn?.departure as Record<string, unknown>)?.time as string | undefined;
+      const searchReturnDep = nestedReturn?.departureTime as string | undefined;
+      const flatReturnDep = flightRaw.returnDepartureTime as string | undefined;
+      const returnDeparture = manualReturnDep || searchReturnDep || flatReturnDep;
+      
+      console.log(`[FlightContext] Parsing flight_selection - manual arrival: ${manualArrival}, search arrival: ${searchArrival}, flat arrival: ${flatArrival} → using: ${outboundArrival}`);
       
       // Airport info
       const departureAirport = flightRaw.departureAirport as string | undefined;
