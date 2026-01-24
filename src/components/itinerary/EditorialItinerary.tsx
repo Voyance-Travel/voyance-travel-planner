@@ -3877,7 +3877,8 @@ function ActivityRow({
                 
                 if (isNonReviewable) return null;
                 
-                // Only show rating badge if we have a rating
+                // Show rating badge if we have a rating, otherwise show "See Reviews" button
+                // Always allow viewing reviews for reviewable activities - the edge function fetches them on-demand
                 if (rating) {
                   return (
                     <Badge 
@@ -3895,13 +3896,7 @@ function ActivityRow({
                   );
                 }
                 
-                // Only show "See Reviews" button if activity has review count or reviews data
-                const hasReviews = (activity as any).reviewCount > 0 || 
-                                   (activity as any).review_count > 0 ||
-                                   ((activity as any).reviews && (activity as any).reviews.length > 0);
-                
-                if (!hasReviews) return null;
-                
+                // Always show "See Reviews" for reviewable activities - reviews are fetched on-demand
                 return (
                   <button
                     onClick={(e) => {
