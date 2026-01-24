@@ -348,11 +348,21 @@ interface NormalizedUserContext {
     ecoFriendly: boolean;
   };
   
+  // Trip-specific context (overrides user defaults for THIS trip)
+  tripContext: {
+    tripType: string | null;       // romantic, adventure, family, solo, business
+    budgetTier: string | null;     // budget, economy, standard, comfort, premium, luxury
+    pace: string | null;           // slow, relaxed, moderate, active, packed
+    travelers: number;
+    interests: string[];           // Trip-specific interests
+  };
+  
   // Source tracking for transparency
   sources: {
     quizVersion: number | null;
     preferencesUpdatedAt: string | null;
     overridesApplied: string[];
+    tripOverrides: string[];       // Which traits were modified by trip context
   };
 }
 
@@ -461,23 +471,31 @@ function deduplicatePreferences(
 }
 
 /**
- * Normalize user context from 3 sources into unified structure
+ * Normalize user context from 4 sources into unified structure
  * 
  * @param dna - Travel DNA profile (quiz results + archetype matching)
  * @param overrides - Manual trait adjustments from user
  * @param prefs - User preferences table data
+ * @param tripContext - Trip-specific context (budget, type, pace) that overrides user defaults
  * @returns Unified normalized context with blended traits and deduplicated preferences
  */
 function normalizeUserContext(
   dna: TravelDNAProfile | null,
   overrides: Record<string, number> | null,
-  prefs: Record<string, unknown> | null
+  prefs: Record<string, unknown> | null,
+  tripContext?: {
+    tripType?: string;
+    budgetTier?: string;
+    pace?: string;
+    travelers?: number;
+    interests?: string[];
+  }
 ): NormalizedUserContext {
   // Extract trait scores from DNA
   const quizTraits = dna?.trait_scores || {};
   const overrideTraits = overrides || {};
   
-  // Blend each trait
+  // Blend each trait (quiz + manual overrides)
   const blendedTraits: NormalizedTraits = {
     planning: blendTraitWithOverride(quizTraits.planning, overrideTraits.planning),
     social: blendTraitWithOverride(quizTraits.social, overrideTraits.social),
@@ -488,6 +506,86 @@ function normalizeUserContext(
     budget: blendTraitWithOverride(quizTraits.budget, overrideTraits.budget),
     transformation: blendTraitWithOverride(quizTraits.transformation, overrideTraits.transformation),
   };
+  
+  // Track which traits were modified by trip context
+  const tripOverrides: string[] = [];
+  
+  // ==========================================================================
+  // TRIP-LEVEL OVERRIDES - These take highest priority for THIS specific trip
+  // ==========================================================================
+  
+  // Trip type affects social and adventure traits
+  if (tripContext?.tripType) {
+    const tripTypeAdjustments: Record<string, Partial<NormalizedTraits>> = {
+      'romantic': { social: -3, comfort: 3, pace: -2 },      // Intimate, comfortable, relaxed
+      'honeymoon': { social: -4, comfort: 4, pace: -3 },     // Very intimate, luxurious, slow
+      'adventure': { adventure: 4, pace: 3, comfort: -2 },    // High adventure, fast, less comfort
+      'family': { social: 2, planning: 3, pace: -1 },         // Group, structured, moderate pace
+      'solo': { social: -4, authenticity: 2, adventure: 1 },  // Independent, local, some adventure
+      'business': { planning: 4, comfort: 3, pace: 2 },       // Very structured, comfortable, efficient
+      'wellness': { pace: -4, comfort: 3, transformation: 3 }, // Slow, comfortable, growth-focused
+      'cultural': { authenticity: 4, transformation: 2 },      // Local experiences, learning
+      'beach': { pace: -3, comfort: 2 },                       // Relaxed, comfortable
+      'city_break': { pace: 3, social: 1 },                    // Fast-paced, social
+    };
+    
+    const adjustments = tripTypeAdjustments[tripContext.tripType];
+    if (adjustments) {
+      for (const [trait, delta] of Object.entries(adjustments)) {
+        const key = trait as keyof NormalizedTraits;
+        const oldValue = blendedTraits[key];
+        blendedTraits[key] = Math.max(-10, Math.min(10, blendedTraits[key] + delta));
+        if (blendedTraits[key] !== oldValue) {
+          tripOverrides.push(`${trait} (${tripContext.tripType})`);
+        }
+      }
+      console.log(`[TripContext] Applied ${tripContext.tripType} adjustments:`, adjustments);
+    }
+  }
+  
+  // Trip pace overrides user pace trait
+  if (tripContext?.pace) {
+    const paceMap: Record<string, number> = {
+      'slow': -6, 'relaxed': -3, 'moderate': 0, 'active': 4, 'packed': 7
+    };
+    if (paceMap[tripContext.pace] !== undefined) {
+      const tripPace = paceMap[tripContext.pace];
+      // Blend 50/50 with user preference (trip pace is strong signal)
+      const oldPace = blendedTraits.pace;
+      blendedTraits.pace = Math.round((blendedTraits.pace * 0.5 + tripPace * 0.5) * 10) / 10;
+      if (blendedTraits.pace !== oldPace) {
+        tripOverrides.push(`pace (${tripContext.pace})`);
+      }
+      console.log(`[TripContext] Pace adjusted: ${oldPace} -> ${blendedTraits.pace} (trip wants ${tripContext.pace})`);
+    }
+  }
+  
+  // Trip budget tier affects comfort trait (budget trait is handled separately in deriveBudgetIntent)
+  if (tripContext?.budgetTier) {
+    const budgetComfortMap: Record<string, number> = {
+      'budget': -5, 'economy': -2, 'standard': 0, 'comfort': 3, 'premium': 5, 'luxury': 8
+    };
+    if (budgetComfortMap[tripContext.budgetTier] !== undefined) {
+      const tripComfort = budgetComfortMap[tripContext.budgetTier];
+      // Blend 60/40 (trip budget is strong signal for comfort expectations)
+      const oldComfort = blendedTraits.comfort;
+      blendedTraits.comfort = Math.round((blendedTraits.comfort * 0.4 + tripComfort * 0.6) * 10) / 10;
+      if (blendedTraits.comfort !== oldComfort) {
+        tripOverrides.push(`comfort (${tripContext.budgetTier})`);
+      }
+      console.log(`[TripContext] Comfort adjusted: ${oldComfort} -> ${blendedTraits.comfort} (trip budget: ${tripContext.budgetTier})`);
+    }
+  }
+  
+  // Travelers count affects social trait
+  if (tripContext?.travelers && tripContext.travelers > 1) {
+    const socialBoost = Math.min(3, (tripContext.travelers - 1) * 1.5);
+    const oldSocial = blendedTraits.social;
+    blendedTraits.social = Math.max(-10, Math.min(10, blendedTraits.social + socialBoost));
+    if (blendedTraits.social !== oldSocial) {
+      tripOverrides.push(`social (+${tripContext.travelers} travelers)`);
+    }
+  }
   
   // Calculate confidence factors
   const hasQuiz = Boolean(dna?.trait_scores && Object.keys(dna.trait_scores).length > 0);
@@ -550,10 +648,20 @@ function normalizeUserContext(
     quizVersion: dna?.dna_version ?? null,
     preferencesUpdatedAt: null, // Would need to fetch from prefs table
     overridesApplied: overrides ? Object.keys(overrides) : [],
+    tripOverrides,
   };
   
-  console.log('[NormalizeUserContext] Blended traits:', blendedTraits);
-  console.log(`[NormalizeUserContext] Confidence: ${adjustedConfidence} (base: ${dna?.confidence ?? 50}, penalties: quiz=${!hasQuiz ? -30 : quizCompleteness < 0.8 ? -15 : 0}, overrides=${overridePenalty})`);
+  // Build trip context for output
+  const tripContextOutput = {
+    tripType: tripContext?.tripType || null,
+    budgetTier: tripContext?.budgetTier || null,
+    pace: tripContext?.pace || null,
+    travelers: tripContext?.travelers || 1,
+    interests: tripContext?.interests || [],
+  };
+  
+  console.log('[NormalizeUserContext] Blended traits (with trip adjustments):', blendedTraits);
+  console.log(`[NormalizeUserContext] Confidence: ${adjustedConfidence}, tripOverrides: ${tripOverrides.join(', ') || 'none'}`);
   
   return {
     traits: blendedTraits,
@@ -567,6 +675,7 @@ function normalizeUserContext(
       quizCompleteness,
     },
     preferences: deduplicatedPrefs,
+    tripContext: tripContextOutput,
     sources,
   };
 }
@@ -636,15 +745,54 @@ function buildNormalizedPromptContext(
     traitSection += `\n   ${trait}: ${score > 0 ? '+' : ''}${score}/10 → ${intensity} ${direction}`;
   }
   
-  // Note if overrides were applied
-  if (normalizedContext.confidenceFactors.hasOverrides) {
-    const overrideList = normalizedContext.sources.overridesApplied.slice(0, 4).join(', ');
-    traitSection += `\n\n   ⚙️ User adjusted: ${overrideList}${normalizedContext.sources.overridesApplied.length > 4 ? '...' : ''}`;
+  // Note if user overrides or trip overrides were applied
+  if (normalizedContext.confidenceFactors.hasOverrides || normalizedContext.sources.tripOverrides.length > 0) {
+    const userOverrides = normalizedContext.sources.overridesApplied.slice(0, 3).join(', ');
+    const tripAdjustments = normalizedContext.sources.tripOverrides.slice(0, 3).join(', ');
+    
+    if (userOverrides) {
+      traitSection += `\n\n   ⚙️ User adjusted: ${userOverrides}${normalizedContext.sources.overridesApplied.length > 3 ? '...' : ''}`;
+    }
+    if (tripAdjustments) {
+      traitSection += `\n   🎯 Trip-specific: ${tripAdjustments}${normalizedContext.sources.tripOverrides.length > 3 ? '...' : ''}`;
+    }
   }
   
   sections.push(traitSection);
   
-  // SECTION 4: Deduplicated Preferences
+  // SECTION 4: Trip Context (if available)
+  const tripCtx = normalizedContext.tripContext;
+  if (tripCtx.tripType || tripCtx.budgetTier || tripCtx.pace) {
+    let tripSection = `\n${'='.repeat(60)}\n🗓️ THIS TRIP\n${'='.repeat(60)}`;
+    
+    if (tripCtx.tripType) {
+      const tripTypeLabels: Record<string, string> = {
+        'romantic': '💕 Romantic getaway — focus on intimate experiences, couples activities, and special moments',
+        'honeymoon': '💍 Honeymoon — luxury, romance, privacy, and once-in-a-lifetime experiences',
+        'adventure': '🏔️ Adventure trip — outdoor activities, adrenaline, exploration',
+        'family': '👨‍👩‍👧‍👦 Family vacation — kid-friendly, manageable pacing, group activities',
+        'solo': '🧘 Solo travel — self-discovery, flexibility, meeting locals',
+        'business': '💼 Business trip — efficient, professional, work-friendly venues',
+        'wellness': '🧘‍♀️ Wellness retreat — spa, yoga, healthy dining, relaxation',
+        'cultural': '🏛️ Cultural exploration — museums, history, local traditions',
+        'beach': '🏖️ Beach vacation — sun, sea, relaxation, water activities',
+        'city_break': '🏙️ City break — urban exploration, nightlife, landmarks',
+      };
+      tripSection += `\n${tripTypeLabels[tripCtx.tripType] || `Trip type: ${tripCtx.tripType}`}`;
+    }
+    
+    if (tripCtx.travelers > 1) {
+      tripSection += `\n👥 ${tripCtx.travelers} travelers — ensure activities accommodate the group`;
+    }
+    
+    if (tripCtx.interests && tripCtx.interests.length > 0) {
+      tripSection += `\n🎯 Trip interests: ${tripCtx.interests.slice(0, 5).join(', ')}`;
+    }
+    
+    sections.push(tripSection);
+  }
+  
+  // SECTION 5: Deduplicated Preferences
   const prefs = normalizedContext.preferences;
   const prefItems: string[] = [];
   
@@ -3434,8 +3582,14 @@ serve(async (req) => {
       const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
       const traitOverrides = userId ? await getTraitOverrides(supabase, userId) : null;
       
-      // Create normalized context with weighted blending
-      const normalizedContext = normalizeUserContext(travelDNA, traitOverrides, prefs);
+      // Create normalized context with weighted blending + trip-level overrides
+      const normalizedContext = normalizeUserContext(travelDNA, traitOverrides, prefs, {
+        tripType: context.tripType,
+        budgetTier: context.budgetTier,
+        pace: context.pace,
+        travelers: context.travelers,
+        interests: context.interests,
+      });
       
       // Derive budget intent from normalized traits (reconciles tier + traits)
       const budgetIntent = deriveBudgetIntent(
@@ -3448,7 +3602,7 @@ serve(async (req) => {
       const unifiedDNAContext = buildNormalizedPromptContext(normalizedContext, budgetIntent);
       
       // Log normalization summary
-      console.log(`[Stage 1.3] Unified context: confidence=${normalizedContext.confidence}, archetypes=${normalizedContext.archetypes.length}, overrides=${normalizedContext.confidenceFactors.overrideCount}`);
+      console.log(`[Stage 1.3] Unified context: confidence=${normalizedContext.confidence}, tripType=${context.tripType}, tripOverrides=${normalizedContext.sources.tripOverrides.join(', ') || 'none'}`);
       
       // Log budget conflict if detected
       if (budgetIntent?.conflict) {
