@@ -2018,6 +2018,16 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
     async function fetchImages() {
       setIsLoading(true);
       try {
+        const isRome = cleanDestination.toLowerCase().trim().split(',')[0] === 'rome';
+        const shuffleOnce = <T,>(arr: T[]): T[] => {
+          const copy = [...arr];
+          for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [copy[i], copy[j]] = [copy[j], copy[i]];
+          }
+          return copy;
+        };
+
         // Use centralized API that enforces curated images for Rome
         const { getDestinationImages } = await import('@/services/destinationImagesAPI');
         const images = await getDestinationImages({
@@ -2028,13 +2038,17 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
         
         if (images.length > 0) {
           const urls = images.map((img) => img.url);
-          setImages(urls);
+          const urlsToUse = isRome ? shuffleOnce(urls) : urls;
+          setImages(urlsToUse);
+          setCurrentIndex(isRome && urlsToUse.length > 1 ? Math.floor(Math.random() * urlsToUse.length) : 0);
         } else {
           setImages([generateGradientDataUrl(cleanDestination)]);
+          setCurrentIndex(0);
         }
       } catch (err) {
         console.error('[DestinationCarousel] Failed to fetch images:', err);
         setImages([generateGradientDataUrl(cleanDestination)]);
+        setCurrentIndex(0);
       } finally {
         setIsLoading(false);
       }

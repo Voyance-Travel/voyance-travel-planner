@@ -59,6 +59,16 @@ export default function DynamicDestinationPhotos({
     }
 
     const loadImages = async () => {
+      const isRome = cleanDestination.toLowerCase().trim().split(',')[0] === 'rome';
+      const shuffleOnce = <T,>(arr: T[]): T[] => {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      };
+
       // Use centralized API that enforces curated images for Rome (no people)
       setIsLoading(true);
       setError(false);
@@ -79,7 +89,11 @@ export default function DynamicDestinationPhotos({
 
         if (fetchedImages.length > 0) {
           console.log('[DynamicPhotos] Got images:', fetchedImages.length);
-          setImages(fetchedImages);
+          const imagesToUse = isRome ? shuffleOnce(fetchedImages) : fetchedImages;
+          setImages(imagesToUse);
+          if (isRome && imagesToUse.length > 1) {
+            setCurrentIndex(Math.floor(Math.random() * imagesToUse.length));
+          }
           fetchedRef.current = cleanDestination;
         } else {
           console.log('[DynamicPhotos] No images returned');
