@@ -44,6 +44,7 @@ import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
 import { AddCreditsModal } from '@/components/checkout';
 import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
 import { Wallet } from 'lucide-react';
+import { getTripStats, TripStats } from '@/services/userAPI';
 
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
 
@@ -146,6 +147,7 @@ export default function Profile() {
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const { data: userCredits, refetch: refetchCredits } = useUserCredits();
+  const [tripStats, setTripStats] = useState<TripStats | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -179,6 +181,20 @@ export default function Profile() {
     }
     
     loadTrips();
+  }, [user?.id]);
+
+  // Load trip stats from userAPI (countries, days, etc.)
+  useEffect(() => {
+    async function loadTripStats() {
+      if (!user?.id) return;
+      try {
+        const stats = await getTripStats();
+        setTripStats(stats);
+      } catch (error) {
+        console.error('Failed to load trip stats:', error);
+      }
+    }
+    loadTripStats();
   }, [user?.id]);
 
   const [searchParams] = useSearchParams();
@@ -330,16 +346,17 @@ export default function Profile() {
     return null;
   }
 
-  // Compute stats from real trips
+  // Compute stats from real trips (local filter for tab display)
   const upcomingTrips = trips.filter(t => t.status === 'upcoming');
   const completedTrips = trips.filter(t => t.status === 'completed');
   const savedTrips = trips.filter(t => t.status === 'draft');
 
+  // Use fetched tripStats for accurate stats, fallback to local calculation
   const stats = {
-    tripsCompleted: completedTrips.length,
-    countriesVisited: completedTrips.length, // Simplified - would need real country data
-    daysOnTheRoad: completedTrips.length * 7, // Estimate
-    upcomingTrips: upcomingTrips.length,
+    tripsCompleted: tripStats?.completedTrips ?? completedTrips.length,
+    countriesVisited: tripStats?.totalCountries ?? 0,
+    daysOnTheRoad: tripStats?.totalDaysAbroad ?? 0,
+    upcomingTrips: tripStats?.upcomingTrips ?? upcomingTrips.length,
   };
 
   const travelDNA = user?.preferences ? {
