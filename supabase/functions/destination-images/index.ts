@@ -593,6 +593,12 @@ async function cacheImage(
   qualityScore?: number
 ): Promise<void> {
   try {
+    // CRITICAL: Never cache base64 data URLs - they are huge and break the database
+    if (image.url.startsWith('data:')) {
+      console.log(`[Images] Skipping cache for base64 data URL: ${entityKey}`);
+      return;
+    }
+
     const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
 
     // Cache images for 90 days (Google Places photos are relatively stable)
