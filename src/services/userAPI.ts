@@ -8,6 +8,118 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 
 // ============================================================================
+// City → Country Mapping (for stats when destination_country is missing)
+// ============================================================================
+
+const CITY_TO_COUNTRY: Record<string, string> = {
+  'london': 'United Kingdom',
+  'paris': 'France',
+  'rome': 'Italy',
+  'barcelona': 'Spain',
+  'madrid': 'Spain',
+  'lisbon': 'Portugal',
+  'porto': 'Portugal',
+  'amsterdam': 'Netherlands',
+  'berlin': 'Germany',
+  'munich': 'Germany',
+  'vienna': 'Austria',
+  'prague': 'Czech Republic',
+  'budapest': 'Hungary',
+  'athens': 'Greece',
+  'santorini': 'Greece',
+  'dublin': 'Ireland',
+  'edinburgh': 'United Kingdom',
+  'copenhagen': 'Denmark',
+  'stockholm': 'Sweden',
+  'oslo': 'Norway',
+  'reykjavik': 'Iceland',
+  'tokyo': 'Japan',
+  'kyoto': 'Japan',
+  'osaka': 'Japan',
+  'seoul': 'South Korea',
+  'bangkok': 'Thailand',
+  'singapore': 'Singapore',
+  'bali': 'Indonesia',
+  'hanoi': 'Vietnam',
+  'ho chi minh': 'Vietnam',
+  'new york': 'United States',
+  'los angeles': 'United States',
+  'san francisco': 'United States',
+  'miami': 'United States',
+  'chicago': 'United States',
+  'new orleans': 'United States',
+  'vancouver': 'Canada',
+  'toronto': 'Canada',
+  'montreal': 'Canada',
+  'mexico city': 'Mexico',
+  'cancun': 'Mexico',
+  'buenos aires': 'Argentina',
+  'rio de janeiro': 'Brazil',
+  'sao paulo': 'Brazil',
+  'cartagena': 'Colombia',
+  'bogota': 'Colombia',
+  'lima': 'Peru',
+  'cusco': 'Peru',
+  'cape town': 'South Africa',
+  'johannesburg': 'South Africa',
+  'marrakech': 'Morocco',
+  'cairo': 'Egypt',
+  'dubai': 'United Arab Emirates',
+  'abu dhabi': 'United Arab Emirates',
+  'doha': 'Qatar',
+  'sydney': 'Australia',
+  'melbourne': 'Australia',
+  'auckland': 'New Zealand',
+  'queenstown': 'New Zealand',
+  'florence': 'Italy',
+  'venice': 'Italy',
+  'milan': 'Italy',
+  'naples': 'Italy',
+  'nice': 'France',
+  'marseille': 'France',
+  'lyon': 'France',
+  'seville': 'Spain',
+  'valencia': 'Spain',
+  'malaga': 'Spain',
+  'zurich': 'Switzerland',
+  'geneva': 'Switzerland',
+  'brussels': 'Belgium',
+  'warsaw': 'Poland',
+  'krakow': 'Poland',
+  'tel aviv': 'Israel',
+  'jerusalem': 'Israel',
+  'istanbul': 'Turkey',
+  'moscow': 'Russia',
+  'st petersburg': 'Russia',
+  'helsinki': 'Finland',
+  'tallinn': 'Estonia',
+  'riga': 'Latvia',
+  'vilnius': 'Lithuania',
+};
+
+function inferCountryFromDestination(destination: string | null | undefined): string | null {
+  if (!destination) return null;
+  // Clean up destination (remove airport codes like "(LHR)")
+  const clean = destination.replace(/\s*\([A-Z]{3}\)\s*$/i, '').trim().toLowerCase();
+  
+  // Direct match
+  if (CITY_TO_COUNTRY[clean]) return CITY_TO_COUNTRY[clean];
+  
+  // Try first word (city name before comma)
+  const cityOnly = clean.split(',')[0].trim();
+  if (CITY_TO_COUNTRY[cityOnly]) return CITY_TO_COUNTRY[cityOnly];
+  
+  // Partial match (e.g., "New York City" → "new york")
+  for (const [city, country] of Object.entries(CITY_TO_COUNTRY)) {
+    if (clean.includes(city) || city.includes(clean)) {
+      return country;
+    }
+  }
+  
+  return null;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -85,7 +197,13 @@ export async function getTripStats(): Promise<TripStats> {
   // Extract unique destinations
   const destinations = allTrips.map(t => t.destination);
   const uniqueCities = [...new Set(destinations)];
-  const countries = allTrips.map(t => t.destination_country).filter(Boolean);
+  
+  // Derive country from destination when destination_country is missing
+  const countries = allTrips.map(t => {
+    if (t.destination_country) return t.destination_country;
+    // Fallback: infer country from destination city name
+    return inferCountryFromDestination(t.destination);
+  }).filter(Boolean);
   const uniqueCountries = [...new Set(countries)];
   
   // Calculate days abroad
