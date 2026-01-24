@@ -3121,14 +3121,9 @@ function DayCard({
               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
             </div>
             <div>
-              <div className="flex items-center gap-3 mb-1">
-                <h3 className="font-serif text-xl font-medium text-foreground">{day.title || day.theme || `Day ${day.dayNumber}`}</h3>
-                {day.date && (
-                  <Badge variant="secondary" className="text-xs font-normal bg-secondary/50">
-                    {format(parseISO(day.date), 'EEEE, MMM d')}
-                  </Badge>
-                )}
-              </div>
+              <h3 className="font-serif text-xl font-medium text-foreground mb-1">
+                {day.title || day.theme || `Day ${day.dayNumber}`}
+              </h3>
               {day.description && (
                 <p className="text-sm text-muted-foreground italic">{day.description}</p>
               )}
