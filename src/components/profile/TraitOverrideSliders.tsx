@@ -202,7 +202,15 @@ export default function TraitOverrideSliders({
 
       setOriginalValues(traitValues);
       setHasChanges(false);
-      toast.success('Your trait preferences have been saved!');
+      
+      const overrideCount = Object.keys(overrides).length;
+      toast.success(
+        overrideCount > 0 
+          ? `${overrideCount} trait adjustment${overrideCount > 1 ? 's' : ''} saved!`
+          : 'Traits reset to quiz-calculated values!',
+        { description: 'Your next itinerary will reflect these changes.' }
+      );
+      
       onSave?.(overrides);
 
     } catch (error) {

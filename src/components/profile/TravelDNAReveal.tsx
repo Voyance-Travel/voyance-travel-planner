@@ -73,6 +73,8 @@ interface TravelDNAData {
   trip_count?: number;
   travel_frequency?: string;
   has_overrides?: boolean;
+  // User-adjusted trait overrides
+  overrides?: Record<string, number>;
 }
 
 // Demo DNA data for preview mode
@@ -136,12 +138,15 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
             .eq('id', userId)
             .maybeSingle();
           
+          const overridesData = profileOverrides?.travel_dna_overrides as Record<string, number> | null;
+          
           setDnaData({
             ...profileData,
             trip_count: tripCount,
             travel_frequency: travelFrequency,
-            has_overrides: !!profileOverrides?.travel_dna_overrides
-          });
+            has_overrides: !!overridesData && Object.keys(overridesData).length > 0,
+            overrides: overridesData || {},
+          } as TravelDNAData);
           setIsLoading(false);
           return;
         }
@@ -156,6 +161,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         if (userProfile?.travel_dna && typeof userProfile.travel_dna === 'object') {
           // Map from profiles.travel_dna to TravelDNAData format
           const dnaJson = userProfile.travel_dna as Record<string, unknown>;
+          const overridesData = userProfile.travel_dna_overrides as Record<string, number> | null;
           setDnaData({
             primary_archetype_name: (dnaJson.primary_archetype_name as string) || null,
             secondary_archetype_name: (dnaJson.secondary_archetype_name as string) || null,
@@ -167,7 +173,8 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
             summary: (dnaJson.summary as string) || null,
             trip_count: tripCount,
             travel_frequency: travelFrequency,
-            has_overrides: !!userProfile.travel_dna_overrides
+            has_overrides: !!overridesData && Object.keys(overridesData).length > 0,
+            overrides: overridesData || {},
           });
         }
         
@@ -651,7 +658,20 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               >
                 <TraitOverrideSliders
                   userId={userId}
-                  computedTraits={(dnaData.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || {}}
+                  computedTraits={(dnaData.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || 
+                    (dnaData.trait_scores as Record<string, number>) || {}}
+                  existingOverrides={(dnaData as { overrides?: Record<string, number> }).overrides || {}}
+                  onSave={async () => {
+                    // Reload DNA data after save to reflect changes
+                    const { data } = await supabase
+                      .from('travel_dna_profiles')
+                      .select('*')
+                      .eq('user_id', userId)
+                      .maybeSingle();
+                    if (data) {
+                      setDnaData(prev => prev ? { ...prev, ...data, has_overrides: true } : null);
+                    }
+                  }}
                 />
               </motion.div>
             </TabsContent>
