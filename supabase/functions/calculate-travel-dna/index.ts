@@ -674,21 +674,69 @@ const QUESTION_MAPPINGS: Record<string, Record<string, AnswerDelta>> = {
   accommodation_style: { h1: ANSWER_DELTAS.h1, h2: ANSWER_DELTAS.h2, h3: ANSWER_DELTAS.h3, h4: ANSWER_DELTAS.h4, h5: ANSWER_DELTAS.h5 },
   climate: { i1: ANSWER_DELTAS.i1, i2: ANSWER_DELTAS.i2, i3: ANSWER_DELTAS.i3, i4: ANSWER_DELTAS.i4 },
   trip_length: { j1: ANSWER_DELTAS.j1, j2: ANSWER_DELTAS.j2, j3: ANSWER_DELTAS.j3, j4: ANSWER_DELTAS.j4 },
+  
+  // Additional legacy question mappings (must match all keys used in calculateTraitScoresV2)
+  hotel_priorities: {
+    boutique: LEGACY_ANSWER_MAPPINGS.boutique,
+    chain: LEGACY_ANSWER_MAPPINGS.chain,
+    vacation_rental: LEGACY_ANSWER_MAPPINGS.vacation_rental,
+    resort: LEGACY_ANSWER_MAPPINGS.resort,
+    location: { deltas: { planning: 2, authenticity: 3 }, label: 'Location priority' },
+    amenities: { deltas: { comfort: 4 }, label: 'Amenities priority' },
+    unique: { deltas: { authenticity: 4, adventure: 2 }, label: 'Unique stays' },
+  },
+  weather_preference: {
+    warm: { deltas: { comfort: 2 }, label: 'Warm weather' },
+    mild: { deltas: { pace: 1 }, label: 'Mild weather' },
+    cold: { deltas: { adventure: 2 }, label: 'Cold weather' },
+    seasonal: { deltas: { authenticity: 2, adventure: 1 }, label: 'Seasonal variety' },
+    tropical: { deltas: { comfort: 3, pace: -1 }, label: 'Tropical weather' },
+  },
+  dining_style: {
+    local: { deltas: { authenticity: 5, social: 2 }, label: 'Local cuisine' },
+    familiar: { deltas: { comfort: 2 }, label: 'Familiar food' },
+    fine_dining: { deltas: { comfort: 4, budget: -3 }, label: 'Fine dining' },  // negative = splurge
+    street_food: { deltas: { authenticity: 4, adventure: 2, budget: 2 }, label: 'Street food' },  // positive = value
+  },
+  flight_preferences: {
+    direct: { deltas: { comfort: 2, planning: 2 }, label: 'Direct flights' },
+    layover_ok: { deltas: { budget: 2, adventure: 1 }, label: 'Layovers OK' },  // positive = value
+    premium_class: { deltas: { comfort: 5, budget: -5 }, label: 'Premium class' },  // negative = splurge
+    budget_carrier: { deltas: { budget: 4, comfort: -2 }, label: 'Budget carrier' },  // positive = value
+  },
 };
 
 // ============================================================================
 // DISAMBIGUATION QUESTION PICKER - Maps traits to questions that clarify them
+// IMPORTANT: All question IDs here MUST exist in the quiz schema!
 // ============================================================================
 
+// Valid quiz question IDs that the frontend can render
+const VALID_QUIZ_QUESTION_IDS = new Set([
+  // Core quiz questions
+  'traveler_type', 'travel_vibes', 'budget', 'pace', 'planning_style',
+  'travel_companions', 'interests', 'accommodation', 'hotel_priorities',
+  'dining_style', 'weather_preference', 'flight_preferences',
+  // V2 quiz questions
+  'morning_routine', 'dream_destination', 'budget_style', 'pace_style',
+  'planning_preference', 'companions', 'activities', 'accommodation_style',
+  'climate', 'trip_length',
+  // Disambiguation-specific questions (must be added to quiz if not present)
+  'splurge_priority', 'activity_density', 'service_level',
+]);
+
+// Fallback safe questions that always exist
+const SAFE_FALLBACK_QUESTIONS = ['budget', 'pace', 'interests'];
+
 const DISAMBIGUATION_QUESTIONS_BY_TRAIT: Record<Trait, string[]> = {
-  pace: ['day_structure', 'morning_style', 'activity_density'],
-  authenticity: ['tourist_vs_local', 'food_style', 'neighborhood_preference'],
-  comfort: ['hotel_vs_experiences', 'service_level', 'transport_preference'],
-  adventure: ['risk_tolerance', 'activity_type', 'outdoor_preference'],
-  social: ['group_size', 'interaction_style', 'dining_preference'],
-  planning: ['booking_style', 'spontaneity_tolerance', 'research_depth'],
-  budget: ['splurge_priority', 'value_definition', 'budget_flexibility'],
-  transformation: ['trip_purpose', 'growth_focus', 'learning_style'],
+  pace: ['pace_style', 'activity_density', 'pace'],
+  authenticity: ['travel_vibes', 'dining_style', 'interests'],
+  comfort: ['accommodation', 'hotel_priorities', 'service_level'],
+  adventure: ['activities', 'interests', 'travel_vibes'],
+  social: ['travel_companions', 'dining_style', 'interests'],
+  planning: ['planning_style', 'planning_preference', 'interests'],
+  budget: ['budget', 'splurge_priority', 'accommodation'],
+  transformation: ['traveler_type', 'interests', 'activities'],
 };
 
 // ============================================================================
@@ -1274,8 +1322,9 @@ function extractToneTags(traits: TraitScores, contributions: TraitContribution[]
   if (traits.planning >= 5) tags.push('organized');
   if (traits.planning <= -4) tags.push('spontaneous');
   if (traits.transformation >= 5) tags.push('transformative');
-  if (traits.budget >= 5) tags.push('luxury');
-  if (traits.budget <= -3) tags.push('value-driven');
+  // CANONICAL: budget positive = frugal/value-focused, negative = splurge/luxury
+  if (traits.budget >= 5) tags.push('value-driven');  // FIXED: positive = frugal
+  if (traits.budget <= -3) tags.push('luxury');  // FIXED: negative = splurge
   
   return [...new Set(tags)].slice(0, 8);
 }
@@ -1359,14 +1408,15 @@ function buildWhyThisResult(
 }
 
 function formatTraitLabel(trait: Trait, value: number): string {
+  // CANONICAL: budget positive = frugal/value-focused, negative = splurge/luxury
   const labels: Record<Trait, [string, string]> = {
     planning: ['spontaneous nature', 'love of planning'],
     social: ['solo preference', 'social energy'],
-    comfort: ['adventure-first mindset', 'comfort-seeking style'],
+    comfort: ['budget-conscious mindset', 'comfort-seeking style'],  // FIXED: comfort polarity
     pace: ['relaxed pace', 'active pace'],
     authenticity: ['mainstream preferences', 'authenticity focus'],
     adventure: ['safe choices', 'adventurous spirit'],
-    budget: ['value focus', 'luxury preference'],
+    budget: ['luxury preference', 'value focus'],  // FIXED: positive = value/frugal, negative = luxury
     transformation: ['leisure focus', 'growth mindset'],
   };
   
@@ -1378,6 +1428,7 @@ function formatTraitExplanation(trait: Trait, value: number): string {
   const intensity = Math.abs(value) >= 7 ? 'strongly' : Math.abs(value) >= 4 ? 'moderately' : 'somewhat';
   const direction = value >= 0 ? 'high' : 'low';
   
+  // CANONICAL: budget positive = frugal/value-focused, negative = splurge/luxury
   const explanations: Record<Trait, [string, string]> = {
     planning: ['You prefer to go with the flow', 'You like having things planned out'],
     social: ['You prefer solo or intimate travel', 'You thrive in social settings'],
@@ -1385,7 +1436,7 @@ function formatTraitExplanation(trait: Trait, value: number): string {
     pace: ['You prefer a relaxed, unhurried pace', 'You like to pack in activities'],
     authenticity: ['You enjoy popular attractions', 'You seek authentic, local experiences'],
     adventure: ['You prefer familiar experiences', 'You seek adventure and new challenges'],
-    budget: ['You prioritize value', 'You enjoy premium experiences'],
+    budget: ['You enjoy premium experiences', 'You prioritize value and smart spending'],  // FIXED: positive = value, negative = premium
     transformation: ['Travel is about relaxation', 'Travel is about personal growth'],
   };
   
@@ -1662,6 +1713,15 @@ serve(async (req) => {
       
       // Step 10b: Pick disambiguation questions based on traits with low fill rates
       // Rank by: (1) low fill rate (unknown trait) and (2) importance to top 2 archetypes
+      // IMPORTANT: Filter out already-answered questions + validate IDs exist
+      
+      // Build set of already-answered question IDs
+      const answeredQuestionIds = new Set(Object.keys(answers).filter(k => {
+        const val = answers[k as keyof QuizAnswers];
+        return val !== undefined && val !== null && 
+               (Array.isArray(val) ? val.length > 0 : true);
+      }));
+      
       if (disambiguationTraits && disambiguationTraits.length > 0) {
         // Sort disambiguation traits by fill rate (ascending - lowest first)
         const sortedTraits = [...disambiguationTraits].sort((a, b) => 
@@ -1669,18 +1729,35 @@ serve(async (req) => {
         );
         
         // Pick questions for the top trait(s)
-        const questionsToAsk = new Set<string>();
-        for (const trait of sortedTraits.slice(0, 2)) {
-          const possibleQuestions = DISAMBIGUATION_QUESTIONS_BY_TRAIT[trait];
-          if (possibleQuestions) {
-            // Add first question from each trait's list
-            questionsToAsk.add(possibleQuestions[0]);
+        const questionsToAsk: string[] = [];
+        for (const trait of sortedTraits.slice(0, 3)) {
+          const possibleQuestions = DISAMBIGUATION_QUESTIONS_BY_TRAIT[trait] || [];
+          for (const q of possibleQuestions) {
+            // Only add if: (1) valid quiz ID, (2) not already answered, (3) not already selected
+            if (VALID_QUIZ_QUESTION_IDS.has(q) && 
+                !answeredQuestionIds.has(q) && 
+                !questionsToAsk.includes(q)) {
+              questionsToAsk.push(q);
+              break;  // Take first valid unanswered question per trait
+            }
           }
         }
         
-        if (questionsToAsk.size > 0) {
-          nextQuestionIds = Array.from(questionsToAsk).slice(0, 3);
+        // If no valid questions found, use safe fallbacks
+        if (questionsToAsk.length === 0) {
+          for (const q of SAFE_FALLBACK_QUESTIONS) {
+            if (!answeredQuestionIds.has(q)) {
+              questionsToAsk.push(q);
+            }
+          }
+        }
+        
+        if (questionsToAsk.length > 0) {
+          nextQuestionIds = questionsToAsk.slice(0, 3);
           console.log(`[TravelDNA V2] Disambiguation questions selected:`, nextQuestionIds);
+          console.log(`[TravelDNA V2] Already answered:`, Array.from(answeredQuestionIds));
+        } else {
+          console.log(`[TravelDNA V2] No unanswered disambiguation questions available`);
         }
       }
     }
