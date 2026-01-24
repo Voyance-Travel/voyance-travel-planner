@@ -154,7 +154,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "capture_preference",
-      description: "Capture a user preference for their travel profile. Call this whenever user expresses a preference.",
+      description: "Capture a user preference. Use 'trip_only' scope for one-time requests specific to this trip, 'profile' for preferences that should apply to all future trips.",
       parameters: {
         type: "object",
         properties: {
@@ -169,8 +169,13 @@ const TOOLS = [
             enum: ["explicit", "inferred"],
             description: "Whether user stated this directly or you inferred it"
           },
+          scope: {
+            type: "string",
+            enum: ["trip_only", "profile"],
+            description: "Use 'trip_only' for one-time changes specific to this trip (e.g., 'make today more relaxed'), 'profile' for preferences that should apply to all future trips (e.g., 'I'm vegetarian')"
+          },
         },
-        required: ["preference_type", "preference_value", "confidence"],
+        required: ["preference_type", "preference_value", "confidence", "scope"],
       },
     },
   },
@@ -383,6 +388,7 @@ ${itineraryDescription}`;
       type: string;
       value: string;
       confidence: string;
+      scope: string;
     }> = [];
 
     for (const toolCall of toolCalls) {
@@ -394,6 +400,7 @@ ${itineraryDescription}`;
           type: args.preference_type,
           value: args.preference_value,
           confidence: args.confidence,
+          scope: args.scope || 'trip_only', // Default to trip_only if not specified
         });
       } else {
         actions.push({

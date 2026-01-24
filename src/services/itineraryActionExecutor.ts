@@ -476,21 +476,30 @@ async function executeFilterAction(
 
       if (!error && data?.success && data.alternatives?.length > 0) {
         const alternatives = data.alternatives as AlternativeActivity[];
-        allAlternatives.push(...alternatives);
-        
         const best = alternatives[0];
-        updatedActivities[actIndex] = {
-          ...activity,
-          id: best.id,
-          title: best.name,
-          name: best.name,
-          description: best.description,
-          category: best.category,
-          cost: { amount: best.estimatedCost },
-          location: { name: best.location },
-          isLocked: false,
-        };
-        swapCount++;
+        
+        // Only count as a swap if the new activity is actually different
+        const currentName = (activity.title || activity.name || '').toLowerCase().trim();
+        const newName = (best.name || '').toLowerCase().trim();
+        const isSameActivity = currentName === newName || 
+          currentName.includes(newName) || 
+          newName.includes(currentName);
+        
+        if (!isSameActivity) {
+          allAlternatives.push(...alternatives);
+          updatedActivities[actIndex] = {
+            ...activity,
+            id: best.id,
+            title: best.name,
+            name: best.name,
+            description: best.description,
+            category: best.category,
+            cost: { amount: best.estimatedCost },
+            location: { name: best.location },
+            isLocked: false,
+          };
+          swapCount++;
+        }
       }
     }
 
