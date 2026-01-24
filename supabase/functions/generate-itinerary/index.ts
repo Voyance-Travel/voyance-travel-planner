@@ -107,6 +107,175 @@ interface EnrichedItinerary {
 }
 
 // =============================================================================
+// BUDGET INTENT RECONCILIATION
+// Derives a single canonical budget line from tier + traits
+// =============================================================================
+
+type SpendStyle = 'value_focused' | 'balanced' | 'splurge_forward';
+type BudgetTierLevel = 'budget' | 'economy' | 'standard' | 'comfort' | 'premium' | 'luxury';
+
+interface BudgetIntent {
+  tier: BudgetTierLevel;
+  spendStyle: SpendStyle;
+  splurgeCadence: { dinners: number; experiences: number };
+  avoid: string[];
+  prioritize: string[];
+  priceSensitivity: number; // 0-100, higher = more price sensitive
+  notes: string; // Single line for the AI prompt
+  conflict: boolean; // Whether tier and traits diverged
+  conflictDetails?: string;
+}
+
+/**
+ * Derive a unified budget intent from trip tier and trait scores
+ * Resolves the contradiction between e.g. "Premium" tier + "Frugal +9" trait
+ */
+function deriveBudgetIntent(
+  budgetTier: string | undefined,
+  budgetTrait: number | undefined, // -10 (splurge) to +10 (frugal)
+  comfortTrait: number | undefined // -10 (budget-conscious) to +10 (luxury-seeking)
+): BudgetIntent {
+  // Normalize inputs
+  const tier = (budgetTier?.toLowerCase() || 'standard') as BudgetTierLevel;
+  const budget = budgetTrait ?? 0; // frugal positive, splurge negative
+  const comfort = comfortTrait ?? 0; // luxury positive, budget-conscious negative
+  
+  // Tier hierarchy (higher = more $$$)
+  const tierLevels: Record<string, number> = {
+    budget: 1, economy: 2, standard: 3, comfort: 4, premium: 5, luxury: 6
+  };
+  const tierLevel = tierLevels[tier] || 3;
+  
+  // Detect conflict: high tier but high frugality, or low tier but high comfort expectations
+  const isHighTier = tierLevel >= 5; // premium/luxury
+  const isLowTier = tierLevel <= 2; // budget/economy
+  const isFrugal = budget >= 5; // Strong frugal trait
+  const isSplurge = budget <= -5; // Strong splurge trait
+  const isLuxurySeeker = comfort >= 5; // Strong luxury comfort preference
+  const isBudgetConscious = comfort <= -5; // Strong budget-conscious comfort
+  
+  let conflict = false;
+  let conflictDetails: string | undefined;
+  
+  // High tier + frugal = "value-focused premium" (wants quality, hates waste)
+  // Low tier + luxury comfort = mismatch (may be budget-constrained luxury seeker)
+  // High tier + splurge = straightforward luxury
+  // Low tier + frugal = straightforward budget
+  
+  if (isHighTier && isFrugal) {
+    conflict = true;
+    conflictDetails = `Premium tier with strong frugal trait (+${budget}) - value-focused premium traveler`;
+  } else if (isLowTier && isLuxurySeeker) {
+    conflict = true;
+    conflictDetails = `Budget tier with luxury-seeking comfort (+${comfort}) - budget-constrained with quality aspirations`;
+  } else if (isHighTier && isBudgetConscious) {
+    conflict = true;
+    conflictDetails = `Premium tier with budget-conscious comfort (${comfort}) - unusual combination`;
+  }
+  
+  // Derive spend style
+  let spendStyle: SpendStyle;
+  if (isFrugal || budget > 2) {
+    spendStyle = 'value_focused';
+  } else if (isSplurge || budget < -2) {
+    spendStyle = 'splurge_forward';
+  } else {
+    spendStyle = 'balanced';
+  }
+  
+  // Adjust based on comfort if budget trait is neutral
+  if (Math.abs(budget) <= 2) {
+    if (isLuxurySeeker) spendStyle = 'splurge_forward';
+    if (isBudgetConscious) spendStyle = 'value_focused';
+  }
+  
+  // Calculate price sensitivity (0-100, higher = more price sensitive)
+  // Starts from tier baseline, modified by traits
+  const tierSensitivity: Record<string, number> = {
+    luxury: 10, premium: 25, comfort: 40, standard: 55, economy: 70, budget: 85
+  };
+  let priceSensitivity = tierSensitivity[tier] || 55;
+  
+  // Frugal trait increases sensitivity, splurge decreases
+  priceSensitivity += budget * 3; // +30 max for strong frugal
+  // Luxury comfort decreases sensitivity, budget-conscious increases
+  priceSensitivity -= comfort * 2; // -20 for strong luxury preference
+  
+  priceSensitivity = Math.max(0, Math.min(100, priceSensitivity));
+  
+  // Derive splurge cadence based on style and tier
+  const splurgeCadence = {
+    dinners: spendStyle === 'splurge_forward' ? 4 : spendStyle === 'value_focused' ? 1 : 2,
+    experiences: spendStyle === 'splurge_forward' ? 3 : spendStyle === 'value_focused' ? 1 : 2
+  };
+  
+  // Adjust for tier
+  if (tierLevel >= 5) {
+    splurgeCadence.dinners = Math.min(5, splurgeCadence.dinners + 1);
+    splurgeCadence.experiences = Math.min(4, splurgeCadence.experiences + 1);
+  } else if (tierLevel <= 2) {
+    splurgeCadence.dinners = Math.max(0, splurgeCadence.dinners - 1);
+    splurgeCadence.experiences = Math.max(0, splurgeCadence.experiences - 1);
+  }
+  
+  // Derive avoid/prioritize lists
+  const avoid: string[] = [];
+  const prioritize: string[] = [];
+  
+  if (spendStyle === 'value_focused') {
+    avoid.push('tourist traps', 'overpriced set menus', 'low-ROI experiences', 'expensive transport when cheaper options exist');
+    prioritize.push('high-value experiences', 'local favorites with quality', 'smart splurges on signature moments');
+  } else if (spendStyle === 'splurge_forward') {
+    avoid.push('budget options that compromise experience', 'overcrowded budget alternatives');
+    prioritize.push('premium experiences', 'fine dining', 'skip-the-line tickets', 'private tours', 'exclusive access');
+  } else {
+    avoid.push('obvious tourist traps');
+    prioritize.push('balanced mix of splurges and value options', 'local recommendations at various price points');
+  }
+  
+  // Add tier-specific refinements
+  if (tierLevel >= 5) {
+    prioritize.push('top-tier accommodations as baseline comfort');
+    if (spendStyle === 'value_focused') {
+      prioritize.push('1-2 signature splurges per trip where ROI is high');
+    }
+  }
+  
+  // Build the single-line notes for AI prompt
+  const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+  const styleLabel = spendStyle.replace('_', '-');
+  let notes = `${tierLabel}, ${styleLabel}`;
+  
+  if (conflict && spendStyle === 'value_focused' && tierLevel >= 5) {
+    notes += ': willing to pay for top-tier comfort + 1-2 signature splurges; avoids tourist traps and low-ROI spend';
+  } else if (spendStyle === 'value_focused') {
+    notes += ': seeks best value at every price point; prioritizes quality over quantity; strategic splurges only';
+  } else if (spendStyle === 'splurge_forward') {
+    notes += ': embraces premium experiences freely; prioritizes exclusivity and comfort over cost savings';
+  } else {
+    notes += ': balanced approach to spending; open to both value finds and occasional splurges';
+  }
+  
+  // Log conflict if detected
+  if (conflict) {
+    console.log(`[BudgetIntent] CONFLICT DETECTED: ${conflictDetails}`);
+    console.log(`[BudgetIntent] Resolved to: ${notes}`);
+  }
+  
+  return {
+    tier: tier as BudgetTierLevel,
+    spendStyle,
+    splurgeCadence,
+    avoid,
+    prioritize,
+    priceSensitivity,
+    notes,
+    conflict,
+    conflictDetails
+  };
+}
+
+// =============================================================================
 // RATE LIMITING - In-memory store (resets on cold start, but limits abuse)
 // =============================================================================
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
@@ -968,13 +1137,14 @@ function inferArchetypesFromTraits(traitScores: Record<string, number>): Array<{
 
 /**
  * Build Travel DNA persona context for AI prompt
- * Includes archetype blend, confidence level, and trait information
+ * Includes archetype blend, confidence level, trait information, and RECONCILED BUDGET INTENT
  */
 function buildTravelDNAContext(
   dna: TravelDNAProfile | null, 
-  overrides: Record<string, number> | null
-): string {
-  if (!dna) return '';
+  overrides: Record<string, number> | null,
+  budgetTier?: string
+): { context: string; budgetIntent: BudgetIntent | null } {
+  if (!dna) return { context: '', budgetIntent: null };
 
   const sections: string[] = [];
   
@@ -982,6 +1152,35 @@ function buildTravelDNAContext(
   const traitScores = overrides 
     ? { ...dna.trait_scores, ...overrides }
     : dna.trait_scores;
+  
+  // ==========================================================================
+  // BUDGET INTENT RECONCILIATION - Single source of truth for spending behavior
+  // ==========================================================================
+  const budgetTrait = traitScores?.budget as number | undefined;
+  const comfortTrait = traitScores?.comfort as number | undefined;
+  const budgetIntent = deriveBudgetIntent(budgetTier, budgetTrait, comfortTrait);
+  
+  // Add reconciled budget section FIRST (most important for activity selection)
+  let budgetSection = `\n${'='.repeat(60)}\n💰 BUDGET INTENT (RECONCILED - SINGLE SOURCE OF TRUTH)\n${'='.repeat(60)}`;
+  budgetSection += `\n🎯 ${budgetIntent.notes}`;
+  budgetSection += `\n`;
+  budgetSection += `\nSpend Style: ${budgetIntent.spendStyle.replace('_', '-')}`;
+  budgetSection += `\nPrice Sensitivity: ${budgetIntent.priceSensitivity}/100 (${budgetIntent.priceSensitivity >= 70 ? 'highly price-aware' : budgetIntent.priceSensitivity >= 40 ? 'moderately price-aware' : 'relaxed about prices'})`;
+  budgetSection += `\nSplurge Cadence: ~${budgetIntent.splurgeCadence.dinners} special dinners/trip, ~${budgetIntent.splurgeCadence.experiences} premium experiences/trip`;
+  
+  if (budgetIntent.prioritize.length > 0) {
+    budgetSection += `\n\n✅ PRIORITIZE: ${budgetIntent.prioritize.join('; ')}`;
+  }
+  if (budgetIntent.avoid.length > 0) {
+    budgetSection += `\n❌ AVOID: ${budgetIntent.avoid.join('; ')}`;
+  }
+  
+  if (budgetIntent.conflict) {
+    budgetSection += `\n\n⚠️ NOTE: ${budgetIntent.conflictDetails}`;
+    budgetSection += `\n   → This traveler has nuanced spending preferences. Follow the reconciled intent above.`;
+  }
+  
+  sections.push(budgetSection);
   
   // Archetype blend section - use existing or infer from trait scores
   let archetypes: Array<{ name: string; pct: number }> | undefined = 
@@ -1043,22 +1242,24 @@ function buildTravelDNAContext(
     sections.push(personaSection);
   }
   
-  // Trait summary section
+  // Trait summary section - EXCLUDING budget/comfort (already reconciled above)
   if (traitScores && Object.keys(traitScores).length > 0) {
     const traitLabels: Record<string, [string, string]> = {
       planning: ['Spontaneous', 'Detailed Planner'],
       social: ['Solo/Intimate', 'Social/Group'],
-      comfort: ['Budget-Conscious', 'Luxury-Seeking'],
       pace: ['Relaxed', 'Fast-Paced'],
       authenticity: ['Tourist-Friendly', 'Local/Authentic'],
       adventure: ['Safe/Comfortable', 'Adventurous'],
-      budget: ['Splurge', 'Frugal'],
       transformation: ['Leisure', 'Growth-Focused'],
+      // NOTE: budget and comfort are EXCLUDED - they are reconciled in Budget Intent above
     };
     
-    let traitSection = `\n${'='.repeat(60)}\n📊 TRAIT PROFILE\n${'='.repeat(60)}`;
+    let traitSection = `\n${'='.repeat(60)}\n📊 TRAIT PROFILE (Non-Budget)\n${'='.repeat(60)}`;
     
     for (const [trait, score] of Object.entries(traitScores)) {
+      // Skip budget and comfort - they're in Budget Intent
+      if (trait === 'budget' || trait === 'comfort') continue;
+      
       const labels = traitLabels[trait];
       if (labels && typeof score === 'number') {
         const normalized = Math.round(score);
@@ -1076,7 +1277,7 @@ function buildTravelDNAContext(
     sections.push(traitSection);
   }
   
-  return sections.join('\n');
+  return { context: sections.join('\n'), budgetIntent };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2660,11 +2861,39 @@ serve(async (req) => {
       console.log("[Stage 1.3] Fetching Travel DNA v2...");
       const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
       const traitOverrides = userId ? await getTraitOverrides(supabase, userId) : null;
-      const travelDNAContext = buildTravelDNAContext(travelDNA, traitOverrides);
+      
+      // Build Travel DNA context WITH budget intent reconciliation
+      const travelDNAResult = buildTravelDNAContext(travelDNA, traitOverrides, context.budgetTier);
+      const travelDNAContext = travelDNAResult.context;
+      const budgetIntent = travelDNAResult.budgetIntent;
       
       if (travelDNA) {
         const confidence = travelDNA.travel_dna_v2?.confidence ?? travelDNA.confidence ?? 75;
         console.log(`[Stage 1.3] Travel DNA loaded: v${travelDNA.dna_version}, confidence=${confidence}`);
+      }
+      
+      // Log budget conflict for analytics and debugging
+      if (budgetIntent?.conflict) {
+        console.log(`[Stage 1.3] 🚨 BUDGET CONFLICT FLAG: ${budgetIntent.conflictDetails}`);
+        console.log(`[Stage 1.3] Reconciled to: ${budgetIntent.notes}`);
+        
+        // Log to voyance_events for tracking conflict frequency
+        try {
+          await supabase.from('voyance_events').insert({
+            user_id: userId,
+            event_type: 'budget_conflict_detected',
+            event_data: {
+              trip_id: tripId,
+              budget_tier: context.budgetTier,
+              budget_trait: travelDNA?.trait_scores?.budget,
+              comfort_trait: travelDNA?.trait_scores?.comfort,
+              reconciled_spend_style: budgetIntent.spendStyle,
+              conflict_details: budgetIntent.conflictDetails,
+            },
+          });
+        } catch (logError) {
+          console.warn('[Stage 1.3] Failed to log budget conflict event:', logError);
+        }
       }
       
       // =======================================================================
@@ -2731,7 +2960,8 @@ serve(async (req) => {
       }
       
       // Combine all context for maximum personalization
-      // Order: Travel DNA (archetype/confidence) → raw prefs → enriched prefs → flight/hotel
+      // Order: Travel DNA (archetype/confidence + RECONCILED BUDGET) → raw prefs → enriched prefs → flight/hotel
+      // NOTE: Budget intent is now FIRST in travelDNAContext - single source of truth
       const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context;
 
       // STAGE 2: AI Generation (batch with validation and retry)
