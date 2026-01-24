@@ -68,6 +68,7 @@ interface WhyThisResult {
 
 interface TravelDNAv2Result {
   version: 2;
+  budget_polarity_version: 1 | 2;  // 1 = old inverted (positive=splurge), 2 = fixed (positive=frugal)
   raw_trait_scores: TraitScores;
   trait_scores: TraitScores;
   trait_signal_strength: Partial<Record<Trait, number>>;
@@ -96,6 +97,12 @@ interface TravelDNAv2Result {
   next_question_ids?: string[];  // NEW: Specific questions to ask for disambiguation
   tension_label?: string;        // NEW: One-liner resolving apparent contradictions
   tension_explanation?: string;  // NEW: Explanation of the tension resolution
+}
+
+// Helper to normalize budget trait from older profiles with inverted polarity
+function normalizeBudgetTrait(budgetTrait: number, polarityVersion: 1 | 2): number {
+  // v1 = old inverted deltas (positive=splurge), v2 = fixed (positive=frugal)
+  return polarityVersion === 1 ? -budgetTrait : budgetTrait;
 }
 
 interface QuizAnswers {
@@ -749,11 +756,20 @@ interface TensionPattern {
   explanation: string;
 }
 
+// CANONICAL POLARITY: budget positive = frugal/value-focused, negative = splurge/luxury
+// All conditions below follow this rule!
 const TENSION_PATTERNS: TensionPattern[] = [
+  // value-focused premium = high comfort + high frugality (budget positive)
   {
-    condition: (t) => t.comfort >= 5 && t.budget <= -3,
+    condition: (t) => t.comfort >= 5 && t.budget >= 3,
     label: 'value-focused premium',
     explanation: 'You appreciate quality but are strategic about where you splurge—maximizing comfort ROI.',
+  },
+  // splurge-forward luxury = high comfort + splurge preference (budget negative)
+  {
+    condition: (t) => t.comfort >= 5 && t.budget <= -3,
+    label: 'splurge-forward luxury',
+    explanation: 'You prioritize top-tier experiences and comfort, and cost isn\'t a primary constraint.',
   },
   {
     condition: (t) => t.pace <= -4 && t.adventure >= 4,
@@ -780,10 +796,23 @@ const TENSION_PATTERNS: TensionPattern[] = [
     label: 'intense growth',
     explanation: 'You pack in experiences not for the checklist, but for maximum personal transformation.',
   },
+  // premium adventure = high adventure + comfortable + value-conscious (budget positive or neutral)
   {
-    condition: (t) => t.budget >= 5 && t.adventure >= 5,
+    condition: (t) => t.adventure >= 5 && t.comfort >= 4 && t.budget >= 2,
     label: 'premium adventure',
     explanation: 'You seek thrilling experiences with excellent logistics—adventure without roughing it.',
+  },
+  // budget adventurer = high adventure + strong frugality
+  {
+    condition: (t) => t.adventure >= 5 && t.budget >= 5,
+    label: 'budget adventurer',
+    explanation: 'You love bold experiences and are resourceful about making them happen affordably.',
+  },
+  // aspirational luxury = wants comfort but constrained by budget-consciousness
+  {
+    condition: (t) => t.comfort >= 6 && t.budget >= 5,
+    label: 'aspirational luxury',
+    explanation: 'You have refined tastes and seek the best value-for-quality deals.',
   },
 ];
 
@@ -1616,6 +1645,17 @@ serve(async (req) => {
     console.log('[TravelDNA V2] Calculating for user:', userId);
     console.log('[TravelDNA V2] Quiz answers:', Object.keys(answers));
     
+    // DEV ASSERTION: Sanity check that budget polarity is correct in mappings
+    // This catches polarity drift during development
+    const luxuryDelta = LEGACY_ANSWER_MAPPINGS.luxury?.deltas?.budget;
+    const budgetDelta = LEGACY_ANSWER_MAPPINGS.budget?.deltas?.budget;
+    if (luxuryDelta !== undefined && luxuryDelta > 0) {
+      console.error('[TravelDNA V2 POLARITY ERROR] luxury delta is positive; expected negative under POSITIVE_IS_FRUGAL');
+    }
+    if (budgetDelta !== undefined && budgetDelta < 0) {
+      console.error('[TravelDNA V2 POLARITY ERROR] budget delta is negative; expected positive under POSITIVE_IS_FRUGAL');
+    }
+    
     // Step 1: Calculate trait scores with contributions
     const { rawScores, finalScores, signalStrength, fillRates, contributions } = calculateTraitScoresV2(answers);
     console.log('[TravelDNA V2] Raw scores:', rawScores);
@@ -1780,6 +1820,7 @@ serve(async (req) => {
     // Build V2 result
     const result: TravelDNAv2Result = {
       version: 2,
+      budget_polarity_version: 2,  // v2 = fixed polarity (positive=frugal)
       raw_trait_scores: rawScores,
       trait_scores: finalScores,
       trait_signal_strength: signalStrength,

@@ -1022,6 +1022,13 @@ async function getUserPreferences(supabase: any, userId: string) {
 // TRAVEL DNA V2 INTEGRATION - Archetype blend + confidence for persona
 // =============================================================================
 
+// Helper to normalize budget trait from older profiles with inverted polarity
+// This is also defined in calculate-travel-dna, replicated here to avoid cross-function imports
+function normalizeBudgetTraitForPolarity(budgetTrait: number, polarityVersion: 1 | 2): number {
+  // v1 = old inverted deltas (positive=splurge), v2 = fixed (positive=frugal)
+  return polarityVersion === 1 ? -budgetTrait : budgetTrait;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAProfile | null> {
   try {
@@ -1034,28 +1041,52 @@ async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAP
     
     if (dnaProfile?.travel_dna_v2) {
       console.log('[TravelDNA] Found v2 profile with archetype blend');
+      
+      // Check polarity version and normalize budget trait if needed
+      const v2Data = dnaProfile.travel_dna_v2;
+      const polarityVersion = v2Data.budget_polarity_version || 1;  // Default to v1 if not present
+      let normalizedTraitScores = v2Data.trait_scores;
+      
+      if (polarityVersion === 1 && normalizedTraitScores?.budget !== undefined) {
+        console.log(`[TravelDNA] Normalizing budget from polarity v1: ${normalizedTraitScores.budget} -> ${-normalizedTraitScores.budget}`);
+        normalizedTraitScores = {
+          ...normalizedTraitScores,
+          budget: normalizeBudgetTraitForPolarity(normalizedTraitScores.budget, 1),
+        };
+      }
+      
       return {
         user_id: dnaProfile.user_id,
-        trait_scores: dnaProfile.travel_dna_v2.trait_scores,
-        travel_dna_v2: dnaProfile.travel_dna_v2,
-        archetype_matches: dnaProfile.travel_dna_v2.archetype_matches,
-        confidence: dnaProfile.travel_dna_v2.confidence,
+        trait_scores: normalizedTraitScores,
+        travel_dna_v2: { ...v2Data, trait_scores: normalizedTraitScores },
+        archetype_matches: v2Data.archetype_matches,
+        confidence: v2Data.confidence,
         dna_version: 2,
       };
     }
 
-    // Fallback to v1 or archetype_matches column
+    // Fallback to v1 or archetype_matches column - ALWAYS needs polarity normalization
     if (dnaProfile?.archetype_matches) {
-      console.log('[TravelDNA] Found v1 profile with archetype_matches');
+      console.log('[TravelDNA] Found v1 profile with archetype_matches - normalizing budget polarity');
+      let traitScores = dnaProfile.trait_scores;
+      
+      // v1 profiles always have inverted polarity
+      if (traitScores?.budget !== undefined) {
+        traitScores = {
+          ...traitScores,
+          budget: normalizeBudgetTraitForPolarity(traitScores.budget, 1),
+        };
+      }
+      
       return {
         user_id: dnaProfile.user_id,
-        trait_scores: dnaProfile.trait_scores,
+        trait_scores: traitScores,
         archetype_matches: dnaProfile.archetype_matches,
         dna_version: 1,
       };
     }
 
-    // Also check profiles.travel_dna for legacy data
+    // Also check profiles.travel_dna for legacy data - ALWAYS needs polarity normalization
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('travel_dna, travel_dna_overrides')
@@ -1064,10 +1095,20 @@ async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAP
 
     if (profile?.travel_dna) {
       const dna = profile.travel_dna as Record<string, unknown>;
-      console.log('[TravelDNA] Found legacy profile data');
+      console.log('[TravelDNA] Found legacy profile data - normalizing budget polarity');
+      let traitScores = dna.trait_scores as Record<string, number>;
+      
+      // Legacy profiles always have inverted polarity
+      if (traitScores?.budget !== undefined) {
+        traitScores = {
+          ...traitScores,
+          budget: normalizeBudgetTraitForPolarity(traitScores.budget, 1),
+        };
+      }
+      
       return {
         user_id: userId,
-        trait_scores: dna.trait_scores as Record<string, number>,
+        trait_scores: traitScores,
         dna_version: 1,
       };
     }
