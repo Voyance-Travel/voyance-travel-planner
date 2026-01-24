@@ -397,10 +397,12 @@ export async function saveUserPreferences(
 /**
  * Calculates Travel DNA via backend edge function
  * Uses sophisticated trait calculation and AI-powered Perfect Trip generation
+ * @param existingOverrides - User's manual trait adjustments to consider during calculation
  */
 export async function calculateTravelDNAAdvanced(
   answers: Record<string, string | string[]>,
-  userId?: string
+  userId?: string,
+  existingOverrides?: Record<string, number> | null
 ): Promise<TravelDNAPayload> {
   try {
     const response = await fetch(
@@ -411,7 +413,12 @@ export async function calculateTravelDNAAdvanced(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ answers, userId }),
+        body: JSON.stringify({ 
+          answers, 
+          userId,
+          // Pass existing overrides so the edge function knows about user adjustments
+          existingOverrides: existingOverrides || null,
+        }),
       }
     );
 
@@ -760,13 +767,46 @@ export async function submitQuizComplete(
   dna: TravelDNAPayload;
 }> {
   try {
+    // 0. Fetch existing overrides and preferences BEFORE recalculating
+    // This ensures user adjustments are preserved across quiz retakes
+    let existingOverrides: Record<string, number> | null = null;
+    let existingPreferences: Record<string, unknown> | null = null;
+    
+    try {
+      const [overridesResult, prefsResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('travel_dna_overrides')
+          .eq('id', userId)
+          .maybeSingle(),
+        supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle()
+      ]);
+      
+      if (overridesResult.data?.travel_dna_overrides) {
+        existingOverrides = overridesResult.data.travel_dna_overrides as Record<string, number>;
+        console.log('[Quiz] Found existing trait overrides:', Object.keys(existingOverrides));
+      }
+      
+      if (prefsResult.data) {
+        existingPreferences = prefsResult.data as Record<string, unknown>;
+        console.log('[Quiz] Found existing preferences');
+      }
+    } catch (err) {
+      console.warn('[Quiz] Could not fetch existing data:', err);
+    }
+    
     // 1. Map answers to preferences
     const preferences = mapQuizAnswersToPreferences(answers);
     
     // 2. Calculate Travel DNA via backend (with AI-powered Perfect Trip)
+    // Pass existing overrides so the edge function can factor them in
     let dna: TravelDNAPayload;
     try {
-      dna = await calculateTravelDNAAdvanced(answers, userId);
+      dna = await calculateTravelDNAAdvanced(answers, userId, existingOverrides);
     } catch {
       // Fallback to simple calculation if backend fails
       dna = calculateTravelDNA(answers);
@@ -776,8 +816,12 @@ export async function submitQuizComplete(
     preferences.traveler_type = dna.primary_archetype_name;
     preferences.emotional_drivers = dna.emotional_drivers;
 
-    // 4. Save preferences
-    const prefSuccess = await saveUserPreferences(userId, preferences, true);
+    // 4. Save preferences - MERGE with existing, don't overwrite
+    // Only update fields that were explicitly set by the quiz
+    const mergedPreferences = existingPreferences
+      ? { ...existingPreferences, ...preferences }
+      : preferences;
+    const prefSuccess = await saveUserPreferences(userId, mergedPreferences as UserPreferencesPayload, true);
     
     // 5. Save Travel DNA
     const dnaSuccess = await saveTravelDNA(userId, sessionId || null, dna);
@@ -791,6 +835,7 @@ export async function submitQuizComplete(
     }
 
     // 7. Update profiles table with quiz_completed flag and travel_dna
+    // IMPORTANT: Preserve existing overrides - do NOT clear them
     try {
       // Create a clean JSON object for travel_dna
       const travelDnaJson = {
@@ -804,11 +849,14 @@ export async function submitQuizComplete(
         summary: dna.summary || null,
       };
       
+      // Note: We explicitly do NOT update travel_dna_overrides here
+      // User adjustments are preserved even when retaking the quiz
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ 
           quiz_completed: true,
           travel_dna: travelDnaJson as unknown as Json,
+          // travel_dna_overrides: preserved (not touched)
         })
         .eq('id', userId);
         

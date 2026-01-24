@@ -1779,7 +1779,7 @@ serve(async (req) => {
   }
   
   try {
-    const { answers, userId } = await req.json();
+    const { answers, userId, existingOverrides } = await req.json();
     
     if (!answers) {
       return new Response(
@@ -1790,6 +1790,9 @@ serve(async (req) => {
     
     console.log('[TravelDNA V2] Calculating for user:', userId);
     console.log('[TravelDNA V2] Quiz answers:', Object.keys(answers));
+    if (existingOverrides && Object.keys(existingOverrides).length > 0) {
+      console.log('[TravelDNA V2] User has existing trait overrides:', existingOverrides);
+    }
     
     // DEV ASSERTION: Generic polarity check to catch drift across BOTH mapping tables
     // CANONICAL: budget positive = frugal/value-focused, negative = splurge/luxury
@@ -1831,8 +1834,25 @@ serve(async (req) => {
     console.log('[TravelDNA V2] Final scores (saturated):', finalScores);
     console.log('[TravelDNA V2] Fill rates:', fillRates);
     
-    // Step 2: Match archetypes with blends
-    const { matches, confidence } = matchArchetypesV2(finalScores, contributions);
+    // Step 1b: Apply existing overrides as a "bias" to final scores
+    // This ensures user's manual adjustments influence archetype matching
+    // but the computed base still comes from quiz answers
+    const effectiveScores: TraitScores = { ...finalScores };
+    if (existingOverrides && typeof existingOverrides === 'object') {
+      for (const trait of ALL_TRAITS) {
+        if (existingOverrides[trait] !== undefined) {
+          // Blend override with computed score (70% computed, 30% override influence)
+          const override = existingOverrides[trait] as number;
+          const computed = finalScores[trait];
+          // Use weighted average to respect both quiz and manual adjustments
+          effectiveScores[trait] = Math.round((computed * 0.7 + override * 0.3) * 10) / 10;
+        }
+      }
+      console.log('[TravelDNA V2] Effective scores after override blend:', effectiveScores);
+    }
+    
+    // Step 2: Match archetypes with blends (use effectiveScores to incorporate user overrides)
+    const { matches, confidence } = matchArchetypesV2(effectiveScores, contributions);
     console.log('[TravelDNA V2] Top matches:', matches.slice(0, 3).map(m => `${m.name} (${m.pct}%)`));
     console.log('[TravelDNA V2] Confidence:', confidence);
     
