@@ -50,6 +50,7 @@ import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
+import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
 
 // =============================================================================
 // TYPES
@@ -499,6 +500,10 @@ export function EditorialItinerary({
   const [inviteCopied, setInviteCopied] = useState(false);
   const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
 
+  // Optimize preferences dialog state
+  const [showOptimizeDialog, setShowOptimizeDialog] = useState(false);
+  const [optimizePrefs, setOptimizePrefs] = useState<OptimizePreferences | null>(null);
+
   // AI Swap (Activity Alternatives) state
   const [swapDrawerOpen, setSwapDrawerOpen] = useState(false);
   const [swapTarget, setSwapTarget] = useState<{ dayIndex: number; activityId: string } | null>(null);
@@ -794,8 +799,15 @@ export function EditorialItinerary({
     }
   }, [days, tripId, onSave]);
 
+  // Open the optimize preferences dialog
+  const openOptimizeDialog = useCallback(() => {
+    setShowOptimizeDialog(true);
+  }, []);
+
   // Optimize itinerary: route optimization, real transport, real costs
-  const handleOptimize = useCallback(async () => {
+  const handleOptimize = useCallback(async (prefs: OptimizePreferences) => {
+    setOptimizePrefs(prefs);
+    setShowOptimizeDialog(false);
     setIsOptimizing(true);
     try {
       toast.info('Optimizing routes and fetching real costs...', { duration: 3000 });
@@ -822,6 +834,11 @@ export function EditorialItinerary({
           enableRouteOptimization: true,
           enableRealTransport: true,
           enableCostLookup: true,
+          // Pass user transport preferences
+          transportPreferences: {
+            allowedModes: prefs.transportModes,
+            distanceUnit: prefs.distanceUnit,
+          },
         }
       });
 
@@ -1138,7 +1155,7 @@ export function EditorialItinerary({
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={handleOptimize} 
+                  onClick={openOptimizeDialog} 
                   disabled={isOptimizing || days.length === 0} 
                   className="gap-1.5 h-8 text-xs"
                 >
@@ -1932,6 +1949,14 @@ export function EditorialItinerary({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Optimize Preferences Dialog */}
+      <OptimizePreferencesDialog
+        open={showOptimizeDialog}
+        onOpenChange={setShowOptimizeDialog}
+        onConfirm={handleOptimize}
+        isOptimizing={isOptimizing}
+      />
     </div>
   );
 }
