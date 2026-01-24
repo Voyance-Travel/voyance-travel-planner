@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ interface ItineraryGeneratorProps {
   tripType?: string;
   budgetTier?: string;
   userId?: string;
+  /** Auto-start generation immediately without showing confirmation */
+  autoStart?: boolean;
   onComplete: (days: GeneratedDay[], overview?: TripOverview) => void;
   onCancel?: () => void;
 }
@@ -45,6 +47,7 @@ export function ItineraryGenerator({
   tripType,
   budgetTier,
   userId,
+  autoStart = false,
   onComplete,
   onCancel,
 }: ItineraryGeneratorProps) {
@@ -73,6 +76,7 @@ export function ItineraryGenerator({
 
   const [hasStarted, setHasStarted] = useState(false);
   const [showNudgeCard, setShowNudgeCard] = useState(true);
+  const autoStartTriggered = useRef(false);
 
   const handleGenerate = async () => {
     setHasStarted(true);
@@ -94,6 +98,15 @@ export function ItineraryGenerator({
       console.error('Generation failed:', err);
     }
   };
+
+  // Auto-start generation if prop is true and user has builds remaining
+  useEffect(() => {
+    if (autoStart && !autoStartTriggered.current && (isPaid || freeBuildsRemaining > 0)) {
+      autoStartTriggered.current = true;
+      handleGenerate();
+    }
+  }, [autoStart, isPaid, freeBuildsRemaining]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const handleRetry = () => {
     reset();
