@@ -2013,22 +2013,21 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
     return `data:image/svg+xml;base64,${btoa(svg)}`;
   };
 
-  // Fetch destination images from the backend
+  // Fetch destination images using centralized API (respects Rome no-people rule)
   useEffect(() => {
     async function fetchImages() {
       setIsLoading(true);
       try {
-        const { supabase } = await import('@/integrations/supabase/client');
-        const { data, error } = await supabase.functions.invoke('destination-images', {
-          body: {
-            destination: queryDestination,
-            imageType: 'gallery',
-            limit: 6,
-          },
+        // Use centralized API that enforces curated images for Rome
+        const { getDestinationImages } = await import('@/services/destinationImagesAPI');
+        const images = await getDestinationImages({
+          destination: queryDestination,
+          imageType: 'gallery',
+          limit: 6,
         });
         
-        if (!error && data?.images?.length > 0) {
-          const urls = data.images.map((img: { url: string }) => img.url);
+        if (images.length > 0) {
+          const urls = images.map((img) => img.url);
           setImages(urls);
         } else {
           setImages([generateGradientDataUrl(cleanDestination)]);
