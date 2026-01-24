@@ -1504,19 +1504,24 @@ REQUIRED FOR EACH ACTIVITY (NO EXCEPTIONS):
 7. Start and end times in HH:MM format
 8. Description (2-3 sentences including what makes it special)
 9. Rating (value 3.5-5.0) and totalReviews (100-50000 for popular, less for hidden gems)
-10. Whether booking is required
+10. Whether booking is required:
+    - bookingRequired: FALSE for ALL of these: hotel check-in, hotel checkout, airport arrival, airport departure, airport transfers, free time, downtime, leisure time, and ALL transport/accommodation categories
+    - bookingRequired: TRUE only for tours, museums, attractions, and experiences that genuinely need advance tickets
 11. Transportation from previous location (method, duration, cost, instructions)
 12. An insider tip
 13. Website URL if well-known venue
 
 COST GUIDELINES (per person):
 - Free attractions: 0
+- Hotel check-in/checkout: 0 (bookingRequired: false)
+- Airport transfers: 0 (bookingRequired: false) - user arranges own transport
+- Free time/downtime: 0 (bookingRequired: false)
 - Museum entry: 15-30
 - Casual restaurant: 20-40
 - Mid-range restaurant: 40-80
 - Fine dining: 80-200
-- Tours: 40-150
-- Shows/entertainment: 50-150
+- Tours: 40-150 (bookingRequired: true)
+- Shows/entertainment: 50-150 (bookingRequired: true)
 
 TAG EXAMPLES for a restaurant:
 ["dining", "restaurant", "french-cuisine", "evening", "romantic", "moderate-price", "local-favorite", "dinner"]
