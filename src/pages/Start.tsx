@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star } from 'lucide-react';
-import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
+import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { getHeroImage } from '@/utils/heroImages';
@@ -515,6 +515,13 @@ export default function Start() {
   const [endDate, setEndDate] = useState<Date | undefined>(
     plannerState.basics.endDate ? parseISO(plannerState.basics.endDate) : undefined
   );
+  // Shared calendar month state - syncs both date pickers
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
+    if (plannerState.basics.startDate) {
+      return startOfMonth(parseISO(plannerState.basics.startDate));
+    }
+    return startOfMonth(new Date());
+  });
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [tripType, setTripType] = useState<string>('leisure');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
@@ -938,6 +945,8 @@ export default function Start() {
                       <Calendar
                         mode="single"
                         selected={startDate}
+                        month={calendarMonth}
+                        onMonthChange={setCalendarMonth}
                         onSelect={(date) => {
                           console.log('[Calendar] Start date selected:', date, 'ISO:', date?.toISOString(), 'Local:', date?.toLocaleDateString());
                           setStartDate(date);
@@ -975,6 +984,8 @@ export default function Start() {
                       <Calendar
                         mode="single"
                         selected={endDate}
+                        month={calendarMonth}
+                        onMonthChange={setCalendarMonth}
                         onSelect={(date) => {
                           console.log('[Calendar] End date selected:', date, 'ISO:', date?.toISOString(), 'Local:', date?.toLocaleDateString());
                           setEndDate(date);
