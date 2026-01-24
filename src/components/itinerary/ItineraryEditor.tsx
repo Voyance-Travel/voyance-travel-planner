@@ -318,6 +318,11 @@ export function ItineraryEditor({
           toast.success(`Day ${day.dayNumber} regenerated!`);
         }
       } else {
+        // Collect current day's activity names to exclude from regeneration
+        const currentDayActivities = day.activities
+          ?.map(a => a.title || a.name)
+          .filter(Boolean) || [];
+        
         // Call edge function directly
         const { data, error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
@@ -330,6 +335,8 @@ export function ItineraryEditor({
             date: day.date,
             travelers,
             budgetTier,
+            previousDayActivities: currentDayActivities, // Force different venues
+            variationNonce: Date.now(), // Force new randomness
           }
         });
 

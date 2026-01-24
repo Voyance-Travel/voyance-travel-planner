@@ -3860,6 +3860,50 @@ export type Database = {
           },
         ]
       }
+      trip_intents: {
+        Row: {
+          active: boolean | null
+          confidence: string | null
+          created_at: string
+          id: string
+          intent_type: string
+          intent_value: string
+          trip_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          confidence?: string | null
+          created_at?: string
+          id?: string
+          intent_type: string
+          intent_value: string
+          trip_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          confidence?: string | null
+          created_at?: string
+          id?: string
+          intent_type?: string
+          intent_value?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_intents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_invites: {
         Row: {
           accepted_at: string | null
