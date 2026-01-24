@@ -3126,15 +3126,21 @@ function DayCard({
                 {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
               </div>
             )}
-            {/* Transport Details Toggle */}
+            {/* Transport Details Toggle - now more prominent with text label */}
             <Button
-              variant="ghost"
-              size="icon"
+              variant={showTransportDetails ? "default" : "outline"}
+              size="sm"
               onClick={() => setShowTransportDetails(prev => !prev)}
-              className={cn("h-8 w-8 hover:bg-primary/10", showTransportDetails && "bg-primary/10 text-primary")}
+              className={cn(
+                "h-8 gap-1.5 text-xs font-medium transition-all",
+                showTransportDetails 
+                  ? "bg-primary text-primary-foreground" 
+                  : "border-primary/30 hover:bg-primary/10 hover:border-primary/50"
+              )}
               title={showTransportDetails ? 'Hide route details' : 'Show route details'}
             >
-              <Route className="h-4 w-4" />
+              <Route className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
             </Button>
             {isEditable && (
               <>
