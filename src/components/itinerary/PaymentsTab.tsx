@@ -7,8 +7,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
-  AlertCircle, CheckCircle2, Users, ChevronDown, Receipt,
-  Wallet, X, UserPlus, Split, User
+  CheckCircle2, Users, ChevronDown, Receipt,
+  Wallet, X, User, Plus, UserPlus, AlertCircle, Split
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,6 @@ import {
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
 import { useTripMembers, type TripMember } from '@/services/tripBudgetAPI';
-import { BookingButton } from '@/components/booking/BookingButton';
 import { toast } from 'sonner';
 import type { EditorialDay } from './EditorialItinerary';
 
@@ -80,6 +79,12 @@ export function PaymentsTab({
   const [assigningItem, setAssigningItem] = useState<PayableItem | null>(null);
   const [assignMemberId, setAssignMemberId] = useState<string>('');
   
+  // Manual entry states
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [newExpenseType, setNewExpenseType] = useState<'flight' | 'hotel' | 'activity'>('flight');
+  const [newExpenseName, setNewExpenseName] = useState('');
+  const [newExpenseAmount, setNewExpenseAmount] = useState('');
+  const [savingExpense, setSavingExpense] = useState(false);
   // Fetch real trip members
   const { data: tripMembers = [], isLoading: membersLoading } = useTripMembers(tripId);
 
@@ -101,7 +106,7 @@ export function PaymentsTab({
   const payableItems: PayableItem[] = useMemo(() => {
     const items: PayableItem[] = [];
 
-    // Flight
+    // Flight from selection
     if (flightSelection?.totalPrice) {
       const flightId = 'flight-selection';
       const flightPayment = payments.find(p => p.item_type === 'flight' && p.item_id === flightId);
@@ -116,7 +121,7 @@ export function PaymentsTab({
       });
     }
 
-    // Hotel
+    // Hotel from selection
     if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
       const hotelId = 'hotel-selection';
       const hotelPayment = payments.find(p => p.item_type === 'hotel' && p.item_id === hotelId);
@@ -132,7 +137,38 @@ export function PaymentsTab({
       });
     }
 
-    // Activities
+    // Manually added expenses from payments (not tied to flight/hotel selection or itinerary)
+    const manualFlights = payments.filter(p => 
+      p.item_type === 'flight' && p.item_id.startsWith('manual-')
+    );
+    manualFlights.forEach(p => {
+      items.push({
+        id: p.item_id,
+        type: 'flight',
+        name: p.item_name,
+        amountCents: p.amount_cents,
+        payment: p,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assignedMemberId: (p as any)?.assigned_member_id,
+      });
+    });
+
+    const manualHotels = payments.filter(p => 
+      p.item_type === 'hotel' && p.item_id.startsWith('manual-')
+    );
+    manualHotels.forEach(p => {
+      items.push({
+        id: p.item_id,
+        type: 'hotel',
+        name: p.item_name,
+        amountCents: p.amount_cents,
+        payment: p,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assignedMemberId: (p as any)?.assigned_member_id,
+      });
+    });
+
+    // Activities from itinerary
     days.forEach(day => {
       day.activities.forEach(activity => {
         if (activity.bookingRequired) {
@@ -151,6 +187,22 @@ export function PaymentsTab({
             });
           }
         }
+      });
+    });
+
+    // Manual activities
+    const manualActivities = payments.filter(p => 
+      p.item_type === 'activity' && p.item_id.startsWith('manual-')
+    );
+    manualActivities.forEach(p => {
+      items.push({
+        id: p.item_id,
+        type: 'activity',
+        name: p.item_name,
+        amountCents: p.amount_cents,
+        payment: p,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assignedMemberId: (p as any)?.assigned_member_id,
       });
     });
 
@@ -234,6 +286,52 @@ export function PaymentsTab({
       toast.error('Failed to update');
     } finally {
       setMarkingPaid(false);
+    }
+  };
+
+  // Handle adding manual expense
+  const handleAddExpense = async () => {
+    if (!newExpenseName.trim() || !newExpenseAmount) return;
+    setSavingExpense(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const amountCents = Math.round(parseFloat(newExpenseAmount) * 100);
+      if (isNaN(amountCents) || amountCents <= 0) {
+        toast.error('Please enter a valid amount');
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('trip_payments').insert({
+        trip_id: tripId,
+        user_id: user.id,
+        item_type: newExpenseType,
+        item_id: `manual-${Date.now()}`,
+        item_name: newExpenseName.trim(),
+        amount_cents: amountCents,
+        currency: 'USD',
+        quantity: 1,
+        status: 'paid',
+        external_provider: 'manual',
+        paid_at: new Date().toISOString(),
+      });
+
+      if (error) throw error;
+
+      toast.success('Expense added');
+      setShowAddExpenseModal(false);
+      setNewExpenseName('');
+      setNewExpenseAmount('');
+      setNewExpenseType('flight');
+      fetchPayments();
+    } catch (err) {
+      console.error('Error adding expense:', err);
+      toast.error('Failed to add expense');
+    } finally {
+      setSavingExpense(false);
     }
   };
 
@@ -402,32 +500,18 @@ export function PaymentsTab({
               <X className="h-3.5 w-3.5" />
             </Button>
           ) : (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => {
-                  setMarkPaidModal(item);
-                  setSelectedMemberId(item.assignedMemberId || '');
-                }}
-              >
-                <Check className="h-3 w-3 mr-1" />
-                Paid
-              </Button>
-              <BookingButton
-                tripId={tripId}
-                itemType={item.type}
-                itemId={item.id}
-                itemName={item.name}
-                amountCents={item.amountCents}
-                quantity={item.type === 'flight' ? travelers : 1}
-                existingPayment={item.payment}
-                onSuccess={fetchPayments}
-                size="sm"
-                className="h-7 text-xs"
-              />
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                setMarkPaidModal(item);
+                setSelectedMemberId(item.assignedMemberId || '');
+              }}
+            >
+              <Check className="h-3 w-3 mr-1" />
+              Mark Paid
+            </Button>
           )}
         </div>
       </motion.div>
@@ -589,11 +673,21 @@ export function PaymentsTab({
             </Card>
           )}
 
+          {/* Add Expense Button */}
+          <Button
+            variant="outline"
+            className="w-full border-dashed gap-2"
+            onClick={() => setShowAddExpenseModal(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Add Expense Manually
+          </Button>
+
           {payableItems.length === 0 && (
             <Card className="p-8 text-center">
               <CreditCard className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-              <p className="text-muted-foreground">No bookable items in this itinerary yet.</p>
-              <p className="text-sm text-muted-foreground/75 mt-1">Add activities that require booking to see them here.</p>
+              <p className="text-muted-foreground">No expenses tracked yet.</p>
+              <p className="text-sm text-muted-foreground/75 mt-1">Add your flight, hotel, and activity costs to track your trip budget.</p>
             </Card>
           )}
 
@@ -997,6 +1091,92 @@ export function PaymentsTab({
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGroupModal(false)}>
               Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Expense Modal */}
+      <Dialog open={showAddExpenseModal} onOpenChange={setShowAddExpenseModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Expense</DialogTitle>
+            <DialogDescription>
+              Manually track a flight, hotel, or activity cost.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Expense Type</Label>
+              <Select value={newExpenseType} onValueChange={(v) => setNewExpenseType(v as 'flight' | 'hotel' | 'activity')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="flight">
+                    <div className="flex items-center gap-2">
+                      <Plane className="h-4 w-4" />
+                      Flight
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="hotel">
+                    <div className="flex items-center gap-2">
+                      <Hotel className="h-4 w-4" />
+                      Hotel / Accommodation
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="activity">
+                    <div className="flex items-center gap-2">
+                      <Camera className="h-4 w-4" />
+                      Activity / Tour
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expenseName">Description</Label>
+              <Input
+                id="expenseName"
+                placeholder={
+                  newExpenseType === 'flight' ? 'e.g., Round-trip to Rome (Delta)' :
+                  newExpenseType === 'hotel' ? 'e.g., The St. Regis Rome (3 nights)' :
+                  'e.g., Colosseum Tour'
+                }
+                value={newExpenseName}
+                onChange={(e) => setNewExpenseName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expenseAmount">Amount (USD)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                <Input
+                  id="expenseAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="pl-7"
+                  placeholder="0.00"
+                  value={newExpenseAmount}
+                  onChange={(e) => setNewExpenseAmount(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowAddExpenseModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddExpense} 
+              disabled={savingExpense || !newExpenseName.trim() || !newExpenseAmount}
+            >
+              {savingExpense ? 'Saving...' : 'Add Expense'}
             </Button>
           </DialogFooter>
         </DialogContent>
