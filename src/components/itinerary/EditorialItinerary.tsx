@@ -53,6 +53,7 @@ import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
+import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
 
 // =============================================================================
 // TYPES
@@ -518,6 +519,28 @@ export function EditorialItinerary({
   const [swapDrawerOpen, setSwapDrawerOpen] = useState(false);
   const [swapTarget, setSwapTarget] = useState<{ dayIndex: number; activityId: string } | null>(null);
   const [swapDrawerActivity, setSwapDrawerActivity] = useState<ItineraryActivity | null>(null);
+
+  // Reviews Drawer state
+  const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
+  const [reviewsTarget, setReviewsTarget] = useState<{ placeName: string; placeType?: 'restaurant' | 'attraction' | 'hotel' | 'activity' } | null>(null);
+
+  // Open reviews drawer for an activity
+  const openReviewsDrawer = useCallback((activity: EditorialActivity) => {
+    const activityType = getActivityType(activity);
+    const placeName = activity.location?.name || activity.title || 'Unknown Place';
+    
+    let placeType: 'restaurant' | 'attraction' | 'hotel' | 'activity' = 'activity';
+    if (['dining', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'].includes(activityType)) {
+      placeType = 'restaurant';
+    } else if (['cultural', 'sightseeing', 'entertainment'].includes(activityType)) {
+      placeType = 'attraction';
+    } else if (activityType === 'accommodation') {
+      placeType = 'hotel';
+    }
+
+    setReviewsTarget({ placeName, placeType });
+    setReviewsDrawerOpen(true);
+  }, []);
 
   const totalActivities = days.reduce((sum, day) => sum + day.activities.length, 0);
   const feedbackCount = payments.filter(p => p.status === 'paid').length;
@@ -1843,6 +1866,18 @@ export function EditorialItinerary({
         activity={swapDrawerActivity}
         destination={destination}
         onSelectAlternative={handleSelectSwapAlternative}
+      />
+
+      {/* Reviews Drawer */}
+      <ReviewsDrawer
+        open={reviewsDrawerOpen}
+        onClose={() => {
+          setReviewsDrawerOpen(false);
+          setReviewsTarget(null);
+        }}
+        placeName={reviewsTarget?.placeName || ''}
+        destination={destination}
+        placeType={reviewsTarget?.placeType}
       />
 
       {/* Share Trip Modal */}
