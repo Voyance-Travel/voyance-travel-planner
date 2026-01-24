@@ -446,6 +446,31 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     perfectTripPreview: "A week in the Maldives, overwater bungalow, no schedule, no obligations. Just you, the ocean, and the luxury of doing nothing.",
     emoji: "🏝️"
   },
+  sanctuary_seeker: {
+    id: 'sanctuary_seeker',
+    name: 'The Sanctuary Seeker',
+    category: 'RESTORER',
+    hookLine: "Travel is finding your perfect refuge.",
+    coreDescription: "You travel to create your ideal environment, not to be drained by crowds and chaos. Luxury isn't about showing off—it's about building the perfect cocoon where you can truly relax on your own terms.",
+    whatThisMeans: [
+      "You prefer private villas over bustling hotels",
+      "Room service is preferable to crowded restaurants",
+      "You plan meticulously to avoid unpleasant surprises",
+      "Peace and quiet are non-negotiable"
+    ],
+    superpowers: [
+      "Creating perfect personal retreats anywhere",
+      "Knowing exactly what restores your energy",
+      "Designing trips that truly recharge rather than deplete"
+    ],
+    growthEdges: [
+      "Sometimes unexpected encounters bring joy",
+      "Comfort zones expand when gently pushed",
+      "Connection doesn't always have to be exhausting"
+    ],
+    perfectTripPreview: "A private villa in Tuscany with your own chef, no neighbors in sight, mornings with a book by the pool, and evenings watching the sunset over the vineyards—alone and content.",
+    emoji: "🏛️"
+  },
   digital_explorer: {
     id: 'digital_explorer',
     name: 'The Digital Explorer',
@@ -824,13 +849,13 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   balanced_story_collector: {
     id: 'balanced_story_collector',
     name: 'The Balanced Story Collector',
-    category: 'CONNECTOR',
+    category: 'EXPLORER',  // Changed from CONNECTOR - accepts introverts
     hookLine: "Every journey adds a chapter worth reading.",
-    coreDescription: "You don't fit into neat boxes, and that's your superpower. You balance adventure with rest, solo time with social connection, and spontaneity with just enough planning. Every trip becomes a story worth telling.",
+    coreDescription: "You don't fit into neat boxes, and that's your superpower. You balance adventure with rest, solo time with meaningful connection, and spontaneity with just enough planning. Every trip becomes a story worth telling—even if you're the only audience.",
     whatThisMeans: [
       "You adapt your travel style to each destination",
       "Some days you explore hard, others you rest completely",
-      "You value both deep connections and solo reflection",
+      "You value both occasional deep connections and plenty of solo reflection",
       "You're equally happy in luxury or simplicity"
     ],
     superpowers: [
