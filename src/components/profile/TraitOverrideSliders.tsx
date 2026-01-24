@@ -2,6 +2,7 @@
  * Trait Override Sliders Component
  * 
  * Panel with sliders for the 8 traits that users can adjust.
+ * Shows computed vs adjusted values with explanations.
  * Overrides are stored in profiles.travel_dna_overrides.
  */
 
@@ -12,7 +13,9 @@ import {
   Save, 
   RotateCcw, 
   Loader2,
-  Info
+  Info,
+  ArrowRight,
+  HelpCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -45,6 +48,11 @@ interface TraitConfig {
   positive: string;
   description: string;
   icon: string;
+  whyExplanations: {
+    high: string;
+    low: string;
+    neutral: string;
+  };
 }
 
 // ============================================================================
@@ -59,6 +67,11 @@ const TRAITS: TraitConfig[] = [
     positive: 'Detailed Planner',
     description: 'How much structure do you want in your trips?',
     icon: '📋',
+    whyExplanations: {
+      high: 'Based on your preference for detailed itineraries and advance booking',
+      low: 'Based on your love for going with the flow and last-minute decisions',
+      neutral: 'Based on a balance between planned activities and free time',
+    },
   },
   {
     key: 'social',
@@ -67,6 +80,11 @@ const TRAITS: TraitConfig[] = [
     positive: 'Social/Group',
     description: 'Do you prefer solo adventures or social experiences?',
     icon: '👥',
+    whyExplanations: {
+      high: 'Based on your preference for group travel and meeting new people',
+      low: 'Based on your preference for solo or intimate travel experiences',
+      neutral: 'Based on enjoying both solo time and social activities',
+    },
   },
   {
     key: 'comfort',
@@ -75,6 +93,11 @@ const TRAITS: TraitConfig[] = [
     positive: 'Luxury-Seeking',
     description: 'Your preference for comfort and luxury.',
     icon: '✨',
+    whyExplanations: {
+      high: 'Based on your preference for luxury accommodations and premium experiences',
+      low: 'Based on your preference for budget-friendly stays and authentic local options',
+      neutral: 'Based on valuing comfort without needing luxury',
+    },
   },
   {
     key: 'pace',
@@ -83,6 +106,11 @@ const TRAITS: TraitConfig[] = [
     positive: 'Fast-Paced',
     description: 'How many activities per day do you prefer?',
     icon: '⚡',
+    whyExplanations: {
+      high: 'Based on your desire to pack in lots of activities and see everything',
+      low: 'Based on your preference for slow travel and deep exploration',
+      neutral: 'Based on enjoying a balanced mix of activities and downtime',
+    },
   },
   {
     key: 'authenticity',
@@ -91,6 +119,11 @@ const TRAITS: TraitConfig[] = [
     positive: 'Local Explorer',
     description: 'Prefer popular attractions or hidden gems?',
     icon: '🗺️',
+    whyExplanations: {
+      high: 'Based on your love for off-the-beaten-path experiences and local culture',
+      low: 'Based on your preference for popular attractions and reliable experiences',
+      neutral: 'Based on enjoying a mix of famous sites and local discoveries',
+    },
   },
   {
     key: 'adventure',
@@ -99,6 +132,11 @@ const TRAITS: TraitConfig[] = [
     positive: 'Thrill-Seeker',
     description: 'Your appetite for risk and adventure.',
     icon: '🏔️',
+    whyExplanations: {
+      high: 'Based on your interest in thrilling activities and pushing boundaries',
+      low: 'Based on your preference for safe, relaxing experiences',
+      neutral: 'Based on enjoying occasional adventures without extreme risks',
+    },
   },
   {
     key: 'budget',
@@ -107,6 +145,11 @@ const TRAITS: TraitConfig[] = [
     positive: 'Frugal',
     description: 'How price-conscious are you while traveling?',
     icon: '💰',
+    whyExplanations: {
+      high: 'Based on your focus on value and smart spending while traveling',
+      low: 'Based on your willingness to splurge on special experiences',
+      neutral: 'Based on balancing value with occasional splurges',
+    },
   },
   {
     key: 'transformation',
@@ -115,8 +158,32 @@ const TRAITS: TraitConfig[] = [
     positive: 'Growth-Focused',
     description: 'Relaxation vs personal development.',
     icon: '🌱',
+    whyExplanations: {
+      high: 'Based on your interest in travel that promotes personal growth',
+      low: 'Based on your desire for pure relaxation and escape',
+      neutral: 'Based on seeking both relaxation and meaningful experiences',
+    },
   },
 ];
+
+function getWhyExplanation(trait: TraitConfig, value: number): string {
+  if (value >= 4) return trait.whyExplanations.high;
+  if (value <= -4) return trait.whyExplanations.low;
+  return trait.whyExplanations.neutral;
+}
+
+function formatTraitValue(value: number): string {
+  if (value > 0) return `+${value}`;
+  return `${value}`;
+}
+
+function getTraitLabel(trait: TraitConfig, value: number): string {
+  if (value >= 6) return trait.positive;
+  if (value <= -6) return trait.negative;
+  if (value >= 3) return `Leaning ${trait.positive.toLowerCase()}`;
+  if (value <= -3) return `Leaning ${trait.negative.toLowerCase()}`;
+  return 'Balanced';
+}
 
 // ============================================================================
 // COMPONENT
@@ -132,6 +199,7 @@ export default function TraitOverrideSliders({
   // State for trait values - will be initialized after preferences are loaded
   const [traitValues, setTraitValues] = useState<Record<string, number>>({});
   const [originalValues, setOriginalValues] = useState<Record<string, number>>({});
+  const [computedBaseline, setComputedBaseline] = useState<Record<string, number>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -204,6 +272,13 @@ export default function TraitOverrideSliders({
           }
         }
         
+        // Store the computed baseline (before any overrides)
+        const computed: Record<string, number> = {};
+        TRAITS.forEach(trait => {
+          computed[trait.key] = computedTraits[trait.key] ?? derivedFromPrefs[trait.key] ?? 0;
+        });
+        setComputedBaseline(computed);
+        
         // Priority: existingOverrides > computedTraits > derivedFromPrefs > 0
         const initial: Record<string, number> = {};
         TRAITS.forEach(trait => {
@@ -220,11 +295,14 @@ export default function TraitOverrideSliders({
         console.error('Failed to load preferences for trait sliders:', error);
         // Fallback to computed traits
         const initial: Record<string, number> = {};
+        const computed: Record<string, number> = {};
         TRAITS.forEach(trait => {
           initial[trait.key] = existingOverrides[trait.key] ?? computedTraits[trait.key] ?? 0;
+          computed[trait.key] = computedTraits[trait.key] ?? 0;
         });
         setTraitValues(initial);
         setOriginalValues(initial);
+        setComputedBaseline(computed);
       } finally {
         setIsLoading(false);
       }
@@ -253,7 +331,7 @@ export default function TraitOverrideSliders({
     // Reset to computed values (not overrides)
     const resetValues: Record<string, number> = {};
     TRAITS.forEach(trait => {
-      resetValues[trait.key] = computedTraits[trait.key] ?? 0;
+      resetValues[trait.key] = computedBaseline[trait.key] ?? 0;
     });
     setTraitValues(resetValues);
   };
@@ -265,7 +343,7 @@ export default function TraitOverrideSliders({
       // Only save traits that differ from computed
       const overrides: Record<string, number> = {};
       TRAITS.forEach(trait => {
-        if (traitValues[trait.key] !== (computedTraits[trait.key] ?? 0)) {
+        if (traitValues[trait.key] !== (computedBaseline[trait.key] ?? 0)) {
           overrides[trait.key] = traitValues[trait.key];
         }
       });
@@ -278,7 +356,7 @@ export default function TraitOverrideSliders({
 
       if (error) throw error;
 
-      // Log event
+      // Log event with before/after comparison
       await supabase
         .from('voyance_events')
         .insert({
@@ -287,7 +365,12 @@ export default function TraitOverrideSliders({
           properties: {
             overrides,
             override_count: Object.keys(overrides).length,
-            computed_traits: computedTraits,
+            computed_traits: computedBaseline,
+            changes_made: Object.entries(overrides).map(([key, newVal]) => ({
+              trait: key,
+              from: computedBaseline[key] ?? 0,
+              to: newVal,
+            })),
             saved_at: new Date().toISOString(),
           },
         });
@@ -371,8 +454,9 @@ export default function TraitOverrideSliders({
       <div className="space-y-8">
         {TRAITS.map((trait) => {
           const value = traitValues[trait.key];
-          const computedValue = computedTraits[trait.key] ?? 0;
+          const computedValue = computedBaseline[trait.key] ?? 0;
           const isOverridden = value !== computedValue;
+          const whyText = getWhyExplanation(trait, computedValue);
 
           return (
             <div key={trait.key} className="space-y-3">
@@ -402,10 +486,39 @@ export default function TraitOverrideSliders({
                     "text-sm font-mono w-8 text-right",
                     value > 0 ? "text-primary" : value < 0 ? "text-secondary" : "text-muted-foreground"
                   )}>
-                    {value > 0 ? '+' : ''}{value}
+                    {formatTraitValue(value)}
                   </span>
                 </div>
               </div>
+
+              {/* Before/After Comparison (if modified) */}
+              {isOverridden && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="flex items-center gap-2 text-xs bg-muted/30 rounded-lg px-3 py-2"
+                >
+                  <span className="text-muted-foreground">Quiz result:</span>
+                  <span className="font-mono text-foreground/70">
+                    {formatTraitValue(computedValue)}
+                  </span>
+                  <span className="text-muted-foreground/50">({getTraitLabel(trait, computedValue)})</span>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground mx-1" />
+                  <span className="text-muted-foreground">Now:</span>
+                  <span className="font-mono text-amber-600 dark:text-amber-400 font-medium">
+                    {formatTraitValue(value)}
+                  </span>
+                  <span className="text-amber-600/70 dark:text-amber-400/70">({getTraitLabel(trait, value)})</span>
+                </motion.div>
+              )}
+
+              {/* Why This Score (computed baseline explanation) */}
+              {!isOverridden && (
+                <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <HelpCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                  <span>{whyText}</span>
+                </div>
+              )}
 
               {/* Slider */}
               <div className="space-y-1">

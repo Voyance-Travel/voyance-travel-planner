@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Check, 
@@ -9,11 +10,14 @@ import {
   Lightbulb, 
   Trophy,
   ChevronRight,
+  ChevronDown,
   Lock,
   Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Button } from '@/components/ui/button';
 import { 
   TRAVELER_STAGES,
   CATEGORY_EVOLUTION,
@@ -51,6 +55,11 @@ export default function TravelDNAEvolution({
   quizCompleted = true,
   className
 }: TravelDNAEvolutionProps) {
+  const [isProgressOpen, setIsProgressOpen] = useState(true);
+  const [isMilestonesOpen, setIsMilestonesOpen] = useState(true);
+  const [isGrowthOpen, setIsGrowthOpen] = useState(true);
+  const [isMasteryOpen, setIsMasteryOpen] = useState(false);
+
   const evolution = calculateEvolutionPath(tripCount, category, {
     travelFrequency,
     hasOverrides,
@@ -71,7 +80,7 @@ export default function TravelDNAEvolution({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("space-y-8", className)}
+      className={cn("space-y-6", className)}
     >
       {/* Current Stage Hero */}
       <div className="space-y-4">
@@ -162,49 +171,85 @@ export default function TravelDNAEvolution({
         </div>
       </div>
 
-      {/* Progress to Next Stage */}
+      {/* Progress to Next Stage - Collapsible */}
       {nextStageData && (
-        <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Progress to {nextStageData.name}</span>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {Math.round(evolution.progressPercent)}%
-            </span>
-          </div>
-          
-          <Progress value={evolution.progressPercent} className="h-2" />
-          
-          <p className="text-xs text-muted-foreground">
-            {evolution.unlockHint}
-          </p>
-        </div>
+        <Collapsible open={isProgressOpen} onOpenChange={setIsProgressOpen}>
+          <CollapsibleTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="w-full justify-between p-4 h-auto rounded-xl bg-muted/30 border border-border hover:bg-muted/50"
+            >
+              <div className="flex items-center gap-2">
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Progress to {nextStageData.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {Math.round(evolution.progressPercent)}%
+                </span>
+                <ChevronDown className={cn(
+                  "h-4 w-4 text-muted-foreground transition-transform",
+                  isProgressOpen && "rotate-180"
+                )} />
+              </div>
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="px-4 pb-4 pt-2 space-y-3 bg-muted/30 border-x border-b border-border rounded-b-xl -mt-2"
+            >
+              <Progress value={evolution.progressPercent} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                {evolution.unlockHint}
+              </p>
+            </motion.div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
-      {/* Key Milestones Achieved */}
-      <div className="space-y-4">
-        <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-          Milestones Achieved
-        </h4>
-        <div className="grid gap-2">
-          {currentStageData.keyMilestones.map((milestone, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="flex items-center gap-3 text-foreground/80"
-            >
-              <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Check className="h-3 w-3 text-primary" />
-              </div>
-              <span className="text-sm">{milestone}</span>
-            </motion.div>
-          ))}
-        </div>
-      </div>
+      {/* Key Milestones Achieved - Collapsible */}
+      <Collapsible open={isMilestonesOpen} onOpenChange={setIsMilestonesOpen}>
+        <CollapsibleTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="w-full justify-between text-muted-foreground hover:text-foreground"
+          >
+            <h4 className="text-xs font-medium tracking-widest uppercase">
+              Milestones Achieved
+            </h4>
+            <ChevronDown className={cn(
+              "h-4 w-4 transition-transform",
+              isMilestonesOpen && "rotate-180"
+            )} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="grid gap-2 pt-2"
+          >
+            {currentStageData.keyMilestones.map((milestone, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="flex items-center gap-3 text-foreground/80"
+              >
+                <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Check className="h-3 w-3 text-primary" />
+                </div>
+                <span className="text-sm">{milestone}</span>
+              </motion.div>
+            ))}
+          </motion.div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Next Milestones to Unlock */}
       {nextMilestones.length > 0 && evolution.currentStage !== 'Master Traveler' && (
@@ -231,55 +276,91 @@ export default function TravelDNAEvolution({
         </div>
       )}
 
-      {/* Maturity Indicators */}
-      <div className="space-y-4">
-        <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-          {category} Mastery Indicators
-        </h4>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {categoryEvolution.maturityIndicators.map((indicator, i) => {
-            const Icon = ICON_MAP[indicator.icon];
-            return (
+      {/* Maturity Indicators - Collapsible */}
+      <Collapsible open={isMasteryOpen} onOpenChange={setIsMasteryOpen}>
+        <CollapsibleTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="w-full justify-between text-muted-foreground hover:text-foreground"
+          >
+            <h4 className="text-xs font-medium tracking-widest uppercase">
+              {category} Mastery Indicators
+            </h4>
+            <ChevronDown className={cn(
+              "h-4 w-4 transition-transform",
+              isMasteryOpen && "rotate-180"
+            )} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="grid sm:grid-cols-2 gap-3 pt-2"
+          >
+            {categoryEvolution.maturityIndicators.map((indicator, i) => {
+              const Icon = ICON_MAP[indicator.icon];
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className="p-3 rounded-lg bg-muted/20 border border-border/50 space-y-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-primary/70" />
+                    <span className="text-sm font-medium text-foreground">{indicator.label}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground pl-6">
+                    {indicator.description}
+                  </p>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Growth Areas - Collapsible */}
+      <Collapsible open={isGrowthOpen} onOpenChange={setIsGrowthOpen}>
+        <CollapsibleTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="w-full justify-between text-muted-foreground hover:text-foreground"
+          >
+            <h4 className="text-xs font-medium tracking-widest uppercase">
+              Areas for Growth
+            </h4>
+            <ChevronDown className={cn(
+              "h-4 w-4 transition-transform",
+              isGrowthOpen && "rotate-180"
+            )} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="grid gap-3 pt-2"
+          >
+            {evolution.growthAreas.slice(0, 3).map((area, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 + i * 0.1 }}
-                className="p-3 rounded-lg bg-muted/20 border border-border/50 space-y-1"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="flex items-start gap-3 py-2"
               >
-                <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-primary/70" />
-                  <span className="text-sm font-medium text-foreground">{indicator.label}</span>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  {indicator.description}
-                </p>
+                <div className="w-1.5 h-1.5 rounded-full bg-foreground/30 mt-2 flex-shrink-0" />
+                <span className="text-foreground/80">{area}</span>
               </motion.div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Growth Areas */}
-      <div className="space-y-4">
-        <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-          Areas for Growth
-        </h4>
-        <div className="grid gap-3">
-          {evolution.growthAreas.slice(0, 3).map((area, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.7 + i * 0.1 }}
-              className="flex items-start gap-3 py-2"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-foreground/30 mt-2 flex-shrink-0" />
-              <span className="text-foreground/80">{area}</span>
-            </motion.div>
-          ))}
-        </div>
-      </div>
+            ))}
+          </motion.div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Evolution Tip */}
       <motion.div

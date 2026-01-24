@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
@@ -32,6 +32,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import TravelDNATransparency from './TravelDNATransparency';
 import DNAAccuracyFeedback from './DNAAccuracyFeedback';
+import DNAFeedbackChat from './DNAFeedbackChat';
 import TraitOverrideSliders from './TraitOverrideSliders';
 import MicroDisambiguation from './MicroDisambiguation';
 import TravelDNAEvolution from './TravelDNAEvolution';
@@ -604,11 +605,13 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                   } | null}
                 />
                 
-                {/* Accuracy Feedback Component */}
-                <div className="pt-6 border-t border-border">
-                  <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground mb-4">
+                {/* Accuracy Feedback Section */}
+                <div className="pt-6 border-t border-border space-y-6">
+                  <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
                     Help Us Improve
                   </h4>
+                  
+                  {/* Quick Rating Feedback */}
                   <DNAAccuracyFeedback
                     userId={userId}
                     dnaVersion={dnaData.dna_version || 1}
@@ -618,6 +621,30 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                       pct: number;
                     }>) || []}
                   />
+                  
+                  {/* Chat-based Feedback */}
+                  <div className="pt-4">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Prefer to explain in your own words?
+                    </p>
+                    <DNAFeedbackChat
+                      userId={userId}
+                      currentArchetype={dnaData.primary_archetype_name || undefined}
+                      currentTraits={(dnaData.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || 
+                        (dnaData.trait_scores as Record<string, number>) || {}}
+                      onFeedbackApplied={async () => {
+                        // Reload DNA data after chat feedback is applied
+                        const { data } = await supabase
+                          .from('travel_dna_profiles')
+                          .select('*')
+                          .eq('user_id', userId)
+                          .maybeSingle();
+                        if (data) {
+                          setDnaData(prev => prev ? { ...prev, ...data, has_overrides: true } : null);
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
               </motion.div>
             </TabsContent>
