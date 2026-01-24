@@ -599,6 +599,30 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'j2': { deltas: { pace: 0 }, label: 'Short week' },
   'j3': { deltas: { authenticity: 2 }, label: 'Week trips' },
   'j4': { deltas: { authenticity: 4, transformation: 3, pace: -2 }, label: 'Extended trips' },
+  
+  // Q11: Post-trip feeling
+  'k1': { deltas: { transformation: 7, authenticity: 3 }, label: 'Seeks personal growth' },
+  'k2': { deltas: { pace: -5, comfort: 4 }, label: 'Seeks restoration' },
+  'k3': { deltas: { adventure: 5, pace: 3, social: 2 }, label: 'Seeks excitement' },
+  'k4': { deltas: { social: 6, transformation: 2 }, label: 'Seeks connection' },
+  
+  // Q12: Cultural immersion depth
+  'l1': { deltas: { authenticity: 7, transformation: 4, comfort: -3 }, label: 'Deep immersion' },
+  'l2': { deltas: { authenticity: 4, planning: 2 }, label: 'Thoughtful explorer' },
+  'l3': { deltas: { comfort: 5, budget: -5, authenticity: 2 }, label: 'Curated premium' },
+  'l4': { deltas: { planning: 3, adventure: 2 }, label: 'Highlight collector' },
+  
+  // Q13: Luxury definition - separates comfort vs authenticity luxury
+  'm1': { deltas: { pace: -5, planning: -3, comfort: 2 }, label: 'Time-freedom luxury' },
+  'm2': { deltas: { adventure: 4, budget: -4, authenticity: 3 }, label: 'Exclusive access' },
+  'm3': { deltas: { comfort: 7, budget: -7 }, label: 'Premium comfort' },
+  'm4': { deltas: { authenticity: 6, budget: 2, transformation: 3 }, label: 'Authentic luxury' },
+  
+  // Q14: Meaningful moments - transformation focused
+  'n1': { deltas: { transformation: 6, social: 3, authenticity: 4 }, label: 'Perspective shift' },
+  'n2': { deltas: { authenticity: 4, adventure: 3, planning: 2 }, label: 'Bucket list achiever' },
+  'n3': { deltas: { adventure: 5, transformation: 5 }, label: 'Challenge seeker' },
+  'n4': { deltas: { social: 4, pace: -3, authenticity: 3 }, label: 'Connection moment' },
 };
 
 // ============================================================================
@@ -729,6 +753,10 @@ const QUESTION_MAPPINGS: Record<string, Record<string, AnswerDelta>> = {
   accommodation_style: { h1: ANSWER_DELTAS.h1, h2: ANSWER_DELTAS.h2, h3: ANSWER_DELTAS.h3, h4: ANSWER_DELTAS.h4, h5: ANSWER_DELTAS.h5 },
   climate: { i1: ANSWER_DELTAS.i1, i2: ANSWER_DELTAS.i2, i3: ANSWER_DELTAS.i3, i4: ANSWER_DELTAS.i4 },
   trip_length: { j1: ANSWER_DELTAS.j1, j2: ANSWER_DELTAS.j2, j3: ANSWER_DELTAS.j3, j4: ANSWER_DELTAS.j4 },
+  post_trip_feeling: { k1: ANSWER_DELTAS.k1, k2: ANSWER_DELTAS.k2, k3: ANSWER_DELTAS.k3, k4: ANSWER_DELTAS.k4 },
+  cultural_immersion: { l1: ANSWER_DELTAS.l1, l2: ANSWER_DELTAS.l2, l3: ANSWER_DELTAS.l3, l4: ANSWER_DELTAS.l4 },
+  luxury_definition: { m1: ANSWER_DELTAS.m1, m2: ANSWER_DELTAS.m2, m3: ANSWER_DELTAS.m3, m4: ANSWER_DELTAS.m4 },
+  meaningful_moment: { n1: ANSWER_DELTAS.n1, n2: ANSWER_DELTAS.n2, n3: ANSWER_DELTAS.n3, n4: ANSWER_DELTAS.n4 },
   
   // Additional legacy question mappings (must match all keys used in calculateTraitScoresV2)
   hotel_priorities: {

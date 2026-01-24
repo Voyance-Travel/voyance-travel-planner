@@ -569,6 +569,210 @@
           "emotionalDrivers": ["curiosity", "knowledge", "perspective"]
         }
       ]
+    },
+    {
+      "id": "q11",
+      "prompt": "After a trip, you most hope to feel...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "k1",
+          "label": "Changed—like I've grown as a person",
+          "mappings": [
+            { "trait": "transformationSeeker", "weight": 0.95 },
+            { "trait": "meaningSeeker", "weight": 0.8 },
+            { "trait": "selfDiscovery", "weight": 0.7 }
+          ],
+          "toneTags": ["transformative", "growth", "meaningful"],
+          "emotionalDrivers": ["growth", "evolution", "self-knowledge"]
+        },
+        {
+          "id": "k2",
+          "label": "Rested—fully recharged and renewed",
+          "mappings": [
+            { "trait": "restorationSeeker", "weight": 0.9 },
+            { "trait": "decompressor", "weight": 0.85 },
+            { "trait": "selfCare", "weight": 0.7 }
+          ],
+          "toneTags": ["restorative", "relaxed", "renewed"],
+          "emotionalDrivers": ["rest", "recovery", "balance"]
+        },
+        {
+          "id": "k3",
+          "label": "Thrilled—buzzing with stories and memories",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.85 },
+            { "trait": "storyCollector", "weight": 0.8 },
+            { "trait": "experienceMaximizer", "weight": 0.7 }
+          ],
+          "toneTags": ["adventure", "exciting", "memorable"],
+          "emotionalDrivers": ["excitement", "stories", "achievement"]
+        },
+        {
+          "id": "k4",
+          "label": "Connected—closer to the people I traveled with",
+          "mappings": [
+            { "trait": "connectionSeeker", "weight": 0.9 },
+            { "trait": "memoryMaker", "weight": 0.8 },
+            { "trait": "socialConnector", "weight": 0.7 }
+          ],
+          "toneTags": ["bonding", "connection", "shared"],
+          "emotionalDrivers": ["connection", "love", "togetherness"]
+        }
+      ]
+    },
+    {
+      "id": "q12",
+      "prompt": "When experiencing a new culture, you prefer to...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "l1",
+          "label": "Fully immerse—stay with locals, learn customs, speak the language",
+          "mappings": [
+            { "trait": "authenticitySeeker", "weight": 0.95 },
+            { "trait": "localLiving", "weight": 0.9 },
+            { "trait": "transformationSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["immersive", "deep", "local"],
+          "emotionalDrivers": ["authenticity", "connection", "understanding"]
+        },
+        {
+          "id": "l2",
+          "label": "Explore thoughtfully—try local restaurants, visit markets, take walking tours",
+          "mappings": [
+            { "trait": "culturalExplorer", "weight": 0.85 },
+            { "trait": "authenticitySeeker", "weight": 0.7 },
+            { "trait": "balancedSpender", "weight": 0.5 }
+          ],
+          "toneTags": ["curious", "balanced", "engaged"],
+          "emotionalDrivers": ["curiosity", "discovery", "appreciation"]
+        },
+        {
+          "id": "l3",
+          "label": "Curated experiences—private guides, exclusive access, behind-the-scenes",
+          "mappings": [
+            { "trait": "qualityFocused", "weight": 0.85 },
+            { "trait": "luxurySeeker", "weight": 0.7 },
+            { "trait": "culturalExplorer", "weight": 0.6 }
+          ],
+          "toneTags": ["premium", "exclusive", "curated"],
+          "emotionalDrivers": ["depth", "access", "expertise"]
+        },
+        {
+          "id": "l4",
+          "label": "Hit the highlights—I want the best-known spots and experiences",
+          "mappings": [
+            { "trait": "experienceMaximizer", "weight": 0.8 },
+            { "trait": "predictabilitySeeker", "weight": 0.6 },
+            { "trait": "plannerMindset", "weight": 0.5 }
+          ],
+          "toneTags": ["classic", "highlights", "efficient"],
+          "emotionalDrivers": ["confidence", "completeness", "stories"]
+        }
+      ]
+    },
+    {
+      "id": "q13",
+      "prompt": "What does 'luxury' mean to you when traveling?",
+      "type": "single",
+      "answers": [
+        {
+          "id": "m1",
+          "label": "Time and freedom—no schedules, no rush",
+          "mappings": [
+            { "trait": "slowTraveler", "weight": 0.85 },
+            { "trait": "flexibilityEmbracer", "weight": 0.8 },
+            { "trait": "restorationSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["freedom", "slow", "unstructured"],
+          "emotionalDrivers": ["freedom", "peace", "presence"]
+        },
+        {
+          "id": "m2",
+          "label": "Unique access—experiences money can't usually buy",
+          "mappings": [
+            { "trait": "uniquenessSeeker", "weight": 0.9 },
+            { "trait": "statusSeeker", "weight": 0.7 },
+            { "trait": "storyCollector", "weight": 0.6 }
+          ],
+          "toneTags": ["exclusive", "rare", "special"],
+          "emotionalDrivers": ["status", "uniqueness", "stories"]
+        },
+        {
+          "id": "m3",
+          "label": "Premium comfort—5-star hotels, first-class, the best of everything",
+          "mappings": [
+            { "trait": "luxurySeeker", "weight": 0.95 },
+            { "trait": "comfortPrioritizer", "weight": 0.85 },
+            { "trait": "pamperedTraveler", "weight": 0.8 }
+          ],
+          "toneTags": ["luxury", "premium", "polished"],
+          "emotionalDrivers": ["indulgence", "ease", "quality"]
+        },
+        {
+          "id": "m4",
+          "label": "Authenticity—genuine local experiences, even if simple",
+          "mappings": [
+            { "trait": "authenticitySeeker", "weight": 0.9 },
+            { "trait": "localLiving", "weight": 0.8 },
+            { "trait": "meaningSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["authentic", "real", "local"],
+          "emotionalDrivers": ["connection", "meaning", "truth"]
+        }
+      ]
+    },
+    {
+      "id": "q14",
+      "prompt": "Which travel moment would be most meaningful to you?",
+      "type": "single",
+      "answers": [
+        {
+          "id": "n1",
+          "label": "A conversation with a local that shifts your perspective",
+          "mappings": [
+            { "trait": "transformationSeeker", "weight": 0.9 },
+            { "trait": "connectionSeeker", "weight": 0.75 },
+            { "trait": "meaningSeeker", "weight": 0.85 }
+          ],
+          "toneTags": ["meaningful", "deep", "human"],
+          "emotionalDrivers": ["connection", "growth", "perspective"]
+        },
+        {
+          "id": "n2",
+          "label": "Standing in a place you've dreamed about since childhood",
+          "mappings": [
+            { "trait": "culturalExplorer", "weight": 0.8 },
+            { "trait": "historyBuff", "weight": 0.7 },
+            { "trait": "meaningSeeker", "weight": 0.75 }
+          ],
+          "toneTags": ["bucket-list", "dreamy", "iconic"],
+          "emotionalDrivers": ["achievement", "wonder", "nostalgia"]
+        },
+        {
+          "id": "n3",
+          "label": "A physical challenge you weren't sure you could complete",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.85 },
+            { "trait": "transformationSeeker", "weight": 0.8 },
+            { "trait": "thrillSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["challenge", "achievement", "growth"],
+          "emotionalDrivers": ["achievement", "growth", "confidence"]
+        },
+        {
+          "id": "n4",
+          "label": "A perfect, unhurried meal with the people you love",
+          "mappings": [
+            { "trait": "culinaryExplorer", "weight": 0.8 },
+            { "trait": "connectionSeeker", "weight": 0.85 },
+            { "trait": "slowTraveler", "weight": 0.7 }
+          ],
+          "toneTags": ["connection", "food", "slow"],
+          "emotionalDrivers": ["connection", "pleasure", "presence"]
+        }
+      ]
     }
   ],
   "traitDefinitions": {
