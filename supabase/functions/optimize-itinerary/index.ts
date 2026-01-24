@@ -57,6 +57,26 @@ function getCoordinates(location?: ActivityLocation): { lat: number; lng: number
   return null;
 }
 
+// Build a routable address string even when we don't have coordinates.
+// Google APIs can accept addresses directly, which lets us get transit line + stop details.
+function getRoutingAddress(location?: ActivityLocation, city?: string): string | null {
+  if (!location) return null;
+
+  const base = (location.address || location.name || '').trim();
+  if (!base) return null;
+
+  if (city) {
+    const baseLower = base.toLowerCase();
+    const cityLower = city.toLowerCase();
+    // Avoid duplicating city if the address already contains it
+    if (!baseLower.includes(cityLower)) {
+      return `${base}, ${city}`;
+    }
+  }
+
+  return base;
+}
+
 interface TransportData {
   method: string;
   duration: string;
@@ -869,6 +889,12 @@ interface TransportResult {
   instructions: string;
 }
 
+type GoogleLocationInput = { lat: number; lng: number } | string;
+
+function toGoogleParam(loc: GoogleLocationInput): string {
+  return typeof loc === 'string' ? encodeURIComponent(loc) : `${loc.lat},${loc.lng}`;
+}
+
 // Extract transit details from Google Directions API response
 function extractTransitDetails(steps: any[]): { lines: string[]; summary: string } {
   const transitSteps = steps.filter((s: any) => s.travel_mode === 'TRANSIT');
@@ -909,8 +935,8 @@ function extractTransitDetails(steps: any[]): { lines: string[]; summary: string
 }
 
 async function getGoogleTransport(
-  origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number },
+  origin: GoogleLocationInput,
+  destination: GoogleLocationInput,
   destinationName: string,
   mode: 'walking' | 'driving' | 'transit' = 'walking'
 ): Promise<TransportResult | null> {
@@ -920,10 +946,13 @@ async function getGoogleTransport(
   }
 
   try {
+    const originParam = toGoogleParam(origin);
+    const destParam = toGoogleParam(destination);
+
     // Use Directions API for transit to get detailed route info
     if (mode === 'transit') {
-      const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=transit&key=${apiKey}`;
-      console.log(`[Transit] Fetching directions from (${origin.lat},${origin.lng}) to (${destination.lat},${destination.lng})`);
+      const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${originParam}&destination=${destParam}&mode=transit&departure_time=now&key=${apiKey}`;
+      console.log(`[Transit] Fetching directions for ${destinationName}`);
       
       const directionsResponse = await fetch(directionsUrl);
       const directionsData = await directionsResponse.json();
@@ -985,7 +1014,7 @@ async function getGoogleTransport(
     }
     
     // Use Distance Matrix API for walking/driving (simpler, no route details needed)
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.lat},${origin.lng}&destinations=${destination.lat},${destination.lng}&mode=${mode}&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originParam}&destinations=${destParam}&mode=${mode}&key=${apiKey}`;
     const response = await fetch(url);
     const data = await response.json();
 
@@ -1087,14 +1116,18 @@ function getHaversineTransport(
 
 // Smart transport mode selection
 async function getOptimalTransport(
-  origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number },
+  origin: GoogleLocationInput,
+  destination: GoogleLocationInput,
   destinationName: string
-): Promise<TransportResult> {
+): Promise<TransportResult | null> {
   const hasApiKey = !!Deno.env.get("GOOGLE_MAPS_API_KEY");
 
   if (!hasApiKey) {
-    return getHaversineTransport(origin, destination, destinationName);
+    // Only possible fallback without Google is Haversine, which needs coords.
+    if (typeof origin !== 'string' && typeof destination !== 'string') {
+      return getHaversineTransport(origin, destination, destinationName);
+    }
+    return null;
   }
 
   // Try walking first
@@ -1127,7 +1160,11 @@ async function getOptimalTransport(
   }
 
   // Fallback to Haversine
-  return getHaversineTransport(origin, destination, destinationName);
+  if (typeof origin !== 'string' && typeof destination !== 'string') {
+    return getHaversineTransport(origin, destination, destinationName);
+  }
+
+  return null;
 }
 
 // =============================================================================
@@ -1625,8 +1662,24 @@ serve(async (req) => {
 
           const seed = `${tripId}|day:${day.dayNumber}|from:${from.id}|to:${to.id}`;
 
-          if (originCoords && destCoords) {
-            const transport = await getOptimalTransport(originCoords, destCoords, to.location?.name || to.title);
+          // Prefer real routing when possible:
+          // 1) coords -> best
+          // 2) address strings -> still lets Directions API return transit line + stop details
+          const originRouting: GoogleLocationInput | null = originCoords || getRoutingAddress(from.location, destination);
+          const destRouting: GoogleLocationInput | null = destCoords || getRoutingAddress(to.location, destination);
+
+          if (originRouting && destRouting) {
+            const transport = await getOptimalTransport(originRouting, destRouting, to.location?.name || to.title);
+
+            if (!transport) {
+              activities[i] = {
+                ...from,
+                transportation: estimateNoCoords(from, to, seed),
+              };
+              transportCalculated++;
+              console.log(`[optimize-itinerary] No route data for leg "${from.title}" → "${to.title}", using estimated transport`);
+              continue;
+            }
 
             activities[i] = {
               ...from,
