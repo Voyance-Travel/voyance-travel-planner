@@ -2504,12 +2504,21 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
         errors.push(`Activities ${i} and ${i + 1} are too similar: "${prevAct.title}" followed by "${act.title}" - AVOID duplicate concepts back-to-back`);
       }
       
-      // Check for same activity category repeating (excluding meals and transport)
-      const skipCategories = ['dining', 'transport', 'accommodation', 'breakfast', 'lunch', 'dinner', 'downtime'];
+      // Check for same meal type back-to-back (e.g., two breakfast spots, two dinner restaurants)
+      const mealCategories = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'cafe', 'coffee'];
+      const currMealType = mealCategories.find(m => currTitle.includes(m) || (act.category || '').toLowerCase().includes(m));
+      const prevMealType = mealCategories.find(m => prevTitle.includes(m) || (prevAct.category || '').toLowerCase().includes(m));
+      
+      if (currMealType && prevMealType && currMealType === prevMealType) {
+        errors.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - NEVER schedule two ${currMealType} spots back-to-back`);
+      }
+      
+      // Check for same activity category repeating (excluding transport/accommodation/downtime - those can repeat for logistics)
+      const skipCategories = ['transport', 'accommodation', 'downtime', 'free_time'];
       if (act.category && prevAct.category && 
           act.category.toLowerCase() === prevAct.category.toLowerCase() &&
           !skipCategories.includes(act.category.toLowerCase())) {
-        // Same category back-to-back (e.g., two "activity" entries that are both cooking classes)
+        // Same category back-to-back (e.g., two "activity" entries, two "cultural" entries)
         warnings.push(`Activities ${i} and ${i + 1} are both "${act.category}" - consider more variety`);
       }
     }
