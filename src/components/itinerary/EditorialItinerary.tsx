@@ -3723,23 +3723,43 @@ function ActivityRow({
             <div className="flex items-center gap-2 mb-1.5">
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
-              {/* Rating badge - clickable to view reviews */}
-              {rating ? (
-                <Badge 
-                  variant="secondary" 
-                  className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none cursor-pointer hover:bg-amber-500/20 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onViewReviews?.(activity);
-                  }}
-                  title="View reviews"
-                >
-                  <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                  {rating.toFixed(1)}
-                </Badge>
-              ) : (
-                /* Show "See Reviews" for activities without rating data */
-                !['downtime', 'transport', 'accommodation'].includes(activityType) && (
+              {/* Rating badge - clickable to view reviews (only for reviewable activity types) */}
+              {(() => {
+                // Types that should NOT show reviews
+                const nonReviewableTypes = [
+                  'downtime', 'transport', 'accommodation', 'flight', 'hotel', 
+                  'check-in', 'check-out', 'checkin', 'checkout', 'transfer', 
+                  'airport', 'arrival', 'departure', 'travel', 'transit',
+                  'packing', 'rest', 'sleep', 'free time', 'leisure'
+                ];
+                const activityTypeLower = activityType.toLowerCase();
+                const titleLower = (activity.title || '').toLowerCase();
+                
+                // Check if this is a non-reviewable activity
+                const isNonReviewable = nonReviewableTypes.some(t => 
+                  activityTypeLower.includes(t) || titleLower.includes(t)
+                ) || titleLower.includes('check in') || titleLower.includes('check out');
+                
+                if (isNonReviewable) return null;
+                
+                if (rating) {
+                  return (
+                    <Badge 
+                      variant="secondary" 
+                      className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none cursor-pointer hover:bg-amber-500/20 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewReviews?.(activity);
+                      }}
+                      title="View reviews"
+                    >
+                      <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                      {rating.toFixed(1)}
+                    </Badge>
+                  );
+                }
+                
+                return (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -3751,8 +3771,8 @@ function ActivityRow({
                     <Star className="h-3 w-3" />
                     See Reviews
                   </button>
-                )
-              )}
+                );
+              })()}
               {activity.bookingRequired && (
                 <Badge variant="outline" className="text-xs border-accent/50 text-accent">
                   Booking Required
