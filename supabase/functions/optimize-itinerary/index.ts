@@ -1957,8 +1957,25 @@ serve(async (req) => {
         for (let i = 0; i < activities.length - 1; i++) {
           const from = activities[i];
 
-          // Don't attach transport to downtime blocks
-          if (from.timeBlockType === 'downtime') continue;
+          // IMPORTANT: Prevent stale/invalid transport from persisting.
+          // - Downtime blocks should never show transport (they're "Flexible")
+          // - Transport blocks (airport transfer, train transfer, etc.) are the transport itself,
+          //   so they should not also show "transportation to next".
+          const fromCategory = (from.category || from.type || '').toLowerCase();
+          const isDowntime = from.timeBlockType === 'downtime';
+          const isTransportBlock =
+            fromCategory === 'transport' ||
+            fromCategory === 'transportation' ||
+            from.timeBlockType === 'transport' ||
+            (from.title || '').toLowerCase().includes('transfer');
+
+          if (isDowntime || isTransportBlock) {
+            // Clear any pre-existing transport that might be left over from prior runs.
+            if (from.transportation) {
+              activities[i] = { ...from, transportation: undefined };
+            }
+            continue;
+          }
 
           // Find next non-downtime activity (so transport doesn't point to "Flexible")
           let nextIndex = i + 1;
