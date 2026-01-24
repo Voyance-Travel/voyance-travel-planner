@@ -13,13 +13,16 @@ import {
 } from '@/utils/destinationImages';
 
 // Bump to invalidate any stale React Query caches that may still contain people photos.
-const IMAGE_QUERY_VERSION = 'img_v2_no_people_rome';
+const IMAGE_QUERY_VERSION = 'img_v3_no_people_curated';
 
-function isRomeDestination(destination?: string): boolean {
+// Destinations that MUST use curated images (no third-party sources allowed)
+const CURATED_ONLY_DESTINATIONS = new Set(['rome', 'lisbon']);
+
+function isCuratedOnlyDestination(destination?: string): boolean {
   if (!destination) return false;
   const d = destination.toLowerCase().trim();
   const cityOnly = d.split(',')[0]?.trim();
-  return cityOnly === 'rome';
+  return CURATED_ONLY_DESTINATIONS.has(cityOnly);
 }
 
 // ============================================================================
@@ -76,10 +79,10 @@ export async function getDestinationImages(
 ): Promise<DestinationImage[]> {
   const normalizedDestination = normalizeDestinationQuery(params.destination);
 
-  // Hard rule: Rome destination hero/gallery images must never come from third-party sources
-  // (they can include people). Use our curated local assets instead.
+  // Hard rule: Curated-only destinations (Rome, Lisbon, etc.) must never use third-party sources
+  // as those can include inappropriate images (people, tuk-tuks, etc.)
   if (
-    isRomeDestination(normalizedDestination) &&
+    isCuratedOnlyDestination(normalizedDestination) &&
     normalizedDestination &&
     (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all') &&
     hasCuratedImages(normalizedDestination)
