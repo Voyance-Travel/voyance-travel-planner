@@ -475,11 +475,168 @@ function generateFallbackHotels(params: HotelSearchParams, destination: string):
   }));
 }
 
+// ============= HOTEL SEARCH BY NAME (Google Places) =============
+interface HotelSearchResult {
+  placeId: string;
+  name: string;
+  address: string;
+  rating?: number;
+  reviewCount?: number;
+  priceLevel?: number;
+  website?: string;
+  googleMapsUrl?: string;
+  coordinates?: { lat: number; lng: number };
+}
+
+async function searchHotelsByName(
+  query: string,
+  destination: string
+): Promise<HotelSearchResult[]> {
+  const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
+  
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.warn('[Hotels] Google Maps API key not configured');
+    return [];
+  }
+
+  try {
+    // Construct search query for hotels
+    const textQuery = `${query} hotel ${destination}`;
+    console.log('[Hotels] Searching Google Places:', textQuery);
+
+    const response = await fetch(
+      'https://places.googleapis.com/v1/places:searchText',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.types',
+        },
+        body: JSON.stringify({
+          textQuery,
+          includedType: 'lodging',
+          maxResultCount: 8,
+          languageCode: 'en',
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error('[Hotels] Google Places error:', await response.text());
+      return [];
+    }
+
+    const data = await response.json();
+    const places = data.places || [];
+
+    console.log('[Hotels] Found', places.length, 'hotels via Google Places');
+
+    return places.map((place: any) => ({
+      placeId: place.id,
+      name: place.displayName?.text || 'Unknown Hotel',
+      address: place.formattedAddress || '',
+      rating: place.rating,
+      reviewCount: place.userRatingCount,
+      priceLevel: place.priceLevel ? mapPriceLevel(place.priceLevel) : undefined,
+      website: place.websiteUri,
+      googleMapsUrl: place.googleMapsUri,
+      coordinates: place.location ? {
+        lat: place.location.latitude,
+        lng: place.location.longitude,
+      } : undefined,
+    }));
+  } catch (error) {
+    console.error('[Hotels] Search error:', error);
+    return [];
+  }
+}
+
+function mapPriceLevel(priceLevel: string): number {
+  const mapping: Record<string, number> = {
+    PRICE_LEVEL_FREE: 0,
+    PRICE_LEVEL_INEXPENSIVE: 1,
+    PRICE_LEVEL_MODERATE: 2,
+    PRICE_LEVEL_EXPENSIVE: 3,
+    PRICE_LEVEL_VERY_EXPENSIVE: 4,
+  };
+  return mapping[priceLevel] ?? 2;
+}
+
 // ============= HOTEL ENRICHMENT =============
-async function enrichHotel(hotelId: string): Promise<any> {
-  console.log('[Hotels] Enriching hotel:', hotelId);
-  // Placeholder for Google Places enrichment
-  return { hotelId, enriched: false, message: 'Enrichment not yet implemented' };
+async function enrichHotelByName(
+  hotelName: string,
+  destination: string
+): Promise<any> {
+  const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
+  
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.warn('[Hotels] Google Maps API key not configured');
+    return { success: false, message: 'API key not configured' };
+  }
+
+  try {
+    const textQuery = `${hotelName} ${destination}`;
+    console.log('[Hotels] Enriching hotel:', textQuery);
+
+    const response = await fetch(
+      'https://places.googleapis.com/v1/places:searchText',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
+        },
+        body: JSON.stringify({
+          textQuery,
+          includedType: 'lodging',
+          maxResultCount: 1,
+          languageCode: 'en',
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error('[Hotels] Enrichment API error:', await response.text());
+      return { success: false, message: 'API error' };
+    }
+
+    const data = await response.json();
+    const place = data.places?.[0];
+
+    if (!place) {
+      console.log('[Hotels] No place found for:', hotelName);
+      return { success: false, message: 'Hotel not found' };
+    }
+
+    // Build photo URLs if available
+    const photos = place.photos?.slice(0, 5).map((photo: any) => 
+      `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_MAPS_API_KEY}`
+    ) || [];
+
+    return {
+      success: true,
+      enrichment: {
+        placeId: place.id,
+        name: place.displayName?.text || hotelName,
+        address: place.formattedAddress,
+        rating: place.rating,
+        reviewCount: place.userRatingCount,
+        priceLevel: place.priceLevel ? mapPriceLevel(place.priceLevel) : undefined,
+        website: place.websiteUri,
+        googleMapsUrl: place.googleMapsUri,
+        coordinates: place.location ? {
+          lat: place.location.latitude,
+          lng: place.location.longitude,
+        } : undefined,
+        photos,
+      },
+    };
+  } catch (error) {
+    console.error('[Hotels] Enrichment error:', error);
+    return { success: false, message: 'Enrichment failed' };
+  }
 }
 
 // ============= HTTP HANDLER =============
@@ -492,8 +649,20 @@ serve(async (req) => {
     const body = await req.json();
     console.log('[Hotels] Request:', JSON.stringify(body));
 
+    // Search hotels by name (for autocomplete)
+    if (body.action === 'searchByName') {
+      const results = await searchHotelsByName(body.query, body.destination);
+      return new Response(JSON.stringify({
+        success: true,
+        hotels: results,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Enrich hotel details
     if (body.action === 'enrich') {
-      const result = await enrichHotel(body.hotelId);
+      const result = await enrichHotelByName(body.hotelName, body.destination);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
