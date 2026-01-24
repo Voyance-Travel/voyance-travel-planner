@@ -1648,11 +1648,19 @@ serve(async (req) => {
     console.log('[TravelDNA V2] Calculating for user:', userId);
     console.log('[TravelDNA V2] Quiz answers:', Object.keys(answers));
     
-    // DEV ASSERTION: Generic polarity check to catch drift
+    // DEV ASSERTION: Generic polarity check to catch drift across BOTH mapping tables
     // CANONICAL: budget positive = frugal/value-focused, negative = splurge/luxury
+    function getBudgetDelta(key: string): number | undefined {
+      return (
+        LEGACY_ANSWER_MAPPINGS[key]?.deltas?.budget ??
+        ANSWER_DELTAS[key]?.deltas?.budget ??
+        undefined
+      );
+    }
+    
     function assertBudgetPolarity(key: string, expectedSign: 'positive' | 'negative') {
-      const delta = LEGACY_ANSWER_MAPPINGS[key]?.deltas?.budget;
-      if (delta === undefined) return;
+      const delta = getBudgetDelta(key);
+      if (delta === undefined) return;  // Key doesn't exist in either table
       if (expectedSign === 'positive' && delta < 0) {
         console.error(`[TravelDNA V2 POLARITY ERROR] ${key} budget delta ${delta} expected positive`);
       }
@@ -1661,13 +1669,18 @@ serve(async (req) => {
       }
     }
     
-    // Anchor assertions for budget polarity invariants
-    assertBudgetPolarity('budget', 'positive');      // budget tier → frugal → positive
-    assertBudgetPolarity('budget_conscious', 'positive');  // c1 answer → frugal
+    // Anchor assertions for budget polarity invariants (legacy + v2 keys)
+    // Legacy keys
+    assertBudgetPolarity('budget', 'positive');       // budget tier → frugal → positive
     assertBudgetPolarity('luxury', 'negative');       // luxury tier → splurge → negative
     assertBudgetPolarity('premium', 'negative');      // premium tier → splurge-ish
     assertBudgetPolarity('curated_luxe', 'negative'); // traveler type → splurge
-    assertBudgetPolarity('no_expense', 'negative');   // c4 answer → splurge
+    // V2 answer keys (c1-c4 from Q3: Budget style)
+    assertBudgetPolarity('c1', 'positive');           // budget-conscious → frugal
+    assertBudgetPolarity('c3', 'negative');           // quality-first → splurge
+    assertBudgetPolarity('c4', 'negative');           // no-expense-spared → splurge
+    // V2 destination keys
+    assertBudgetPolarity('b4', 'negative');           // luxury seeker → splurge
     
     // Step 1: Calculate trait scores with contributions
     const { rawScores, finalScores, signalStrength, fillRates, contributions } = calculateTraitScoresV2(answers);
