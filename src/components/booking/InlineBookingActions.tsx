@@ -193,9 +193,35 @@ export function InlineBookingActions({
     return null;
   }
 
-  // Dining activities cannot be booked - no booking actions shown
+  // Dining activities - show restaurant link if available instead of booking UI
   if (isDiningActivity(activity.title)) {
-    return null;
+    const restaurantUrl = activity.website || activity.externalBookingUrl || activity.bookingUrl;
+    if (restaurantUrl) {
+      return (
+        <a
+          href={restaurantUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          View Menu
+        </a>
+      );
+    }
+    // No URL available - generate a Google search for the restaurant
+    const searchQuery = encodeURIComponent(`${activity.title} ${destination} menu`);
+    return (
+      <a
+        href={`https://www.google.com/search?q=${searchQuery}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:underline"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Find Restaurant
+      </a>
+    );
   }
 
   // Non-bookable activities (hotel checkout, free time, transport, etc.) - no booking UI
