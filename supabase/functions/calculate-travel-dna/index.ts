@@ -462,6 +462,45 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     ],
     signatureAnswers: ['g5'],
   },
+  {
+    id: 'retirement_ranger',
+    name: 'The Retirement Ranger',
+    category: 'TRANSFORMER',
+    tagline: 'Finally free to explore without limits.',
+    primaryTraits: [
+      { trait: 'transformation', weight: 2, sweetSpot: 6, range: [4, 10] },
+      { trait: 'pace', weight: 2, sweetSpot: -3, range: [-8, 3] },
+      { trait: 'comfort', weight: 2, sweetSpot: 6, range: [3, 10] },
+    ],
+    signatureAnswers: [],
+  },
+  
+  // BALANCED / FLEXIBLE archetypes
+  {
+    id: 'balanced_story_collector',
+    name: 'The Balanced Story Collector',
+    category: 'CONNECTOR',
+    tagline: 'Every journey adds a chapter worth reading.',
+    primaryTraits: [
+      { trait: 'social', weight: 2, sweetSpot: 4, range: [0, 8] },
+      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
+      { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 8] },
+      { trait: 'pace', weight: 1, sweetSpot: 0, range: [-5, 5] },
+    ],
+    signatureAnswers: [],
+  },
+  {
+    id: 'flexible_wanderer',
+    name: 'The Flexible Wanderer',
+    category: 'EXPLORER',
+    tagline: "Plans are just suggestions—the road decides.",
+    primaryTraits: [
+      { trait: 'planning', weight: 3, sweetSpot: -5, range: [-10, 0] },
+      { trait: 'adventure', weight: 2, sweetSpot: 5, range: [2, 10] },
+      { trait: 'authenticity', weight: 1, sweetSpot: 4, range: [0, 10] },
+    ],
+    signatureAnswers: [],
+  },
   
   // Default fallback
   {

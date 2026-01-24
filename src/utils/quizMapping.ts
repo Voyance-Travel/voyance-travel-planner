@@ -528,6 +528,10 @@ function getArchetypeDisplayName(id: string): string {
     midlife_explorer: 'The Midlife Explorer',
     sabbatical_scholar: 'The Sabbatical Scholar',
     healing_journeyer: 'The Healing Journeyer',
+    retirement_ranger: 'The Retirement Ranger',
+    // BALANCED / FLEXIBLE archetypes
+    balanced_story_collector: 'The Balanced Story Collector',
+    flexible_wanderer: 'The Flexible Wanderer',
   };
   return names[id] || 'The Explorer';
 }
