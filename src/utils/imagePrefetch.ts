@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getDestinationImages, hasCuratedImages } from '@/utils/destinationImages';
 
 interface PrefetchedImage {
   url: string;
@@ -16,7 +17,19 @@ interface PrefetchedImage {
 
 const imageCache = new Map<string, PrefetchedImage[]>();
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-const STORAGE_KEY = 'voyance_destination_image_cache_v1';
+// Bump cache key to invalidate any previously persisted destination images
+// (e.g., a Rome image with people that got cached and kept reappearing).
+const STORAGE_KEY = 'voyance_destination_image_cache_v2';
+
+// Explicitly ban specific known-bad images (e.g., photos with people).
+// Keep this list tight and only add URLs that must never be shown.
+const BANNED_IMAGE_URLS = new Set<string>([
+  'https://media-cdn.tripadvisor.com/media/photo-s/31/94/59/97/caption.jpg',
+]);
+
+function filterBanned(urls: string[]): string[] {
+  return urls.filter((u) => !!u && !BANNED_IMAGE_URLS.has(u));
+}
 
 function normalizeDestination(destination: string): string {
   return (destination || '')
@@ -84,6 +97,30 @@ export async function prefetchDestinationImages(destination: string): Promise<vo
   try {
     const cleanDestination = destination.replace(/\s*\([A-Z]{3}\)\s*$/i, '').trim();
 
+    // If we have curated local images, cache & preload those instead of calling the backend.
+    // This ensures we don't cache third-party images that may include people.
+    if (hasCuratedImages(cleanDestination)) {
+      const curatedUrls = filterBanned(getDestinationImages(cleanDestination, 4));
+      if (curatedUrls.length > 0) {
+        const curated: PrefetchedImage[] = curatedUrls.map((url) => ({
+          url,
+          destination: cleanDestination,
+          fetchedAt: Date.now(),
+        }));
+
+        setCached(cleanKey, curated);
+
+        curated.forEach((img) => {
+          const pre = new Image();
+          pre.decoding = 'async';
+          pre.src = img.url;
+        });
+
+        console.log('[ImagePrefetch] Cached curated images for:', destination);
+        return;
+      }
+    }
+
     const { data, error } = await supabase.functions.invoke('destination-images', {
       body: {
         destination: cleanDestination,
@@ -97,8 +134,14 @@ export async function prefetchDestinationImages(destination: string): Promise<vo
       return;
     }
 
-    const images: PrefetchedImage[] = data.images.map((img: any) => ({
-      url: img.url,
+    const urls = filterBanned((data.images || []).map((img: any) => img?.url).filter(Boolean));
+    if (urls.length === 0) {
+      console.warn('[ImagePrefetch] Only banned/empty images returned for:', destination);
+      return;
+    }
+
+    const images: PrefetchedImage[] = urls.map((url) => ({
+      url,
       destination: cleanDestination,
       fetchedAt: Date.now(),
     }));

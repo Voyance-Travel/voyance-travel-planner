@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import { useHeroImage } from '@/services/destinationImagesAPI';
+import { getDestinationImages, hasCuratedImages } from '@/utils/destinationImages';
 
 interface DestinationHeroImageProps {
   destinationId?: string;
@@ -55,14 +56,23 @@ export default function DestinationHeroImage({
   className,
   overlayGradient = '',
 }: DestinationHeroImageProps) {
+  // If we have curated local images for this destination, always prefer them.
+  // This prevents backend/third-party images (which can include people) from being used.
+  const curatedSrc = useMemo(() => {
+    if (!destinationName) return null;
+    if (!hasCuratedImages(destinationName)) return null;
+    const first = getDestinationImages(destinationName, 1)[0];
+    return first || null;
+  }, [destinationName]);
+
   // useHeroImage has staleTime of 1 hour - won't refetch on every render
   // Backend checks curated_images table first (90-day cache of Google Places images)
-  const { data, isLoading } = useHeroImage(destinationId, destinationName);
+  const { data } = useHeroImage(destinationId, destinationName);
 
   const fallback = useMemo(() => generateGradientDataUrl(destinationName), [destinationName]);
   
-  // Use cached/fetched image, or gradient fallback
-  const src = data?.url || fallback;
+  // Use curated local image first, then cached/fetched image, or gradient fallback
+  const src = curatedSrc || data?.url || fallback;
 
   return (
     <HeroImageWithFallback
