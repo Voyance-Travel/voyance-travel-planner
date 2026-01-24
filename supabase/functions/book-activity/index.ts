@@ -91,13 +91,15 @@ serve(async (req) => {
         },
       ],
       mode: "payment",
-      success_url: `${origin}/trip/${tripId}?payment=success&item=${itemId}`,
+      // Include session_id placeholder so verify-payment can use it
+      success_url: `${origin}/trip/${tripId}?payment=success&session_id={CHECKOUT_SESSION_ID}&item=${itemId}`,
       cancel_url: `${origin}/trip/${tripId}?payment=cancelled`,
       metadata: {
         tripId,
         itemType,
         itemId,
         userId: user.id,
+        externalProvider: externalProvider || '',
       },
     });
 

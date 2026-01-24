@@ -269,6 +269,63 @@ serve(async (req) => {
           }
         }
 
+        // Activity/Flight/Hotel Payment Fulfillment
+        if (metadata.tripId && metadata.itemId && metadata.itemType) {
+          log("Activity payment checkout completed", { 
+            tripId: metadata.tripId, 
+            itemId: metadata.itemId, 
+            itemType: metadata.itemType 
+          });
+
+          // Update trip_payments to 'paid' status
+          const { data: payment, error: updateError } = await supabaseAdmin
+            .from("trip_payments")
+            .update({
+              status: 'paid',
+              paid_at: new Date().toISOString(),
+              stripe_payment_intent_id: typeof session.payment_intent === 'string' 
+                ? session.payment_intent 
+                : (session.payment_intent as any)?.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_checkout_session_id', session.id)
+            .select()
+            .single();
+
+          if (updateError) {
+            log("Error updating trip_payment to paid", updateError);
+          } else {
+            log("Trip payment marked as paid", { paymentId: payment?.id });
+
+            // If this is a Viator activity, update booking state to awaiting_booking
+            // The actual Viator API call happens when user provides traveler info
+            if (payment?.external_provider === 'viator' && metadata.itemType === 'activity') {
+              log("Viator activity payment confirmed, ready for booking", { 
+                paymentId: payment.id,
+                itemId: metadata.itemId 
+              });
+
+              // Update the trip_activities booking state to indicate payment received
+              const { error: activityError } = await supabaseAdmin.rpc('transition_booking_state', {
+                p_activity_id: metadata.itemId,
+                p_new_state: 'payment_confirmed',
+                p_trigger_source: 'stripe_webhook',
+                p_trigger_reference: session.id,
+                p_metadata: { 
+                  payment_id: payment.id,
+                  stripe_session_id: session.id,
+                },
+              });
+
+              if (activityError) {
+                log("Error transitioning booking state", activityError);
+              } else {
+                log("Booking state transitioned to payment_confirmed");
+              }
+            }
+          }
+        }
+
         break;
       }
 
