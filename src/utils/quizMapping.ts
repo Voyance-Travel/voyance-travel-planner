@@ -835,6 +835,115 @@ export async function submitQuizComplete(
 }
 
 // ============================================================================
+// RECALCULATE DNA FROM PREFERENCES
+// ============================================================================
+
+/**
+ * Reverse mapping: Converts stored preferences back to quiz answer format
+ * This allows us to recalculate DNA when preferences are updated
+ */
+const PREFERENCE_TO_QUIZ_MAP: Record<string, string> = {
+  traveler_type: 'traveler_type',
+  travel_vibes: 'travel_vibes',
+  travel_frequency: 'trip_frequency',
+  trip_duration: 'trip_duration',
+  budget_tier: 'budget',
+  travel_pace: 'pace',
+  planning_preference: 'planning_style',
+  travel_companions: 'travel_companions',
+  preferred_group_size: 'group_size',
+  interests: 'interests',
+  accommodation_style: 'accommodation',
+  hotel_style: 'hotel_style',
+  dining_style: 'dining_style',
+  dietary_restrictions: 'dietary_restrictions',
+  climate_preferences: 'weather_preference',
+  primary_goal: 'primaryGoal',
+  activity_level: 'activityLevel',
+  eco_friendly: 'ecoFriendly',
+};
+
+/**
+ * Converts stored preferences back to quiz-like answers format
+ */
+export function preferencesToQuizAnswers(
+  preferences: UserPreferencesPayload
+): Record<string, string | string[]> {
+  const answers: Record<string, string | string[]> = {};
+  
+  for (const [prefKey, quizKey] of Object.entries(PREFERENCE_TO_QUIZ_MAP)) {
+    const value = (preferences as Record<string, unknown>)[prefKey];
+    if (value !== null && value !== undefined) {
+      // Handle boolean conversions back to strings
+      if (prefKey === 'eco_friendly' || prefKey === 'direct_flights_only') {
+        answers[quizKey] = value ? 'yes' : 'no';
+      } else {
+        answers[quizKey] = value as string | string[];
+      }
+    }
+  }
+  
+  return answers;
+}
+
+/**
+ * Recalculates Travel DNA from current preferences
+ * Use this when preferences are updated outside of the quiz flow
+ */
+export async function recalculateDNAFromPreferences(
+  userId: string
+): Promise<{ success: boolean; dna: TravelDNAPayload | null }> {
+  try {
+    // 1. Fetch current preferences
+    const preferences = await getUserPreferences(userId);
+    if (!preferences) {
+      console.error('No preferences found for user:', userId);
+      return { success: false, dna: null };
+    }
+    
+    // 2. Convert preferences to quiz answer format
+    const answers = preferencesToQuizAnswers(preferences);
+    
+    // 3. Recalculate DNA via backend
+    let dna: TravelDNAPayload;
+    try {
+      dna = await calculateTravelDNAAdvanced(answers, userId);
+    } catch {
+      dna = calculateTravelDNA(answers);
+    }
+    
+    // 4. Save the new DNA
+    const dnaSuccess = await saveTravelDNA(userId, null, dna);
+    
+    // 5. Update profiles table with new travel_dna
+    try {
+      const travelDnaJson = {
+        primary_archetype_name: dna.primary_archetype_name || null,
+        secondary_archetype_name: dna.secondary_archetype_name || null,
+        dna_confidence_score: dna.dna_confidence_score || null,
+        dna_rarity: dna.dna_rarity || null,
+        trait_scores: dna.trait_scores || {},
+        tone_tags: dna.tone_tags || [],
+        emotional_drivers: dna.emotional_drivers || [],
+        summary: dna.summary || null,
+      };
+      
+      await supabase
+        .from('profiles')
+        .update({ travel_dna: travelDnaJson as unknown as Json })
+        .eq('id', userId);
+    } catch (profileErr) {
+      console.error('Error updating profile travel_dna:', profileErr);
+    }
+    
+    return { success: dnaSuccess, dna };
+  } catch (error) {
+    console.error('Failed to recalculate DNA from preferences:', error);
+    return { success: false, dna: null };
+  }
+}
+
+// ============================================================================
 // DATA RETRIEVAL
 // ============================================================================
 

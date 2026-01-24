@@ -54,6 +54,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { recalculateDNAFromPreferences } from '@/utils/quizMapping';
 import { AirportAutocomplete } from './AirportAutocomplete';
 
 // Preference categories for nested tabs
@@ -146,6 +147,7 @@ export default function EditorialPreferencesView() {
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const [activeTab, setActiveTab] = useState<PreferenceTabId>('travel-style');
 
   // Load preferences from Supabase
@@ -196,6 +198,30 @@ export default function EditorialPreferencesView() {
     }
   };
 
+  // Recalculate Travel DNA from current preferences
+  const handleRecalculateDNA = async () => {
+    if (!user?.id) return;
+    
+    setIsRecalculating(true);
+    try {
+      const result = await recalculateDNAFromPreferences(user.id);
+      if (result.success && result.dna) {
+        toast.success('Travel DNA updated based on your preferences!', {
+          description: result.dna.primary_archetype_display 
+            ? `You're now: ${result.dna.primary_archetype_display}`
+            : undefined,
+        });
+      } else {
+        toast.error('Failed to recalculate Travel DNA');
+      }
+    } catch (error) {
+      console.error('Failed to recalculate DNA:', error);
+      toast.error('Failed to update Travel DNA');
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -214,15 +240,32 @@ export default function EditorialPreferencesView() {
       <div className="relative">
         <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-primary via-primary/50 to-transparent" />
         <div className="pl-8">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Travel Profile
-            </span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                Travel Profile
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRecalculateDNA}
+              disabled={isRecalculating}
+              className="gap-2"
+            >
+              {isRecalculating ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Zap className="h-3 w-3" />
+              )}
+              Update Travel DNA
+            </Button>
           </div>
           <h2 className="text-2xl font-serif text-foreground mb-2">Your Preferences</h2>
           <p className="text-sm text-muted-foreground max-w-lg">
             The more you share, the more personalized your recommendations become.
+            <span className="text-primary/70 ml-1">Changes will update your Travel DNA.</span>
           </p>
         </div>
       </div>
