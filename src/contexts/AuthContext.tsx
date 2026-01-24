@@ -219,7 +219,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       
       if (session?.user) {
-        // Keep loading true until user data is loaded
+        // CRITICAL: Set loading true IMMEDIATELY to prevent false redirects
+        // This ensures ProtectedRoute shows spinner until user data is ready
+        setIsLoading(true);
+        
         // Defer async operations with setTimeout to avoid deadlock
         setTimeout(async () => {
           // On sign in, sync profile and claim any locally-saved trips
