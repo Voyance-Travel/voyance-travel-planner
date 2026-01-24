@@ -66,6 +66,13 @@ interface WhyThisResult {
   }>;
 }
 
+interface TopTraitBadge {
+  trait: Trait;
+  value: number;
+  label: string;  // Human-readable e.g. "High Adventure", "Value-Focused"
+  intensity: 'moderate' | 'strong' | 'extreme';
+}
+
 interface TravelDNAv2Result {
   version: 2;
   budget_polarity_version: 1 | 2;  // 1 = old inverted (positive=splurge), 2 = fixed (positive=frugal)
@@ -82,10 +89,12 @@ interface TravelDNAv2Result {
   primary_archetype_tagline: string;
   secondary_archetype_name: string | null;
   secondary_archetype_display: string | null;
+  secondary_probability?: number;  // NEW: Probability (0-1) of secondary archetype
   dna_rarity: string;
   emotional_drivers: string[];
   tone_tags: string[];
   top_contributors: TraitContribution[];
+  top_trait_badges: TopTraitBadge[];  // NEW: Show "Adventure: High" badges
   perfect_trip_preview: string;
   summary: string;
   calculated_at: string;
@@ -737,18 +746,36 @@ const QUESTION_MAPPINGS: Record<string, Record<string, AnswerDelta>> = {
     cold: { deltas: { adventure: 2 }, label: 'Cold weather' },
     seasonal: { deltas: { authenticity: 2, adventure: 1 }, label: 'Seasonal variety' },
     tropical: { deltas: { comfort: 3, pace: -1 }, label: 'Tropical weather' },
+    temperate: { deltas: { authenticity: 2, pace: 1 }, label: 'Temperate climate' },
+    variable: { deltas: { adventure: 2, planning: 2 }, label: 'Variable weather' },
   },
   dining_style: {
     local: { deltas: { authenticity: 5, social: 2 }, label: 'Local cuisine' },
     familiar: { deltas: { comfort: 2 }, label: 'Familiar food' },
     fine_dining: { deltas: { comfort: 4, budget: -3 }, label: 'Fine dining' },  // negative = splurge
     street_food: { deltas: { authenticity: 4, adventure: 2, budget: 2 }, label: 'Street food' },  // positive = value
+    adventurous: { deltas: { adventure: 4, authenticity: 3 }, label: 'Adventurous eater' },
+    balanced: { deltas: { comfort: 2, authenticity: 2 }, label: 'Balanced dining' },
   },
   flight_preferences: {
     direct: { deltas: { comfort: 2, planning: 2 }, label: 'Direct flights' },
     layover_ok: { deltas: { budget: 2, adventure: 1 }, label: 'Layovers OK' },  // positive = value
     premium_class: { deltas: { comfort: 5, budget: -5 }, label: 'Premium class' },  // negative = splurge
     budget_carrier: { deltas: { budget: 4, comfort: -2 }, label: 'Budget carrier' },  // positive = value
+    flexible: { deltas: { adventure: 2, budget: 2 }, label: 'Flexible flights' },
+  },
+  // NEW: Trip frequency and duration (previously missing)
+  trip_frequency: {
+    monthly: { deltas: { pace: 3, adventure: 2, transformation: 2 }, label: 'Frequent traveler' },
+    quarterly: { deltas: { pace: 1, planning: 2 }, label: 'Regular traveler' },
+    biannually: { deltas: { planning: 3, comfort: 2 }, label: 'Occasional traveler' },
+    annually: { deltas: { planning: 4, comfort: 3 }, label: 'Annual vacationer' },
+  },
+  trip_duration: {
+    weekend: { deltas: { pace: 4, adventure: 2 }, label: 'Weekend warrior' },
+    short_week: { deltas: { pace: 2 }, label: 'Short breaks' },
+    week: { deltas: { authenticity: 2, pace: 0 }, label: 'Week trips' },
+    extended: { deltas: { authenticity: 4, transformation: 3, pace: -2 }, label: 'Extended journeys' },
   },
 };
 
@@ -1105,12 +1132,61 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const multiplier = 1 / Math.min(k, 2);
     
     for (const weather of answers.weather_preference) {
-      const delta = ANSWER_DELTAS[weather] || LEGACY_ANSWER_MAPPINGS[weather];
+      // Look up in QUESTION_MAPPINGS.weather_preference first, then fallback
+      const delta = QUESTION_MAPPINGS.weather_preference?.[weather] || 
+                    ANSWER_DELTAS[weather] || 
+                    LEGACY_ANSWER_MAPPINGS[weather];
       if (delta) {
         applyAnswerDeltas('weather_preference', weather, delta, multiplier);
       }
     }
-    updatePossibleMax('climate', 1.0);  // Use climate from QUESTION_MAPPINGS
+    updatePossibleMax('weather_preference', 1.0);
+  }
+  
+  // Process dining_style (single select) - NEW
+  if (answers.dining_style) {
+    const delta = QUESTION_MAPPINGS.dining_style?.[answers.dining_style] || 
+                  LEGACY_ANSWER_MAPPINGS[answers.dining_style];
+    if (delta) {
+      applyAnswerDeltas('dining_style', answers.dining_style, delta, 1.0);
+      updatePossibleMax('dining_style', 1.0);
+    }
+  }
+  
+  // Process flight_preferences (single or multi-select) - NEW
+  if (answers.flight_preferences) {
+    const flightPref = Array.isArray(answers.flight_preferences) 
+      ? answers.flight_preferences 
+      : [answers.flight_preferences];
+    const k = flightPref.length;
+    const multiplier = 1 / Math.min(k, 2);
+    
+    for (const pref of flightPref) {
+      const delta = QUESTION_MAPPINGS.flight_preferences?.[pref] || 
+                    LEGACY_ANSWER_MAPPINGS[pref];
+      if (delta) {
+        applyAnswerDeltas('flight_preferences', pref, delta, multiplier);
+      }
+    }
+    updatePossibleMax('flight_preferences', 1.0);
+  }
+  
+  // Process trip_frequency (single select) - NEW
+  if (answers.trip_frequency) {
+    const delta = QUESTION_MAPPINGS.trip_frequency?.[answers.trip_frequency];
+    if (delta) {
+      applyAnswerDeltas('trip_frequency', answers.trip_frequency, delta, 1.0);
+      updatePossibleMax('trip_frequency', 1.0);
+    }
+  }
+  
+  // Process trip_duration (single select) - NEW
+  if (answers.trip_duration) {
+    const delta = QUESTION_MAPPINGS.trip_duration?.[answers.trip_duration];
+    if (delta) {
+      applyAnswerDeltas('trip_duration', answers.trip_duration, delta, 1.0);
+      updatePossibleMax('trip_duration', 1.0);
+    }
   }
   
   // Calculate fill rates (percent-of-possible)
@@ -1754,6 +1830,38 @@ serve(async (req) => {
       .sort((a, b) => b.totalImpact - a.totalImpact)
       .slice(0, 5);
     
+    // Step 6b: Generate top trait badges (users trust these even if archetype seems "off")
+    const topTraitBadges: TopTraitBadge[] = [];
+    const traitLabels: Record<Trait, [string, string]> = {
+      planning: ['Spontaneous', 'Planner'],
+      social: ['Solo-Oriented', 'Social'],
+      comfort: ['Experience-First', 'Comfort-Seeking'],
+      pace: ['Slow & Steady', 'Active'],
+      authenticity: ['Mainstream', 'Authentic'],
+      adventure: ['Familiar', 'Adventurous'],
+      budget: ['Premium', 'Value-Focused'],  // CANONICAL: positive = frugal/value
+      transformation: ['Relaxation', 'Growth-Seeking'],
+    };
+    
+    for (const trait of ALL_TRAITS) {
+      const value = finalScores[trait];
+      const absValue = Math.abs(value);
+      
+      if (absValue >= 3) {  // Only show badges for significant traits
+        const [lowLabel, highLabel] = traitLabels[trait];
+        const label = value >= 0 ? highLabel : lowLabel;
+        const intensity: 'moderate' | 'strong' | 'extreme' = 
+          absValue >= 7 ? 'extreme' : absValue >= 5 ? 'strong' : 'moderate';
+        
+        topTraitBadges.push({ trait, value, label, intensity });
+      }
+    }
+    
+    // Sort badges by absolute value (strongest first), take top 4
+    topTraitBadges.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+    const finalBadges = topTraitBadges.slice(0, 4);
+    console.log('[TravelDNA V2] Top trait badges:', finalBadges.map(b => b.label));
+    
     // Step 7: Generate AI-powered perfect trip
     const perfectTrip = await generatePerfectTrip(
       primaryArchetype,
@@ -1786,8 +1894,15 @@ serve(async (req) => {
     );
     
     // Step 10: Determine if disambiguation is needed + pick next questions
-    const top2Gap = secondaryMatch ? Math.abs(primaryMatch.pct - secondaryMatch.pct) : 100;
-    const needsDisambiguation = confidence < 60 || top2Gap <= 10;
+    // IMPROVED: Use probability-based closeness instead of raw percentage gap
+    // Secondary is "real" if: secondaryPct >= 25% OR secondaryPct >= 90% of primaryPct
+    const primaryPct = primaryMatch.pct;
+    const secondaryPct = secondaryMatch?.pct || 0;
+    const secondaryIsClose = secondaryPct >= 25 || (secondaryPct >= primaryPct * 0.9);
+    const top2Gap = primaryPct - secondaryPct;
+    
+    // Disambiguation needed if: low confidence OR secondary is very close to primary
+    const needsDisambiguation = confidence < 60 || (secondaryIsClose && top2Gap <= 15);
     let disambiguationReason: string | undefined;
     let disambiguationTraits: Trait[] | undefined;
     let nextQuestionIds: string[] | undefined;
@@ -1795,8 +1910,8 @@ serve(async (req) => {
     if (needsDisambiguation) {
       if (confidence < 60) {
         disambiguationReason = 'Low confidence - mixed signals in profile';
-      } else if (top2Gap <= 10) {
-        disambiguationReason = `Close match between ${primaryArchetype.name} and ${secondaryArchetype?.name || 'secondary'}`;
+      } else if (secondaryIsClose) {
+        disambiguationReason = `Close match between ${primaryArchetype.name} (${primaryPct}%) and ${secondaryArchetype?.name || 'secondary'} (${secondaryPct}%)`;
       }
       
       // Find traits that differentiate top 2 archetypes
@@ -1899,10 +2014,12 @@ serve(async (req) => {
       primary_archetype_tagline: primaryArchetype.tagline,
       secondary_archetype_name: secondaryMatch?.archetype_id || null,
       secondary_archetype_display: secondaryArchetype?.name || null,
+      secondary_probability: secondaryMatch ? secondaryMatch.pct / 100 : undefined,
       dna_rarity: rarity,
       emotional_drivers: emotionalDrivers,
       tone_tags: toneTags,
       top_contributors: topContributors,
+      top_trait_badges: finalBadges,
       perfect_trip_preview: perfectTrip,
       summary,
       calculated_at: new Date().toISOString(),
