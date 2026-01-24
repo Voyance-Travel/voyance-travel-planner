@@ -3011,10 +3011,92 @@ serve(async (req) => {
         }
       }
       
+      // STAGE 1.7: Fetch past trip learnings for continuous improvement
+      console.log("[Stage 1.7] Fetching past trip learnings...");
+      let tripLearningsContext = "";
+      try {
+        const { data: learnings } = await supabase
+          .from('trip_learnings')
+          .select('*')
+          .eq('user_id', userId)
+          .not('lessons_summary', 'is', null)
+          .order('completed_at', { ascending: false })
+          .limit(3);
+        
+        if (learnings && learnings.length > 0) {
+          const sections: string[] = [];
+          
+          for (const l of learnings) {
+            const tripSection: string[] = [];
+            
+            if (l.destination) {
+              tripSection.push(`Past trip to ${l.destination}:`);
+            }
+            
+            // Positive learnings
+            const highlights = l.highlights as Array<{ activity?: string; why?: string }> | null;
+            if (highlights && highlights.length > 0) {
+              const highlightText = highlights
+                .slice(0, 2)
+                .map(h => `${h.activity || 'Unknown'} (${h.why || ''})`)
+                .join(', ');
+              tripSection.push(`  ✓ Loved: ${highlightText}`);
+            }
+            
+            // What to avoid
+            const painPoints = l.pain_points as Array<{ issue?: string; solution?: string }> | null;
+            if (painPoints && painPoints.length > 0) {
+              const issues = painPoints
+                .slice(0, 2)
+                .map(p => `${p.issue || 'Issue'}${p.solution ? ` → ${p.solution}` : ''}`)
+                .join('; ');
+              tripSection.push(`  ✗ Avoid: ${issues}`);
+            }
+            
+            // Pacing insights
+            if (l.pacing_feedback) {
+              const pacingMap: Record<string, string> = {
+                'too_rushed': 'prefers slower pace with fewer activities',
+                'perfect': 'current pacing works well',
+                'too_slow': 'enjoys action-packed days',
+                'varied_needs': 'needs variety in daily intensity'
+              };
+              tripSection.push(`  📊 ${pacingMap[l.pacing_feedback] || l.pacing_feedback}`);
+            }
+            
+            // Discovered preferences
+            if (l.discovered_likes && l.discovered_likes.length > 0) {
+              tripSection.push(`  💡 Discovered loves: ${l.discovered_likes.slice(0, 3).join(', ')}`);
+            }
+            if (l.discovered_dislikes && l.discovered_dislikes.length > 0) {
+              tripSection.push(`  ⚠️ Discovered dislikes: ${l.discovered_dislikes.slice(0, 3).join(', ')}`);
+            }
+            
+            // AI summary (most valuable)
+            if (l.lessons_summary) {
+              tripSection.push(`  📝 Key insight: ${l.lessons_summary}`);
+            }
+            
+            if (tripSection.length > 1) {
+              sections.push(tripSection.join('\n'));
+            }
+          }
+          
+          if (sections.length > 0) {
+            tripLearningsContext = `\n## 🔄 LEARNINGS FROM PAST TRIPS\nApply these lessons to avoid repeating mistakes:\n${sections.join('\n\n')}\n`;
+            console.log(`[Stage 1.7] Loaded ${learnings.length} past trip learnings`);
+          }
+        } else {
+          console.log("[Stage 1.7] No past trip learnings found");
+        }
+      } catch (learningsError) {
+        console.warn("[Stage 1.7] Failed to fetch trip learnings:", learningsError);
+      }
+      
       // Combine all context for maximum personalization
-      // Order: Travel DNA (archetype/confidence + RECONCILED BUDGET) → raw prefs → enriched prefs → flight/hotel
+      // Order: Travel DNA → raw prefs → enriched prefs → flight/hotel → LEARNINGS (for improvement)
       // NOTE: Budget intent is now FIRST in travelDNAContext - single source of truth
-      const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context;
+      const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;

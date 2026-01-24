@@ -11,8 +11,10 @@ import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
+import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
+import { useTripLearning } from '@/services/tripLearningsAPI';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
 import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
@@ -64,9 +66,14 @@ export default function TripDetail() {
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
   const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
+  const [showDebriefModal, setShowDebriefModal] = useState(false);
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
+  const debriefPromptAttempted = useRef(false);
+
+  // Check if trip already has a learning submitted
+  const { data: existingLearning } = useTripLearning(tripId || '');
 
   // Payment verification on return from Stripe
   usePaymentVerification({
@@ -415,6 +422,24 @@ export default function TripDetail() {
 
     fetchTripData();
   }, [tripId]);
+
+  // Auto-prompt debrief modal for completed trips without feedback
+  useEffect(() => {
+    if (
+      trip?.status === 'completed' &&
+      user &&
+      !existingLearning &&
+      !debriefPromptAttempted.current &&
+      !loading
+    ) {
+      debriefPromptAttempted.current = true;
+      // Small delay to let UI settle
+      const timer = setTimeout(() => {
+        setShowDebriefModal(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [trip?.status, user, existingLearning, loading]);
 
   // Transform activities into day-based structure
   const transformToItineraryDays = (): ItineraryDay[] => {
@@ -969,6 +994,17 @@ export default function TripDetail() {
               })),
             } : null);
           }}
+        />
+      )}
+
+      {/* Trip Debrief Modal - Post-trip retrospective */}
+      {trip && (
+        <TripDebriefModal
+          isOpen={showDebriefModal}
+          onClose={() => setShowDebriefModal(false)}
+          tripId={trip.id}
+          destination={trip.destination}
+          tripName={trip.name}
         />
       )}
     </MainLayout>
