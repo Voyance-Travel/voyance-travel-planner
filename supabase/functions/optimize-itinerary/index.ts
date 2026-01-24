@@ -1962,13 +1962,18 @@ serve(async (req) => {
           // - Transport blocks (airport transfer, train transfer, etc.) are the transport itself,
           //   so they should not also show "transportation to next".
           const fromCategory = (from.category || from.type || '').toLowerCase();
+          const fromTitle = (from.title || '').toLowerCase();
           const isDowntime = from.timeBlockType === 'downtime';
+          
+          // Transport blocks ARE transport - don't add route to them
           const isTransportBlock =
             fromCategory === 'transport' ||
             fromCategory === 'transportation' ||
             from.timeBlockType === 'transport' ||
-            (from.title || '').toLowerCase().includes('transfer');
+            fromTitle.includes('transfer');
 
+          // Note: Hotel/accommodation blocks SHOULD have routes to next activity
+          // Only skip for downtime and pure transport blocks
           if (isDowntime || isTransportBlock) {
             // Clear any pre-existing transport that might be left over from prior runs.
             if (from.transportation) {
