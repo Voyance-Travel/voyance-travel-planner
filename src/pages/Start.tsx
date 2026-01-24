@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -22,6 +22,7 @@ import {
   type Airport,
   type Destination,
 } from '@/services/locationSearchAPI';
+import { searchHotelsByName, type HotelSearchByNameResult } from '@/services/hotelAPI';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -345,7 +346,127 @@ function DestinationAutocomplete({
   );
 }
 
-// Trip type options - text only, no icons
+// Hotel selection type for itinerary-only mode
+interface HotelSelectionData {
+  placeId: string;
+  name: string;
+  address: string;
+  rating?: number;
+  reviewCount?: number;
+  website?: string;
+  googleMapsUrl?: string;
+  coordinates?: { lat: number; lng: number };
+}
+
+// Hotel Autocomplete for itinerary-only mode
+function HotelAutocomplete({
+  value,
+  onChange,
+  destination,
+  placeholder = "Where are you staying? (optional)",
+}: {
+  value: HotelSelectionData | null;
+  onChange: (hotel: HotelSelectionData | null) => void;
+  destination: string;
+  placeholder?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value?.name || '');
+  const [hotels, setHotels] = useState<HotelSearchByNameResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const debouncedQuery = useDebounce(inputValue, 400);
+
+  useEffect(() => {
+    if (value?.name !== inputValue && value?.name) {
+      setInputValue(value.name);
+    }
+  }, [value?.name]);
+
+  useEffect(() => {
+    if (debouncedQuery.length >= 2 && destination) {
+      setLoading(true);
+      searchHotelsByName(debouncedQuery, destination)
+        .then(setHotels)
+        .finally(() => setLoading(false));
+    } else {
+      setHotels([]);
+    }
+  }, [debouncedQuery, destination]);
+
+  const handleSelect = (hotel: HotelSearchByNameResult) => {
+    setInputValue(hotel.name);
+    onChange({
+      placeId: hotel.placeId,
+      name: hotel.name,
+      address: hotel.address,
+      rating: hotel.rating,
+      reviewCount: hotel.reviewCount,
+      website: hotel.website,
+      googleMapsUrl: hotel.googleMapsUrl,
+      coordinates: hotel.coordinates,
+    });
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <div className="absolute left-0 top-1/2 -translate-y-1/2">
+        <Building2 className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <Input
+        placeholder={destination ? placeholder : "Select destination first"}
+        value={inputValue}
+        onChange={(e) => { setInputValue(e.target.value); if (!e.target.value) onChange(null); setIsOpen(true); }}
+        onFocus={() => { if (inputValue.length >= 2 && destination) setIsOpen(true); }}
+        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+        disabled={!destination}
+        className={cn(
+          "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
+          !destination ? "opacity-50 cursor-not-allowed" : "border-border focus:border-primary"
+        )}
+      />
+      {isOpen && inputValue.length >= 2 && destination && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 overflow-hidden max-h-80 overflow-y-auto rounded-xl"
+        >
+          {loading ? (
+            <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <span className="text-sm">Searching hotels...</span>
+            </div>
+          ) : hotels.length > 0 ? (
+            hotels.map((hotel, idx) => (
+              <button
+                key={hotel.placeId}
+                type="button"
+                className={cn("w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3", idx < hotels.length - 1 && "border-b border-border/50")}
+                onMouseDown={() => handleSelect(hotel)}
+              >
+                <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">{hotel.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{hotel.address}</p>
+                  {hotel.rating && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
+                      <span className="text-xs text-muted-foreground">{hotel.rating.toFixed(1)}</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="px-4 py-6 text-center text-muted-foreground text-sm">No hotels found</div>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+// Trip type options
 const tripTypes = [
   { id: 'romantic', label: 'Romantic', description: 'Couples getaway' },
   { id: 'business', label: 'Business', description: 'Work travel' },
@@ -353,7 +474,7 @@ const tripTypes = [
   { id: 'leisure', label: 'Leisure', description: 'Relax & unwind' },
 ];
 
-// Featured destinations with editorial imagery
+// Featured destinations
 const featuredDestinations = [
   { name: 'Kyoto', country: 'Japan', image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600' },
   { name: 'Santorini', country: 'Greece', image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600' },
@@ -397,6 +518,7 @@ export default function Start() {
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [tripType, setTripType] = useState<string>('leisure');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
+  const [hotelSelection, setHotelSelection] = useState<HotelSelectionData | null>(null);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [showBudget, setShowBudget] = useState(!!plannerState.basics.budgetAmount);
   const today = startOfToday();
@@ -633,6 +755,22 @@ export default function Start() {
     if (itineraryOnlyMode) {
       const tripId = await saveTrip();
       if (tripId) {
+        // Save hotel selection to trip if provided
+        if (hotelSelection) {
+          await supabase.from('trips').update({
+            hotel_selection: {
+              id: `manual-${Date.now()}`,
+              name: hotelSelection.name,
+              address: hotelSelection.address,
+              location: hotelSelection.address,
+              rating: hotelSelection.rating || 0,
+              website: hotelSelection.website,
+              googleMapsUrl: hotelSelection.googleMapsUrl,
+              placeId: hotelSelection.placeId,
+              isManualEntry: true,
+            },
+          }).eq('id', tripId);
+        }
         navigate(`/trip/${tripId}?generate=true`);
       }
       return;
@@ -653,7 +791,6 @@ export default function Start() {
   };
 
   const isFormValid = destinationSelection.cityName && startDate && endDate;
-
 
   return (
     <MainLayout>
@@ -762,7 +899,22 @@ export default function Start() {
                 )}
               </div>
 
-              {/* Dates Row */}
+              {/* Hotel Input - Only for itinerary-only mode */}
+              {itineraryOnlyMode && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    Staying at <span className="text-muted-foreground font-normal">(optional)</span>
+                  </label>
+                  <HotelAutocomplete
+                    value={hotelSelection}
+                    onChange={setHotelSelection}
+                    destination={destinationSelection.cityName}
+                    placeholder="Search your hotel..."
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-foreground">

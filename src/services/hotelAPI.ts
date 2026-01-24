@@ -128,6 +128,52 @@ export interface HotelHoldResponse {
 }
 
 // ============================================================================
+// Hotel Search by Name (Google Places Autocomplete)
+// ============================================================================
+
+export interface HotelSearchByNameResult {
+  placeId: string;
+  name: string;
+  address: string;
+  rating?: number;
+  reviewCount?: number;
+  priceLevel?: number;
+  website?: string;
+  googleMapsUrl?: string;
+  coordinates?: { lat: number; lng: number };
+}
+
+export async function searchHotelsByName(
+  query: string,
+  destination: string
+): Promise<HotelSearchByNameResult[]> {
+  if (!query || query.length < 2) return [];
+  
+  try {
+    console.log('[HotelAPI] Searching hotels by name:', query, 'in', destination);
+    
+    const { data, error } = await supabase.functions.invoke('hotels', {
+      body: {
+        action: 'searchByName',
+        query,
+        destination,
+      },
+    });
+    
+    if (error || !data?.success) {
+      console.warn('[HotelAPI] Search failed:', error);
+      return [];
+    }
+    
+    console.log('[HotelAPI] Found hotels:', data.hotels?.length || 0);
+    return data.hotels as HotelSearchByNameResult[];
+  } catch (error) {
+    console.warn('[HotelAPI] Search error:', error);
+    return [];
+  }
+}
+
+// ============================================================================
 // API Helpers (for Cloud edge function)
 // ============================================================================
 
