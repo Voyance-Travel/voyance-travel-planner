@@ -11,7 +11,7 @@
  * - Save changes
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronUp, ChevronDown, MapPin, Clock, Star, Save,
@@ -154,6 +154,7 @@ export interface FlightSelection {
 }
 
 export interface HotelSelection {
+  id?: string;
   name?: string;
   address?: string;
   rating?: number;
@@ -161,6 +162,10 @@ export interface HotelSelection {
   nights?: number;
   checkIn?: string;
   checkOut?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
   imageUrl?: string;
   images?: string[];
   amenities?: string[];

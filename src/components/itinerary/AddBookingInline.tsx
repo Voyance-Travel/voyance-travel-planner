@@ -266,6 +266,17 @@ export function AddFlightInline({
                     onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureTime: e.target.value }))}
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Arrival Time (at destination)</Label>
+                  <Input
+                    type="time"
+                    value={outboundFlight.arrivalTime}
+                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, arrivalTime: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This helps us plan your Day 1 activities
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -322,6 +333,14 @@ export function AddFlightInline({
                     type="time"
                     value={returnFlight.departureTime}
                     onChange={(e) => setReturnFlight(prev => ({ ...prev, departureTime: e.target.value }))}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Arrival Time (at home)</Label>
+                  <Input
+                    type="time"
+                    value={returnFlight.arrivalTime}
+                    onChange={(e) => setReturnFlight(prev => ({ ...prev, arrivalTime: e.target.value }))}
                   />
                 </div>
               </div>
