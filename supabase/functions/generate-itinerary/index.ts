@@ -828,7 +828,10 @@ async function getUserPreferences(supabase: any, userId: string) {
         travel_companions,
         vibe,
         travel_style,
-        primary_goal
+        primary_goal,
+        emotional_drivers,
+        food_likes,
+        food_dislikes
       `)
       .eq('user_id', userId)
       .maybeSingle();
@@ -920,6 +923,50 @@ async function getTraitOverrides(supabase: any, userId: string): Promise<Record<
 }
 
 /**
+ * Infer archetypes from trait scores for v1 users who don't have archetype_matches
+ * Uses a simple weighted mapping of traits to archetype affinities
+ */
+function inferArchetypesFromTraits(traitScores: Record<string, number>): Array<{ name: string; pct: number }> {
+  // Archetype definitions with trait weights
+  const archetypeTraitWeights: Record<string, Record<string, number>> = {
+    'Cultural Curator': { authenticity: 2, transformation: 1.5, planning: 1, adventure: 0.5 },
+    'Wellness Wanderer': { comfort: 1.5, pace: -2, transformation: 1.5, social: -1 },
+    'Wilderness Pioneer': { adventure: 2, authenticity: 1.5, comfort: -1, pace: 0.5 },
+    'Urban Explorer': { social: 1.5, adventure: 1, pace: 1, authenticity: 0.5 },
+    'Culinary Voyager': { authenticity: 1.5, comfort: 1, social: 0.5, adventure: 0.5 },
+    'Luxury Seeker': { comfort: 2, budget: -2, planning: 1 },
+    'Budget Adventurer': { budget: 2, adventure: 1.5, comfort: -1.5 },
+    'Social Butterfly': { social: 2, adventure: 0.5, authenticity: 0.5 },
+    'Slow Traveler': { pace: -2, comfort: 1, authenticity: 1, planning: -0.5 },
+    'Thrill Seeker': { adventure: 2, pace: 1.5, comfort: -1, transformation: 1 },
+  };
+
+  // Calculate score for each archetype
+  const archetypeScores: Array<{ name: string; score: number }> = [];
+  
+  for (const [archetype, weights] of Object.entries(archetypeTraitWeights)) {
+    let score = 50; // Base score
+    for (const [trait, weight] of Object.entries(weights)) {
+      const traitValue = traitScores[trait] || 0;
+      score += traitValue * weight;
+    }
+    archetypeScores.push({ name: archetype, score: Math.max(0, Math.min(100, score)) });
+  }
+
+  // Sort by score descending
+  archetypeScores.sort((a, b) => b.score - a.score);
+
+  // Convert to percentages (softmax-like normalization)
+  const totalScore = archetypeScores.reduce((sum, a) => sum + a.score, 0) || 1;
+  const topArchetypes = archetypeScores.slice(0, 5).map(a => ({
+    name: a.name,
+    pct: (a.score / totalScore) * 100,
+  }));
+
+  return topArchetypes;
+}
+
+/**
  * Build Travel DNA persona context for AI prompt
  * Includes archetype blend, confidence level, and trait information
  */
@@ -936,12 +983,21 @@ function buildTravelDNAContext(
     ? { ...dna.trait_scores, ...overrides }
     : dna.trait_scores;
   
-  // Archetype blend section
-  const archetypes = dna.travel_dna_v2?.archetype_matches || dna.archetype_matches;
+  // Archetype blend section - use existing or infer from trait scores
+  let archetypes: Array<{ name: string; pct: number }> | undefined = 
+    dna.travel_dna_v2?.archetype_matches || dna.archetype_matches;
   const confidence = dna.travel_dna_v2?.confidence ?? dna.confidence ?? 75;
   
+  // If no archetypes but we have trait scores, infer archetypes from traits (v1 fallback)
+  if ((!archetypes || archetypes.length === 0) && traitScores) {
+    archetypes = inferArchetypesFromTraits(traitScores);
+    if (archetypes && archetypes.length > 0) {
+      console.log('[TravelDNA] Inferred archetypes from trait scores:', archetypes.map(a => a.name));
+    }
+  }
+  
   if (archetypes && archetypes.length > 0) {
-    const blendParts = archetypes.slice(0, 3).map((a: { name: string; pct: number }) => 
+    const blendParts = archetypes.slice(0, 3).map((a) => 
       `${a.name.replace(/_/g, ' ')} (${Math.round(a.pct)}%)`
     );
     
@@ -950,6 +1006,26 @@ function buildTravelDNAContext(
     let personaSection = `\n${'='.repeat(60)}\n🧬 TRAVEL DNA ARCHETYPE BLEND\n${'='.repeat(60)}`;
     personaSection += `\nArchetype Blend: ${blendParts.join(' + ')}`;
     personaSection += `\nConfidence: ${Math.round(confidence)}/100 (${confidenceLabel})`;
+    
+    // Add archetype descriptions for AI context
+    const archetypeDescriptions: Record<string, string> = {
+      'Cultural Curator': 'Prioritize museums, historical sites, art galleries, architectural tours, and authentic local experiences',
+      'Wellness Wanderer': 'Include spa visits, yoga sessions, meditation spots, thermal baths, and peaceful nature retreats',
+      'Wilderness Pioneer': 'Focus on hiking, nature reserves, outdoor adventures, wildlife, and scenic viewpoints',
+      'Urban Explorer': 'Emphasize city walks, street art, local neighborhoods, rooftop bars, and vibrant nightlife',
+      'Culinary Voyager': 'Center activities around food markets, cooking classes, wine tastings, and renowned restaurants',
+      'Luxury Seeker': 'Recommend premium experiences, fine dining, exclusive tours, and high-end establishments',
+      'Budget Adventurer': 'Focus on free attractions, street food, walking tours, and value experiences',
+      'Social Butterfly': 'Include group tours, communal dining, festivals, and opportunities to meet locals',
+      'Slow Traveler': 'Fewer activities per day, longer experiences, cafe culture, and immersive local living',
+      'Thrill Seeker': 'Adventure sports, extreme activities, adrenaline experiences, and unique challenges',
+    };
+    
+    const topArchetype = archetypes[0]?.name?.replace(/_/g, ' ');
+    if (topArchetype && archetypeDescriptions[topArchetype]) {
+      personaSection += `\n\n🎯 PRIMARY ARCHETYPE GUIDANCE:`;
+      personaSection += `\n   ${archetypeDescriptions[topArchetype]}`;
+    }
     
     // Add guidance based on confidence
     if (confidence < 60) {
@@ -1057,12 +1133,39 @@ function buildPreferenceContext(insights: any, prefs: any): string {
         'escape_artist': 'Peace-seeker who travels to disconnect, recharge, and find inner peace',
         'curated_luxe': 'Refinement-focused traveler who appreciates curated experiences and premium service',
         'story_seeker': 'Moment-collector who focuses on memorable experiences and cultural connections',
+        'wilderness_pioneer': 'Nature-focused adventurer who seeks wilderness, outdoor experiences, and connection with nature',
+        'cultural_curator': 'Culture enthusiast who prioritizes museums, history, art, and authentic local experiences',
+        'wellness_wanderer': 'Wellness-focused traveler seeking relaxation, spas, yoga, and rejuvenation',
+        'urban_explorer': 'City lover who thrives on urban energy, nightlife, architecture, and local neighborhoods',
+        'social_butterfly': 'Social traveler who loves group activities, meeting locals, and shared experiences',
       };
-      personaItems.push(`🧭 TRAVELER TYPE: ${personaMap[prefs.traveler_type] || prefs.traveler_type}`);
+      personaItems.push(`🧭 TRAVELER TYPE: ${personaMap[prefs.traveler_type] || prefs.traveler_type.replace(/_/g, ' ')}`);
+    }
+    
+    // Emotional drivers - WHY they travel (critical for activity selection!)
+    if (prefs.emotional_drivers?.length) {
+      const driverDescriptions: Record<string, string> = {
+        'freedom': 'seeks liberation and escape from routine',
+        'peace': 'wants tranquility and calm environments',
+        'renewal': 'looking for rejuvenation and fresh perspectives',
+        'restoration': 'needs recovery and recharging energy',
+        'pleasure': 'desires enjoyment, indulgence, and sensory experiences',
+        'adventure': 'craves excitement and new challenges',
+        'connection': 'wants meaningful relationships and cultural bonds',
+        'discovery': 'driven by curiosity and learning',
+        'achievement': 'seeks accomplishment and bucket-list experiences',
+        'transformation': 'looking for personal growth and change',
+      };
+      const driverContext = prefs.emotional_drivers
+        .slice(0, 5)
+        .map((d: string) => driverDescriptions[d] || d)
+        .join('; ');
+      personaItems.push(`💫 EMOTIONAL DRIVERS: ${driverContext}`);
+      personaItems.push(`   → Design activities that fulfill these emotional needs`);
     }
     
     if (prefs.travel_vibes?.length) {
-      personaItems.push(`Attracted to: ${prefs.travel_vibes.join(', ')} environments`);
+      personaItems.push(`🌍 Attracted to: ${prefs.travel_vibes.join(', ')} environments`);
     }
     
     if (prefs.vibe || prefs.travel_style) {
@@ -1114,6 +1217,20 @@ function buildPreferenceContext(insights: any, prefs: any): string {
     
     if (coreItems.length > 0) {
       sections.push({ title: '🎯 TRAVEL STYLE', items: coreItems });
+    }
+
+    // FOOD PREFERENCES (Likes/Dislikes) - Critical for restaurant selection!
+    const foodItems: string[] = [];
+    if (prefs.food_likes?.length) {
+      foodItems.push(`✅ FOOD LOVES: ${prefs.food_likes.join(', ')}`);
+      foodItems.push(`   → Prioritize restaurants/cafes that specialize in these cuisines`);
+    }
+    if (prefs.food_dislikes?.length) {
+      foodItems.push(`❌ FOOD DISLIKES: ${prefs.food_dislikes.join(', ')}`);
+      foodItems.push(`   → AVOID recommending these types of food/restaurants`);
+    }
+    if (foodItems.length > 0) {
+      sections.push({ title: '🍴 FOOD PREFERENCES', items: foodItems });
     }
 
     // CRITICAL: Dietary restrictions
