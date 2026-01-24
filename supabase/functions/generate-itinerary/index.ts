@@ -1411,195 +1411,452 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
 }
 
 // =============================================================================
-// STAGE 2: AI GENERATION WITH STRICT SCHEMA
+// STAGE 2: AI GENERATION WITH BATCH PROCESSING, VALIDATION & RETRY
 // =============================================================================
 
+// Day validation result
+interface DayValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+// Validate a single generated day for quality and correctness
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number): DayValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Basic structure checks
+  if (!day.dayNumber || day.dayNumber !== dayNumber) {
+    errors.push(`Day number mismatch: expected ${dayNumber}, got ${day.dayNumber}`);
+  }
+
+  if (!day.activities || day.activities.length === 0) {
+    errors.push('Day has no activities');
+  }
+
+  if (day.activities && day.activities.length < 3) {
+    warnings.push(`Day has only ${day.activities.length} activities (expected 3-6)`);
+  }
+
+  // Validate each activity
+  for (let i = 0; i < (day.activities?.length || 0); i++) {
+    const act = day.activities[i];
+    
+    // Required fields check
+    if (!act.title) {
+      errors.push(`Activity ${i + 1}: Missing title`);
+    }
+    if (!act.startTime || !act.endTime) {
+      errors.push(`Activity ${i + 1} (${act.title || 'unknown'}): Missing start/end time`);
+    }
+    if (!act.category) {
+      warnings.push(`Activity ${i + 1} (${act.title || 'unknown'}): Missing category`);
+    }
+    if (!act.location?.name) {
+      warnings.push(`Activity ${i + 1} (${act.title || 'unknown'}): Missing location name`);
+    }
+
+    // Time format validation (HH:MM)
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (act.startTime && !timeRegex.test(act.startTime)) {
+      errors.push(`Activity ${i + 1} (${act.title || 'unknown'}): Invalid startTime format "${act.startTime}"`);
+    }
+    if (act.endTime && !timeRegex.test(act.endTime)) {
+      errors.push(`Activity ${i + 1} (${act.title || 'unknown'}): Invalid endTime format "${act.endTime}"`);
+    }
+
+    // Logistics should NOT have booking required
+    const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'check in', 'check out', 'arrival', 'departure', 'transfer', 'free time', 'at leisure'];
+    const isLogistics = logisticsKeywords.some(kw => (act.title || '').toLowerCase().includes(kw)) ||
+                        ['transport', 'accommodation', 'downtime', 'free_time'].includes(act.category?.toLowerCase() || '');
+    
+    if (isLogistics && act.bookingRequired) {
+      warnings.push(`Activity ${i + 1} (${act.title || 'unknown'}): Logistics activity should not require booking`);
+    }
+
+    // Logistics should have $0 cost
+    if (isLogistics && act.cost?.amount && act.cost.amount > 0) {
+      const isAirportTransfer = (act.title || '').toLowerCase().includes('transfer') && 
+                                 (act.title || '').toLowerCase().includes('airport');
+      // Airport transfers may have a cost, but check-in/out should be free
+      if (!isAirportTransfer) {
+        warnings.push(`Activity ${i + 1} (${act.title || 'unknown'}): Logistics should have $0 cost`);
+      }
+    }
+  }
+
+  // First day checks
+  if (isFirstDay) {
+    const hasArrival = day.activities?.some(a => 
+      (a.title || '').toLowerCase().includes('arrival') || 
+      ((a.category === 'transport') && (a.title || '').toLowerCase().includes('airport'))
+    );
+    const hasTransfer = day.activities?.some(a => 
+      (a.title || '').toLowerCase().includes('transfer')
+    );
+    const hasCheckin = day.activities?.some(a => 
+      (a.title || '').toLowerCase().includes('check-in') || (a.title || '').toLowerCase().includes('checkin')
+    );
+
+    if (!hasArrival) {
+      warnings.push('Day 1 should start with airport arrival');
+    }
+    if (!hasTransfer) {
+      warnings.push('Day 1 should include airport-to-hotel transfer');
+    }
+    if (!hasCheckin) {
+      warnings.push('Day 1 should include hotel check-in');
+    }
+  }
+
+  // Last day checks
+  if (isLastDay && totalDays > 1) {
+    const hasCheckout = day.activities?.some(a => 
+      (a.title || '').toLowerCase().includes('check-out') || (a.title || '').toLowerCase().includes('checkout')
+    );
+    const hasDeparture = day.activities?.some(a => 
+      (a.title || '').toLowerCase().includes('departure') ||
+      ((a.category === 'transport') && (a.title || '').toLowerCase().includes('airport'))
+    );
+
+    if (!hasCheckout) {
+      warnings.push('Last day should include hotel checkout');
+    }
+    if (!hasDeparture) {
+      warnings.push('Last day should end with airport departure');
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+// Generate a single day with retry logic
+async function generateSingleDayWithRetry(
+  context: GenerationContext,
+  preferenceContext: string,
+  dayNumber: number,
+  previousDays: StrictDay[],
+  flightHotelContext: string,
+  LOVABLE_API_KEY: string,
+  maxRetries: number = 2
+): Promise<StrictDay> {
+  const isFirstDay = dayNumber === 1;
+  const isLastDay = dayNumber === context.totalDays;
+  const date = formatDate(context.startDate, dayNumber - 1);
+
+  // Build previous activities list to avoid repetition
+  const previousActivities = previousDays.flatMap(d => 
+    d.activities.map(a => a.title).filter(Boolean)
+  );
+
+  // Quality enforcement rules that get stricter with retries
+  const qualityRules = [
+    'QUALITY RULES (STRICTLY ENFORCED):',
+    '1. Every activity MUST have a title, startTime, endTime, category, and location',
+    '2. Times MUST be in HH:MM format (24-hour, e.g., "09:00", "14:30")',
+    '3. Hotel check-in/checkout: bookingRequired=false, cost.amount=0',
+    '4. Airport transfers: bookingRequired=false (user arranges transport)',
+    '5. Free time/leisure: bookingRequired=false, cost.amount=0',
+    '6. Only tours, museums, and ticketed attractions should have bookingRequired=true',
+    isFirstDay ? '7. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
+    isLastDay && context.totalDays > 1 ? '7. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+  ].filter(Boolean).join('\n');
+
+  let lastError: Error | null = null;
+  let lastValidation: DayValidationResult | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Stage 2] Generating day ${dayNumber}/${context.totalDays} (attempt ${attempt + 1}/${maxRetries + 1})`);
+
+      // Build retry-specific prompt additions
+      let retryPrompt = '';
+      if (attempt > 0 && lastValidation) {
+        retryPrompt = `\n\n⚠️ PREVIOUS ATTEMPT FAILED VALIDATION. FIX THESE ISSUES:\n`;
+        if (lastValidation.errors.length > 0) {
+          retryPrompt += `ERRORS (must fix):\n${lastValidation.errors.map(e => `  - ${e}`).join('\n')}\n`;
+        }
+        if (lastValidation.warnings.length > 0) {
+          retryPrompt += `WARNINGS (should fix):\n${lastValidation.warnings.map(w => `  - ${w}`).join('\n')}\n`;
+        }
+      }
+
+      const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
+
+${qualityRules}
+
+PERSONALIZATION:
+${preferenceContext}
+
+${flightHotelContext}${retryPrompt}`;
+
+      const userPrompt = `Generate Day ${dayNumber} of ${context.totalDays} for ${context.destination}${context.destinationCountry ? `, ${context.destinationCountry}` : ''}.
+
+DATE: ${date}
+TRAVELERS: ${context.travelers}
+BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)
+PACE: ${context.pace || 'moderate'}
+
+${previousActivities.length > 0 ? `AVOID REPEATING: ${previousActivities.slice(-10).join(', ')}\n` : ''}
+
+Generate 4-6 activities for this day following ALL quality rules above.`;
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "create_day_itinerary",
+              description: "Creates a validated day itinerary",
+              parameters: {
+                type: "object",
+                properties: {
+                  dayNumber: { type: "number" },
+                  date: { type: "string" },
+                  title: { type: "string" },
+                  theme: { type: "string" },
+                  activities: {
+                    type: "array",
+                    minItems: 3,
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        title: { type: "string" },
+                        startTime: { type: "string", description: "HH:MM 24-hour format" },
+                        endTime: { type: "string", description: "HH:MM 24-hour format" },
+                        category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
+                        location: {
+                          type: "object",
+                          properties: {
+                            name: { type: "string" },
+                            address: { type: "string" },
+                            coordinates: {
+                              type: "object",
+                              properties: { lat: { type: "number" }, lng: { type: "number" } },
+                              required: ["lat", "lng"]
+                            }
+                          },
+                          required: ["name", "address"]
+                        },
+                        cost: {
+                          type: "object",
+                          properties: {
+                            amount: { type: "number", minimum: 0 },
+                            currency: { type: "string" }
+                          },
+                          required: ["amount", "currency"]
+                        },
+                        description: { type: "string" },
+                        tags: { type: "array", items: { type: "string" }, minItems: 5 },
+                        bookingRequired: { type: "boolean" },
+                        transportation: {
+                          type: "object",
+                          properties: {
+                            method: { type: "string" },
+                            duration: { type: "string" },
+                            estimatedCost: {
+                              type: "object",
+                              properties: { amount: { type: "number" }, currency: { type: "string" } }
+                            },
+                            instructions: { type: "string" }
+                          }
+                        },
+                        tips: { type: "string" },
+                        rating: {
+                          type: "object",
+                          properties: { value: { type: "number" }, totalReviews: { type: "number" } }
+                        },
+                        website: { type: "string" }
+                      },
+                      required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired"]
+                    }
+                  }
+                },
+                required: ["dayNumber", "date", "title", "activities"]
+              }
+            }
+          }],
+          tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
+        }),
+      });
+
+      if (!response.ok) {
+        const status = response.status;
+        const errorText = await response.text();
+        console.error(`[Stage 2] AI Gateway error for day ${dayNumber}: ${status}`, errorText);
+        throw new Error(status === 429 ? 'Rate limit exceeded' : status === 402 ? 'Credits exhausted' : 'AI generation failed');
+      }
+
+      const data = await response.json();
+      const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+
+      if (!toolCall?.function?.arguments) {
+        throw new Error("Invalid AI response format");
+      }
+
+      const generatedDay = JSON.parse(toolCall.function.arguments) as StrictDay;
+
+      // Normalize the day data
+      generatedDay.dayNumber = dayNumber;
+      generatedDay.date = date;
+      generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
+
+      // Normalize activities
+      generatedDay.activities = generatedDay.activities.map((act, idx) => {
+        const normalizedAct = {
+          ...act,
+          id: act.id || `day${dayNumber}-act${idx + 1}-${Date.now()}`,
+          title: act.title || `Activity ${idx + 1}`,
+          durationMinutes: calculateDuration(act.startTime, act.endTime),
+          categoryIcon: getCategoryIcon(act.category || 'activity'),
+        };
+
+        // Auto-fix logistics activities
+        const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'arrival', 'departure', 'transfer', 'free time', 'at leisure'];
+        const isLogistics = logisticsKeywords.some(kw => normalizedAct.title.toLowerCase().includes(kw)) ||
+                            ['transport', 'accommodation', 'downtime', 'free_time'].includes(normalizedAct.category?.toLowerCase() || '');
+        
+        if (isLogistics) {
+          normalizedAct.bookingRequired = false;
+          // Only zero out non-transfer logistics
+          if (!normalizedAct.title.toLowerCase().includes('transfer')) {
+            normalizedAct.cost = { amount: 0, currency: act.cost?.currency || 'USD' };
+          }
+        }
+
+        return normalizedAct;
+      });
+
+      // Validate the generated day
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays);
+      lastValidation = validation;
+
+      if (validation.errors.length > 0) {
+        console.warn(`[Stage 2] Day ${dayNumber} validation errors:`, validation.errors);
+      }
+      if (validation.warnings.length > 0) {
+        console.log(`[Stage 2] Day ${dayNumber} validation warnings:`, validation.warnings);
+      }
+
+      // If valid or on last retry, return the day
+      if (validation.isValid || attempt === maxRetries) {
+        console.log(`[Stage 2] Day ${dayNumber} generated successfully (${generatedDay.activities.length} activities)`);
+        return generatedDay;
+      }
+
+      // Otherwise, retry with feedback
+      console.log(`[Stage 2] Day ${dayNumber} has ${validation.errors.length} errors, retrying...`);
+      lastError = new Error(`Validation failed: ${validation.errors.join('; ')}`);
+
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`[Stage 2] Day ${dayNumber} generation error on attempt ${attempt + 1}:`, lastError.message);
+      
+      // Rate limit and credits errors should not retry
+      if (lastError.message.includes('Rate limit') || lastError.message.includes('Credits')) {
+        throw lastError;
+      }
+
+      // If not the last attempt, wait before retry
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError || new Error(`Failed to generate day ${dayNumber} after ${maxRetries + 1} attempts`);
+}
+
+// Main batch generation function
 async function generateItineraryAI(
   context: GenerationContext,
   preferenceContext: string,
-  LOVABLE_API_KEY: string
+  LOVABLE_API_KEY: string,
+  flightHotelContext: string = ''
 ): Promise<{ days: StrictDay[] } | null> {
-  console.log(`[Stage 2] Starting AI generation for ${context.totalDays} days`);
+  console.log(`[Stage 2] Starting batch generation for ${context.totalDays} days`);
 
-  const systemPrompt = `You are an expert travel planner creating HIGHLY PERSONALIZED itineraries. Your itineraries are:
-- Realistic with proper timing and logistics
-- Include a balanced mix of experiences (cultural, culinary, relaxation, activities)
-- Feature local hidden gems alongside popular attractions
-- Account for travel time between activities
-- STRICTLY tailored to the traveler's personal profile and constraints
+  const days: StrictDay[] = [];
+  const BATCH_SIZE = 2; // Generate 2 days at a time for quality control
 
-MANDATORY PERSONALIZATION RULES:
-1. DIETARY RESTRICTIONS are NON-NEGOTIABLE - never recommend restaurants or food that violate dietary requirements
-2. ACCESSIBILITY NEEDS are NON-NEGOTIABLE - all venues must be accessible, avoid stairs/long walks if mobility issues exist
-3. CLIMATE/WEATHER preferences should inform activity timing (outdoor activities during preferred conditions)
-4. Use the traveler's INTERESTS to prioritize activity categories
-5. Match the traveler's PACE preference (relaxed = fewer activities with more downtime, packed = more activities)
-6. Honor LEARNED PREFERENCES from past trips - include activities they've loved, avoid what they disliked
+  // Process days in batches
+  for (let batchStart = 0; batchStart < context.totalDays; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, context.totalDays);
+    const batchDays: Promise<StrictDay>[] = [];
 
-CRITICAL DATA REQUIREMENTS (REQUIRED FOR EVERY ACTIVITY):
-1. COORDINATES: Provide approximate lat/lng for EVERY venue. You know major landmarks, restaurants, and attractions worldwide. Example: Eiffel Tower = {"lat": 48.8584, "lng": 2.2945}
-2. COSTS: Provide realistic per-person cost estimates for EVERY activity. Use 0 for free attractions. Research typical prices - museum entry ~$15-25, restaurant meal ~$30-80, tours ~$50-100.
-3. TAGS: Generate 5-8 comprehensive tags for EACH activity for searchability:
-   - Category tags: museum, park, restaurant, cafe, landmark, historic, religious
-   - Experience tags: romantic, family-friendly, adventure, relaxation, educational, scenic
-   - Time tags: morning, afternoon, evening, sunset, sunrise, night
-   - Price tags: free, budget-friendly, moderate-price, premium, splurge
-   - Mood tags: photo-op, instagram-worthy, hidden-gem, must-see, local-favorite
-4. ADDRESSES: Complete street addresses with postal codes
-5. RATINGS: Realistic ratings (3.5-5.0) and review counts (100-50000) based on venue popularity
+    console.log(`[Stage 2] Generating batch: days ${batchStart + 1}-${batchEnd}`);
 
-STRUCTURAL REQUIREMENTS:
-1. Include 4-6 activities per day including meals
-2. START times depend on flight schedule (see FLIGHT CONSTRAINTS in preferences if provided):
-   - If flight arrival time is specified: first sightseeing activity must be AT LEAST 4 hours AFTER landing
-   - If no flight info: start days around 9:00 AM
-3. End days by 9:00-10:00 PM (unless late arrival day - then end earlier)
-4. Account for travel time between activities
-5. SMART TRANSPORTATION SELECTION (CRITICAL - DO NOT DEFAULT TO WALK):
-   - WALK: Only for distances under 1km (about 10-15 min walk)
-   - METRO/TRAM/BUS: For 1-8km in cities with public transit (Paris, London, Tokyo, NYC, Berlin, Rome, etc.)
-   - UBER/TAXI: For 3km+ when no convenient transit, late night, or luggage
-   - TRAIN: For inter-city or airport-to-city transfers
-   - Include specific transit line names (e.g., "Take Metro Line 1 to Concorde station")
-6. DAY 1 MUST START with airport arrival and transfer to hotel (times based on actual flight if provided)
-7. LAST DAY MUST END with hotel checkout and transfer to airport (times based on return flight if provided)
-8. Include website URLs for popular venues when known`;
+    // Generate days in this batch in parallel
+    for (let dayNum = batchStart + 1; dayNum <= batchEnd; dayNum++) {
+      batchDays.push(
+        generateSingleDayWithRetry(
+          context,
+          preferenceContext,
+          dayNum,
+          days, // Pass already completed days for context
+          flightHotelContext,
+          LOVABLE_API_KEY
+        )
+      );
+    }
 
-  const daysList = [];
-  for (let i = 0; i < context.totalDays; i++) {
-    daysList.push(`Day ${i + 1}: ${formatDate(context.startDate, i)}`);
+    // Wait for all days in batch to complete
+    const batchResults = await Promise.all(batchDays);
+    days.push(...batchResults);
+
+    console.log(`[Stage 2] Batch complete: ${days.length}/${context.totalDays} days generated`);
+
+    // Small delay between batches to avoid rate limiting
+    if (batchEnd < context.totalDays) {
+      await new Promise(r => setTimeout(r, 500));
+    }
   }
 
-  const userPrompt = `Generate a complete ${context.totalDays}-day itinerary for ${context.destination}${context.destinationCountry ? `, ${context.destinationCountry}` : ''}.
+  // Apply fallback costs for any missing values
+  const fallbackCosts: Record<string, number> = {
+    sightseeing: 15,
+    cultural: 20,
+    dining: 35,
+    shopping: 0,
+    relaxation: 40,
+    transport: 10,
+    accommodation: 0,
+    activity: 25
+  };
 
-TRIP DETAILS:
-- Dates: ${context.startDate} to ${context.endDate}
-- Duration: ${context.totalDays} days
-- Travelers: ${context.travelers}
-- Budget tier: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)
-- Trip type: ${context.tripType || 'leisure'}
-- Pace: ${context.pace || 'moderate'}
-${preferenceContext}
-
-IMPORTANT STRUCTURE:
-- DAY 1: Start with "Arrival at [Airport Name]" as the FIRST activity (category: "transport") at the ACTUAL arrival time from flight data, 
-  followed by "Airport Transfer to Hotel" (category: "transport"), 
-  then "Check-in at Hotel" (category: "accommodation")
-  ⚠️ CRITICAL: If flight arrival time is provided, the first NON-transport/accommodation activity CANNOT start earlier than 4 hours after landing. 
-  For example: landing at 10:30 AM → first sightseeing/dining at 14:30 (2:30 PM) or later.
-- LAST DAY: End with "Hotel Checkout" (category: "accommodation"), 
-  followed by "Transfer to Airport" (category: "transport") - ensure arrival at airport 2.5-3 hours before departure, 
-  then "Departure from [Airport Name]" (category: "transport")
-
-Generate activities for these days:
-${daysList.join('\n')}
-
-REQUIRED FOR EACH ACTIVITY (NO EXCEPTIONS):
-1. Unique ID (format: "day1-act1", "day1-act2", etc.)
-2. Specific venue name and FULL street address (including city and postal code)
-3. COORDINATES: lat/lng values (you know these for major venues worldwide!)
-4. COST: Realistic per-person cost in ${context.currency || 'USD'} (0 for free, realistic amounts for paid)
-5. TAGS: 5-8 comprehensive tags covering category, experience type, time of day, price tier, and mood
-6. Category (sightseeing, dining, cultural, shopping, relaxation, transport, accommodation, activity)
-7. Start and end times in HH:MM format
-8. Description (2-3 sentences including what makes it special)
-9. Rating (value 3.5-5.0) and totalReviews (100-50000 for popular, less for hidden gems)
-10. Whether booking is required:
-    - bookingRequired: FALSE for ALL of these: hotel check-in, hotel checkout, airport arrival, airport departure, airport transfers, free time, downtime, leisure time, and ALL transport/accommodation categories
-    - bookingRequired: TRUE only for tours, museums, attractions, and experiences that genuinely need advance tickets
-11. Transportation from previous location (method, duration, cost, instructions)
-12. An insider tip
-13. Website URL if well-known venue
-
-COST GUIDELINES (per person):
-- Free attractions: 0
-- Hotel check-in/checkout: 0 (bookingRequired: false)
-- Airport transfers: 0 (bookingRequired: false) - user arranges own transport
-- Free time/downtime: 0 (bookingRequired: false)
-- Museum entry: 15-30
-- Casual restaurant: 20-40
-- Mid-range restaurant: 40-80
-- Fine dining: 80-200
-- Tours: 40-150 (bookingRequired: true)
-- Shows/entertainment: 50-150 (bookingRequired: true)
-
-TAG EXAMPLES for a restaurant:
-["dining", "restaurant", "french-cuisine", "evening", "romantic", "moderate-price", "local-favorite", "dinner"]
-
-Create a well-paced, authentic travel experience!`;
-
-  try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        tools: [STRICT_ITINERARY_TOOL],
-        tool_choice: { type: "function", function: { name: "create_complete_itinerary" } },
-      }),
-    });
-
-    if (!response.ok) {
-      const status = response.status;
-      const errorText = await response.text();
-      console.error(`[Stage 2] AI Gateway error: ${status}`, errorText);
-      throw new Error(status === 429 ? 'Rate limit exceeded' : status === 402 ? 'Credits exhausted' : 'AI generation failed');
-    }
-
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-
-    if (!toolCall?.function?.arguments) {
-      console.error("[Stage 2] No tool call in response");
-      throw new Error("Invalid AI response format");
-    }
-
-    const result = JSON.parse(toolCall.function.arguments);
-    console.log(`[Stage 2] Generated ${result.days?.length || 0} days`);
-
-    // Enhance activities with calculated fields and fallback costs
-    const fallbackCosts: Record<string, number> = {
-      sightseeing: 15,
-      cultural: 20,
-      dining: 35,
-      shopping: 0,
-      relaxation: 40,
-      transport: 10,
-      accommodation: 0,
-      activity: 25
-    };
-
-    result.days = result.days.map((day: StrictDay) => ({
-      ...day,
-      activities: day.activities.map((act: StrictActivity) => {
-        const amount = act.cost?.amount && act.cost.amount > 0 
-          ? act.cost.amount 
-          : (fallbackCosts[act.category] || 20);
-        return {
-          ...act,
-          durationMinutes: calculateDuration(act.startTime, act.endTime),
-          categoryIcon: getCategoryIcon(act.category),
-          cost: {
-            amount,
-            currency: act.cost?.currency || 'USD',
-            formatted: `$${amount} USD`
-          }
+  for (const day of days) {
+    for (const act of day.activities) {
+      if (!act.cost || act.cost.amount === undefined) {
+        const amount = fallbackCosts[act.category] || 20;
+        act.cost = {
+          amount,
+          currency: 'USD',
+          formatted: `$${amount} USD`
         };
-      })
-    }));
-
-    return result;
-  } catch (error) {
-    console.error("[Stage 2] Generation error:", error);
-    throw error;
+      } else if (!act.cost.formatted) {
+        act.cost.formatted = `$${act.cost.amount} ${act.cost.currency || 'USD'}`;
+      }
+    }
   }
+
+  console.log(`[Stage 2] All ${days.length} days generated successfully`);
+  return { days };
 }
 
 // =============================================================================
@@ -1905,18 +2162,69 @@ async function enrichActivity(
   return enriched;
 }
 
+// Enrichment result tracking for better reporting
+interface EnrichmentStats {
+  totalActivities: number;
+  photosAdded: number;
+  venuesVerified: number;
+  enrichmentFailures: number;
+  retriedSuccessfully: number;
+}
+
+// Enrich a single activity with retry logic
+async function enrichActivityWithRetry(
+  activity: StrictActivity,
+  destination: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+  GOOGLE_MAPS_API_KEY: string | undefined,
+  maxRetries: number = 1
+): Promise<{ activity: StrictActivity; success: boolean; retried: boolean }> {
+  let retried = false;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const enriched = await enrichActivity(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY);
+      return { activity: enriched, success: true, retried };
+    } catch (error) {
+      console.warn(`[Stage 4] Enrichment error for "${activity.title}" (attempt ${attempt + 1}):`, error);
+      
+      if (attempt < maxRetries) {
+        retried = true;
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+  }
+  
+  // Return original activity with minimal verification on failure
+  console.log(`[Stage 4] Enrichment failed for "${activity.title}" after ${maxRetries + 1} attempts, using original`);
+  return {
+    activity: {
+      ...activity,
+      verified: { isValid: false, confidence: 0.5 }
+    },
+    success: false,
+    retried
+  };
+}
+
 async function enrichItinerary(
   days: StrictDay[],
   destination: string,
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined
-): Promise<StrictDay[]> {
+): Promise<{ days: StrictDay[]; stats: EnrichmentStats }> {
   console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos + venue verification`);
 
   const enrichedDays: StrictDay[] = [];
-  let totalPhotos = 0;
-  let verifiedCount = 0;
+  const stats: EnrichmentStats = {
+    totalActivities: 0,
+    photosAdded: 0,
+    venuesVerified: 0,
+    enrichmentFailures: 0,
+    retriedSuccessfully: 0
+  };
 
   for (const day of days) {
     const enrichedActivities: StrictActivity[] = [];
@@ -1926,12 +2234,28 @@ async function enrichItinerary(
     const BATCH_SIZE = 3;
     for (let i = 0; i < day.activities.length; i += BATCH_SIZE) {
       const batch = day.activities.slice(i, i + BATCH_SIZE);
+      
       const enrichedBatch = await Promise.all(
-        batch.map(act => enrichActivity(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY))
+        batch.map(act => enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY))
       );
-      enrichedActivities.push(...enrichedBatch);
-      totalPhotos += enrichedBatch.filter(a => a.photos?.length).length;
-      verifiedCount += enrichedBatch.filter(a => a.verified?.placeId).length;
+      
+      for (const result of enrichedBatch) {
+        enrichedActivities.push(result.activity);
+        stats.totalActivities++;
+        
+        if (result.activity.photos?.length) {
+          stats.photosAdded++;
+        }
+        if (result.activity.verified?.placeId) {
+          stats.venuesVerified++;
+        }
+        if (!result.success) {
+          stats.enrichmentFailures++;
+        }
+        if (result.retried && result.success) {
+          stats.retriedSuccessfully++;
+        }
+      }
 
       // Delay between batches to respect API rate limits
       if (i + BATCH_SIZE < day.activities.length) {
@@ -1956,8 +2280,8 @@ async function enrichItinerary(
     });
   }
 
-  console.log(`[Stage 4] Enrichment complete - ${totalPhotos} photos, ${verifiedCount} venues verified`);
-  return enrichedDays;
+  console.log(`[Stage 4] Enrichment complete - ${stats.photosAdded} photos, ${stats.venuesVerified} venues verified, ${stats.enrichmentFailures} failures${stats.retriedSuccessfully > 0 ? `, ${stats.retriedSuccessfully} recovered via retry` : ''}`);
+  return { days: enrichedDays, stats };
 }
 
 // =============================================================================
@@ -2293,10 +2617,10 @@ serve(async (req) => {
       // Order: Travel DNA (archetype/confidence) → raw prefs → enriched prefs → flight/hotel
       const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context;
 
-      // STAGE 2: AI Generation
+      // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
       try {
-        aiResult = await generateItineraryAI(context, preferenceContext, LOVABLE_API_KEY);
+        aiResult = await generateItineraryAI(context, preferenceContext, LOVABLE_API_KEY, flightHotelResult.context);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Generation failed';
         const status = message.includes('Rate limit') ? 429 : message.includes('Credits') ? 402 : 500;
@@ -2405,8 +2729,11 @@ serve(async (req) => {
 
       // STAGE 4: Enrichment (real photos + venue verification via Google Places API v1)
       let enrichedDays: StrictDay[];
+      let enrichmentStats: EnrichmentStats | null = null;
       try {
-        enrichedDays = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY);
+        const enrichmentResult = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY);
+        enrichedDays = enrichmentResult.days;
+        enrichmentStats = enrichmentResult.stats;
       } catch (enrichError) {
         console.warn('[generate-itinerary] Enrichment failed, using base itinerary:', enrichError);
         enrichedDays = aiResult.days;
@@ -2415,12 +2742,12 @@ serve(async (req) => {
       // STAGE 5: Trip Overview
       const overview = generateTripOverview(enrichedDays, context);
 
-      // Build enrichment metadata
-      const totalActivities = enrichedDays.reduce((sum, d) => sum + d.activities.length, 0);
-      const photosAdded = enrichedDays.reduce(
+      // Build enrichment metadata from stats or calculate from days
+      const totalActivities = enrichmentStats?.totalActivities || enrichedDays.reduce((sum, d) => sum + d.activities.length, 0);
+      const photosAdded = enrichmentStats?.photosAdded || enrichedDays.reduce(
         (sum, d) => sum + d.activities.filter(a => a.photos?.length).length, 0
       );
-      const verifiedVenues = enrichedDays.reduce(
+      const verifiedVenues = enrichmentStats?.venuesVerified || enrichedDays.reduce(
         (sum, d) => sum + d.activities.filter(a => a.verified?.placeId).length, 0
       );
       const geocodedActivities = enrichedDays.reduce(
@@ -2435,7 +2762,11 @@ serve(async (req) => {
           geocodedActivities,
           verifiedActivities: verifiedVenues,
           photosAdded,
-          totalActivities
+          totalActivities,
+          ...(enrichmentStats?.enrichmentFailures && enrichmentStats.enrichmentFailures > 0 && {
+            failures: enrichmentStats.enrichmentFailures,
+            retriedSuccessfully: enrichmentStats.retriedSuccessfully
+          })
         }
       };
 
