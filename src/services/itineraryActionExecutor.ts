@@ -9,6 +9,74 @@ import type { ItineraryAction } from './itineraryChatAPI';
 import type { Json } from '@/integrations/supabase/types';
 
 // ============================================================================
+// GUARDRAILS (COMMON-SENSE SCHEDULING)
+// - Never alter travel-critical blocks (arrival/airport/transfer/check-in/out)
+// - Keep meal structure unless the user is explicitly filtering dining
+// - Avoid spammy duplicates (e.g. multiple "sunset" blocks in a row)
+// ============================================================================
+
+const PROTECTED_ACTIVITY_KEYWORDS = [
+  'arrival',
+  'land',
+  'flight',
+  'airport',
+  'customs',
+  'immigration',
+  'baggage',
+  'transfer',
+  'check-in',
+  'check in',
+  'check-out',
+  'check out',
+  'hotel check-in',
+  'hotel check in',
+  'hotel check-out',
+  'hotel check out',
+  'drive to',
+  'train to',
+  'depart',
+];
+
+const PROTECTED_CATEGORIES = [
+  'transport',
+  'transportation',
+  'transfer',
+  'flight',
+  'logistics',
+  'accommodation',
+];
+
+const MEAL_KEYWORDS = ['breakfast', 'brunch', 'lunch', 'dinner', 'restaurant', 'cafe', 'coffee', 'meal', 'eat'];
+
+function norm(v?: string): string {
+  return (v || '').toLowerCase().trim();
+}
+
+function activityTitle(activity: Activity): string {
+  return activity.title || activity.name || '';
+}
+
+function isProtectedActivity(activity: Activity): boolean {
+  const title = norm(activityTitle(activity));
+  const category = norm(activity.category);
+
+  if (PROTECTED_CATEGORIES.includes(category)) return true;
+  return PROTECTED_ACTIVITY_KEYWORDS.some(k => title.includes(k));
+}
+
+function isMealActivity(activity: Activity): boolean {
+  const title = norm(activityTitle(activity));
+  const category = norm(activity.category);
+  if (category.includes('dining') || category.includes('food')) return true;
+  return MEAL_KEYWORDS.some(k => title.includes(k));
+}
+
+function hasKeywordInDay(day: ItineraryDay, keyword: string): boolean {
+  const k = norm(keyword);
+  return day.activities.some(a => norm(activityTitle(a)).includes(k));
+}
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -155,6 +223,15 @@ async function executeSwapAction(
     };
   }
 
+  // Guardrail: never swap travel-critical blocks unless explicitly rebuilt via full generator
+  if (isProtectedActivity(targetActivity)) {
+    return {
+      success: false,
+      message: `That item is part of your travel logistics (arrival/transfer/check-in) and can't be swapped via chat.`,
+      error: 'Protected activity',
+    };
+  }
+
   // Build search query from preference hint or reason
   const searchQuery = preference_hint || reason || '';
   
@@ -262,82 +339,52 @@ async function executeRegenerateAction(
   }
 
   const day = currentDays[dayIndex];
-  const unlockedActivities = day.activities.filter(a => !a.isLocked);
-  
-  if (unlockedActivities.length === 0) {
+
+  // IMPORTANT:
+  // Chat-based "regenerate" should NOT do naive activity-by-activity swaps.
+  // Use the same flight-aware day generator used elsewhere so we keep:
+  // - arrival/airport/transfer/check-in sequencing
+  // - meals / sane pacing
+  // - realistic time windows
+  const keepActivities = day.activities
+    .filter(a => a.isLocked || isProtectedActivity(a) || isMealActivity(a))
+    .map(a => a.id)
+    .filter(Boolean);
+
+  const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'regenerate-day',
+      tripId,
+      dayNumber: target_day,
+      destination,
+      keepActivities,
+      // Soft hint only; generator may ignore unknown preference keys
+      preferences: new_focus ? { dayFocus: new_focus } : undefined,
+    },
+  });
+
+  if (error || !data?.day) {
     return {
       success: false,
-      message: `All activities on Day ${target_day} are locked`,
-      error: 'All activities locked',
+      message: 'Failed to regenerate day with scheduling constraints',
+      error: error?.message || data?.error || 'Unknown error',
     };
-  }
-
-  // Get alternatives for each unlocked activity
-  const updatedActivities = [...day.activities];
-  const allAlternatives: AlternativeActivity[] = [];
-  
-  // Build exclusion list - all current activity names plus ones we've already selected
-  const baseExclusions = currentDays.flatMap(d => 
-    d.activities.map(a => a.title || a.name).filter(Boolean)
-  ) as string[];
-
-  for (let i = 0; i < day.activities.length; i++) {
-    const activity = day.activities[i];
-    if (activity.isLocked) continue;
-    
-    // Add any alternatives we've already picked to the exclusion list
-    const usedAlternatives = allAlternatives.map(a => a.name);
-    const excludeActivities = [...baseExclusions, ...usedAlternatives];
-
-    const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
-      body: {
-        currentActivity: {
-          id: activity.id || `act-${dayIndex}-${i}`,
-          name: activity.title || activity.name || 'Activity',
-          type: activity.category || 'activity',
-          description: activity.description,
-        },
-        destination,
-        searchQuery: new_focus || '',
-        excludeActivities,
-      },
-    });
-
-    if (!error && data?.success && data.alternatives?.length > 0) {
-      const alternatives = data.alternatives as AlternativeActivity[];
-      allAlternatives.push(...alternatives);
-      
-      // Pick the best one
-      const best = alternatives[0];
-      updatedActivities[i] = {
-        ...activity,
-        id: best.id,
-        title: best.name,
-        name: best.name,
-        description: best.description,
-        category: best.category,
-        cost: { amount: best.estimatedCost },
-        location: { name: best.location },
-        isLocked: false,
-      };
-    }
   }
 
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = {
     ...day,
-    activities: updatedActivities,
-    theme: new_focus || day.theme,
+    ...data.day,
+    activities: data.day.activities || day.activities,
   };
 
-  // Update the trip in database
+  // The generator already persists; also update local trip copy for UI consistency
   await updateTripItinerary(tripId, updatedDays);
 
   return {
     success: true,
-    message: `Regenerated Day ${target_day}${new_focus ? ` with focus on "${new_focus}"` : ''}`,
+    message: `Refreshed Day ${target_day}${new_focus ? ` (more “${new_focus}”)` : ''} without breaking flight/arrival timing`,
     updatedDays,
-    alternatives: allAlternatives,
   };
 }
 
@@ -433,10 +480,13 @@ async function executeFilterAction(
   currentDays: ItineraryDay[],
   destination: string
 ): Promise<ActionExecutionResult> {
-  const { filter_type, filter_value, scope } = action.params as {
+  // NOTE: the chatbot tool schema uses scopes like "entire_trip"/"specific_day".
+  // Keep this parsing permissive so we don't accidentally apply a trip-wide rewrite.
+  const { filter_type, filter_value, scope, target_day } = action.params as {
     filter_type: string;
     filter_value: string;
-    scope?: 'all' | 'day';
+    scope?: 'all' | 'day' | 'entire_trip' | 'specific_day' | 'dining_only' | 'activities_only';
+    target_day?: number;
   };
 
   const searchQuery = `${filter_type}: ${filter_value}`;
@@ -444,14 +494,47 @@ async function executeFilterAction(
   const updatedDays = [...currentDays];
   let swapCount = 0;
 
+  const existingActivityNames = currentDays
+    .flatMap(d => d.activities.map(a => activityTitle(a)).filter(Boolean))
+    .map(s => s.trim());
+
+  // Determine which days to apply to
+  const normalizedScope = scope || 'entire_trip';
+  const dayIndexes: number[] = (() => {
+    if (normalizedScope === 'day' || normalizedScope === 'specific_day') {
+      if (!target_day) return [];
+      const idx = currentDays.findIndex(d => d.dayNumber === target_day);
+      return idx >= 0 ? [idx] : [];
+    }
+    return currentDays.map((_, idx) => idx);
+  })();
+
+  // For "romantic" and similar vibe filters: avoid rewriting the whole day.
+  // Make at most a couple swaps per day and never touch meals/logistics.
+  const maxSwapsPerDay = (filter_type === 'romantic' || filter_type === 'adventure' || filter_type === 'family_friendly')
+    ? 2
+    : 999;
+
   // Apply filter to relevant days
-  for (let dayIndex = 0; dayIndex < currentDays.length; dayIndex++) {
+  for (const dayIndex of dayIndexes) {
     const day = currentDays[dayIndex];
     const updatedActivities = [...day.activities];
+    let swapsThisDay = 0;
 
     for (let actIndex = 0; actIndex < day.activities.length; actIndex++) {
       const activity = day.activities[actIndex];
       if (activity.isLocked) continue;
+
+      // Guardrail: never touch arrival/transfer/check-in/out blocks via filters
+      if (isProtectedActivity(activity)) continue;
+
+      // Guardrail: keep meals unless filter explicitly targets dining
+      const diningOnly = normalizedScope === 'dining_only' || filter_type === 'dietary';
+      const activitiesOnly = normalizedScope === 'activities_only' || filter_type === 'romantic' || filter_type === 'adventure';
+      if (diningOnly && !isMealActivity(activity)) continue;
+      if (activitiesOnly && isMealActivity(activity)) continue;
+
+      if (swapsThisDay >= maxSwapsPerDay) continue;
 
       // For dietary/accessibility, focus on dining or relevant categories
       const shouldFilter = 
@@ -468,9 +551,12 @@ async function executeFilterAction(
             id: activity.id || `act-${dayIndex}-${actIndex}`,
             name: activity.title || activity.name || 'Activity',
             type: activity.category || 'activity',
+            description: activity.description,
+            time: activity.startTime || activity.time,
           },
           destination,
           searchQuery,
+          excludeActivities: existingActivityNames,
         },
       });
 
@@ -485,7 +571,12 @@ async function executeFilterAction(
           currentName.includes(newName) || 
           newName.includes(currentName);
         
-        if (!isSameActivity) {
+        // Simple dedupe for spammy concepts like multiple "sunset" blocks
+        const bestName = norm(best.name);
+        const wouldDuplicateSunset = bestName.includes('sunset') && hasKeywordInDay(day, 'sunset');
+        const wouldDuplicateOpera = bestName.includes('opera') && hasKeywordInDay(day, 'opera');
+
+        if (!isSameActivity && !wouldDuplicateSunset && !wouldDuplicateOpera) {
           allAlternatives.push(...alternatives);
           updatedActivities[actIndex] = {
             ...activity,
@@ -499,6 +590,7 @@ async function executeFilterAction(
             isLocked: false,
           };
           swapCount++;
+          swapsThisDay++;
         }
       }
     }
