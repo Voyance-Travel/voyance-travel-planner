@@ -1986,6 +1986,29 @@ serve(async (req) => {
 
           const to = activities[nextIndex];
 
+          // SMART CHECK: If the NEXT activity is itself a transport/transfer block,
+          // we don't need to show "transportation to next" - that would be redundant.
+          // Example: Arrival at Airport → Airport Transfer (the transfer IS the transport)
+          const toCategory = (to.category || to.type || '').toLowerCase();
+          const toTitle = (to.title || '').toLowerCase();
+          const isNextTransportBlock =
+            toCategory === 'transport' ||
+            toCategory === 'transportation' ||
+            to.timeBlockType === 'transport' ||
+            toTitle.includes('transfer') ||
+            toTitle.includes('taxi') ||
+            toTitle.includes('uber') ||
+            toTitle.includes('shuttle');
+
+          if (isNextTransportBlock) {
+            // Clear any existing transport - the next card IS the transport
+            if (from.transportation) {
+              activities[i] = { ...from, transportation: undefined };
+            }
+            console.log(`[optimize-itinerary] Skipping transport for "${from.title}" → "${to.title}" (next activity is transport)`);
+            continue;
+          }
+
           const originCoords = getCoordinates(from.location);
           const destCoords = getCoordinates(to.location);
 
