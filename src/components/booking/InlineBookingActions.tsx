@@ -96,11 +96,42 @@ const NON_BOOKABLE_KEYWORDS = [
   'airport transfer', 'transfer to airport', 'transfer to hotel',
   'arrival at', 'departure from',
   'hotel checkout', 'hotel check-out',
+  'rest', 'relax at hotel', 'hotel rest',
 ];
+
+// Activities that are part of a hotel/accommodation and shouldn't show external booking
+// These are hotel amenities, not separate bookable experiences
+const HOTEL_AMENITY_KEYWORDS = [
+  'spa', 'lounge', 'pool', 'gym', 'fitness', 'sauna', 'steam room',
+  'relaxation', 'wellness', 'massage', 'treatment',
+  'rooftop', 'terrace', 'bar at', 'hotel bar', 'lobby',
+  'st regis', 'ritz', 'four seasons', 'w hotel', 'marriott', 'hilton',
+  'hyatt', 'waldorf', 'peninsula', 'mandarin oriental', 'shangri-la',
+];
+
+// Categories that indicate accommodation-based activities
+const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel', 'lodging', 'resort', 'spa', 'wellness'];
 
 function isDiningActivity(title: string): boolean {
   const lowerTitle = title.toLowerCase();
   return DINING_KEYWORDS.some(keyword => lowerTitle.includes(keyword));
+}
+
+function isHotelAmenityActivity(title: string, category?: string): boolean {
+  const lowerTitle = title.toLowerCase();
+  const lowerCategory = (category || '').toLowerCase();
+  
+  // Check if category indicates accommodation/spa
+  if (ACCOMMODATION_CATEGORIES.some(cat => lowerCategory.includes(cat))) {
+    return true;
+  }
+  
+  // Check for hotel brand names or amenity keywords in title
+  if (HOTEL_AMENITY_KEYWORDS.some(keyword => lowerTitle.includes(keyword))) {
+    return true;
+  }
+  
+  return false;
 }
 
 function isNonBookableActivity(title: string, category?: string): boolean {
@@ -113,11 +144,50 @@ function isNonBookableActivity(title: string, category?: string): boolean {
   }
   
   // Check categories that should never show booking
-  if (['transport', 'transportation', 'accommodation', 'downtime', 'free_time'].includes(lowerCategory)) {
+  if (['transport', 'transportation', 'downtime', 'free_time'].includes(lowerCategory)) {
     return true;
   }
   
   return false;
+}
+
+/**
+ * Determine the appropriate link action for an activity
+ * Returns: 'none' | 'view_details' | 'view_menu' | 'find_restaurant' | 'vendor_booking'
+ */
+function getActivityLinkType(
+  title: string, 
+  category?: string,
+  hasViatorProduct?: boolean,
+  hasDirectUrl?: boolean
+): 'none' | 'view_details' | 'view_menu' | 'find_restaurant' | 'vendor_booking' {
+  // Non-bookable activities (free time, transfers, etc.) - no link
+  if (isNonBookableActivity(title, category)) {
+    return 'none';
+  }
+  
+  // Hotel amenities (spa, lounge, pool) - view details only if we have a URL
+  if (isHotelAmenityActivity(title, category)) {
+    return hasDirectUrl ? 'view_details' : 'none';
+  }
+  
+  // Dining activities - menu link
+  if (isDiningActivity(title)) {
+    return hasDirectUrl ? 'view_menu' : 'find_restaurant';
+  }
+  
+  // Regular bookable activities
+  if (hasViatorProduct) {
+    return 'vendor_booking';
+  }
+  
+  // External link available - show vendor booking
+  if (hasDirectUrl) {
+    return 'vendor_booking';
+  }
+  
+  // Fallback - generate a search
+  return 'vendor_booking';
 }
 
 export function InlineBookingActions({
@@ -145,9 +215,11 @@ export function InlineBookingActions({
   const quoteValid = isQuoteValid(activity.quoteExpiresAt);
   const quoteTimeRemaining = getQuoteTimeRemaining(activity.quoteExpiresAt);
   
-  // Determine booking mode
+  // Determine booking mode using the new link type system
   const hasViatorProduct = isViatorBookable(activity);
-  const canShowViatorLink = showVendorLink && !isDiningActivity(activity.title) && !isNonBookableActivity(activity.title, activity.category);
+  const hasDirectUrl = !!(activity.externalBookingUrl || activity.bookingUrl || activity.website);
+  const linkType = getActivityLinkType(activity.title, activity.category, hasViatorProduct, hasDirectUrl);
+  const canShowViatorLink = showVendorLink && linkType === 'vendor_booking';
 
   // Convert to BookableActivity format for the state machine
   const bookableActivity = {
@@ -175,17 +247,19 @@ export function InlineBookingActions({
   
   const primaryAction = getPrimaryAction(bookableActivity);
 
-  // If booking is not required, show external link or nothing
-  // Check for non-bookable activities FIRST (free time, transport, etc.)
-  if (isNonBookableActivity(activity.title, activity.category)) {
+  // Use the linkType to determine what to show
+  if (linkType === 'none') {
     return null;
   }
 
+  // If booking is not required, show appropriate link based on type
   if (!activity.bookingRequired) {
-    if (activity.website) {
+    const directUrl = activity.website || activity.externalBookingUrl || activity.bookingUrl;
+    
+    if (linkType === 'view_details' && directUrl) {
       return (
         <a
-          href={activity.website}
+          href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
@@ -195,16 +269,11 @@ export function InlineBookingActions({
         </a>
       );
     }
-    return null;
-  }
-
-  // Dining activities - show restaurant link if available instead of booking UI
-  if (isDiningActivity(activity.title)) {
-    const restaurantUrl = activity.website || activity.externalBookingUrl || activity.bookingUrl;
-    if (restaurantUrl) {
+    
+    if (linkType === 'view_menu' && directUrl) {
       return (
         <a
-          href={restaurantUrl}
+          href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
@@ -214,7 +283,62 @@ export function InlineBookingActions({
         </a>
       );
     }
-    // No URL available - generate a Google search for the restaurant
+    
+    if (linkType === 'find_restaurant') {
+      const searchQuery = encodeURIComponent(`${activity.title} ${destination} menu`);
+      return (
+        <a
+          href={`https://www.google.com/search?q=${searchQuery}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          Find Restaurant
+        </a>
+      );
+    }
+    
+    // For hotel amenities without URL, show nothing
+    if (isHotelAmenityActivity(activity.title, activity.category)) {
+      return null;
+    }
+    
+    // Otherwise show view details if we have a URL
+    if (directUrl) {
+      return (
+        <a
+          href={directUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          View Details
+        </a>
+      );
+    }
+    
+    return null;
+  }
+
+  // Dining activities - show restaurant link if available instead of booking UI
+  if (linkType === 'view_menu') {
+    const restaurantUrl = activity.website || activity.externalBookingUrl || activity.bookingUrl;
+    return (
+      <a
+        href={restaurantUrl!}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+      >
+        <ExternalLink className="h-3 w-3" />
+        View Menu
+      </a>
+    );
+  }
+  
+  if (linkType === 'find_restaurant') {
     const searchQuery = encodeURIComponent(`${activity.title} ${destination} menu`);
     return (
       <a
@@ -228,8 +352,6 @@ export function InlineBookingActions({
       </a>
     );
   }
-
-  // (Non-bookable check moved to top of component)
 
   // Handle primary action based on state
   const handlePrimaryAction = async () => {
