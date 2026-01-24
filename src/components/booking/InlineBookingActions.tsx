@@ -62,12 +62,15 @@ export interface InlineBookingActivity {
   vendorName?: string;
   bookedAt?: string;
   cancelledAt?: string;
+  /** Direct external booking URL (affiliate/vendor link) - use this over generated search URL */
   externalBookingUrl?: string;
   currency?: string;
   cost?: number;
+  /** Website for the activity venue/location - for "View Details" link */
   website?: string;
   // Viator API integration fields
   viatorProductCode?: string;
+  /** Booking URL from activity data - prioritize over generated search */
   bookingUrl?: string;
 }
 
@@ -269,20 +272,26 @@ export function InlineBookingActions({
         );
       }
       
-      // MODE 2: External link only - redirect to vendor search
+      // MODE 2: External link only - use actual URL if available, otherwise vendor search
       if (canShowViatorLink) {
+        // Prioritize actual booking URL from activity data over generated search
+        const actualBookingUrl = activity.externalBookingUrl || activity.bookingUrl || activity.website;
+        
         return (
           <div className="flex items-center gap-2">
             <VendorBookingLink
               activityName={activity.title}
               destination={destination}
+              externalBookingUrl={actualBookingUrl} // Pass actual URL to avoid wrong search results
               estimatedPrice={price}
               preferredVendor="viator"
               size="sm"
             />
-            <span className="text-[10px] text-muted-foreground">
-              External
-            </span>
+            {!actualBookingUrl && (
+              <span className="text-[10px] text-muted-foreground">
+                Search
+              </span>
+            )}
           </div>
         );
       }
