@@ -3,15 +3,21 @@
  * 
  * A compact, inline version of booking controls for use within ActivityRow.
  * Shows appropriate actions based on booking state.
+ * 
+ * BOOKING MODES:
+ * 1. Viator API Bookable: Has viatorProductCode - we process full transaction
+ * 2. External Link Only: No productCode - redirect to vendor search (no tracking)
+ * 3. Non-Bookable: Dining, logistics, free time - no booking UI shown
  */
 
 import { useState } from 'react';
 import { 
   ShoppingCart, Users, CreditCard, Ticket, XCircle, 
-  Timer, Check, AlertCircle, ExternalLink
+  Timer, Check, AlertCircle, ExternalLink, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
   BookingItemState,
@@ -28,6 +34,7 @@ import { TravelerInfoModal } from './TravelerInfoModal';
 import { VoucherModal } from './VoucherModal';
 import { formatPrice } from '@/utils/bookingUtils';
 import { VendorBookingLink } from './VendorBookingLink';
+import { isViatorBookable } from '@/services/viatorAPI';
 
 export interface InlineBookingActivity {
   id: string;
@@ -59,11 +66,16 @@ export interface InlineBookingActivity {
   currency?: string;
   cost?: number;
   website?: string;
+  // Viator API integration fields
+  viatorProductCode?: string;
+  bookingUrl?: string;
 }
 
 interface InlineBookingActionsProps {
   activity: InlineBookingActivity;
   destination: string;
+  travelDate?: string; // For availability checks
+  travelers?: { adults: number; children?: number };
   estimatedCost?: number;
   onPaymentRequest?: (activityId: string) => void;
   onStateChange?: (activityId: string, newState: BookingItemState) => void;
@@ -108,6 +120,8 @@ function isNonBookableActivity(title: string, category?: string): boolean {
 export function InlineBookingActions({
   activity,
   destination,
+  travelDate,
+  travelers,
   estimatedCost = 0,
   onPaymentRequest,
   onStateChange,
@@ -128,7 +142,8 @@ export function InlineBookingActions({
   const quoteValid = isQuoteValid(activity.quoteExpiresAt);
   const quoteTimeRemaining = getQuoteTimeRemaining(activity.quoteExpiresAt);
   
-  // Hide Viator booking link for dining and non-bookable activities
+  // Determine booking mode
+  const hasViatorProduct = isViatorBookable(activity);
   const canShowViatorLink = showVendorLink && !isDiningActivity(activity.title) && !isNonBookableActivity(activity.title, activity.category);
 
   // Convert to BookableActivity format for the state machine
@@ -222,20 +237,42 @@ export function InlineBookingActions({
   // Render based on booking state
   switch (bookingState) {
     case 'not_selected':
-      // Show "Add to Trip" or vendor link (but not for dining activities)
-      if (canShowViatorLink && !activity.externalBookingUrl) {
+      // MODE 1: Viator API Bookable - we process the full transaction
+      if (hasViatorProduct) {
+        return (
+          <TooltipProvider>
+            <div className="flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={handlePrimaryAction}
+                    disabled={selectMutation.isPending}
+                    className="gap-1.5 text-xs bg-primary"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {compact ? 'Book' : 'Book Now'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">Book instantly through Voyance • Confirmation in minutes</p>
+                </TooltipContent>
+              </Tooltip>
+              {price > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ~{formatPrice(price)}
+                </span>
+              )}
+            </div>
+          </TooltipProvider>
+        );
+      }
+      
+      // MODE 2: External link only - redirect to vendor search
+      if (canShowViatorLink) {
         return (
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handlePrimaryAction}
-              disabled={selectMutation.isPending}
-              className="gap-1.5 text-xs"
-            >
-              <ShoppingCart className="h-3 w-3" />
-              {compact ? 'Add' : 'Add to Trip'}
-            </Button>
             <VendorBookingLink
               activityName={activity.title}
               destination={destination}
@@ -243,9 +280,14 @@ export function InlineBookingActions({
               preferredVendor="viator"
               size="sm"
             />
+            <span className="text-[10px] text-muted-foreground">
+              External
+            </span>
           </div>
         );
       }
+      
+      // Fallback - basic add to trip (shouldn't happen often)
       return (
         <Button
           size="sm"
