@@ -1065,86 +1065,91 @@ async function getGoogleTransport(
   destinationName: string,
   mode: 'walking' | 'driving' | 'transit' = 'walking'
 ): Promise<TransportResult | null> {
-  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-  if (!apiKey) {
+  const mapsApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+
+  // For transit mode, try Routes API first (uses its own key)
+  if (mode === 'transit') {
+    try {
+      // Prefer Routes API (newer, uses dedicated GOOGLE_ROUTES_API_KEY)
+      const routesApiResult = await getGoogleRoutesTransitTransport(origin, destination, destinationName);
+      if (routesApiResult) return routesApiResult;
+
+      // Fallback to legacy Directions API if we have a Maps key
+      if (mapsApiKey) {
+        const originParam = toGoogleParam(origin);
+        const destParam = toGoogleParam(destination);
+        const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${originParam}&destination=${destParam}&mode=transit&departure_time=now&key=${mapsApiKey}`;
+        console.log(`[Transit] (Legacy Directions) Fetching directions for ${destinationName}`);
+
+        const directionsResponse = await fetch(directionsUrl);
+        const directionsData = await directionsResponse.json();
+
+        console.log(`[Transit] (Legacy Directions) API status: ${directionsData.status}`);
+
+        if (directionsData.status === 'OK' && directionsData.routes?.[0]?.legs?.[0]) {
+          const leg = directionsData.routes[0].legs[0];
+          const distanceMeters = leg.distance.value;
+          const durationMinutes = Math.round(leg.duration.value / 60);
+
+          const steps = leg.steps || [];
+          console.log(`[Transit] (Legacy Directions) Found ${steps.length} steps, transit steps: ${steps.filter((s: any) => (s.travel_mode || s.travelMode) === 'TRANSIT').length}`);
+
+          const transitDetails = extractTransitDetails(steps);
+          console.log(`[Transit] (Legacy Directions) Extracted details: ${transitDetails.summary || 'none'}`);
+
+          const costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
+
+          let instructions: string;
+          if (transitDetails.summary) {
+            instructions = transitDetails.summary;
+          } else {
+            const stepInstructions: string[] = [];
+            for (const step of steps) {
+              if ((step.travel_mode || step.travelMode) === 'TRANSIT' && step.html_instructions) {
+                const cleanInstruction = step.html_instructions.replace(/<[^>]*>/g, '');
+                stepInstructions.push(cleanInstruction);
+              }
+            }
+            if (stepInstructions.length > 0) {
+              instructions = stepInstructions.join(' → ');
+            } else {
+              instructions = `Take public transit (${leg.distance.text}) to ${destinationName}`;
+            }
+          }
+
+          return {
+            method: 'metro',
+            duration: `${durationMinutes} min`,
+            durationMinutes,
+            distance: leg.distance.text,
+            distanceMeters,
+            estimatedCost: { amount: costAmount, currency: 'USD' },
+            instructions,
+          };
+        } else if (directionsData.status === 'ZERO_RESULTS') {
+          console.log(`[Transit] (Legacy Directions) No transit routes found`);
+        } else {
+          console.log(`[Transit] (Legacy Directions) API error: ${directionsData.error_message || directionsData.status}`);
+        }
+      }
+      
+      // No transit result available
+      return null;
+    } catch (error) {
+      console.error("[optimize-itinerary] Transit API error:", error);
+      return null;
+    }
+  }
+
+  // For walking/driving modes, use Distance Matrix API (requires Maps key)
+  if (!mapsApiKey) {
     return null;
   }
 
   try {
     const originParam = toGoogleParam(origin);
     const destParam = toGoogleParam(destination);
-
-    // Use Directions API for transit to get detailed route info
-    if (mode === 'transit') {
-      // Prefer Routes API (newer) to avoid legacy Directions API activation issues.
-      const routesApiResult = await getGoogleRoutesTransitTransport(origin, destination, destinationName);
-      if (routesApiResult) return routesApiResult;
-
-      // Fallback to legacy Directions API (some keys/projects still support it)
-      const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${originParam}&destination=${destParam}&mode=transit&departure_time=now&key=${apiKey}`;
-      console.log(`[Transit] (Legacy Directions) Fetching directions for ${destinationName}`);
-
-      const directionsResponse = await fetch(directionsUrl);
-      const directionsData = await directionsResponse.json();
-
-      console.log(`[Transit] (Legacy Directions) API status: ${directionsData.status}`);
-
-      if (directionsData.status === 'OK' && directionsData.routes?.[0]?.legs?.[0]) {
-        const leg = directionsData.routes[0].legs[0];
-        const distanceMeters = leg.distance.value;
-        const durationMinutes = Math.round(leg.duration.value / 60);
-
-        // Log the steps for debugging
-        const steps = leg.steps || [];
-        console.log(`[Transit] (Legacy Directions) Found ${steps.length} steps, transit steps: ${steps.filter((s: any) => (s.travel_mode || s.travelMode) === 'TRANSIT').length}`);
-
-        // Extract transit line details
-        const transitDetails = extractTransitDetails(steps);
-        console.log(`[Transit] (Legacy Directions) Extracted details: ${transitDetails.summary || 'none'}`);
-
-        // Transit cost varies by city, estimate $2-5
-        const costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
-
-        // Build detailed instructions - use API's html_instructions as fallback
-        let instructions: string;
-        if (transitDetails.summary) {
-          instructions = transitDetails.summary;
-        } else {
-          // Try to build instructions from step summaries
-          const stepInstructions: string[] = [];
-          for (const step of steps) {
-            if ((step.travel_mode || step.travelMode) === 'TRANSIT' && step.html_instructions) {
-              // Clean HTML tags
-              const cleanInstruction = step.html_instructions.replace(/<[^>]*>/g, '');
-              stepInstructions.push(cleanInstruction);
-            }
-          }
-          if (stepInstructions.length > 0) {
-            instructions = stepInstructions.join(' → ');
-          } else {
-            instructions = `Take public transit (${leg.distance.text}) to ${destinationName}`;
-          }
-        }
-
-        return {
-          method: 'metro',
-          duration: `${durationMinutes} min`,
-          durationMinutes,
-          distance: leg.distance.text,
-          distanceMeters,
-          estimatedCost: { amount: costAmount, currency: 'USD' },
-          instructions,
-        };
-      } else if (directionsData.status === 'ZERO_RESULTS') {
-        console.log(`[Transit] (Legacy Directions) No transit routes found, falling back to driving`);
-        // No transit available, fall through to distance matrix for driving estimate
-      } else {
-        console.log(`[Transit] (Legacy Directions) API error: ${directionsData.error_message || directionsData.status}`);
-      }
-    }
-    
-    // Use Distance Matrix API for walking/driving (simpler, no route details needed)
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originParam}&destinations=${destParam}&mode=${mode}&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originParam}&destinations=${destParam}&mode=${mode}&key=${mapsApiKey}`;
     const response = await fetch(url);
     const data = await response.json();
 
@@ -1160,7 +1165,6 @@ async function getGoogleTransport(
     const distanceMeters = element.distance.value;
     const durationMinutes = Math.round(element.duration.value / 60);
 
-    // Estimate cost based on mode and distance
     let costAmount = 0;
     let displayMethod: string = mode;
     let instructions: string = '';
@@ -1170,7 +1174,6 @@ async function getGoogleTransport(
       displayMethod = 'walk';
       instructions = `Walk ${element.distance.text} to ${destinationName}`;
     } else if (mode === 'driving') {
-      // Rideshare: base fare + per-km rate
       const basefare = 3;
       const perKmRate = 1.8;
       costAmount = Math.round(basefare + (distanceMeters / 1000) * perKmRate);
@@ -1250,10 +1253,12 @@ async function getOptimalTransport(
   destination: GoogleLocationInput,
   destinationName: string
 ): Promise<TransportResult | null> {
-  const hasApiKey = !!Deno.env.get("GOOGLE_MAPS_API_KEY");
+  const hasMapsKey = !!Deno.env.get("GOOGLE_MAPS_API_KEY");
+  const hasRoutesKey = !!Deno.env.get("GOOGLE_ROUTES_API_KEY");
+  const hasAnyKey = hasMapsKey || hasRoutesKey;
 
-  if (!hasApiKey) {
-    console.log(`[Transport] No API key, falling back to heuristics`);
+  if (!hasAnyKey) {
+    console.log(`[Transport] No API keys, falling back to heuristics`);
     // Only possible fallback without Google is Haversine, which needs coords.
     if (typeof origin !== 'string' && typeof destination !== 'string') {
       return getHaversineTransport(origin, destination, destinationName);

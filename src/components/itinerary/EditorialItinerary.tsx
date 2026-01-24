@@ -3051,6 +3051,9 @@ function DayCard({
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
   
+  // Transport details toggle - collapsed by default to reduce visual noise
+  const [showTransportDetails, setShowTransportDetails] = useState(false);
+  
   // Normalize destination for image lookups
   const cleanDestination = normalizeDestination(destination);
   // Library modal state removed - agent features disabled
@@ -3098,6 +3101,16 @@ function DayCard({
                 {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
               </div>
             )}
+            {/* Transport Details Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowTransportDetails(prev => !prev)}
+              className={cn("h-8 w-8 hover:bg-primary/10", showTransportDetails && "bg-primary/10 text-primary")}
+              title={showTransportDetails ? 'Hide route details' : 'Show route details'}
+            >
+              <Route className="h-4 w-4" />
+            </Button>
             {isEditable && (
               <>
                 <Button
@@ -3159,6 +3172,7 @@ function DayCard({
                   budgetTier={budgetTier}
                   tripCurrency={tripCurrency}
                   tripId={tripId}
+                  showTransportDetails={showTransportDetails}
                   existingPayment={getPaymentForItem('activity', activity.id)}
                   onPaymentSuccess={refreshPayments}
                   onLock={onActivityLock}
@@ -3227,6 +3241,7 @@ interface ActivityRowProps {
   budgetTier?: string;
   tripCurrency: string; // User's preferred display currency
   tripId: string;
+  showTransportDetails: boolean; // Whether to show expanded transport info
   existingPayment?: TripPayment;
   onPaymentSuccess: () => void;
   onLock: (dayIndex: number, activityId: string) => void;
@@ -3250,6 +3265,7 @@ function ActivityRow({
   budgetTier,
   tripCurrency,
   tripId,
+  showTransportDetails,
   existingPayment,
   onPaymentSuccess,
   onLock,
@@ -3473,8 +3489,12 @@ function ActivityRow({
             {/* Transportation to next */}
             {activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
               <div className="flex flex-col gap-1 mt-2 p-2 bg-secondary/30 rounded border-l-2 border-primary/30">
+                {/* Compact summary - always visible */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Car className="h-3 w-3" />
+                  {activity.transportation.method === 'walk' && <MapPin className="h-3 w-3" />}
+                  {activity.transportation.method === 'metro' && <Train className="h-3 w-3" />}
+                  {(activity.transportation.method === 'uber' || activity.transportation.method === 'driving') && <Car className="h-3 w-3" />}
+                  {!['walk', 'metro', 'uber', 'driving'].includes(activity.transportation.method) && <Car className="h-3 w-3" />}
                   <span className="capitalize font-medium">{activity.transportation.method}</span>
                   {activity.transportation.duration && (
                     <span>• {activity.transportation.duration}</span>
@@ -3486,10 +3506,30 @@ function ActivityRow({
                     <span>• ~{formatCurrency(activity.transportation.estimatedCost.amount, activity.transportation.estimatedCost.currency || tripCurrency)}</span>
                   )}
                 </div>
-                {activity.transportation.instructions && (
-                  <p className="text-xs text-muted-foreground/80 pl-5">
-                    {activity.transportation.instructions}
-                  </p>
+                
+                {/* Expanded details - only when toggle is on */}
+                {showTransportDetails && activity.transportation.instructions && (
+                  <div className="mt-2 pl-5 space-y-1.5">
+                    {/* Parse instructions by → separator for step-by-step format */}
+                    {activity.transportation.instructions.includes('→') ? (
+                      activity.transportation.instructions.split('→').map((step, idx) => {
+                        const trimmedStep = step.trim();
+                        if (!trimmedStep) return null;
+                        return (
+                          <div key={idx} className="flex items-start gap-2 text-xs">
+                            <div className="flex items-center justify-center w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-medium shrink-0 mt-0.5">
+                              {idx + 1}
+                            </div>
+                            <span className="text-muted-foreground">{trimmedStep}</span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-muted-foreground/80">
+                        {activity.transportation.instructions}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
