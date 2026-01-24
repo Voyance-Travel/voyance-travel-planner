@@ -283,6 +283,425 @@ function deriveBudgetIntent(
 }
 
 // =============================================================================
+// UNIFIED USER CONTEXT NORMALIZATION
+// Merges Quiz (DNA), Preferences, and Adjustments (Overrides) into single context
+// =============================================================================
+
+interface NormalizedTraits {
+  planning: number;    // -10 to +10
+  social: number;      // -10 to +10
+  comfort: number;     // -10 to +10
+  pace: number;        // -10 to +10
+  authenticity: number; // -10 to +10
+  adventure: number;   // -10 to +10
+  budget: number;      // -10 to +10 (POSITIVE = frugal)
+  transformation: number; // -10 to +10
+}
+
+interface NormalizedUserContext {
+  // Effective trait scores (blended from all sources)
+  traits: NormalizedTraits;
+  
+  // Archetype information
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  archetypes: Array<{ name: string; pct: number; [key: string]: any }>;
+  
+  // Confidence score (adjusted based on data quality)
+  confidence: number; // 0-100
+  confidenceFactors: {
+    hasQuiz: boolean;
+    hasOverrides: boolean;
+    hasPreferences: boolean;
+    overrideCount: number;
+    quizCompleteness: number; // 0-1
+  };
+  
+  // Deduplicated preferences (quiz takes priority, preferences fill gaps)
+  preferences: {
+    // Persona
+    travelerType: string | null;
+    emotionalDrivers: string[];
+    travelVibes: string[];
+    travelCompanions: string[];
+    
+    // Style
+    interests: string[];
+    diningStyle: string | null;
+    planningPreference: string | null;
+    activityLevel: string | null;
+    
+    // Constraints
+    dietaryRestrictions: string[];
+    mobilityNeeds: string | null;
+    accessibilityNeeds: string | null;
+    
+    // Food
+    foodLikes: string[];
+    foodDislikes: string[];
+    
+    // Flight/Accommodation (from preferences only)
+    flightPreferences: string | null;
+    accommodationStyle: string | null;
+    climatePreferences: string[];
+    
+    // Eco
+    ecoFriendly: boolean;
+  };
+  
+  // Source tracking for transparency
+  sources: {
+    quizVersion: number | null;
+    preferencesUpdatedAt: string | null;
+    overridesApplied: string[];
+  };
+}
+
+// Blending weights
+const BLEND_WEIGHTS = {
+  QUIZ: 0.7,      // 70% weight to computed quiz results
+  OVERRIDE: 0.3,  // 30% weight to manual overrides
+} as const;
+
+// Confidence penalties
+const CONFIDENCE_PENALTIES = {
+  NO_QUIZ: -30,           // No quiz data
+  PARTIAL_QUIZ: -15,      // Quiz incomplete
+  PER_OVERRIDE: -3,       // Each override slightly reduces confidence
+  MAX_OVERRIDE_PENALTY: -15, // Cap override penalty
+  NO_PREFERENCES: -10,    // No preference data
+} as const;
+
+/**
+ * Blend a single trait value with an override using weighted average
+ */
+function blendTraitWithOverride(
+  quizValue: number | undefined,
+  overrideValue: number | undefined
+): number {
+  if (quizValue === undefined && overrideValue === undefined) return 0;
+  if (quizValue === undefined) return overrideValue ?? 0;
+  if (overrideValue === undefined) return quizValue;
+  
+  // Weighted blend: 70% quiz + 30% override
+  const blended = (quizValue * BLEND_WEIGHTS.QUIZ) + (overrideValue * BLEND_WEIGHTS.OVERRIDE);
+  // Round to 1 decimal place and clamp to -10 to +10
+  return Math.max(-10, Math.min(10, Math.round(blended * 10) / 10));
+}
+
+/**
+ * Calculate quiz completeness based on trait coverage
+ */
+function calculateQuizCompleteness(traitScores: Record<string, number> | undefined): number {
+  if (!traitScores) return 0;
+  
+  const requiredTraits = ['planning', 'social', 'comfort', 'pace', 'authenticity', 'adventure', 'budget', 'transformation'];
+  const presentTraits = requiredTraits.filter(t => 
+    traitScores[t] !== undefined && traitScores[t] !== 0
+  );
+  
+  return presentTraits.length / requiredTraits.length;
+}
+
+/**
+ * Deduplicate fields between quiz responses and preferences
+ * Quiz-derived values take priority; preferences fill gaps
+ */
+function deduplicatePreferences(
+  quizData: Record<string, unknown> | null,
+  prefsData: Record<string, unknown> | null
+): NormalizedUserContext['preferences'] {
+  const quiz = quizData || {};
+  const prefs = prefsData || {};
+  
+  // Helper: get first non-null value
+  const coalesce = <T>(...values: (T | null | undefined)[]): T | null => {
+    for (const v of values) {
+      if (v !== null && v !== undefined) return v;
+    }
+    return null;
+  };
+  
+  // Helper: merge arrays, quiz first
+  const mergeArrays = (quizArr: unknown, prefsArr: unknown): string[] => {
+    const q = Array.isArray(quizArr) ? quizArr : [];
+    const p = Array.isArray(prefsArr) ? prefsArr : [];
+    return [...new Set([...q, ...p])].filter(Boolean) as string[];
+  };
+  
+  return {
+    // Persona - quiz fields take priority
+    travelerType: coalesce(quiz.traveler_type, prefs.traveler_type) as string | null,
+    emotionalDrivers: mergeArrays(quiz.emotional_drivers, prefs.emotional_drivers),
+    travelVibes: mergeArrays(quiz.travel_vibes, prefs.travel_vibes),
+    travelCompanions: mergeArrays(quiz.travel_companions, prefs.travel_companions),
+    
+    // Style
+    interests: mergeArrays(quiz.interests, prefs.interests),
+    diningStyle: coalesce(quiz.dining_style, prefs.dining_style) as string | null,
+    planningPreference: coalesce(quiz.planning_preference, prefs.planning_preference) as string | null,
+    activityLevel: coalesce(quiz.activity_level, prefs.activity_level) as string | null,
+    
+    // Constraints - preferences typically more complete here
+    dietaryRestrictions: mergeArrays(prefs.dietary_restrictions, quiz.dietary_restrictions),
+    mobilityNeeds: coalesce(prefs.mobility_needs, quiz.mobility_needs) as string | null,
+    accessibilityNeeds: coalesce(prefs.accessibility_needs, quiz.accessibility_needs) as string | null,
+    
+    // Food
+    foodLikes: mergeArrays(prefs.food_likes, quiz.food_likes),
+    foodDislikes: mergeArrays(prefs.food_dislikes, quiz.food_dislikes),
+    
+    // Flight/Accommodation - preferences only
+    flightPreferences: prefs.flight_preferences as string | null,
+    accommodationStyle: coalesce(prefs.accommodation_style, prefs.hotel_style) as string | null,
+    climatePreferences: mergeArrays(prefs.climate_preferences, prefs.weather_preferences),
+    
+    // Eco
+    ecoFriendly: Boolean(prefs.eco_friendly || quiz.eco_friendly),
+  };
+}
+
+/**
+ * Normalize user context from 3 sources into unified structure
+ * 
+ * @param dna - Travel DNA profile (quiz results + archetype matching)
+ * @param overrides - Manual trait adjustments from user
+ * @param prefs - User preferences table data
+ * @returns Unified normalized context with blended traits and deduplicated preferences
+ */
+function normalizeUserContext(
+  dna: TravelDNAProfile | null,
+  overrides: Record<string, number> | null,
+  prefs: Record<string, unknown> | null
+): NormalizedUserContext {
+  // Extract trait scores from DNA
+  const quizTraits = dna?.trait_scores || {};
+  const overrideTraits = overrides || {};
+  
+  // Blend each trait
+  const blendedTraits: NormalizedTraits = {
+    planning: blendTraitWithOverride(quizTraits.planning, overrideTraits.planning),
+    social: blendTraitWithOverride(quizTraits.social, overrideTraits.social),
+    comfort: blendTraitWithOverride(quizTraits.comfort, overrideTraits.comfort),
+    pace: blendTraitWithOverride(quizTraits.pace, overrideTraits.pace),
+    authenticity: blendTraitWithOverride(quizTraits.authenticity, overrideTraits.authenticity),
+    adventure: blendTraitWithOverride(quizTraits.adventure, overrideTraits.adventure),
+    budget: blendTraitWithOverride(quizTraits.budget, overrideTraits.budget),
+    transformation: blendTraitWithOverride(quizTraits.transformation, overrideTraits.transformation),
+  };
+  
+  // Calculate confidence factors
+  const hasQuiz = Boolean(dna?.trait_scores && Object.keys(dna.trait_scores).length > 0);
+  const hasOverrides = Boolean(overrides && Object.keys(overrides).length > 0);
+  const hasPreferences = Boolean(prefs && Object.values(prefs).some(v => v !== null));
+  const overrideCount = overrides ? Object.keys(overrides).length : 0;
+  const quizCompleteness = calculateQuizCompleteness(dna?.trait_scores);
+  
+  // Calculate adjusted confidence
+  let baseConfidence = dna?.travel_dna_v2?.confidence ?? dna?.confidence ?? 50;
+  
+  // Apply penalties
+  if (!hasQuiz) {
+    baseConfidence += CONFIDENCE_PENALTIES.NO_QUIZ;
+  } else if (quizCompleteness < 0.8) {
+    baseConfidence += CONFIDENCE_PENALTIES.PARTIAL_QUIZ;
+  }
+  
+  if (!hasPreferences) {
+    baseConfidence += CONFIDENCE_PENALTIES.NO_PREFERENCES;
+  }
+  
+  // Override penalty (capped)
+  const overridePenalty = Math.max(
+    CONFIDENCE_PENALTIES.MAX_OVERRIDE_PENALTY,
+    overrideCount * CONFIDENCE_PENALTIES.PER_OVERRIDE
+  );
+  baseConfidence += overridePenalty;
+  
+  // Clamp to 0-100
+  const adjustedConfidence = Math.max(0, Math.min(100, Math.round(baseConfidence)));
+  
+  // Get archetypes (from DNA or infer)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let archetypes: Array<{ name: string; pct: number; [key: string]: any }> = 
+    dna?.travel_dna_v2?.archetype_matches || dna?.archetype_matches || [];
+  if (archetypes.length === 0 && hasQuiz) {
+    // Convert blended traits to Record<string, number> for inferArchetypesFromTraits
+    const traitsAsRecord: Record<string, number> = {
+      planning: blendedTraits.planning,
+      social: blendedTraits.social,
+      comfort: blendedTraits.comfort,
+      pace: blendedTraits.pace,
+      authenticity: blendedTraits.authenticity,
+      adventure: blendedTraits.adventure,
+      budget: blendedTraits.budget,
+      transformation: blendedTraits.transformation,
+    };
+    archetypes = inferArchetypesFromTraits(traitsAsRecord);
+  }
+  
+  // Deduplicate preferences
+  const deduplicatedPrefs = deduplicatePreferences(
+    dna?.travel_dna_v2 as Record<string, unknown> | null,
+    prefs
+  );
+  
+  // Track sources
+  const sources = {
+    quizVersion: dna?.dna_version ?? null,
+    preferencesUpdatedAt: null, // Would need to fetch from prefs table
+    overridesApplied: overrides ? Object.keys(overrides) : [],
+  };
+  
+  console.log('[NormalizeUserContext] Blended traits:', blendedTraits);
+  console.log(`[NormalizeUserContext] Confidence: ${adjustedConfidence} (base: ${dna?.confidence ?? 50}, penalties: quiz=${!hasQuiz ? -30 : quizCompleteness < 0.8 ? -15 : 0}, overrides=${overridePenalty})`);
+  
+  return {
+    traits: blendedTraits,
+    archetypes,
+    confidence: adjustedConfidence,
+    confidenceFactors: {
+      hasQuiz,
+      hasOverrides,
+      hasPreferences,
+      overrideCount,
+      quizCompleteness,
+    },
+    preferences: deduplicatedPrefs,
+    sources,
+  };
+}
+
+/**
+ * Build prompt context from normalized user context
+ * Uses the unified blended traits instead of raw sources
+ */
+function buildNormalizedPromptContext(
+  normalizedContext: NormalizedUserContext,
+  budgetIntent: BudgetIntent | null
+): string {
+  const sections: string[] = [];
+  
+  // SECTION 1: Budget Intent (already reconciled)
+  if (budgetIntent) {
+    let budgetSection = `\n${'='.repeat(60)}\n💰 BUDGET INTENT\n${'='.repeat(60)}`;
+    budgetSection += `\n🎯 ${budgetIntent.notes}`;
+    budgetSection += `\n✅ PRIORITIZE: ${budgetIntent.prioritize.slice(0, 3).join('; ')}`;
+    budgetSection += `\n❌ AVOID: ${budgetIntent.avoid.slice(0, 3).join('; ')}`;
+    budgetSection += `\n📊 Splurge cadence: ${budgetIntent.splurgeCadence.dinners} nice dinners, ${budgetIntent.splurgeCadence.experiences} premium experiences per trip`;
+    sections.push(budgetSection);
+  }
+  
+  // SECTION 2: Archetype Blend (from normalized context)
+  if (normalizedContext.archetypes.length > 0) {
+    const blendParts = normalizedContext.archetypes.slice(0, 3).map((a) => 
+      `${a.name.replace(/_/g, ' ')} (${Math.round(a.pct)}%)`
+    );
+    
+    const confidenceLabel = normalizedContext.confidence >= 80 ? 'High' : 
+                            normalizedContext.confidence >= 60 ? 'Moderate' : 'Uncertain';
+    
+    let personaSection = `\n${'='.repeat(60)}\n🧬 TRAVEL PERSONA\n${'='.repeat(60)}`;
+    personaSection += `\nArchetype Blend: ${blendParts.join(' + ')}`;
+    personaSection += `\nConfidence: ${normalizedContext.confidence}/100 (${confidenceLabel})`;
+    
+    // Confidence guidance
+    if (normalizedContext.confidence < 60) {
+      personaSection += `\n\n⚠️ LOW CONFIDENCE:`;
+      personaSection += `\n   - Profile has mixed signals or limited data`;
+      personaSection += `\n   - Include variety and avoid strong assumptions`;
+      if (normalizedContext.confidenceFactors.overrideCount > 2) {
+        personaSection += `\n   - User has adjusted ${normalizedContext.confidenceFactors.overrideCount} traits manually`;
+      }
+    }
+    
+    sections.push(personaSection);
+  }
+  
+  // SECTION 3: Trait Profile (blended, excluding budget/comfort)
+  const traitLabels: Record<string, [string, string]> = {
+    planning: ['Spontaneous', 'Detailed Planner'],
+    social: ['Solo/Intimate', 'Social/Group'],
+    pace: ['Relaxed', 'Fast-Paced'],
+    authenticity: ['Tourist-Friendly', 'Local/Authentic'],
+    adventure: ['Safe/Comfortable', 'Adventurous'],
+    transformation: ['Leisure', 'Growth-Focused'],
+  };
+  
+  let traitSection = `\n${'='.repeat(60)}\n📊 TRAIT PROFILE (Blended from Quiz + Adjustments)\n${'='.repeat(60)}`;
+  
+  for (const [trait, labels] of Object.entries(traitLabels)) {
+    const score = normalizedContext.traits[trait as keyof NormalizedTraits];
+    const direction = score > 0 ? labels[1] : score < 0 ? labels[0] : 'Balanced';
+    const intensity = Math.abs(score) >= 7 ? 'Strong' : Math.abs(score) >= 4 ? 'Moderate' : 'Slight';
+    traitSection += `\n   ${trait}: ${score > 0 ? '+' : ''}${score}/10 → ${intensity} ${direction}`;
+  }
+  
+  // Note if overrides were applied
+  if (normalizedContext.confidenceFactors.hasOverrides) {
+    const overrideList = normalizedContext.sources.overridesApplied.slice(0, 4).join(', ');
+    traitSection += `\n\n   ⚙️ User adjusted: ${overrideList}${normalizedContext.sources.overridesApplied.length > 4 ? '...' : ''}`;
+  }
+  
+  sections.push(traitSection);
+  
+  // SECTION 4: Deduplicated Preferences
+  const prefs = normalizedContext.preferences;
+  const prefItems: string[] = [];
+  
+  // Persona
+  if (prefs.travelerType) {
+    prefItems.push(`🧭 Traveler type: ${prefs.travelerType.replace(/_/g, ' ')}`);
+  }
+  if (prefs.emotionalDrivers.length > 0) {
+    prefItems.push(`💫 Emotional drivers: ${prefs.emotionalDrivers.slice(0, 4).join(', ')}`);
+  }
+  if (prefs.travelVibes.length > 0) {
+    prefItems.push(`🌍 Travel vibes: ${prefs.travelVibes.slice(0, 4).join(', ')}`);
+  }
+  if (prefs.travelCompanions.length > 0) {
+    prefItems.push(`👥 Travel companions: ${prefs.travelCompanions.join(', ')}`);
+  }
+  
+  // Style
+  if (prefs.interests.length > 0) {
+    prefItems.push(`🎯 Interests: ${prefs.interests.slice(0, 6).join(', ')}`);
+  }
+  if (prefs.diningStyle) {
+    prefItems.push(`🍽️ Dining style: ${prefs.diningStyle}`);
+  }
+  if (prefs.planningPreference) {
+    prefItems.push(`📋 Planning style: ${prefs.planningPreference}`);
+  }
+  
+  // Food
+  if (prefs.foodLikes.length > 0) {
+    prefItems.push(`✅ Food loves: ${prefs.foodLikes.slice(0, 5).join(', ')}`);
+  }
+  if (prefs.foodDislikes.length > 0) {
+    prefItems.push(`❌ Food avoid: ${prefs.foodDislikes.slice(0, 5).join(', ')}`);
+  }
+  
+  // Constraints
+  if (prefs.dietaryRestrictions.length > 0) {
+    prefItems.push(`⚠️ Dietary: ${prefs.dietaryRestrictions.join(', ')}`);
+  }
+  if (prefs.mobilityNeeds) {
+    prefItems.push(`♿ Mobility: ${prefs.mobilityNeeds}`);
+  }
+  if (prefs.ecoFriendly) {
+    prefItems.push(`🌱 Eco-conscious traveler`);
+  }
+  
+  if (prefItems.length > 0) {
+    let prefSection = `\n${'='.repeat(60)}\n🎭 UNIFIED PREFERENCES\n${'='.repeat(60)}`;
+    prefSection += '\n' + prefItems.join('\n');
+    sections.push(prefSection);
+  }
+  
+  return sections.join('\n');
+}
+
+// =============================================================================
 // RATE LIMITING - In-memory store (resets on cold start, but limits abuse)
 // =============================================================================
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
@@ -3008,27 +3427,51 @@ serve(async (req) => {
       }
       
       // =======================================================================
-      // TRAVEL DNA V2 - Archetype blend + trait scores for persona
+      // UNIFIED USER CONTEXT NORMALIZATION
+      // Merges Quiz (DNA) + Preferences + Adjustments into single context
       // =======================================================================
-      console.log("[Stage 1.3] Fetching Travel DNA v2...");
+      console.log("[Stage 1.3] Building unified user context...");
       const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
       const traitOverrides = userId ? await getTraitOverrides(supabase, userId) : null;
       
-      // Build Travel DNA context WITH budget intent reconciliation
-      // Now async to support structured event logging for conflicts
-      const travelDNAResult = await buildTravelDNAContext(travelDNA, traitOverrides, context.budgetTier, supabase, userId);
-      const travelDNAContext = travelDNAResult.context;
-      const budgetIntent = travelDNAResult.budgetIntent;
+      // Create normalized context with weighted blending
+      const normalizedContext = normalizeUserContext(travelDNA, traitOverrides, prefs);
       
-      if (travelDNA) {
-        const confidence = travelDNA.travel_dna_v2?.confidence ?? travelDNA.confidence ?? 75;
-        console.log(`[Stage 1.3] Travel DNA loaded: v${travelDNA.dna_version}, confidence=${confidence}`);
-      }
+      // Derive budget intent from normalized traits (reconciles tier + traits)
+      const budgetIntent = deriveBudgetIntent(
+        context.budgetTier,
+        normalizedContext.traits.budget,
+        normalizedContext.traits.comfort
+      );
       
-      // Log budget conflict summary (structured logging already done in buildTravelDNAContext)
+      // Build unified prompt context from normalized data
+      const unifiedDNAContext = buildNormalizedPromptContext(normalizedContext, budgetIntent);
+      
+      // Log normalization summary
+      console.log(`[Stage 1.3] Unified context: confidence=${normalizedContext.confidence}, archetypes=${normalizedContext.archetypes.length}, overrides=${normalizedContext.confidenceFactors.overrideCount}`);
+      
+      // Log budget conflict if detected
       if (budgetIntent?.conflict) {
-        console.log(`[Stage 1.3] 🚨 BUDGET CONFLICT FLAG: ${budgetIntent.conflictDetails}`);
+        console.log(`[Stage 1.3] 🚨 BUDGET CONFLICT: ${budgetIntent.conflictDetails}`);
         console.log(`[Stage 1.3] Reconciled to: ${budgetIntent.notes}`);
+        
+        // Log conflict event for analytics
+        try {
+          await supabase.from('voyance_events').insert({
+            user_id: userId,
+            event_type: 'budget_intent_conflict',
+            properties: {
+              budget_tier: context.budgetTier,
+              budget_trait: normalizedContext.traits.budget,
+              comfort_trait: normalizedContext.traits.comfort,
+              resolved_tier: budgetIntent.tier,
+              resolved_spend_style: budgetIntent.spendStyle,
+              confidence: normalizedContext.confidence,
+            },
+          });
+        } catch (logErr) {
+          console.warn('[Stage 1.3] Failed to log conflict event:', logErr);
+        }
       }
       
       // =======================================================================
@@ -3230,9 +3673,9 @@ serve(async (req) => {
       }
       
       // Combine all context for maximum personalization
-      // Order: Travel DNA → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED
-      // NOTE: Budget intent is now FIRST in travelDNAContext - single source of truth
-      const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext;
+      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED
+      // NOTE: unifiedDNAContext includes budget intent, archetypes, blended traits, and deduplicated preferences
+      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
