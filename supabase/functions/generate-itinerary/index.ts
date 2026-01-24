@@ -3176,10 +3176,63 @@ serve(async (req) => {
         console.warn("[Stage 1.7] Failed to fetch trip learnings:", learningsError);
       }
       
+      // STAGE 1.8: Fetch recently used activities for this destination to ensure variety
+      console.log("[Stage 1.8] Fetching recently used activities for variety...");
+      let recentlyUsedContext = "";
+      try {
+        // Get activities from recent trips to the same destination (last 30 days)
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const destinationLower = context.destination.toLowerCase();
+        
+        const { data: recentTrips } = await supabase
+          .from('trips')
+          .select('id, destination, itinerary_data')
+          .neq('id', tripId) // Exclude current trip
+          .gte('created_at', thirtyDaysAgo)
+          .not('itinerary_data', 'is', null)
+          .limit(10);
+        
+        if (recentTrips && recentTrips.length > 0) {
+          // Filter to same destination and extract activity titles
+          const recentActivityNames: string[] = [];
+          
+          for (const trip of recentTrips) {
+            const tripDest = (trip.destination || '').toLowerCase();
+            // Match if destination contains our destination or vice versa
+            if (tripDest.includes(destinationLower) || destinationLower.includes(tripDest)) {
+              const itineraryData = trip.itinerary_data as { days?: Array<{ activities?: Array<{ title?: string; name?: string }> }> };
+              if (itineraryData?.days) {
+                for (const day of itineraryData.days) {
+                  if (day.activities) {
+                    for (const act of day.activities) {
+                      const actName = act.title || act.name;
+                      if (actName && !recentActivityNames.includes(actName)) {
+                        recentActivityNames.push(actName);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          if (recentActivityNames.length > 0) {
+            // Limit to 20 most recent to keep prompt size reasonable
+            const topRecent = recentActivityNames.slice(0, 20);
+            recentlyUsedContext = `\n## ⚠️ RECENTLY USED (avoid for variety):\nThese activities/restaurants were recently used in other ${context.destination} itineraries. AVOID suggesting them to ensure unique experiences:\n- ${topRecent.join('\n- ')}\n`;
+            console.log(`[Stage 1.8] Found ${topRecent.length} recently used activities to avoid`);
+          }
+        } else {
+          console.log("[Stage 1.8] No recent trips to this destination found");
+        }
+      } catch (recentError) {
+        console.warn("[Stage 1.8] Failed to fetch recently used activities:", recentError);
+      }
+      
       // Combine all context for maximum personalization
-      // Order: Travel DNA → raw prefs → enriched prefs → flight/hotel → LEARNINGS (for improvement)
+      // Order: Travel DNA → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED
       // NOTE: Budget intent is now FIRST in travelDNAContext - single source of truth
-      const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext;
+      const preferenceContext = travelDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
