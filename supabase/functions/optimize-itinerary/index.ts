@@ -895,20 +895,59 @@ function toGoogleParam(loc: GoogleLocationInput): string {
   return typeof loc === 'string' ? encodeURIComponent(loc) : `${loc.lat},${loc.lng}`;
 }
 
+function metersToDistanceText(distanceMeters: number): string {
+  if (!Number.isFinite(distanceMeters)) return '';
+  if (distanceMeters < 1000) return `${Math.round(distanceMeters)}m`;
+  return `${(distanceMeters / 1000).toFixed(1)}km`;
+}
+
+function parseGoogleDurationToMinutes(duration: any): number {
+  // Routes API returns google.protobuf.Duration as a string like "123s".
+  if (typeof duration === 'string') {
+    const seconds = Number(duration.replace('s', ''));
+    return Number.isFinite(seconds) ? Math.round(seconds / 60) : 0;
+  }
+
+  // Some APIs return { seconds, nanos }
+  const seconds = Number(duration?.seconds);
+  if (Number.isFinite(seconds)) return Math.round(seconds / 60);
+
+  return 0;
+}
+
 // Extract transit details from Google Directions API response
 function extractTransitDetails(steps: any[]): { lines: string[]; summary: string } {
-  const transitSteps = steps.filter((s: any) => s.travel_mode === 'TRANSIT');
+  const transitSteps = steps.filter((s: any) => (s.travel_mode || s.travelMode) === 'TRANSIT');
   const lines: string[] = [];
   
   for (const step of transitSteps) {
-    const transit = step.transit_details;
+    // Supports both legacy Directions API (snake_case) and Routes API (camelCase)
+    const transit = step.transit_details || step.transitDetails;
     if (!transit) continue;
     
-    const lineName = transit.line?.short_name || transit.line?.name || '';
-    const vehicleType = transit.line?.vehicle?.type || 'TRANSIT';
-    const departureStop = transit.departure_stop?.name || '';
-    const arrivalStop = transit.arrival_stop?.name || '';
-    const numStops = transit.num_stops || 0;
+    const lineName =
+      transit.line?.short_name ||
+      transit.line?.name ||
+      transit.transitLine?.nameShort ||
+      transit.transitLine?.name ||
+      '';
+
+    const vehicleType =
+      transit.line?.vehicle?.type ||
+      transit.transitLine?.vehicle?.type ||
+      'TRANSIT';
+
+    const departureStop =
+      transit.departure_stop?.name ||
+      transit.stopDetails?.departureStop?.name ||
+      '';
+
+    const arrivalStop =
+      transit.arrival_stop?.name ||
+      transit.stopDetails?.arrivalStop?.name ||
+      '';
+
+    const numStops = transit.num_stops || transit.stopCount || 0;
     
     // Format: "Take M1 Metro from Gare du Nord to Châtelet (4 stops)"
     const vehicleLabel = vehicleType === 'SUBWAY' || vehicleType === 'METRO' ? 'Metro' 
@@ -934,6 +973,87 @@ function extractTransitDetails(steps: any[]): { lines: string[]; summary: string
   };
 }
 
+function toRoutesApiLocation(loc: GoogleLocationInput) {
+  if (typeof loc === 'string') return { address: loc };
+  return { location: { latLng: { latitude: loc.lat, longitude: loc.lng } } };
+}
+
+async function getGoogleRoutesTransitTransport(
+  origin: GoogleLocationInput,
+  destination: GoogleLocationInput,
+  destinationName: string,
+  apiKey: string
+): Promise<TransportResult | null> {
+  try {
+    const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+    const body = {
+      origin: toRoutesApiLocation(origin),
+      destination: toRoutesApiLocation(destination),
+      travelMode: 'TRANSIT',
+      computeAlternativeRoutes: false,
+      languageCode: 'en-US',
+      // departureTime: new Date().toISOString(), // optional; leaving unset is OK
+    };
+
+    const fieldMask = [
+      'routes.distanceMeters',
+      'routes.duration',
+      'routes.legs.steps.travelMode',
+      'routes.legs.steps.transitDetails',
+    ].join(',');
+
+    console.log(`[Transit] (Routes API) Fetching directions for ${destinationName}`);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': fieldMask,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      const msg = data?.error?.message || JSON.stringify(data);
+      console.log(`[Transit] (Routes API) HTTP ${res.status}: ${msg}`);
+      return null;
+    }
+
+    const route = data?.routes?.[0];
+    const leg = route?.legs?.[0];
+    const steps = leg?.steps || [];
+    const distanceMeters = Number(route?.distanceMeters ?? leg?.distanceMeters ?? 0);
+    const durationMinutes = parseGoogleDurationToMinutes(route?.duration ?? leg?.duration);
+
+    // Extract transit line details
+    const transitDetails = extractTransitDetails(steps);
+    console.log(`[Transit] (Routes API) Extracted details: ${transitDetails.summary || 'none'}`);
+
+    if (!transitDetails.summary) {
+      // If we can't get station/line data, treat as non-success so legacy/heuristics can try.
+      return null;
+    }
+
+    const costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
+
+    return {
+      method: 'metro',
+      duration: `${durationMinutes || 0} min`,
+      durationMinutes: durationMinutes || 0,
+      distance: metersToDistanceText(distanceMeters),
+      distanceMeters: distanceMeters || 0,
+      estimatedCost: { amount: costAmount, currency: 'USD' },
+      instructions: transitDetails.summary,
+    };
+  } catch (e) {
+    console.log(`[Transit] (Routes API) Error: ${String(e)}`);
+    return null;
+  }
+}
+
 async function getGoogleTransport(
   origin: GoogleLocationInput,
   destination: GoogleLocationInput,
@@ -951,30 +1071,35 @@ async function getGoogleTransport(
 
     // Use Directions API for transit to get detailed route info
     if (mode === 'transit') {
+      // Prefer Routes API (newer) to avoid legacy Directions API activation issues.
+      const routesApiResult = await getGoogleRoutesTransitTransport(origin, destination, destinationName, apiKey);
+      if (routesApiResult) return routesApiResult;
+
+      // Fallback to legacy Directions API (some keys/projects still support it)
       const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${originParam}&destination=${destParam}&mode=transit&departure_time=now&key=${apiKey}`;
-      console.log(`[Transit] Fetching directions for ${destinationName}`);
-      
+      console.log(`[Transit] (Legacy Directions) Fetching directions for ${destinationName}`);
+
       const directionsResponse = await fetch(directionsUrl);
       const directionsData = await directionsResponse.json();
-      
-      console.log(`[Transit] API status: ${directionsData.status}`);
-      
+
+      console.log(`[Transit] (Legacy Directions) API status: ${directionsData.status}`);
+
       if (directionsData.status === 'OK' && directionsData.routes?.[0]?.legs?.[0]) {
         const leg = directionsData.routes[0].legs[0];
         const distanceMeters = leg.distance.value;
         const durationMinutes = Math.round(leg.duration.value / 60);
-        
+
         // Log the steps for debugging
         const steps = leg.steps || [];
-        console.log(`[Transit] Found ${steps.length} steps, transit steps: ${steps.filter((s: any) => s.travel_mode === 'TRANSIT').length}`);
-        
+        console.log(`[Transit] (Legacy Directions) Found ${steps.length} steps, transit steps: ${steps.filter((s: any) => (s.travel_mode || s.travelMode) === 'TRANSIT').length}`);
+
         // Extract transit line details
         const transitDetails = extractTransitDetails(steps);
-        console.log(`[Transit] Extracted details: ${transitDetails.summary || 'none'}`);
-        
+        console.log(`[Transit] (Legacy Directions) Extracted details: ${transitDetails.summary || 'none'}`);
+
         // Transit cost varies by city, estimate $2-5
         const costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
-        
+
         // Build detailed instructions - use API's html_instructions as fallback
         let instructions: string;
         if (transitDetails.summary) {
@@ -983,7 +1108,7 @@ async function getGoogleTransport(
           // Try to build instructions from step summaries
           const stepInstructions: string[] = [];
           for (const step of steps) {
-            if (step.travel_mode === 'TRANSIT' && step.html_instructions) {
+            if ((step.travel_mode || step.travelMode) === 'TRANSIT' && step.html_instructions) {
               // Clean HTML tags
               const cleanInstruction = step.html_instructions.replace(/<[^>]*>/g, '');
               stepInstructions.push(cleanInstruction);
@@ -995,7 +1120,7 @@ async function getGoogleTransport(
             instructions = `Take public transit (${leg.distance.text}) to ${destinationName}`;
           }
         }
-        
+
         return {
           method: 'metro',
           duration: `${durationMinutes} min`,
@@ -1006,10 +1131,10 @@ async function getGoogleTransport(
           instructions,
         };
       } else if (directionsData.status === 'ZERO_RESULTS') {
-        console.log(`[Transit] No transit routes found, falling back to driving`);
+        console.log(`[Transit] (Legacy Directions) No transit routes found, falling back to driving`);
         // No transit available, fall through to distance matrix for driving estimate
       } else {
-        console.log(`[Transit] API error: ${directionsData.error_message || directionsData.status}`);
+        console.log(`[Transit] (Legacy Directions) API error: ${directionsData.error_message || directionsData.status}`);
       }
     }
     
