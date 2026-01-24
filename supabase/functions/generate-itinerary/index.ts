@@ -77,6 +77,29 @@ interface StrictDay {
   };
 }
 
+interface TravelAdvisory {
+  visaRequired?: boolean;
+  visaType?: string;
+  visaDetails?: string;
+  passportValidity?: string;
+  entryRequirements?: string[];
+  safetyLevel?: 'low-risk' | 'moderate' | 'elevated' | 'high-risk';
+  safetyAdvisory?: string;
+  healthRequirements?: string[];
+  currencyTips?: string;
+  importantNotes?: string[];
+  lastUpdated?: string;
+}
+
+interface LocalEventInfo {
+  name: string;
+  type: string;
+  dates: string;
+  location: string;
+  description: string;
+  isFree: boolean;
+}
+
 interface TripOverview {
   bestTimeToVisit?: string;
   currency?: string;
@@ -92,6 +115,8 @@ interface TripOverview {
   };
   highlights?: string[];
   localTips?: string[];
+  travelAdvisory?: TravelAdvisory;
+  localEvents?: LocalEventInfo[];
 }
 
 interface EnrichedItinerary {
@@ -3325,7 +3350,14 @@ async function enrichItinerary(
 // STAGE 5: TRIP OVERVIEW GENERATION
 // =============================================================================
 
-function generateTripOverview(days: StrictDay[], context: GenerationContext): TripOverview {
+function generateTripOverview(
+  days: StrictDay[], 
+  context: GenerationContext,
+  options?: {
+    travelAdvisory?: TravelAdvisory;
+    localEvents?: LocalEventInfo[];
+  }
+): TripOverview {
   console.log('[Stage 5] Generating trip overview');
 
   // Calculate budget breakdown
@@ -3372,10 +3404,20 @@ function generateTripOverview(days: StrictDay[], context: GenerationContext): Tr
       'Use public transportation for authentic experiences',
       'Learn a few phrases in the local language',
       'Keep some local currency for small vendors'
-    ]
+    ],
+    // Include AI-enriched travel advisory if available
+    ...(options?.travelAdvisory && { travelAdvisory: options.travelAdvisory }),
+    // Include local events if available
+    ...(options?.localEvents && options.localEvents.length > 0 && { localEvents: options.localEvents }),
   };
 
   console.log(`[Stage 5] Overview generated - Total budget: $${overview.budgetBreakdown?.total}`);
+  if (options?.travelAdvisory) {
+    console.log(`[Stage 5] Travel advisory included: safetyLevel=${options.travelAdvisory.safetyLevel}`);
+  }
+  if (options?.localEvents?.length) {
+    console.log(`[Stage 5] Local events included: ${options.localEvents.length} events`);
+  }
   return overview;
 }
 
@@ -3826,10 +3868,179 @@ serve(async (req) => {
         console.warn("[Stage 1.8] Failed to fetch recently used activities:", recentError);
       }
       
+      // STAGE 1.9: Fetch local events and travel advisory (AI-powered via Perplexity)
+      console.log("[Stage 1.9] Fetching local events and travel advisory...");
+      let localEventsContext = "";
+      let fetchedLocalEvents: LocalEventInfo[] = [];
+      let fetchedTravelAdvisory: TravelAdvisory | undefined;
+      
+      try {
+        const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+        
+        if (PERPLEXITY_API_KEY && context.startDate && context.endDate) {
+          // Fetch local events and travel advisory in parallel
+          const [eventsResponse, advisoryResponse] = await Promise.all([
+            // Local events lookup
+            fetch('https://api.perplexity.ai/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'sonar',
+                messages: [
+                  {
+                    role: 'system',
+                    content: `You are a local events researcher. Find festivals, concerts, exhibitions, sports events, cultural events, and special happenings.
+
+Return a JSON array of events:
+[
+  {
+    "name": "Event name",
+    "type": "festival|concert|exhibition|sports|cultural|market|other",
+    "dates": "Date range or specific date",
+    "location": "Venue or area",
+    "description": "Brief 1-2 sentence description",
+    "isFree": boolean,
+    "bestFor": "who this appeals to (e.g., 'art lovers', 'families', 'foodies')"
+  }
+]
+
+RULES:
+- Include ONLY events happening during the specified dates
+- Maximum 8 events, prioritize by significance
+- Return empty array [] if no events found
+- ONLY return valid JSON. No markdown.`
+                  },
+                  {
+                    role: 'user',
+                    content: `Find events and happenings in ${context.destination}${context.destinationCountry ? `, ${context.destinationCountry}` : ''} between ${context.startDate} and ${context.endDate}.`
+                  }
+                ],
+              }),
+            }),
+            // Travel advisory lookup
+            fetch('https://api.perplexity.ai/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'sonar',
+                messages: [
+                  {
+                    role: 'system',
+                    content: `You are a travel advisory specialist. Provide current, accurate information about entry requirements, safety, and health.
+
+Return a JSON object:
+{
+  "visaRequired": boolean,
+  "visaType": string or null,
+  "passportValidity": string or null,
+  "entryRequirements": [string],
+  "safetyLevel": "low-risk" | "moderate" | "elevated" | "high-risk",
+  "safetyAdvisory": string or null,
+  "healthRequirements": [string],
+  "currencyTips": string or null,
+  "importantNotes": [string],
+  "lastUpdated": "YYYY-MM-DD"
+}
+
+ONLY return valid JSON. No markdown.`
+                  },
+                  {
+                    role: 'user',
+                    content: `Get travel advisory for US citizens traveling to ${context.destination}${context.destinationCountry ? `, ${context.destinationCountry}` : ''}.`
+                  }
+                ],
+              }),
+            }),
+          ]);
+
+          // Process local events
+          if (eventsResponse.ok) {
+            const eventsData = await eventsResponse.json();
+            const content = eventsData.choices?.[0]?.message?.content?.trim() || '';
+            
+            try {
+              const jsonMatch = content.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                const events = JSON.parse(jsonMatch[0]);
+                
+                if (events && events.length > 0) {
+                  // Store for overview
+                  fetchedLocalEvents = events.map((e: any) => ({
+                    name: e.name,
+                    type: e.type,
+                    dates: e.dates,
+                    location: e.location,
+                    description: e.description,
+                    isFree: e.isFree || false,
+                  }));
+                  
+                  // Build context for AI prompt
+                  const eventLines = events.map((e: any) => 
+                    `- ${e.name} (${e.type}): ${e.dates} at ${e.location}. ${e.description}${e.isFree ? ' [FREE]' : ''} Best for: ${e.bestFor || 'general interest'}`
+                  ).join('\n');
+                  
+                  localEventsContext = `\n## 🎉 LOCAL EVENTS DURING TRIP
+The following events are happening during the traveler's visit. INCORPORATE relevant ones into the itinerary based on the traveler's interests:
+${eventLines}
+
+INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEAVE it into the appropriate day. For festivals/markets, schedule as a morning or afternoon activity. For concerts/evening events, replace a dinner or evening activity. Always mention the event is happening if you include it.
+`;
+                  console.log(`[Stage 1.9] Found ${events.length} local events to potentially include`);
+                }
+              }
+            } catch (parseErr) {
+              console.warn("[Stage 1.9] Failed to parse events:", parseErr);
+            }
+          } else {
+            console.warn(`[Stage 1.9] Events API error: ${eventsResponse.status}`);
+          }
+          
+          // Process travel advisory
+          if (advisoryResponse.ok) {
+            const advisoryData = await advisoryResponse.json();
+            const content = advisoryData.choices?.[0]?.message?.content?.trim() || '';
+            
+            try {
+              const jsonMatch = content.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const advisory = JSON.parse(jsonMatch[0]);
+                fetchedTravelAdvisory = {
+                  visaRequired: advisory.visaRequired,
+                  visaType: advisory.visaType,
+                  passportValidity: advisory.passportValidity,
+                  entryRequirements: advisory.entryRequirements || [],
+                  safetyLevel: advisory.safetyLevel,
+                  safetyAdvisory: advisory.safetyAdvisory,
+                  healthRequirements: advisory.healthRequirements || [],
+                  currencyTips: advisory.currencyTips,
+                  importantNotes: advisory.importantNotes || [],
+                  lastUpdated: advisory.lastUpdated || new Date().toISOString().split('T')[0],
+                };
+                console.log(`[Stage 1.9] Travel advisory: safetyLevel=${fetchedTravelAdvisory.safetyLevel}, visaRequired=${fetchedTravelAdvisory.visaRequired}`);
+              }
+            } catch (parseErr) {
+              console.warn("[Stage 1.9] Failed to parse travel advisory:", parseErr);
+            }
+          } else {
+            console.warn(`[Stage 1.9] Advisory API error: ${advisoryResponse.status}`);
+          }
+        } else {
+          console.log("[Stage 1.9] Skipping - Perplexity not configured or missing dates");
+        }
+      } catch (eventsError) {
+        console.warn("[Stage 1.9] Failed to fetch enrichment data:", eventsError);
+      }
+      
       // Combine all context for maximum personalization
-      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED
+      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS
       // NOTE: unifiedDNAContext includes budget intent, archetypes, blended traits, and deduplicated preferences
-      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext;
+      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
@@ -3953,8 +4164,11 @@ serve(async (req) => {
         enrichedDays = aiResult.days;
       }
 
-      // STAGE 5: Trip Overview
-      const overview = generateTripOverview(enrichedDays, context);
+      // STAGE 5: Trip Overview (with enriched data from Stage 1.9)
+      const overview = generateTripOverview(enrichedDays, context, {
+        travelAdvisory: fetchedTravelAdvisory,
+        localEvents: fetchedLocalEvents,
+      });
 
       // Build enrichment metadata from stats or calculate from days
       const totalActivities = enrichmentStats?.totalActivities || enrichedDays.reduce((sum, d) => sum + d.activities.length, 0);
