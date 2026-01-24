@@ -32,6 +32,7 @@ import { VendorBookingLink } from './VendorBookingLink';
 export interface InlineBookingActivity {
   id: string;
   title: string;
+  category?: string;
   bookingState?: BookingItemState;
   bookingRequired?: boolean;
   quotePriceCents?: number;
@@ -69,13 +70,39 @@ interface InlineBookingActionsProps {
   showVendorLink?: boolean;
   compact?: boolean;
 }
-
 // Activity types that cannot be booked on Viator (dining, restaurants, etc.)
 const DINING_KEYWORDS = ['dinner', 'lunch', 'breakfast', 'brunch', 'dining', 'restaurant', 'cafe', 'coffee', 'meal', 'eat at', 'food tour'];
+
+// Activities that should NEVER show booking UI (logistics, free time, hotel operations)
+const NON_BOOKABLE_KEYWORDS = [
+  'check-out', 'checkout', 'check out',
+  'check-in', 'checkin', 'check in',
+  'free time', 'downtime', 'leisure time', 'at leisure',
+  'airport transfer', 'transfer to airport', 'transfer to hotel',
+  'arrival at', 'departure from',
+  'hotel checkout', 'hotel check-out',
+];
 
 function isDiningActivity(title: string): boolean {
   const lowerTitle = title.toLowerCase();
   return DINING_KEYWORDS.some(keyword => lowerTitle.includes(keyword));
+}
+
+function isNonBookableActivity(title: string, category?: string): boolean {
+  const lowerTitle = title.toLowerCase();
+  const lowerCategory = (category || '').toLowerCase();
+  
+  // Check keywords
+  if (NON_BOOKABLE_KEYWORDS.some(keyword => lowerTitle.includes(keyword))) {
+    return true;
+  }
+  
+  // Check categories that should never show booking
+  if (['transport', 'transportation', 'accommodation', 'downtime', 'free_time'].includes(lowerCategory)) {
+    return true;
+  }
+  
+  return false;
 }
 
 export function InlineBookingActions({
@@ -101,8 +128,8 @@ export function InlineBookingActions({
   const quoteValid = isQuoteValid(activity.quoteExpiresAt);
   const quoteTimeRemaining = getQuoteTimeRemaining(activity.quoteExpiresAt);
   
-  // Hide Viator booking link for dining activities
-  const canShowViatorLink = showVendorLink && !isDiningActivity(activity.title);
+  // Hide Viator booking link for dining and non-bookable activities
+  const canShowViatorLink = showVendorLink && !isDiningActivity(activity.title) && !isNonBookableActivity(activity.title, activity.category);
 
   // Convert to BookableActivity format for the state machine
   const bookableActivity = {
@@ -150,6 +177,11 @@ export function InlineBookingActions({
 
   // Dining activities cannot be booked - no booking actions shown
   if (isDiningActivity(activity.title)) {
+    return null;
+  }
+
+  // Non-bookable activities (hotel checkout, free time, transport, etc.) - no booking UI
+  if (isNonBookableActivity(activity.title, activity.category)) {
     return null;
   }
 
