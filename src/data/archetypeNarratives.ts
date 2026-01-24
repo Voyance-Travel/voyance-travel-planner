@@ -446,6 +446,356 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     perfectTripPreview: "A week in the Maldives, overwater bungalow, no schedule, no obligations. Just you, the ocean, and the luxury of doing nothing.",
     emoji: "🏝️"
   },
+  digital_explorer: {
+    id: 'digital_explorer',
+    name: 'The Digital Explorer',
+    category: 'EXPLORER',
+    hookLine: "Your laptop is your passport extension.",
+    coreDescription: "You've cracked the code of working from anywhere. Coffee shops in Lisbon, co-working spaces in Bali, beach cafés in Thailand—your office has the best views in the world.",
+    whatThisMeans: [
+      "You know which cafés have the best WiFi",
+      "Time zones are puzzles you've mastered",
+      "You pack light but never forget your chargers",
+      "Work-life integration, not balance, is your mantra"
+    ],
+    superpowers: [
+      "Productivity in any environment",
+      "Building global professional networks",
+      "Finding the perfect remote work spots"
+    ],
+    growthEdges: [
+      "Disconnect to truly connect",
+      "Some experiences require your full attention",
+      "Boundaries between work and travel matter"
+    ],
+    perfectTripPreview: "Three months in Southeast Asia, hopping between Bali, Chiang Mai, and Saigon, meeting fellow nomads while crushing deadlines with ocean views.",
+    emoji: "💻"
+  },
+  social_butterfly: {
+    id: 'social_butterfly',
+    name: 'The Social Butterfly',
+    category: 'CONNECTOR',
+    hookLine: "Every stranger is a friend you haven't met.",
+    coreDescription: "Your trips are measured in friendships made, not miles traveled. You collect people, not passport stamps. Hostels, group tours, and communal tables are your natural habitat.",
+    whatThisMeans: [
+      "Solo travel means making new friends",
+      "You've joined strangers for dinner worldwide",
+      "Group trips energize rather than drain you",
+      "You stay in touch with travel friends for years"
+    ],
+    superpowers: [
+      "Breaking ice in any culture",
+      "Turning acquaintances into lifelong friends",
+      "Creating instant travel families"
+    ],
+    growthEdges: [
+      "Solo reflection has its gifts",
+      "Quality over quantity in connections",
+      "Not every encounter needs to be a friendship"
+    ],
+    perfectTripPreview: "A group tour through the Balkans, ending with a WhatsApp group of 20 new friends and plans to reunite in three countries next year.",
+    emoji: "🦋"
+  },
+  romantic_curator: {
+    id: 'romantic_curator',
+    name: 'The Romantic Curator',
+    category: 'CONNECTOR',
+    hookLine: "Love is better with a view.",
+    coreDescription: "You design journeys that deepen bonds. Whether honeymoon or anniversary, every detail is choreographed for connection. Sunset dinners, private tours, and memory-making are your specialty.",
+    whatThisMeans: [
+      "You research romantic restaurants months ahead",
+      "Surprises are part of every itinerary",
+      "You notice the little details that matter",
+      "Creating shared memories is your love language"
+    ],
+    superpowers: [
+      "Curating perfect romantic moments",
+      "Reading your partner's travel preferences",
+      "Turning ordinary moments into extraordinary memories"
+    ],
+    growthEdges: [
+      "Spontaneity can be romantic too",
+      "Individual adventures strengthen partnerships",
+      "Not every moment needs to be Instagram-perfect"
+    ],
+    perfectTripPreview: "Santorini with cliffside dinners, private wine tastings, sunset sailing, and a surprise vow renewal on a hidden beach.",
+    emoji: "💕"
+  },
+  bucket_list_conqueror: {
+    id: 'bucket_list_conqueror',
+    name: 'The Bucket List Conqueror',
+    category: 'ACHIEVER',
+    hookLine: "Life is a checklist of wonders.",
+    coreDescription: "You have a list, and you're checking it twice. From the Northern Lights to Machu Picchu, you approach travel with purpose. Every trip brings you closer to seeing it all.",
+    whatThisMeans: [
+      "You've got a spreadsheet of destinations",
+      "Limited edition experiences excite you",
+      "You plan around natural phenomena and events",
+      "FOMO is real and you embrace it"
+    ],
+    superpowers: [
+      "Efficient trip planning and execution",
+      "Prioritizing what matters most",
+      "Creating a life full of incredible stories"
+    ],
+    growthEdges: [
+      "Some magic isn't on any list",
+      "Revisiting favorites has its own joy",
+      "The journey matters as much as the destination"
+    ],
+    perfectTripPreview: "Northern Lights in Iceland, followed by the Pyramids, then the Galápagos—three bucket list items in one epic year.",
+    emoji: "✓"
+  },
+  collection_curator: {
+    id: 'collection_curator',
+    name: 'The Collection Curator',
+    category: 'ACHIEVER',
+    hookLine: "Countries collected, stamps earned.",
+    coreDescription: "You're on a mission to see the world, systematically. Whether it's every country, every continent, or every UNESCO site, you approach travel as a magnificent collection to complete.",
+    whatThisMeans: [
+      "You track your travel statistics",
+      "Border crossings excite you",
+      "You've visited countries others haven't heard of",
+      "The map on your wall has more pins than blank spaces"
+    ],
+    superpowers: [
+      "Geographic knowledge that impresses",
+      "Efficient multi-country logistics",
+      "Stories from truly obscure places"
+    ],
+    growthEdges: [
+      "Depth can matter more than breadth",
+      "Some countries deserve more than a flyby",
+      "Quality of experience over quantity of stamps"
+    ],
+    perfectTripPreview: "A month-long trip hitting 8 countries in Central Asia, ticking off the -stans while collecting stories from the Silk Road.",
+    emoji: "🗺️"
+  },
+  status_seeker: {
+    id: 'status_seeker',
+    name: 'The Status Seeker',
+    category: 'ACHIEVER',
+    hookLine: "First class isn't a seat, it's a lifestyle.",
+    coreDescription: "You've earned the right to travel in style. Elite status, private experiences, and VIP access are your rewards for hard work. Travel is both pleasure and proof of success.",
+    whatThisMeans: [
+      "Your loyalty program tiers are impressive",
+      "You know which credit cards unlock which perks",
+      "Exclusive experiences are worth the premium",
+      "Your travel stories inspire and impress"
+    ],
+    superpowers: [
+      "Maximizing value from status and points",
+      "Accessing experiences others can't",
+      "Traveling in comfort and style"
+    ],
+    growthEdges: [
+      "The best experiences aren't always exclusive",
+      "Authentic connection transcends class",
+      "Sometimes the local way is the better way"
+    ],
+    perfectTripPreview: "First class to Dubai, Burj Al Arab suite, helicopter tour, and a desert dinner under the stars—all on points and status perks.",
+    emoji: "👑"
+  },
+  retreat_regular: {
+    id: 'retreat_regular',
+    name: 'The Retreat Regular',
+    category: 'RESTORER',
+    hookLine: "Wellness isn't a trend, it's a lifestyle.",
+    coreDescription: "You don't vacation, you retreat. Yoga camps, detox programs, silent retreats—travel is your commitment to becoming your best self. You return transformed, not just rested.",
+    whatThisMeans: [
+      "You've done juice cleanses in exotic locations",
+      "Meditation is part of your travel routine",
+      "You research wellness programs like others research hotels",
+      "Your packing includes yoga mats and journals"
+    ],
+    superpowers: [
+      "Prioritizing true self-care",
+      "Finding transformation through travel",
+      "Returning as an upgraded version of yourself"
+    ],
+    growthEdges: [
+      "Sometimes indulgence is wellness too",
+      "Not every trip needs a program",
+      "Relaxation can be unstructured"
+    ],
+    perfectTripPreview: "A 10-day Ayurvedic retreat in Kerala, daily yoga, personalized treatments, and meditation—returning with new habits and inner peace.",
+    emoji: "🧖"
+  },
+  beach_therapist: {
+    id: 'beach_therapist',
+    name: 'The Beach Therapist',
+    category: 'RESTORER',
+    hookLine: "Salt water heals everything.",
+    coreDescription: "The ocean is your therapist, the beach your couch. You understand the healing power of waves, sand, and horizon. Vitamin Sea is your prescription, and you fill it often.",
+    whatThisMeans: [
+      "You judge destinations by their beaches",
+      "You own an impressive collection of swimwear",
+      "Ocean sounds are your sleep soundtrack",
+      "You've found paradise in multiple countries"
+    ],
+    superpowers: [
+      "Finding the perfect beach anywhere",
+      "Total relaxation in coastal settings",
+      "Returning sun-kissed and soul-restored"
+    ],
+    growthEdges: [
+      "Mountains have their own magic",
+      "Cities offer unexpected restoration",
+      "Adventure can coexist with beach time"
+    ],
+    perfectTripPreview: "Two weeks island-hopping in Greece, from Santorini's shores to hidden Cycladic beaches, with nothing but sun, sea, and serenity.",
+    emoji: "🏖️"
+  },
+  art_aficionado: {
+    id: 'art_aficionado',
+    name: 'The Art Aficionado',
+    category: 'CURATOR',
+    hookLine: "Every gallery is a pilgrimage.",
+    coreDescription: "You travel to witness human creativity. Museums are your temples, galleries your sanctuaries. You plan trips around exhibitions and leave with a deeper appreciation of beauty.",
+    whatThisMeans: [
+      "You've cried in front of a painting",
+      "You book museum tickets before flights",
+      "Street art tours excite you",
+      "You can name artists in any city you visit"
+    ],
+    superpowers: [
+      "Seeing beauty others miss",
+      "Understanding cultures through their art",
+      "Creating deeply meaningful cultural experiences"
+    ],
+    growthEdges: [
+      "Nature is art too",
+      "Not every moment needs curation",
+      "Sometimes the best art is lived, not viewed"
+    ],
+    perfectTripPreview: "A week in Florence, Uffizi deep dive, Accademia at dawn, discovering Renaissance gems in tiny chapels, and art history brought to life.",
+    emoji: "🎨"
+  },
+  eco_ethicist: {
+    id: 'eco_ethicist',
+    name: 'The Eco Ethicist',
+    category: 'CURATOR',
+    hookLine: "Leave nothing but footprints.",
+    coreDescription: "You travel with purpose and principles. Carbon footprints, local impact, and sustainable choices guide your decisions. You prove that responsible travel can be extraordinary.",
+    whatThisMeans: [
+      "You research a destination's sustainability practices",
+      "You choose eco-lodges and carbon offsets",
+      "Local and ethical matter to your choices",
+      "You leave places better than you found them"
+    ],
+    superpowers: [
+      "Finding sustainable options anywhere",
+      "Inspiring others to travel responsibly",
+      "Connecting with nature and communities"
+    ],
+    growthEdges: [
+      "Perfect isn't the enemy of good",
+      "Sometimes convenience is okay",
+      "Enjoy without guilt when you've done your best"
+    ],
+    perfectTripPreview: "Costa Rica eco-lodge hopping, wildlife conservation volunteering, and sustainable coffee farm tours—all carbon offset and locally sourced.",
+    emoji: "🌱"
+  },
+  gap_year_graduate: {
+    id: 'gap_year_graduate',
+    name: 'The Gap Year Graduate',
+    category: 'TRANSFORMER',
+    hookLine: "The world is the ultimate classroom.",
+    coreDescription: "Travel shaped who you are. Those months of backpacking, teaching, or volunteering taught you more than any degree. You carry that transformative spirit into every journey.",
+    whatThisMeans: [
+      "You've lived out of a backpack for months",
+      "You've worked odd jobs in foreign countries",
+      "Budget travel doesn't scare you",
+      "You see travel as education"
+    ],
+    superpowers: [
+      "Adapting to any situation",
+      "Finding meaning in uncomfortable moments",
+      "Connecting deeply across cultures"
+    ],
+    growthEdges: [
+      "Comfort isn't selling out",
+      "You can grow without struggle",
+      "Sometimes a nice hotel is okay"
+    ],
+    perfectTripPreview: "Three months through South America, teaching English, learning Spanish, and returning with a completely different worldview.",
+    emoji: "🎒"
+  },
+  midlife_explorer: {
+    id: 'midlife_explorer',
+    name: 'The Midlife Explorer',
+    category: 'TRANSFORMER',
+    hookLine: "It's never too late to become who you were meant to be.",
+    coreDescription: "You're rewriting your travel story. Life experience has taught you what matters, and now you're going after it. These trips aren't escapes—they're homecomings to your true self.",
+    whatThisMeans: [
+      "You travel with intention and appreciation",
+      "Dreams deferred are now dreams pursued",
+      "Quality over quantity in every choice",
+      "You've stopped waiting for 'someday'"
+    ],
+    superpowers: [
+      "Knowing exactly what you want",
+      "Appreciating experiences deeply",
+      "Inspiring others to take the leap"
+    ],
+    growthEdges: [
+      "Youth has its own wisdom",
+      "Spontaneity keeps you young",
+      "Not every trip needs deep meaning"
+    ],
+    perfectTripPreview: "Finally taking that dream trip to Japan, cherry blossoms in Kyoto, ryokan stays, and discovering that it's better than you imagined.",
+    emoji: "🦅"
+  },
+  sabbatical_scholar: {
+    id: 'sabbatical_scholar',
+    name: 'The Sabbatical Scholar',
+    category: 'TRANSFORMER',
+    hookLine: "Taking time off to find time on.",
+    coreDescription: "You've carved out extended time to travel with purpose. Language immersion, creative projects, or deep rest—your sabbatical is an investment in your next chapter.",
+    whatThisMeans: [
+      "You've planned a significant career break",
+      "Learning is central to your travels",
+      "You rent apartments, not hotel rooms",
+      "You return with new skills and perspectives"
+    ],
+    superpowers: [
+      "Long-term planning and commitment",
+      "Deep immersion in new environments",
+      "Returning transformed and renewed"
+    ],
+    growthEdges: [
+      "You don't need months to find meaning",
+      "Weekend trips can be transformative too",
+      "Structure isn't always the enemy"
+    ],
+    perfectTripPreview: "Six months in Spain: intensive Spanish school, writing that novel, and returning fluent with a finished manuscript.",
+    emoji: "📚"
+  },
+  healing_journeyer: {
+    id: 'healing_journeyer',
+    name: 'The Healing Journeyer',
+    category: 'TRANSFORMER',
+    hookLine: "Travel is the medicine for the soul.",
+    coreDescription: "You travel to heal. Whether grief, burnout, or life transition, the road has been your path to recovery. You understand that sometimes the best way through is away.",
+    whatThisMeans: [
+      "You've used travel as therapy",
+      "Sacred places call to you",
+      "You return from trips emotionally renewed",
+      "Transformation is the goal, not distraction"
+    ],
+    superpowers: [
+      "Processing life through journey",
+      "Finding peace in new places",
+      "Emerging stronger from travel"
+    ],
+    growthEdges: [
+      "Home can hold healing too",
+      "Running toward beats running from",
+      "Professional help complements travel therapy"
+    ],
+    perfectTripPreview: "A pilgrimage on the Camino de Santiago, walking through grief, meeting fellow seekers, and arriving in Santiago transformed.",
+    emoji: "🕊️"
+  },
 };
 
 export function getArchetypeNarrative(archetypeId: string): ArchetypeNarrative {
