@@ -561,7 +561,7 @@ const LEGACY_ANSWER_MAPPINGS: Record<string, AnswerDelta> = {
   // Traveler type
   'explorer': { deltas: { adventure: 4, authenticity: 5, transformation: 3 }, label: 'Explorer type' },
   'escape_artist': { deltas: { pace: -5, comfort: 3, transformation: 4 }, label: 'Escape artist' },
-  'curated_luxe': { deltas: { comfort: 6, planning: 4, budget: 5 }, label: 'Curated luxe' },
+  'curated_luxe': { deltas: { comfort: 6, planning: 4, budget: -5 }, label: 'Curated luxe' },  // FIXED: negative = splurge (luxury curator)
   'story_seeker': { deltas: { social: 5, authenticity: 4, transformation: 3 }, label: 'Story seeker' },
   
   // Vibes
@@ -718,22 +718,18 @@ const QUESTION_MAPPINGS: Record<string, Record<string, AnswerDelta>> = {
 // IMPORTANT: All question IDs here MUST exist in the quiz schema!
 // ============================================================================
 
-// Valid quiz question IDs that the frontend can render
+// Valid quiz question IDs derived from QUESTION_MAPPINGS (single source of truth)
+// Plus a few disambiguation-specific questions that may not be in QUESTION_MAPPINGS yet
 const VALID_QUIZ_QUESTION_IDS = new Set([
-  // Core quiz questions
-  'traveler_type', 'travel_vibes', 'budget', 'pace', 'planning_style',
-  'travel_companions', 'interests', 'accommodation', 'hotel_priorities',
-  'dining_style', 'weather_preference', 'flight_preferences',
-  // V2 quiz questions
-  'morning_routine', 'dream_destination', 'budget_style', 'pace_style',
-  'planning_preference', 'companions', 'activities', 'accommodation_style',
-  'climate', 'trip_length',
+  ...Object.keys(QUESTION_MAPPINGS),
   // Disambiguation-specific questions (must be added to quiz if not present)
   'splurge_priority', 'activity_density', 'service_level',
 ]);
 
-// Fallback safe questions that always exist
-const SAFE_FALLBACK_QUESTIONS = ['budget', 'pace', 'interests'];
+// Fallback safe questions that always exist in QUESTION_MAPPINGS
+const SAFE_FALLBACK_QUESTIONS = Object.keys(QUESTION_MAPPINGS).includes('budget') 
+  ? ['budget', 'pace', 'interests'] 
+  : ['traveler_type', 'travel_vibes'];
 
 const DISAMBIGUATION_QUESTIONS_BY_TRAIT: Record<Trait, string[]> = {
   pace: ['pace_style', 'activity_density', 'pace'],
@@ -1649,11 +1645,20 @@ serve(async (req) => {
     // This catches polarity drift during development
     const luxuryDelta = LEGACY_ANSWER_MAPPINGS.luxury?.deltas?.budget;
     const budgetDelta = LEGACY_ANSWER_MAPPINGS.budget?.deltas?.budget;
+    const curatedLuxeDelta = LEGACY_ANSWER_MAPPINGS.curated_luxe?.deltas?.budget;
+    const premiumDelta = LEGACY_ANSWER_MAPPINGS.premium?.deltas?.budget;
+    
     if (luxuryDelta !== undefined && luxuryDelta > 0) {
       console.error('[TravelDNA V2 POLARITY ERROR] luxury delta is positive; expected negative under POSITIVE_IS_FRUGAL');
     }
     if (budgetDelta !== undefined && budgetDelta < 0) {
       console.error('[TravelDNA V2 POLARITY ERROR] budget delta is negative; expected positive under POSITIVE_IS_FRUGAL');
+    }
+    if (curatedLuxeDelta !== undefined && curatedLuxeDelta > 0) {
+      console.error('[TravelDNA V2 POLARITY ERROR] curated_luxe delta is positive; expected negative under POSITIVE_IS_FRUGAL');
+    }
+    if (premiumDelta !== undefined && premiumDelta > 0) {
+      console.error('[TravelDNA V2 POLARITY ERROR] premium delta is positive; expected negative under POSITIVE_IS_FRUGAL');
     }
     
     // Step 1: Calculate trait scores with contributions
