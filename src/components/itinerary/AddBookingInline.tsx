@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Hotel, Plus, ArrowRight } from 'lucide-react';
+import { Plane, Hotel, Plus, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,8 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
+import { enrichHotel } from '@/services/hotelAPI';
 
 // Types for manual entry
 export interface ManualFlightEntry {
@@ -206,18 +208,18 @@ export function AddFlightInline({
                 </div>
                 <div>
                   <Label className="text-xs">From (Airport)</Label>
-                  <Input
-                    placeholder="e.g. JFK"
+                  <AirportAutocomplete
                     value={outboundFlight.departureAirport}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureAirport: e.target.value }))}
+                    onChange={(code) => setOutboundFlight(prev => ({ ...prev, departureAirport: code }))}
+                    placeholder="e.g. JFK"
                   />
                 </div>
                 <div>
                   <Label className="text-xs">To (Airport)</Label>
-                  <Input
-                    placeholder="e.g. CDG"
+                  <AirportAutocomplete
                     value={outboundFlight.arrivalAirport}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, arrivalAirport: e.target.value }))}
+                    onChange={(code) => setOutboundFlight(prev => ({ ...prev, arrivalAirport: code }))}
+                    placeholder="e.g. CDG"
                   />
                 </div>
                 <div>
@@ -264,18 +266,18 @@ export function AddFlightInline({
                 </div>
                 <div>
                   <Label className="text-xs">From (Airport)</Label>
-                  <Input
-                    placeholder="e.g. CDG"
+                  <AirportAutocomplete
                     value={returnFlight.departureAirport}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, departureAirport: e.target.value }))}
+                    onChange={(code) => setReturnFlight(prev => ({ ...prev, departureAirport: code }))}
+                    placeholder="e.g. CDG"
                   />
                 </div>
                 <div>
                   <Label className="text-xs">To (Airport)</Label>
-                  <Input
-                    placeholder="e.g. JFK"
+                  <AirportAutocomplete
                     value={returnFlight.arrivalAirport}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, arrivalAirport: e.target.value }))}
+                    onChange={(code) => setReturnFlight(prev => ({ ...prev, arrivalAirport: code }))}
+                    placeholder="e.g. JFK"
                   />
                 </div>
                 <div>
@@ -355,14 +357,30 @@ export function AddHotelInline({
 
     setIsSaving(true);
     try {
+      // Try to enrich the hotel with real data (address, photos, etc.)
+      toast.info('Looking up hotel details...', { id: 'hotel-enrich' });
+      
+      // Normalize destination (remove IATA codes)
+      const cleanDestination = destination
+        .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+        .trim();
+      
+      const enrichment = await enrichHotel(hotelData.name, cleanDestination);
+      
       const hotelSelection = {
         id: `manual-${Date.now()}`,
         name: hotelData.name,
-        address: hotelData.address,
+        address: enrichment?.address || hotelData.address,
         neighborhood: hotelData.neighborhood || hotelData.address,
         checkIn: hotelData.checkInTime,
         checkOut: hotelData.checkOutTime,
+        website: enrichment?.website,
+        googleMapsUrl: enrichment?.googleMapsUrl,
+        images: enrichment?.photos,
+        imageUrl: enrichment?.photos?.[0],
+        placeId: enrichment?.placeId,
         isManualEntry: true,
+        isEnriched: !!enrichment,
       };
 
       const { error } = await supabase
@@ -372,11 +390,13 @@ export function AddHotelInline({
 
       if (error) throw error;
 
-      toast.success('Hotel details saved!');
+      toast.dismiss('hotel-enrich');
+      toast.success(enrichment ? 'Hotel found and details updated!' : 'Hotel details saved!');
       setShowManualEntry(false);
       onHotelAdded?.();
     } catch (err) {
       console.error('Failed to save hotel:', err);
+      toast.dismiss('hotel-enrich');
       toast.error('Failed to save hotel details');
     } finally {
       setIsSaving(false);
@@ -457,8 +477,9 @@ export function AddHotelInline({
             <Button variant="outline" onClick={() => setShowManualEntry(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveManualHotel} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save Hotel'}
+            <Button onClick={handleSaveManualHotel} disabled={isSaving} className="gap-2">
+              {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSaving ? 'Finding Hotel...' : 'Save Hotel'}
             </Button>
           </DialogFooter>
         </DialogContent>
