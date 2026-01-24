@@ -5,6 +5,7 @@
  * - Constrained actions (swap, pace, filter, regenerate)
  * - Approval mode toggle (approve each action vs. direct apply)
  * - Preference capture for profile improvement
+ * - Direct execution of actions using get-activity-alternatives
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -27,26 +28,20 @@ import {
   type ItineraryAction,
   type ItineraryContext,
 } from '@/services/itineraryChatAPI';
+import { 
+  executeAction, 
+  updateLocalTripItinerary,
+  type ItineraryDay,
+} from '@/services/itineraryActionExecutor';
 
 interface ItineraryAssistantProps {
   tripId: string;
   destination: string;
   startDate: string;
   endDate: string;
-  days: Array<{
-    dayNumber: number;
-    date: string;
-    activities: Array<{
-      id?: string;
-      index: number;
-      title: string;
-      category?: string;
-      time: string;
-      cost?: number;
-      isLocked?: boolean;
-    }>;
-  }>;
-  onActionApply?: (action: ItineraryAction) => void;
+  days: ItineraryDay[];
+  isLocalTrip?: boolean;
+  onItineraryUpdate?: (updatedDays: ItineraryDay[]) => void;
 }
 
 export function ItineraryAssistant({
@@ -55,16 +50,24 @@ export function ItineraryAssistant({
   startDate,
   endDate,
   days,
-  onActionApply,
+  isLocalTrip = false,
+  onItineraryUpdate,
 }: ItineraryAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
   const [approvalMode, setApprovalMode] = useState(true); // Default to approval mode
+  const [currentDays, setCurrentDays] = useState<ItineraryDay[]>(days);
   const [conversationId] = useState(generateConversationId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep local days in sync with props
+  useEffect(() => {
+    setCurrentDays(days);
+  }, [days]);
 
   // Build context from props
   const itineraryContext: ItineraryContext = {
@@ -72,14 +75,15 @@ export function ItineraryAssistant({
     destination,
     startDate,
     endDate,
-    days: days.map(d => ({
-      ...d,
+    days: currentDays.map(d => ({
+      dayNumber: d.dayNumber,
+      date: d.date,
       activities: d.activities.map((a, idx) => ({
         index: idx,
-        title: a.title,
+        title: a.title || a.name || 'Activity',
         category: a.category,
-        time: a.time,
-        cost: a.cost,
+        time: a.time || a.startTime || '',
+        cost: typeof a.cost === 'number' ? a.cost : (a.cost as { amount?: number })?.amount,
         isLocked: a.isLocked,
       })),
     })),
@@ -186,23 +190,66 @@ export function ItineraryAssistant({
     }
   }, [inputValue, isLoading, messages, itineraryContext, conversationId, approvalMode]);
 
-  const handleActionApply = (messageId: string, actionIndex: number, action: ItineraryAction) => {
-    // Update action status in message
-    setMessages(prev => prev.map(msg => {
-      if (msg.id === messageId && msg.actions) {
-        const newActions = [...msg.actions];
-        newActions[actionIndex] = { ...newActions[actionIndex], status: 'applied' };
-        return { ...msg, actions: newActions };
+  const handleActionApply = async (messageId: string, actionIndex: number, action: ItineraryAction) => {
+    setIsExecuting(true);
+    
+    try {
+      // Execute the action using the action executor
+      const result = await executeAction(action, tripId, currentDays, destination);
+      
+      // Update action status in message
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === messageId && msg.actions) {
+          const newActions = [...msg.actions];
+          newActions[actionIndex] = { 
+            ...newActions[actionIndex], 
+            status: result.success ? 'applied' : 'declined' 
+          };
+          return { ...msg, actions: newActions };
+        }
+        return msg;
+      }));
+
+      if (result.success) {
+        // Update local state with new days
+        if (result.updatedDays) {
+          setCurrentDays(result.updatedDays);
+          
+          // Also update localStorage for local trips
+          if (isLocalTrip) {
+            updateLocalTripItinerary(tripId, result.updatedDays);
+          }
+          
+          // Notify parent to update its state
+          onItineraryUpdate?.(result.updatedDays);
+        }
+
+        toast.success('Action applied', {
+          description: result.message,
+        });
+      } else {
+        toast.error('Action failed', {
+          description: result.message,
+        });
       }
-      return msg;
-    }));
+    } catch (error) {
+      console.error('[ItineraryAssistant] Action execution error:', error);
+      
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === messageId && msg.actions) {
+          const newActions = [...msg.actions];
+          newActions[actionIndex] = { ...newActions[actionIndex], status: 'declined' };
+          return { ...msg, actions: newActions };
+        }
+        return msg;
+      }));
 
-    // Notify parent
-    onActionApply?.(action);
-
-    toast.success('Action applied', {
-      description: getActionDisplayInfo(action).title,
-    });
+      toast.error('Failed to execute action', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const handleActionDecline = (messageId: string, actionIndex: number) => {
