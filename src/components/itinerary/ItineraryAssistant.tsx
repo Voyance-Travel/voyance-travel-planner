@@ -181,10 +181,14 @@ export function ItineraryAssistant({
         });
       }
 
-      // Show toast for captured preferences
-      if (response.capturedPreferences?.length > 0) {
-        toast.info('Preference noted', {
-          description: `Saved: ${response.capturedPreferences[0].value}`,
+      // Show toast ONLY for profile-level preferences (not trip-specific ones)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const profilePreferences = (response.capturedPreferences || []).filter(
+        (p: any) => p.scope === 'profile'
+      );
+      if (profilePreferences.length > 0) {
+        toast.info('Preference saved to your profile', {
+          description: profilePreferences[0].value,
         });
       }
 
