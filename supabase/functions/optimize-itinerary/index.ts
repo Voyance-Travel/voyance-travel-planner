@@ -1206,7 +1206,16 @@ async function getGoogleTransport(
   }
 }
 
-// Fallback using Haversine distance estimation
+// =============================================================================
+// TRANSPORT MODE CONSTANTS - Strict limits to prevent unreasonable suggestions
+// =============================================================================
+
+// Maximum walking distance: 0.4 miles = ~650 meters
+const MAX_WALK_DISTANCE_METERS = 650;
+// Maximum walking duration: 15 minutes
+const MAX_WALK_DURATION_MINUTES = 15;
+
+// Fallback using Haversine distance estimation with STRICT walking limits
 function getHaversineTransport(
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
@@ -1216,20 +1225,23 @@ function getHaversineTransport(
     origin.lat, origin.lng, destination.lat, destination.lng
   ));
 
-  // Determine best mode based on distance
+  // Determine best mode based on STRICT distance thresholds
   let method: string;
   let durationMinutes: number;
   let costAmount: number;
   let instructions: string;
 
-  if (distanceMeters < 1500) {
-    // Under 1.5km = walk (~5 km/h = 83m/min)
+  // Walking speed: ~5 km/h = 83m/min
+  const estimatedWalkMinutes = Math.round(distanceMeters / 83);
+
+  // STRICT: Only walk if under 650m AND under 15 minutes
+  if (distanceMeters <= MAX_WALK_DISTANCE_METERS && estimatedWalkMinutes <= MAX_WALK_DURATION_MINUTES) {
     method = 'walk';
-    durationMinutes = Math.round(distanceMeters / 83);
+    durationMinutes = estimatedWalkMinutes;
     costAmount = 0;
     instructions = `Walk ${Math.round(distanceMeters)}m to ${destinationName}`;
   } else if (distanceMeters < 5000) {
-    // 1.5-5km = metro/bus (~25 km/h + 5min wait)
+    // 650m-5km = metro/bus (~25 km/h + 5min wait)
     method = 'metro';
     durationMinutes = Math.round(distanceMeters / 417) + 5;
     costAmount = 3;
@@ -1239,7 +1251,7 @@ function getHaversineTransport(
     method = 'uber';
     durationMinutes = Math.round(distanceMeters / 500) + 3;
     costAmount = Math.round(3 + (distanceMeters / 1000) * 1.8);
-    instructions = `Take a rideshare ${(distanceMeters / 1000).toFixed(1)}km to ${destinationName} (~$${costAmount})`;
+    instructions = `Take a rideshare ${(distanceMeters / 1000).toFixed(1)}km to ${destinationName}`;
   }
 
   const distanceText = distanceMeters < 1000 
@@ -1290,9 +1302,12 @@ async function getOptimalTransport(
       }
     }
     
-    // Try walking as alternative
+    // Try walking as alternative - STRICT limits (15 min max, ~650m max)
     const walkResult = await getGoogleTransport(origin, destination, destinationName, 'walking');
-    if (walkResult && walkResult.durationMinutes <= 20) {
+    const walkDistanceOk = !walkResult?.distanceMeters || walkResult.distanceMeters <= MAX_WALK_DISTANCE_METERS;
+    const walkDurationOk = walkResult && walkResult.durationMinutes <= MAX_WALK_DURATION_MINUTES;
+    
+    if (walkResult && walkDistanceOk && walkDurationOk) {
       return walkResult;
     }
     
@@ -1302,37 +1317,49 @@ async function getOptimalTransport(
       return driveResult;
     }
     
-    // Return transit if we have it, otherwise walk
-    return transitResult || walkResult || null;
+    // Return transit if we have it, NOT walk for long distances
+    return transitResult || null;
   }
 
-  // For coordinate-based routing, try walking first (original logic)
+  // For coordinate-based routing, try walking first with STRICT limits
   const walkResult = await getGoogleTransport(origin, destination, destinationName, 'walking');
 
   if (walkResult) {
-    // If walk is under 20 minutes, use it
-    if (walkResult.durationMinutes <= 20) {
+    // STRICT: Only allow walking if under 15 minutes AND under ~650m (0.4 miles)
+    const walkDistanceOk = !walkResult.distanceMeters || walkResult.distanceMeters <= MAX_WALK_DISTANCE_METERS;
+    const walkDurationOk = walkResult.durationMinutes <= MAX_WALK_DURATION_MINUTES;
+    
+    if (walkDistanceOk && walkDurationOk) {
       return walkResult;
     }
 
-    // Try transit for longer distances
+    // Walk is too long - try transit
     const transitResult = await getGoogleTransport(origin, destination, destinationName, 'transit');
-    if (transitResult && transitResult.durationMinutes < walkResult.durationMinutes * 0.6) {
+    if (transitResult) {
       return transitResult;
     }
 
-    // If walk is 20-35 minutes, still acceptable
-    if (walkResult.durationMinutes <= 35) {
-      return walkResult;
-    }
-
-    // For very long walks, try driving
+    // No transit available - try driving/rideshare
     const driveResult = await getGoogleTransport(origin, destination, destinationName, 'driving');
-    if (driveResult && driveResult.durationMinutes < walkResult.durationMinutes * 0.4) {
+    if (driveResult) {
       return driveResult;
     }
 
-    return transitResult || walkResult;
+    // Last resort: return transit placeholder or walk (for very short distances we may have missed)
+    if (walkResult.durationMinutes <= MAX_WALK_DURATION_MINUTES) {
+      return walkResult;
+    }
+    
+    // If walk is unreasonably long, force to transit with estimated data
+    return {
+      method: 'metro',
+      duration: `${Math.round(walkResult.durationMinutes * 0.4)} min`,
+      durationMinutes: Math.round(walkResult.durationMinutes * 0.4),
+      distance: walkResult.distance,
+      distanceMeters: walkResult.distanceMeters,
+      estimatedCost: { amount: 3, currency: 'USD' },
+      instructions: `Take public transit to ${destinationName}`,
+    };
   }
 
   // Fallback to Haversine
@@ -1836,20 +1863,28 @@ serve(async (req) => {
             return preferredModes[0] || null;
           };
           
-          // Build mode options based on distance
+          // Build mode options based on distance with STRICT walking limits
+          // MAX_WALK_DISTANCE_METERS = 650m (0.4 miles), MAX_WALK_DURATION_MINUTES = 15
           const modeOptions: Array<{ mode: 'walk' | 'metro' | 'uber' | 'taxi' | 'train'; cost: number; durationMins: number; label: string }> = [];
           
-          // Walking is always an option (free)
-          const walkDuration = Math.round(estimatedDistanceKm * 12);
-          modeOptions.push({ mode: 'walk', cost: 0, durationMins: walkDuration, label: 'Walk' });
+          const distanceMetersEst = Math.round(estimatedDistanceKm * 1000);
+          const walkDuration = Math.round(estimatedDistanceKm * 12); // ~5km/h
           
-          // Transit options for medium distances
-          if (estimatedDistanceKm >= 0.8) {
+          // STRICT: Only offer walking if under 650m (0.4 miles) AND under 15 minutes
+          const walkDistanceOk = distanceMetersEst <= 650; // MAX_WALK_DISTANCE_METERS
+          const walkDurationOk = walkDuration <= 15; // MAX_WALK_DURATION_MINUTES
+          
+          if (walkDistanceOk && walkDurationOk) {
+            modeOptions.push({ mode: 'walk', cost: 0, durationMins: walkDuration, label: 'Walk' });
+          }
+          
+          // Transit is the default for distances over walking threshold
+          if (estimatedDistanceKm > 0.65 || !walkDistanceOk) {
             const transitDuration = Math.round(5 + estimatedDistanceKm * 2.5);
             modeOptions.push({ mode: 'metro', cost: 3, durationMins: transitDuration, label: 'Transit' });
           }
           
-          // Rideshare/taxi for longer distances
+          // Rideshare/taxi for longer distances (2km+)
           if (estimatedDistanceKm >= 2) {
             const rideShareDuration = Math.round(estimatedDistanceKm * 2);
             const rideShareCost = Math.round(5 + estimatedDistanceKm * 1.5);
@@ -1862,9 +1897,10 @@ serve(async (req) => {
           // Pick the best allowed mode
           let selected = pickAllowedMode(modeOptions);
           
-          // If nothing selected, default to walk
+          // If nothing selected, default to transit (NOT walk for long distances)
           if (!selected) {
-            selected = { mode: 'walk', cost: 0, durationMins: walkDuration, label: 'Walk' };
+            const transitDuration = Math.round(5 + estimatedDistanceKm * 2.5);
+            selected = { mode: 'metro', cost: 3, durationMins: transitDuration, label: 'Transit' };
           }
           
           // Apply late night override (safety upgrade to rideshare)
