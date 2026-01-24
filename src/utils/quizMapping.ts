@@ -709,6 +709,7 @@ export async function saveTravelDNA(
     trait_scores: dna.trait_scores ? JSON.parse(JSON.stringify(dna.trait_scores)) : null,
     tone_tags: dna.tone_tags ?? null,
     emotional_drivers: dna.emotional_drivers ?? null,
+    perfect_trip_preview: (dna as { perfect_trip_preview?: string | null })?.perfect_trip_preview ?? null,
     summary: dna.summary,
     calculated_at: new Date().toISOString(),
   };
@@ -846,6 +847,7 @@ export async function submitQuizComplete(
         trait_scores: dna.trait_scores || {},
         tone_tags: dna.tone_tags || [],
         emotional_drivers: dna.emotional_drivers || [],
+        perfect_trip_preview: (dna as { perfect_trip_preview?: string | null })?.perfect_trip_preview ?? null,
         summary: dna.summary || null,
       };
       
@@ -973,6 +975,7 @@ export async function recalculateDNAFromPreferences(
         trait_scores: dna.trait_scores || {},
         tone_tags: dna.tone_tags || [],
         emotional_drivers: dna.emotional_drivers || [],
+        perfect_trip_preview: (dna as { perfect_trip_preview?: string | null })?.perfect_trip_preview ?? null,
         summary: dna.summary || null,
       };
       
