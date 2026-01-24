@@ -46,6 +46,10 @@ interface AddFlightInlineProps {
   travelers: number;
   origin?: string;
   onFlightAdded?: () => void;
+  // Edit mode props
+  editMode?: boolean;
+  existingOutbound?: ManualFlightEntry;
+  existingReturn?: ManualFlightEntry;
 }
 
 interface AddHotelInlineProps {
@@ -55,6 +59,9 @@ interface AddHotelInlineProps {
   endDate: string;
   travelers: number;
   onHotelAdded?: () => void;
+  // Edit mode props
+  editMode?: boolean;
+  existingHotel?: ManualHotelEntry;
 }
 
 // ============================================================================
@@ -68,31 +75,38 @@ export function AddFlightInline({
   endDate, 
   travelers,
   origin,
-  onFlightAdded 
+  onFlightAdded,
+  editMode = false,
+  existingOutbound,
+  existingReturn
 }: AddFlightInlineProps) {
   const navigate = useNavigate();
-  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(editMode);
   const [isSaving, setIsSaving] = useState(false);
   
-  const [outboundFlight, setOutboundFlight] = useState<ManualFlightEntry>({
-    airline: '',
-    flightNumber: '',
-    departureAirport: origin || '',
-    arrivalAirport: '',
-    departureTime: '',
-    arrivalTime: '',
-    departureDate: startDate,
-  });
+  const [outboundFlight, setOutboundFlight] = useState<ManualFlightEntry>(
+    existingOutbound || {
+      airline: '',
+      flightNumber: '',
+      departureAirport: origin || '',
+      arrivalAirport: '',
+      departureTime: '',
+      arrivalTime: '',
+      departureDate: startDate,
+    }
+  );
   
-  const [returnFlight, setReturnFlight] = useState<ManualFlightEntry>({
-    airline: '',
-    flightNumber: '',
-    departureAirport: '',
-    arrivalAirport: origin || '',
-    departureTime: '',
-    arrivalTime: '',
-    departureDate: endDate,
-  });
+  const [returnFlight, setReturnFlight] = useState<ManualFlightEntry>(
+    existingReturn || {
+      airline: '',
+      flightNumber: '',
+      departureAirport: '',
+      arrivalAirport: origin || '',
+      departureTime: '',
+      arrivalTime: '',
+      departureDate: endDate,
+    }
+  );
 
   // Removed: Browse & Book flights - we're a "bring your own flight" platform
 
@@ -324,19 +338,23 @@ export function AddHotelInline({
   startDate, 
   endDate, 
   travelers,
-  onHotelAdded 
+  onHotelAdded,
+  editMode = false,
+  existingHotel
 }: AddHotelInlineProps) {
   const navigate = useNavigate();
-  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(editMode);
   const [isSaving, setIsSaving] = useState(false);
   
-  const [hotelData, setHotelData] = useState<ManualHotelEntry>({
-    name: '',
-    address: '',
-    neighborhood: '',
-    checkInTime: '15:00',
-    checkOutTime: '11:00',
-  });
+  const [hotelData, setHotelData] = useState<ManualHotelEntry>(
+    existingHotel || {
+      name: '',
+      address: '',
+      neighborhood: '',
+      checkInTime: '15:00',
+      checkOutTime: '11:00',
+    }
+  );
 
   const handleBrowseHotels = () => {
     const params = new URLSearchParams({
