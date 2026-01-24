@@ -35,6 +35,7 @@ import { VoucherModal } from './VoucherModal';
 import { formatPrice } from '@/utils/bookingUtils';
 import { VendorBookingLink } from './VendorBookingLink';
 import { isViatorBookable } from '@/services/viatorAPI';
+import { RestaurantLink } from './RestaurantLink';
 
 export interface InlineBookingActivity {
   id: string;
@@ -190,22 +191,6 @@ function getActivityLinkType(
   return 'vendor_booking';
 }
 
-/**
- * Generate a restaurant URL using Yelp search
- * Yelp works reliably without blocking and shows reviews, hours, and reservation links
- */
-function generateRestaurantSearchUrl(restaurantName: string, destination: string): string {
-  // Clean up the restaurant name (remove common prefixes like "Dinner at", "Lunch at", etc.)
-  const cleanName = restaurantName
-    .replace(/^(dinner|lunch|breakfast|brunch|meal|dining)\s*(at|@)\s*/i, '')
-    .replace(/\s*restaurant$/i, '')
-    .trim();
-  
-  // Use Yelp search - works reliably, shows reviews, hours, website, and reservation links
-  const searchQuery = encodeURIComponent(cleanName);
-  const location = encodeURIComponent(destination);
-  return `https://www.yelp.com/search?find_desc=${searchQuery}&find_loc=${location}`;
-}
 
 export function InlineBookingActions({
   activity,
@@ -302,17 +287,11 @@ export function InlineBookingActions({
     }
     
     if (linkType === 'find_restaurant') {
-      const searchUrl = generateRestaurantSearchUrl(activity.title, destination);
       return (
-        <a
-          href={searchUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-        >
-          <ExternalLink className="h-3 w-3" />
-          View Restaurant
-        </a>
+        <RestaurantLink 
+          restaurantName={activity.title} 
+          destination={destination} 
+        />
       );
     }
     
@@ -356,18 +335,11 @@ export function InlineBookingActions({
   }
   
   if (linkType === 'find_restaurant') {
-    // Use the smart search that cleans up the name and targets official websites
-    const searchUrl = generateRestaurantSearchUrl(activity.title, destination);
     return (
-      <a
-        href={searchUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-      >
-        <ExternalLink className="h-3 w-3" />
-        View Restaurant
-      </a>
+      <RestaurantLink 
+        restaurantName={activity.title} 
+        destination={destination} 
+      />
     );
   }
 
