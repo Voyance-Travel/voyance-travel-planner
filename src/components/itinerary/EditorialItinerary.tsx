@@ -3521,7 +3521,11 @@ function ActivityRow({
             {activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
               <div className="flex flex-col gap-1 mt-2 p-2 bg-secondary/30 rounded border-l-2 border-primary/30">
                 {/* Compact summary - always visible */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-2 text-xs text-muted-foreground w-full text-left"
+                >
                   {activity.transportation.method === 'walk' && <MapPin className="h-3 w-3" />}
                   {activity.transportation.method === 'metro' && <Train className="h-3 w-3" />}
                   {(activity.transportation.method === 'uber' || activity.transportation.method === 'driving') && <Car className="h-3 w-3" />}
@@ -3536,28 +3540,36 @@ function ActivityRow({
                   {activity.transportation.estimatedCost?.amount && activity.transportation.estimatedCost.amount > 0 && (
                     <span>• ~{formatCurrency(activity.transportation.estimatedCost.amount, activity.transportation.estimatedCost.currency || tripCurrency)}</span>
                   )}
-                </div>
+                </button>
                 
-                {/* Expanded details - only when toggle is on */}
-                {showTransportDetails && activity.transportation.instructions && (
-                  <div className="mt-2 pl-5 space-y-1.5">
-                    {/* Parse instructions by → separator for step-by-step format */}
-                    {activity.transportation.instructions.includes('→') ? (
-                      activity.transportation.instructions.split('→').map((step, idx) => {
-                        const trimmedStep = step.trim();
-                        if (!trimmedStep) return null;
-                        return (
-                          <div key={idx} className="flex items-start gap-2 text-xs">
-                            <div className="flex items-center justify-center w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-medium shrink-0 mt-0.5">
-                              {idx + 1}
-                            </div>
-                            <span className="text-muted-foreground">{trimmedStep}</span>
-                          </div>
-                        );
-                      })
+                {/* Expanded details - show when toggle is on */}
+                {showTransportDetails && (
+                  <div className="mt-2 pl-5 space-y-1.5 border-t border-border/50 pt-2">
+                    {activity.transportation.instructions ? (
+                      <>
+                        {/* Parse instructions by → separator for step-by-step format */}
+                        {activity.transportation.instructions.includes('→') ? (
+                          activity.transportation.instructions.split('→').map((step, idx) => {
+                            const trimmedStep = step.trim();
+                            if (!trimmedStep) return null;
+                            return (
+                              <div key={idx} className="flex items-start gap-2 text-xs">
+                                <div className="flex items-center justify-center w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-medium shrink-0 mt-0.5">
+                                  {idx + 1}
+                                </div>
+                                <span className="text-muted-foreground">{trimmedStep}</span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-xs text-muted-foreground/80">
+                            {activity.transportation.instructions}
+                          </p>
+                        )}
+                      </>
                     ) : (
-                      <p className="text-xs text-muted-foreground/80">
-                        {activity.transportation.instructions}
+                      <p className="text-xs text-muted-foreground/60 italic">
+                        No detailed route instructions available. Use the summary above.
                       </p>
                     )}
                   </div>
