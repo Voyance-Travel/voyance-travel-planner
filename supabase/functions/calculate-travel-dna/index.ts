@@ -1648,25 +1648,26 @@ serve(async (req) => {
     console.log('[TravelDNA V2] Calculating for user:', userId);
     console.log('[TravelDNA V2] Quiz answers:', Object.keys(answers));
     
-    // DEV ASSERTION: Sanity check that budget polarity is correct in mappings
-    // This catches polarity drift during development
-    const luxuryDelta = LEGACY_ANSWER_MAPPINGS.luxury?.deltas?.budget;
-    const budgetDelta = LEGACY_ANSWER_MAPPINGS.budget?.deltas?.budget;
-    const curatedLuxeDelta = LEGACY_ANSWER_MAPPINGS.curated_luxe?.deltas?.budget;
-    const premiumDelta = LEGACY_ANSWER_MAPPINGS.premium?.deltas?.budget;
+    // DEV ASSERTION: Generic polarity check to catch drift
+    // CANONICAL: budget positive = frugal/value-focused, negative = splurge/luxury
+    function assertBudgetPolarity(key: string, expectedSign: 'positive' | 'negative') {
+      const delta = LEGACY_ANSWER_MAPPINGS[key]?.deltas?.budget;
+      if (delta === undefined) return;
+      if (expectedSign === 'positive' && delta < 0) {
+        console.error(`[TravelDNA V2 POLARITY ERROR] ${key} budget delta ${delta} expected positive`);
+      }
+      if (expectedSign === 'negative' && delta > 0) {
+        console.error(`[TravelDNA V2 POLARITY ERROR] ${key} budget delta ${delta} expected negative`);
+      }
+    }
     
-    if (luxuryDelta !== undefined && luxuryDelta > 0) {
-      console.error('[TravelDNA V2 POLARITY ERROR] luxury delta is positive; expected negative under POSITIVE_IS_FRUGAL');
-    }
-    if (budgetDelta !== undefined && budgetDelta < 0) {
-      console.error('[TravelDNA V2 POLARITY ERROR] budget delta is negative; expected positive under POSITIVE_IS_FRUGAL');
-    }
-    if (curatedLuxeDelta !== undefined && curatedLuxeDelta > 0) {
-      console.error('[TravelDNA V2 POLARITY ERROR] curated_luxe delta is positive; expected negative under POSITIVE_IS_FRUGAL');
-    }
-    if (premiumDelta !== undefined && premiumDelta > 0) {
-      console.error('[TravelDNA V2 POLARITY ERROR] premium delta is positive; expected negative under POSITIVE_IS_FRUGAL');
-    }
+    // Anchor assertions for budget polarity invariants
+    assertBudgetPolarity('budget', 'positive');      // budget tier → frugal → positive
+    assertBudgetPolarity('budget_conscious', 'positive');  // c1 answer → frugal
+    assertBudgetPolarity('luxury', 'negative');       // luxury tier → splurge → negative
+    assertBudgetPolarity('premium', 'negative');      // premium tier → splurge-ish
+    assertBudgetPolarity('curated_luxe', 'negative'); // traveler type → splurge
+    assertBudgetPolarity('no_expense', 'negative');   // c4 answer → splurge
     
     // Step 1: Calculate trait scores with contributions
     const { rawScores, finalScores, signalStrength, fillRates, contributions } = calculateTraitScoresV2(answers);
