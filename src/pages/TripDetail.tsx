@@ -23,6 +23,8 @@ import { usePaymentVerification } from '@/hooks/usePaymentVerification';
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
 import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
 import { getDestinationByCity, type Destination } from '@/services/supabase/destinations';
+import { initiateBooking } from '@/services/tripPaymentsAPI';
+import { toast } from 'sonner';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -935,6 +937,42 @@ export default function TripDetail() {
                   }
                   isEditable={true}
                   onBookingAdded={() => window.location.reload()}
+                  onPaymentRequest={async (activityId) => {
+                    // Find the activity across all days
+                    const activity = editorDays
+                      .flatMap(d => d.activities)
+                      .find(a => a.id === activityId);
+                    
+                    if (!activity) {
+                      toast.error('Activity not found');
+                      return;
+                    }
+                    
+                    const priceCents = activity.quotePriceCents || Math.round((activity.cost?.amount || 0) * 100);
+                    if (priceCents <= 0) {
+                      toast.error('No price available for this activity');
+                      return;
+                    }
+                    
+                    toast.loading('Preparing checkout...', { id: 'checkout' });
+                    
+                    const result = await initiateBooking({
+                      tripId: trip.id,
+                      itemType: 'activity',
+                      itemId: activityId,
+                      itemName: activity.title,
+                      amountCents: priceCents,
+                      currency: activity.cost?.currency || 'USD',
+                      externalProvider: activity.viatorProductCode ? 'viator' : undefined,
+                    });
+                    
+                    if (result.success && result.checkoutUrl) {
+                      toast.success('Redirecting to checkout...', { id: 'checkout' });
+                      window.open(result.checkoutUrl, '_blank');
+                    } else {
+                      toast.error(result.error || 'Failed to start checkout', { id: 'checkout' });
+                    }
+                  }}
                 />
               );
             })()
