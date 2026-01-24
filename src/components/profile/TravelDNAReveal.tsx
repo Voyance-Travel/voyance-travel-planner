@@ -13,7 +13,8 @@ import {
   Leaf,
   Gem,
   Info,
-  Settings2
+  Settings2,
+  Rocket
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,7 @@ import TravelDNATransparency from './TravelDNATransparency';
 import DNAAccuracyFeedback from './DNAAccuracyFeedback';
 import TraitOverrideSliders from './TraitOverrideSliders';
 import MicroDisambiguation from './MicroDisambiguation';
+import TravelDNAEvolution from './TravelDNAEvolution';
 
 /** Map category names to their Lucide icon components */
 const CATEGORY_ICONS = {
@@ -67,6 +69,10 @@ interface TravelDNAData {
   travel_dna_v2?: unknown;
   archetype_matches?: unknown;
   dna_version?: number;
+  // Evolution fields
+  trip_count?: number;
+  travel_frequency?: string;
+  has_overrides?: boolean;
 }
 
 // Demo DNA data for preview mode
@@ -100,15 +106,42 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
       if (!userId) return;
       
       try {
-        // First try travel_dna_profiles table
-        const { data: profileData, error: profileError } = await supabase
-          .from('travel_dna_profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle();
+        // Fetch DNA profile and trip count in parallel
+        const [dnaResult, tripCountResult, preferencesResult] = await Promise.all([
+          supabase
+            .from('travel_dna_profiles')
+            .select('*')
+            .eq('user_id', userId)
+            .maybeSingle(),
+          supabase
+            .from('trips')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId),
+          supabase
+            .from('user_preferences')
+            .select('travel_frequency')
+            .eq('user_id', userId)
+            .maybeSingle()
+        ]);
+        
+        const { data: profileData, error: profileError } = dnaResult;
+        const tripCount = tripCountResult.count || 0;
+        const travelFrequency = preferencesResult.data?.travel_frequency as string | undefined;
         
         if (profileData?.primary_archetype_name) {
-          setDnaData(profileData);
+          // Check if overrides exist (may be on profiles table)
+          const { data: profileOverrides } = await supabase
+            .from('profiles')
+            .select('travel_dna_overrides')
+            .eq('id', userId)
+            .maybeSingle();
+          
+          setDnaData({
+            ...profileData,
+            trip_count: tripCount,
+            travel_frequency: travelFrequency,
+            has_overrides: !!profileOverrides?.travel_dna_overrides
+          });
           setIsLoading(false);
           return;
         }
@@ -116,7 +149,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         // Fallback: Check profiles.travel_dna column
         const { data: userProfile, error: userError } = await supabase
           .from('profiles')
-          .select('travel_dna, quiz_completed')
+          .select('travel_dna, quiz_completed, travel_dna_overrides')
           .eq('id', userId)
           .maybeSingle();
         
@@ -132,6 +165,9 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
             tone_tags: (dnaJson.tone_tags as string[]) || null,
             emotional_drivers: (dnaJson.emotional_drivers as string[]) || null,
             summary: (dnaJson.summary as string) || null,
+            trip_count: tripCount,
+            travel_frequency: travelFrequency,
+            has_overrides: !!userProfile.travel_dna_overrides
           });
         }
         
@@ -421,6 +457,12 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               What This Means
             </TabsTrigger>
             <TabsTrigger 
+              value="evolution" 
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
+            >
+              Evolution
+            </TabsTrigger>
+            <TabsTrigger 
               value="insights" 
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
@@ -511,6 +553,17 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                   </div>
                 </div>
               </motion.div>
+            </TabsContent>
+
+            {/* Evolution Tab - Traveler Maturity & Growth */}
+            <TabsContent value="evolution" className="mt-8">
+              <TravelDNAEvolution
+                category={narrative.category}
+                tripCount={dnaData.trip_count || 0}
+                travelFrequency={dnaData.travel_frequency}
+                hasOverrides={dnaData.has_overrides || false}
+                quizCompleted={true}
+              />
             </TabsContent>
 
             {/* NEW: Insights Tab - Travel DNA V2 Transparency */}
