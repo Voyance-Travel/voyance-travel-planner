@@ -15,6 +15,7 @@ interface RequestBody {
   };
   destination?: string;
   searchQuery?: string;
+  excludeActivities?: string[]; // Names of activities to exclude (already in itinerary)
 }
 
 interface AlternativeActivity {
@@ -38,12 +39,13 @@ serve(async (req) => {
 
   try {
     const body: RequestBody = await req.json();
-    const { currentActivity, destination, searchQuery } = body;
+    const { currentActivity, destination, searchQuery, excludeActivities } = body;
 
     console.log('[get-activity-alternatives] Request:', {
       activity: currentActivity.name,
       destination,
       searchQuery,
+      excludeCount: excludeActivities?.length || 0,
     });
 
     // Try AI-powered alternatives first, fall back to templates
@@ -53,7 +55,7 @@ serve(async (req) => {
     
     if (LOVABLE_API_KEY) {
       try {
-        alternatives = await getAIAlternatives(currentActivity, destination, searchQuery, LOVABLE_API_KEY);
+        alternatives = await getAIAlternatives(currentActivity, destination, searchQuery, LOVABLE_API_KEY, excludeActivities);
       } catch (aiError) {
         console.error('[get-activity-alternatives] AI fallback to templates:', aiError);
         alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery);
@@ -99,20 +101,27 @@ async function getAIAlternatives(
   activity: RequestBody['currentActivity'],
   destination?: string,
   searchQuery?: string,
-  apiKey?: string
+  apiKey?: string,
+  excludeActivities?: string[]
 ): Promise<AlternativeActivity[]> {
   const locationName = destination || 'the destination';
   const activityType = activity.type || 'activity';
   
+  // Build exclusion list for the prompt
+  const exclusionNote = excludeActivities && excludeActivities.length > 0
+    ? `\n\nIMPORTANT: Do NOT suggest any of these places (already in the traveler's itinerary or previously suggested):\n- ${excludeActivities.join('\n- ')}`
+    : '';
+  
   const userPrompt = searchQuery 
-    ? `The user is looking for: "${searchQuery}". Find activities matching this request in ${locationName}.`
-    : `Find 4 alternative activities similar to "${activity.name}" (${activityType}) in ${locationName}.`;
+    ? `The user is looking for: "${searchQuery}". Find activities matching this request in ${locationName}.${exclusionNote}`
+    : `Find 4 alternative activities similar to "${activity.name}" (${activityType}) in ${locationName}.${exclusionNote}`;
 
   const systemPrompt = `You are a travel activity recommendation expert. Generate creative, real-world activity alternatives for travelers.
   
 For ${locationName}, suggest actual places and experiences that exist or could realistically exist there.
 Consider the local culture, popular attractions, and hidden gems.
-Vary the price points and experience types (premium, budget-friendly, unique local, group-friendly).`;
+Vary the price points and experience types (premium, budget-friendly, unique local, group-friendly).
+NEVER suggest the same activity or location that appears in the exclusion list.`;
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
