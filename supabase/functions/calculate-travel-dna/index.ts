@@ -160,7 +160,9 @@ interface ArchetypeV2 {
 }
 
 const ARCHETYPES_V2: ArchetypeV2[] = [
+  // ═══════════════════════════════════════
   // EXPLORER category
+  // ═══════════════════════════════════════
   {
     id: 'cultural_anthropologist',
     name: 'The Cultural Anthropologist',
@@ -168,11 +170,12 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     tagline: "You don't just visit places, you become them.",
     primaryTraits: [
       { trait: 'authenticity', weight: 3, sweetSpot: 8, range: [5, 10] },
-      { trait: 'social', weight: 2, sweetSpot: 5, range: [2, 10] },
       { trait: 'transformation', weight: 2, sweetSpot: 6, range: [3, 10] },
     ],
-    hardNo: [{ trait: 'comfort', range: [8, 10], penalty: -15 }],
-    signatureAnswers: ['b1', 'g2'],
+    hardNo: [
+      { trait: 'authenticity', range: [-10, 0], penalty: -20 },
+    ],
+    signatureAnswers: ['cd1', 'b1', 'g2', 'sm4', 'sm5'],  // culture_depth: immersion + history + culture activities
   },
   {
     id: 'urban_nomad',
@@ -180,11 +183,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: 'Cities speak to you in neon and noise.',
     primaryTraits: [
-      { trait: 'pace', weight: 2, sweetSpot: 6, range: [3, 10] },
-      { trait: 'social', weight: 2, sweetSpot: 7, range: [4, 10] },
-      { trait: 'adventure', weight: 2, sweetSpot: 5, range: [2, 10] },
+      { trait: 'pace', weight: 2, sweetSpot: 5, range: [2, 8] },
+      { trait: 'social', weight: 2, sweetSpot: 3, range: [-2, 7] },
     ],
-    signatureAnswers: ['b3', 'g4'],
+    signatureAnswers: ['b3', 'a2', 'g4', 'i3'],  // city + exploring + nightlife
   },
   {
     id: 'wilderness_pioneer',
@@ -192,12 +194,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: 'WiFi is optional, wilderness is essential.',
     primaryTraits: [
-      { trait: 'adventure', weight: 3, sweetSpot: 9, range: [7, 10] },
+      { trait: 'adventure', weight: 3, sweetSpot: 7, range: [4, 10] },
       { trait: 'authenticity', weight: 2, sweetSpot: 7, range: [4, 10] },
-      { trait: 'comfort', weight: 2, sweetSpot: -5, range: [-10, 2] },
+      { trait: 'comfort', weight: 2, sweetSpot: -3, range: [-10, 3] },
     ],
-    hardNo: [{ trait: 'budget', range: [7, 10], penalty: -10 }],
-    signatureAnswers: ['b2', 'g1', 'i2'],
+    hardNo: [
+      { trait: 'comfort', range: [6, 10], penalty: -15 },
+    ],
+    signatureAnswers: ['ad1', 'b2', 'g1', 'sm5', 'i2'],  // adventure_driver: frontier + nature + solo
   },
   {
     id: 'digital_explorer',
@@ -205,25 +209,28 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: 'Your laptop is your passport extension.',
     primaryTraits: [
-      { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 10] },
-      { trait: 'comfort', weight: 2, sweetSpot: 4, range: [0, 8] },
-      { trait: 'pace', weight: 1, sweetSpot: 0, range: [-5, 5] },
+      { trait: 'planning', weight: 2, sweetSpot: -2, range: [-6, 4] },
+      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['d3', 'h3'],
+    signatureAnswers: ['a3', 'e2', 'e4', 'h3', 'sm5'],  // flexible planning + rental + solo
   },
   
+  // ═══════════════════════════════════════
   // CONNECTOR category
+  // ═══════════════════════════════════════
   {
     id: 'social_butterfly',
     name: 'The Social Butterfly',
     category: 'CONNECTOR',
     tagline: "Every stranger is a friend you haven't met.",
     primaryTraits: [
-      { trait: 'social', weight: 3, sweetSpot: 9, range: [6, 10] },
-      { trait: 'adventure', weight: 1, sweetSpot: 4, range: [0, 10] },
+      { trait: 'social', weight: 4, sweetSpot: 8, range: [5, 10] },
+      { trait: 'pace', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    hardNo: [{ trait: 'social', range: [-10, 0], penalty: -20 }],
-    signatureAnswers: ['f3', 'g4'],
+    hardNo: [
+      { trait: 'social', range: [-10, 0], penalty: -25 },
+    ],
+    signatureAnswers: ['sm1', 'a4', 'g4', 'f3'],  // social_mode: group_social + group morning + nightlife
   },
   {
     id: 'family_architect',
@@ -231,11 +238,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'CONNECTOR',
     tagline: 'Making memories that outlive photo albums.',
     primaryTraits: [
-      { trait: 'social', weight: 2, sweetSpot: 6, range: [3, 10] },
-      { trait: 'planning', weight: 2, sweetSpot: 7, range: [4, 10] },
-      { trait: 'comfort', weight: 2, sweetSpot: 5, range: [2, 10] },
+      { trait: 'social', weight: 2, sweetSpot: 4, range: [1, 7] },
+      { trait: 'planning', weight: 3, sweetSpot: 6, range: [3, 10] },
+      { trait: 'comfort', weight: 2, sweetSpot: 4, range: [1, 7] },
     ],
-    signatureAnswers: ['f4'],
+    signatureAnswers: ['sm2', 'f4', 'e1', 'e2', 'h4'],  // social_mode: family + family companions + planning
   },
   {
     id: 'romantic_curator',
@@ -243,10 +250,25 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'CONNECTOR',
     tagline: 'Love is better with a view.',
     primaryTraits: [
-      { trait: 'comfort', weight: 2, sweetSpot: 6, range: [3, 10] },
-      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 10] },
+      { trait: 'social', weight: 2, sweetSpot: 1, range: [-3, 4] },
+      { trait: 'comfort', weight: 3, sweetSpot: 6, range: [3, 10] },
     ],
-    signatureAnswers: ['f2'],
+    hardNo: [
+      { trait: 'social', range: [6, 10], penalty: -15 },
+    ],
+    signatureAnswers: ['sm3', 'f2', 'h1', 'h2', 'b4'],  // social_mode: partner + romance + boutique/luxury
+  },
+  {
+    id: 'community_builder',
+    name: 'The Community Builder',
+    category: 'CONNECTOR',
+    tagline: 'Travel with purpose, leave a legacy.',
+    primaryTraits: [
+      { trait: 'authenticity', weight: 3, sweetSpot: 7, range: [4, 10] },
+      { trait: 'transformation', weight: 3, sweetSpot: 7, range: [4, 10] },
+      { trait: 'social', weight: 2, sweetSpot: 4, range: [0, 7] },
+    ],
+    signatureAnswers: ['sm4', 'cd1', 'tt3', 'tt4'],  // social_mode: community + immersion + learning/healing
   },
   {
     id: 'story_seeker',
@@ -254,25 +276,29 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'CONNECTOR',
     tagline: "Every person is a book you haven't read yet.",
     primaryTraits: [
-      { trait: 'social', weight: 2, sweetSpot: 7, range: [5, 10] },
+      { trait: 'social', weight: 2, sweetSpot: 5, range: [2, 8] },
       { trait: 'authenticity', weight: 2, sweetSpot: 6, range: [4, 10] },
       { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 10] },
     ],
-    signatureAnswers: ['a4'],
+    signatureAnswers: ['a4', 'n1', 'cd1'],  // group morning + meaningful convo + immersion
   },
   
+  // ═══════════════════════════════════════
   // ACHIEVER category
+  // ═══════════════════════════════════════
   {
     id: 'bucket_list_conqueror',
     name: 'The Bucket List Conqueror',
     category: 'ACHIEVER',
     tagline: 'Life is a checklist of wonders.',
     primaryTraits: [
-      { trait: 'pace', weight: 2, sweetSpot: 7, range: [4, 10] },
-      { trait: 'adventure', weight: 2, sweetSpot: 6, range: [3, 10] },
-      { trait: 'planning', weight: 2, sweetSpot: 6, range: [2, 10] },
+      { trait: 'pace', weight: 3, sweetSpot: 6, range: [3, 10] },
+      { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['d2'],
+    hardNo: [
+      { trait: 'pace', range: [-10, -2], penalty: -15 },
+    ],
+    signatureAnswers: ['cd3', 'd2', 'e1', 'e2', 'tt5'],  // culture_depth: highlights + active + planning + fulfillment
   },
   {
     id: 'adrenaline_architect',
@@ -280,11 +306,13 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'ACHIEVER',
     tagline: 'Normal is just a setting on the washing machine.',
     primaryTraits: [
-      { trait: 'adventure', weight: 3, sweetSpot: 10, range: [7, 10] },
-      { trait: 'pace', weight: 2, sweetSpot: 8, range: [5, 10] },
+      { trait: 'adventure', weight: 4, sweetSpot: 9, range: [6, 10] },
+      { trait: 'pace', weight: 2, sweetSpot: 7, range: [4, 10] },
     ],
-    hardNo: [{ trait: 'pace', range: [-10, -3], penalty: -20 }],
-    signatureAnswers: ['g1'],
+    hardNo: [
+      { trait: 'adventure', range: [-10, 2], penalty: -25 },
+    ],
+    signatureAnswers: ['ad2', 'g1', 'd2', 'b2'],  // adventure_driver: intensity + outdoor + active
   },
   {
     id: 'collection_curator',
@@ -292,10 +320,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'ACHIEVER',
     tagline: 'Countries collected, stamps earned.',
     primaryTraits: [
-      { trait: 'pace', weight: 2, sweetSpot: 6, range: [4, 10] },
-      { trait: 'planning', weight: 2, sweetSpot: 6, range: [4, 10] },
+      { trait: 'planning', weight: 3, sweetSpot: 7, range: [4, 10] },
+      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['e1'],
+    signatureAnswers: ['e1', 'cd1', 'cd2', 'tt3'],  // detailed planning + immersion/aesthetic + learning
   },
   {
     id: 'status_seeker',
@@ -303,24 +331,33 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'ACHIEVER',
     tagline: "First class isn't a seat, it's a lifestyle.",
     primaryTraits: [
-      { trait: 'comfort', weight: 3, sweetSpot: 9, range: [6, 10] },
-      { trait: 'budget', weight: 2, sweetSpot: 8, range: [5, 10] },
+      { trait: 'comfort', weight: 3, sweetSpot: 8, range: [5, 10] },
+      { trait: 'budget', weight: 3, sweetSpot: -7, range: [-10, -3] },
+      { trait: 'social', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
-    signatureAnswers: ['c4', 'h2'],
+    hardNo: [
+      { trait: 'budget', range: [4, 10], penalty: -20 },
+    ],
+    signatureAnswers: ['ld1', 'c4', 'h2', 'b4'],  // luxury_driver: prestige + luxury budget + luxury resort
   },
   
+  // ═══════════════════════════════════════
   // RESTORER category
+  // ═══════════════════════════════════════
   {
     id: 'zen_seeker',
     name: 'The Zen Seeker',
     category: 'RESTORER',
     tagline: 'Breathe in experience, exhale expectation.',
     primaryTraits: [
-      { trait: 'pace', weight: 3, sweetSpot: -7, range: [-10, -2] },
-      { trait: 'transformation', weight: 2, sweetSpot: 7, range: [4, 10] },
+      { trait: 'pace', weight: 3, sweetSpot: -6, range: [-10, -2] },
+      { trait: 'transformation', weight: 2, sweetSpot: 6, range: [3, 10] },
+      { trait: 'social', weight: 2, sweetSpot: -4, range: [-10, 0] },
     ],
-    hardNo: [{ trait: 'pace', range: [5, 10], penalty: -25 }],
-    signatureAnswers: ['d1', 'g5'],
+    hardNo: [
+      { trait: 'pace', range: [5, 10], penalty: -20 },
+    ],
+    signatureAnswers: ['rm1', 'a1', 'g5', 'd1'],  // restoration_mode: stillness + quiet morning + wellness
   },
   {
     id: 'retreat_regular',
@@ -328,10 +365,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'RESTORER',
     tagline: "Wellness isn't a trend, it's a lifestyle.",
     primaryTraits: [
-      { trait: 'pace', weight: 2, sweetSpot: -6, range: [-10, -1] },
-      { trait: 'comfort', weight: 2, sweetSpot: 7, range: [4, 10] },
+      { trait: 'transformation', weight: 3, sweetSpot: 7, range: [4, 10] },
+      { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['g5', 'h2'],
+    signatureAnswers: ['rm4', 'g5', 'e2', 'tt3'],  // restoration_mode: program + wellness + structured + learning
   },
   {
     id: 'beach_therapist',
@@ -339,10 +376,13 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'RESTORER',
     tagline: 'Salt water heals everything.',
     primaryTraits: [
-      { trait: 'pace', weight: 2, sweetSpot: -5, range: [-10, 0] },
-      { trait: 'comfort', weight: 2, sweetSpot: 5, range: [2, 10] },
+      { trait: 'pace', weight: 3, sweetSpot: -4, range: [-10, 0] },
+      { trait: 'comfort', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
-    signatureAnswers: ['i1'],
+    hardNo: [
+      { trait: 'pace', range: [6, 10], penalty: -15 },
+    ],
+    signatureAnswers: ['rm2', 'i1', 'd1', 'd4', 'a1'],  // restoration_mode: ocean + tropical + slow/relaxed
   },
   {
     id: 'slow_traveler',
@@ -350,10 +390,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'RESTORER',
     tagline: 'Stay long enough to have a favorite café.',
     primaryTraits: [
-      { trait: 'pace', weight: 3, sweetSpot: -8, range: [-10, -4] },
-      { trait: 'authenticity', weight: 2, sweetSpot: 7, range: [4, 10] },
+      { trait: 'pace', weight: 4, sweetSpot: -6, range: [-10, -2] },
+      { trait: 'authenticity', weight: 3, sweetSpot: 7, range: [4, 10] },
+      { trait: 'planning', weight: 2, sweetSpot: -3, range: [-8, 2] },
     ],
-    signatureAnswers: ['d1'],
+    hardNo: [
+      { trait: 'pace', range: [4, 10], penalty: -20 },
+    ],
+    signatureAnswers: ['rm3', 'd1', 'h3', 'e3', 'e4'],  // restoration_mode: settle + slow + rental + flexible
   },
   {
     id: 'escape_artist',
@@ -364,20 +408,37 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'pace', weight: 2, sweetSpot: -4, range: [-10, 2] },
       { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 10] },
     ],
-    signatureAnswers: ['a1', 'd4'],
+    signatureAnswers: ['a1', 'd4', 'tt2', 'sm5'],  // quiet + relaxed + fresh start + solo
+  },
+  {
+    id: 'sanctuary_seeker',
+    name: 'The Sanctuary Seeker',
+    category: 'RESTORER',
+    tagline: 'Travel is finding your perfect refuge.',
+    primaryTraits: [
+      { trait: 'comfort', weight: 3, sweetSpot: 8, range: [6, 10] },
+      { trait: 'planning', weight: 2, sweetSpot: 6, range: [4, 10] },
+      { trait: 'social', weight: 2, sweetSpot: -3, range: [-10, 2] },
+      { trait: 'adventure', weight: 1, sweetSpot: 0, range: [-5, 4] },
+    ],
+    hardNo: [
+      { trait: 'social', range: [6, 10], penalty: -20 },
+    ],
+    signatureAnswers: ['o1', 'rm1', 'rm2', 'h2', 'a1', 'ld2', 'ad4'],  // solitude + stillness/ocean + luxury + craft
   },
   
+  // ═══════════════════════════════════════
   // CURATOR category
+  // ═══════════════════════════════════════
   {
     id: 'culinary_cartographer',
     name: 'The Culinary Cartographer',
     category: 'CURATOR',
     tagline: 'Your passport is basically a menu.',
     primaryTraits: [
-      { trait: 'authenticity', weight: 2, sweetSpot: 7, range: [5, 10] },
-      { trait: 'social', weight: 1, sweetSpot: 4, range: [0, 10] },
+      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 9] },
     ],
-    signatureAnswers: ['a3', 'g3'],
+    signatureAnswers: ['g3', 'cd1', 'b3'],  // food + immersion + city (food cities)
   },
   {
     id: 'art_aficionado',
@@ -385,10 +446,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'CURATOR',
     tagline: 'Every gallery is a pilgrimage.',
     primaryTraits: [
-      { trait: 'authenticity', weight: 2, sweetSpot: 6, range: [4, 10] },
-      { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 10] },
+      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
+      { trait: 'comfort', weight: 2, sweetSpot: 4, range: [1, 7] },
     ],
-    signatureAnswers: ['g2'],
+    signatureAnswers: ['cd2', 'g2', 'b3', 'h1'],  // culture_depth: aesthetic + culture + city + boutique
   },
   {
     id: 'luxury_luminary',
@@ -396,11 +457,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'CURATOR',
     tagline: 'Champagne wishes, caviar dreams, economy never.',
     primaryTraits: [
-      { trait: 'comfort', weight: 3, sweetSpot: 9, range: [7, 10] },
-      { trait: 'budget', weight: 2, sweetSpot: 9, range: [6, 10] },
+      { trait: 'comfort', weight: 4, sweetSpot: 9, range: [6, 10] },
+      { trait: 'budget', weight: 3, sweetSpot: -8, range: [-10, -4] },
+      { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    hardNo: [{ trait: 'budget', range: [-10, 2], penalty: -20 }],
-    signatureAnswers: ['c4', 'h2', 'b4'],
+    hardNo: [
+      { trait: 'comfort', range: [-10, 2], penalty: -20 },
+    ],
+    signatureAnswers: ['ld2', 'c4', 'h2', 'e1'],  // luxury_driver: craft + luxury + resort + planning
   },
   {
     id: 'eco_ethicist',
@@ -408,10 +472,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'CURATOR',
     tagline: 'Leave nothing but footprints.',
     primaryTraits: [
-      { trait: 'authenticity', weight: 2, sweetSpot: 7, range: [4, 10] },
-      { trait: 'transformation', weight: 2, sweetSpot: 6, range: [4, 10] },
+      { trait: 'authenticity', weight: 3, sweetSpot: 8, range: [5, 10] },
+      { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: [],
+    signatureAnswers: ['sm4', 'g1', 'h5', 'rm3'],  // community + outdoor + unique stays + settle
   },
   {
     id: 'curated_luxe',
@@ -422,20 +486,23 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'comfort', weight: 2, sweetSpot: 7, range: [5, 10] },
       { trait: 'planning', weight: 2, sweetSpot: 7, range: [5, 10] },
     ],
-    signatureAnswers: ['e1', 'h1'],
+    signatureAnswers: ['e1', 'h1', 'ld2'],  // detailed + boutique + craft
   },
   
+  // ═══════════════════════════════════════
   // TRANSFORMER category
+  // ═══════════════════════════════════════
   {
     id: 'gap_year_graduate',
     name: 'The Gap Year Graduate',
     category: 'TRANSFORMER',
     tagline: 'The world is the ultimate classroom.',
     primaryTraits: [
-      { trait: 'transformation', weight: 3, sweetSpot: 9, range: [6, 10] },
-      { trait: 'adventure', weight: 2, sweetSpot: 7, range: [4, 10] },
+      { trait: 'transformation', weight: 4, sweetSpot: 8, range: [5, 10] },
+      { trait: 'social', weight: 2, sweetSpot: -3, range: [-7, 3] },
+      { trait: 'planning', weight: 2, sweetSpot: -4, range: [-8, 2] },
     ],
-    signatureAnswers: [],
+    signatureAnswers: ['tt1', 'sm5', 'e4', 'c1'],  // transformation: identity + solo + spontaneous + budget
   },
   {
     id: 'midlife_explorer',
@@ -443,10 +510,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'TRANSFORMER',
     tagline: "It's never too late to become who you were meant to be.",
     primaryTraits: [
-      { trait: 'transformation', weight: 2, sweetSpot: 7, range: [5, 10] },
-      { trait: 'comfort', weight: 2, sweetSpot: 5, range: [3, 10] },
+      { trait: 'transformation', weight: 3, sweetSpot: 6, range: [3, 9] },
+      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: [],
+    signatureAnswers: ['tt2', 'a2', 'c2', 'c3'],  // transformation: reinvention + exploring + moderate/comfort budget
   },
   {
     id: 'sabbatical_scholar',
@@ -454,11 +521,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'TRANSFORMER',
     tagline: 'Taking time off to find time on.',
     primaryTraits: [
-      { trait: 'transformation', weight: 2, sweetSpot: 7, range: [5, 10] },
-      { trait: 'pace', weight: 1, sweetSpot: 0, range: [-5, 5] },
-      { trait: 'authenticity', weight: 2, sweetSpot: 6, range: [4, 10] },
+      { trait: 'transformation', weight: 4, sweetSpot: 8, range: [5, 10] },
+      { trait: 'authenticity', weight: 2, sweetSpot: 6, range: [3, 9] },
+      { trait: 'planning', weight: 2, sweetSpot: 3, range: [-2, 7] },
     ],
-    signatureAnswers: [],
+    signatureAnswers: ['tt3', 'g2', 'cd1', 'sm5', 'sm4'],  // transformation: learning + culture + immersion + solo/community
   },
   {
     id: 'healing_journeyer',
@@ -466,10 +533,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'TRANSFORMER',
     tagline: 'Travel is the medicine for the soul.',
     primaryTraits: [
-      { trait: 'transformation', weight: 3, sweetSpot: 8, range: [6, 10] },
-      { trait: 'pace', weight: 2, sweetSpot: -5, range: [-10, 0] },
+      { trait: 'transformation', weight: 3, sweetSpot: 7, range: [4, 10] },
+      { trait: 'pace', weight: 3, sweetSpot: -5, range: [-10, 0] },
+      { trait: 'comfort', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
-    signatureAnswers: ['g5'],
+    hardNo: [
+      { trait: 'pace', range: [5, 10], penalty: -15 },
+    ],
+    signatureAnswers: ['tt4', 'rm1', 'rm4', 'g5', 'd1'],  // transformation: healing + stillness/program + wellness
   },
   {
     id: 'retirement_ranger',
@@ -477,42 +548,31 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'TRANSFORMER',
     tagline: 'Finally free to explore without limits.',
     primaryTraits: [
-      { trait: 'transformation', weight: 2, sweetSpot: 6, range: [4, 10] },
-      { trait: 'pace', weight: 2, sweetSpot: -3, range: [-8, 3] },
-      { trait: 'comfort', weight: 2, sweetSpot: 6, range: [3, 10] },
+      { trait: 'comfort', weight: 3, sweetSpot: 5, range: [2, 8] },
+      { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 8] },
+      { trait: 'transformation', weight: 2, sweetSpot: 4, range: [1, 7] },
     ],
-    signatureAnswers: [],
+    signatureAnswers: ['tt5', 'c3', 'c4', 'e1', 'e2', 'sm2', 'sm3'],  // transformation: fulfillment + comfort/luxury + planning + family/partner
   },
   
-  // BALANCED / FLEXIBLE archetypes
+  // ═══════════════════════════════════════
+  // FALLBACK archetypes
+  // ═══════════════════════════════════════
   {
     id: 'balanced_story_collector',
     name: 'The Balanced Story Collector',
-    category: 'EXPLORER',  // Changed from CONNECTOR - accepts low social scores
+    category: 'EXPLORER',
     tagline: 'Every journey adds a chapter worth reading.',
     primaryTraits: [
-      { trait: 'social', weight: 1, sweetSpot: 3, range: [-2, 7] },  // Reduced weight, lower sweetSpot
-      { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
-      { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 8] },
-      { trait: 'pace', weight: 1, sweetSpot: 0, range: [-5, 5] },
+      // All traits near middle — wins when nothing is extreme
+      { trait: 'planning', weight: 1, sweetSpot: 0, range: [-4, 4] },
+      { trait: 'social', weight: 1, sweetSpot: 0, range: [-4, 4] },
+      { trait: 'comfort', weight: 1, sweetSpot: 0, range: [-4, 4] },
+      { trait: 'pace', weight: 1, sweetSpot: 0, range: [-4, 4] },
+      { trait: 'authenticity', weight: 1, sweetSpot: 0, range: [-4, 4] },
+      { trait: 'adventure', weight: 1, sweetSpot: 0, range: [-4, 4] },
     ],
-    signatureAnswers: [],
-  },
-  
-  // NEW: Sanctuary Seeker - for high comfort + high planning + low social + low adventure travelers
-  {
-    id: 'sanctuary_seeker',
-    name: 'The Sanctuary Seeker',
-    category: 'RESTORER',
-    tagline: 'Travel is finding your perfect refuge.',
-    primaryTraits: [
-      { trait: 'comfort', weight: 3, sweetSpot: 8, range: [6, 10] },
-      { trait: 'planning', weight: 2, sweetSpot: 6, range: [4, 10] },
-      { trait: 'social', weight: 2, sweetSpot: -3, range: [-10, 2] },  // Explicitly low social
-      { trait: 'adventure', weight: 1, sweetSpot: 0, range: [-5, 4] },
-    ],
-    hardNo: [{ trait: 'social', range: [6, 10], penalty: -20 }],  // Hard no for very social people
-    signatureAnswers: ['o1', 'o3', 'h2', 'a1'],  // Solitude-focused answers
+    signatureAnswers: ['ad3', 'e2', 'd3', 'c2'],  // "both" and "balanced" answers
   },
   {
     id: 'flexible_wanderer',
@@ -524,7 +584,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'adventure', weight: 2, sweetSpot: 5, range: [2, 10] },
       { trait: 'authenticity', weight: 1, sweetSpot: 4, range: [0, 10] },
     ],
-    signatureAnswers: [],
+    signatureAnswers: ['ad4', 'cd4', 'rm5', 'ld3', 'tt6'],  // All "none" answers - truly neutral
   },
   
   // Default fallback
@@ -645,6 +705,45 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'o2': { deltas: { social: -3, comfort: 2 }, label: 'Small groups' },  // Mild introvert
   'o3': { deltas: { social: 3 }, label: 'Flexible social' },  // Balanced
   'o4': { deltas: { social: 8, adventure: 2 }, label: 'Extrovert energizer' },  // Strong extrovert signal
+  
+  // Q16: Adventure driver - Separates Wilderness Pioneer ↔ Adrenaline Architect
+  'ad1': { deltas: { authenticity: 5, social: -3, adventure: 4 }, label: 'Frontier seeker' },      // Remote/wilderness
+  'ad2': { deltas: { adventure: 6, pace: 4, transformation: 3 }, label: 'Intensity seeker' },     // Adrenaline/challenge
+  'ad3': { deltas: { adventure: 4, authenticity: 2 }, label: 'Both adventure types' },            // Balanced
+  'ad4': { deltas: { adventure: -5, comfort: 3 }, label: 'Not adventure-focused' },               // None
+  
+  // Q17: Culture depth - Separates Cultural Anthropologist ↔ Art Aficionado ↔ Bucket List
+  'cd1': { deltas: { authenticity: 6, transformation: 4, planning: 2 }, label: 'Deep immersion' },  // Anthropological
+  'cd2': { deltas: { authenticity: 3, comfort: 2 }, label: 'Aesthetic focus' },                     // Art/design
+  'cd3': { deltas: { pace: 3, planning: 3, authenticity: -2 }, label: 'Highlights collector' },     // Bucket list
+  'cd4': { deltas: { adventure: 2 }, label: 'Not culture-focused' },                                // None
+  
+  // Q18: Restoration mode - Separates Zen Seeker ↔ Beach Therapist ↔ Slow Traveler ↔ Retreat Regular
+  'rm1': { deltas: { pace: -6, social: -4, transformation: 5 }, label: 'Stillness seeker' },        // Zen/meditation
+  'rm2': { deltas: { pace: -4, comfort: 3, social: -2 }, label: 'Ocean rhythm' },                   // Beach therapy
+  'rm3': { deltas: { pace: -5, authenticity: 5, planning: -3 }, label: 'Slow settler' },            // Slow travel
+  'rm4': { deltas: { planning: 4, transformation: 4, comfort: 2 }, label: 'Structured wellness' }, // Retreat
+  'rm5': { deltas: { pace: 3, adventure: 2 }, label: 'Action over recharge' },                      // None
+  
+  // Q19: Luxury driver - Separates Status Seeker ↔ Luxury Luminary
+  'ld1': { deltas: { comfort: 5, social: 3, budget: -6 }, label: 'Prestige seeker' },               // Status-driven
+  'ld2': { deltas: { comfort: 6, planning: 3, budget: -5 }, label: 'Craft appreciator' },           // Quality-driven
+  'ld3': { deltas: { budget: 4, authenticity: 2 }, label: 'Value prioritizer' },                    // Not luxury-focused
+  
+  // Q20: Transformation type - Separates Gap Year ↔ Midlife ↔ Sabbatical ↔ Healing ↔ Retirement
+  'tt1': { deltas: { transformation: 7, social: -2, authenticity: 3 }, label: 'Identity discovery' },      // Gap year
+  'tt2': { deltas: { transformation: 6, pace: 2 }, label: 'Fresh start seeker' },                          // Midlife
+  'tt3': { deltas: { transformation: 5, planning: 3, authenticity: 4 }, label: 'Skill builder' },          // Sabbatical
+  'tt4': { deltas: { transformation: 6, pace: -4, comfort: 3 }, label: 'Healing focus' },                   // Healing
+  'tt5': { deltas: { transformation: 4, adventure: 3, planning: 2 }, label: 'Dream fulfillment' },          // Retirement
+  'tt6': { deltas: { transformation: -3, comfort: 2 }, label: 'Not transformation-focused' },               // None
+  
+  // Q21: Social mode - Separates Social Butterfly ↔ Family Architect ↔ Romantic Curator ↔ Community Builder
+  'sm1': { deltas: { social: 7, pace: 2 }, label: 'Group social' },                                         // Social butterfly
+  'sm2': { deltas: { social: 4, planning: 4, comfort: 3 }, label: 'Family focused' },                       // Family architect
+  'sm3': { deltas: { social: 1, comfort: 3, authenticity: 2 }, label: 'Partner focused' },                  // Romantic curator
+  'sm4': { deltas: { social: 3, authenticity: 5, transformation: 4 }, label: 'Community builder' },         // Volunteering/giving back
+  'sm5': { deltas: { social: -6, transformation: 3, authenticity: 2 }, label: 'Solo traveler' },            // Solo
 };
 
 // ============================================================================
@@ -779,6 +878,15 @@ const QUESTION_MAPPINGS: Record<string, Record<string, AnswerDelta>> = {
   cultural_immersion: { l1: ANSWER_DELTAS.l1, l2: ANSWER_DELTAS.l2, l3: ANSWER_DELTAS.l3, l4: ANSWER_DELTAS.l4 },
   luxury_definition: { m1: ANSWER_DELTAS.m1, m2: ANSWER_DELTAS.m2, m3: ANSWER_DELTAS.m3, m4: ANSWER_DELTAS.m4 },
   meaningful_moment: { n1: ANSWER_DELTAS.n1, n2: ANSWER_DELTAS.n2, n3: ANSWER_DELTAS.n3, n4: ANSWER_DELTAS.n4 },
+  social_energy: { o1: ANSWER_DELTAS.o1, o2: ANSWER_DELTAS.o2, o3: ANSWER_DELTAS.o3, o4: ANSWER_DELTAS.o4 },
+  
+  // Q16-Q21: Disambiguation questions for archetype separation
+  adventure_driver: { ad1: ANSWER_DELTAS.ad1, ad2: ANSWER_DELTAS.ad2, ad3: ANSWER_DELTAS.ad3, ad4: ANSWER_DELTAS.ad4 },
+  culture_depth: { cd1: ANSWER_DELTAS.cd1, cd2: ANSWER_DELTAS.cd2, cd3: ANSWER_DELTAS.cd3, cd4: ANSWER_DELTAS.cd4 },
+  restoration_mode: { rm1: ANSWER_DELTAS.rm1, rm2: ANSWER_DELTAS.rm2, rm3: ANSWER_DELTAS.rm3, rm4: ANSWER_DELTAS.rm4, rm5: ANSWER_DELTAS.rm5 },
+  luxury_driver: { ld1: ANSWER_DELTAS.ld1, ld2: ANSWER_DELTAS.ld2, ld3: ANSWER_DELTAS.ld3 },
+  transformation_type: { tt1: ANSWER_DELTAS.tt1, tt2: ANSWER_DELTAS.tt2, tt3: ANSWER_DELTAS.tt3, tt4: ANSWER_DELTAS.tt4, tt5: ANSWER_DELTAS.tt5, tt6: ANSWER_DELTAS.tt6 },
+  social_mode: { sm1: ANSWER_DELTAS.sm1, sm2: ANSWER_DELTAS.sm2, sm3: ANSWER_DELTAS.sm3, sm4: ANSWER_DELTAS.sm4, sm5: ANSWER_DELTAS.sm5 },
   
   // Additional legacy question mappings (must match all keys used in calculateTraitScoresV2)
   hotel_priorities: {
@@ -1371,6 +1479,61 @@ function matchArchetypesV2(
   
   // Sort by score descending
   archetypeScores.sort((a, b) => b.score - a.score);
+  
+  // ═══════════════════════════════════════
+  // FALLBACK LOGIC: Check for flat/weak profiles
+  // ═══════════════════════════════════════
+  const FALLBACK_THRESHOLD = 45;  // Top score must exceed this
+  const FLAT_PROFILE_MARGIN = 10; // If top 3 within this margin, profile is flat
+  
+  // Get non-fallback archetypes first
+  const nonFallbackScores = archetypeScores.filter(
+    a => !['balanced_story_collector', 'flexible_wanderer', 'explorer'].includes(a.archetype.id)
+  );
+  const fallbackScores = archetypeScores.filter(
+    a => ['balanced_story_collector', 'flexible_wanderer'].includes(a.archetype.id)
+  );
+  
+  const topScore = nonFallbackScores[0]?.score ?? 0;
+  const secondScore = nonFallbackScores[1]?.score ?? 0;
+  const thirdScore = nonFallbackScores[2]?.score ?? 0;
+  
+  // Check fallback trigger conditions
+  const isWeakProfile = topScore < FALLBACK_THRESHOLD;
+  const isFlatProfile = topScore - thirdScore < FLAT_PROFILE_MARGIN;
+  let finalScores = archetypeScores;
+  let fallbackUsed = false;
+  
+  if (isWeakProfile || isFlatProfile) {
+    // Find best fallback archetype
+    const balancedScore = fallbackScores.find(a => a.archetype.id === 'balanced_story_collector');
+    const flexibleScore = fallbackScores.find(a => a.archetype.id === 'flexible_wanderer');
+    
+    // Determine which fallback fits better
+    // Flexible Wanderer: for people who selected lots of "none" answers
+    // Balanced Story Collector: for people with moderate scores across the board
+    let bestFallback = balancedScore;
+    if (flexibleScore && (!balancedScore || flexibleScore.score > balancedScore.score)) {
+      bestFallback = flexibleScore;
+    }
+    
+    if (bestFallback) {
+      // Boost fallback score to be primary, keep original top as secondary
+      bestFallback.score = Math.max(topScore + 5, 50);
+      bestFallback.reasons.push({
+        trait: 'planning' as Trait,  // Arbitrary, just for documentation
+        effect: 'boost',
+        amount: 0,
+        note: isWeakProfile 
+          ? 'Fallback: weak signals (no strong archetype match)' 
+          : 'Fallback: flat profile (multiple archetypes equally matched)',
+      });
+      fallbackUsed = true;
+      
+      // Re-sort after boosting
+      archetypeScores.sort((a, b) => b.score - a.score);
+    }
+  }
   
   // Take top 5 for blend
   const topN = archetypeScores.slice(0, 5);

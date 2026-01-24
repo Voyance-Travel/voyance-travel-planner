@@ -823,6 +823,340 @@
           "emotionalDrivers": ["connection", "energy", "community"]
         }
       ]
+    },
+    {
+      "id": "q16",
+      "prompt": "When you seek adventure, what pulls you?",
+      "type": "single",
+      "answers": [
+        {
+          "id": "ad1",
+          "label": "The frontier — remote places few have seen",
+          "mappings": [
+            { "trait": "wildernessSeeker", "weight": 0.95 },
+            { "trait": "solitudeEmbracer", "weight": 0.7 },
+            { "trait": "authenticitySeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["frontier", "remote", "pioneer"],
+          "emotionalDrivers": ["discovery", "solitude", "achievement"]
+        },
+        {
+          "id": "ad2",
+          "label": "The rush — pushing limits, earning the story",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.95 },
+            { "trait": "thrillSeeker", "weight": 0.9 },
+            { "trait": "transformationSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["adrenaline", "extreme", "challenge"],
+          "emotionalDrivers": ["thrill", "achievement", "growth"]
+        },
+        {
+          "id": "ad3",
+          "label": "Both equally — I want wild places AND intense challenges",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.8 },
+            { "trait": "wildernessSeeker", "weight": 0.7 },
+            { "trait": "discoveryDriven", "weight": 0.6 }
+          ],
+          "toneTags": ["versatile", "adventurous", "exploratory"],
+          "emotionalDrivers": ["variety", "exploration", "challenge"]
+        },
+        {
+          "id": "ad4",
+          "label": "Neither — adventure isn't really my thing",
+          "mappings": [
+            { "trait": "comfortPrioritizer", "weight": 0.7 },
+            { "trait": "restorationSeeker", "weight": 0.5 }
+          ],
+          "toneTags": ["relaxed", "comfort-seeking", "mellow"],
+          "emotionalDrivers": ["ease", "comfort", "peace"]
+        }
+      ]
+    },
+    {
+      "id": "q17",
+      "prompt": "When exploring culture, you're drawn to...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "cd1",
+          "label": "Deep history — why people live the way they do",
+          "mappings": [
+            { "trait": "culturalExplorer", "weight": 0.95 },
+            { "trait": "historyBuff", "weight": 0.9 },
+            { "trait": "transformationSeeker", "weight": 0.6 }
+          ],
+          "toneTags": ["immersive", "historical", "anthropological"],
+          "emotionalDrivers": ["meaning", "understanding", "connection"]
+        },
+        {
+          "id": "cd2",
+          "label": "Aesthetic beauty — galleries, architecture, design",
+          "mappings": [
+            { "trait": "designAppreciator", "weight": 0.9 },
+            { "trait": "authenticitySeeker", "weight": 0.6 },
+            { "trait": "comfortPrioritizer", "weight": 0.4 }
+          ],
+          "toneTags": ["aesthetic", "artistic", "visual"],
+          "emotionalDrivers": ["beauty", "inspiration", "appreciation"]
+        },
+        {
+          "id": "cd3",
+          "label": "Iconic highlights — the must-sees everyone talks about",
+          "mappings": [
+            { "trait": "experienceMaximizer", "weight": 0.85 },
+            { "trait": "plannerMindset", "weight": 0.6 },
+            { "trait": "collectorMindset", "weight": 0.5 }
+          ],
+          "toneTags": ["bucket-list", "iconic", "mainstream"],
+          "emotionalDrivers": ["achievement", "validation", "completion"]
+        },
+        {
+          "id": "cd4",
+          "label": "I'm not that focused on culture",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.5 },
+            { "trait": "comfortPrioritizer", "weight": 0.4 }
+          ],
+          "toneTags": ["practical", "relaxed", "unconcerned"],
+          "emotionalDrivers": ["simplicity", "relaxation", "freedom"]
+        }
+      ]
+    },
+    {
+      "id": "q18",
+      "prompt": "When you need to recharge, you want...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "rm1",
+          "label": "Stillness — meditation, silence, inner quiet",
+          "mappings": [
+            { "trait": "restorationSeeker", "weight": 0.95 },
+            { "trait": "solitudeEmbracer", "weight": 0.85 },
+            { "trait": "transformationSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["zen", "meditative", "spiritual"],
+          "emotionalDrivers": ["peace", "clarity", "renewal"]
+        },
+        {
+          "id": "rm2",
+          "label": "Ocean rhythm — waves, sun, vitamin sea",
+          "mappings": [
+            { "trait": "beachLover", "weight": 0.95 },
+            { "trait": "warmthSeeker", "weight": 0.8 },
+            { "trait": "restorationSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["beach", "coastal", "tropical"],
+          "emotionalDrivers": ["relaxation", "warmth", "escape"]
+        },
+        {
+          "id": "rm3",
+          "label": "Settling in — live like a local, no rushing",
+          "mappings": [
+            { "trait": "slowTraveler", "weight": 0.95 },
+            { "trait": "authenticitySeeker", "weight": 0.8 },
+            { "trait": "localLiving", "weight": 0.75 }
+          ],
+          "toneTags": ["slow", "local", "immersive"],
+          "emotionalDrivers": ["authenticity", "belonging", "depth"]
+        },
+        {
+          "id": "rm4",
+          "label": "Structured wellness — programs, routines, guided growth",
+          "mappings": [
+            { "trait": "wellnessOriented", "weight": 0.9 },
+            { "trait": "plannerMindset", "weight": 0.7 },
+            { "trait": "transformationSeeker", "weight": 0.65 }
+          ],
+          "toneTags": ["wellness", "structured", "retreat"],
+          "emotionalDrivers": ["growth", "discipline", "self-improvement"]
+        },
+        {
+          "id": "rm5",
+          "label": "I don't travel to recharge — I travel for action",
+          "mappings": [
+            { "trait": "energySeeker", "weight": 0.8 },
+            { "trait": "adventureChaser", "weight": 0.6 }
+          ],
+          "toneTags": ["active", "energetic", "go-getter"],
+          "emotionalDrivers": ["excitement", "momentum", "stimulation"]
+        }
+      ]
+    },
+    {
+      "id": "q19",
+      "prompt": "When you splurge on travel, it's for...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "ld1",
+          "label": "Prestige — exclusivity, the best-in-class, recognition",
+          "mappings": [
+            { "trait": "statusSeeker", "weight": 0.95 },
+            { "trait": "luxurySeeker", "weight": 0.85 },
+            { "trait": "socialConnector", "weight": 0.5 }
+          ],
+          "toneTags": ["prestige", "exclusive", "status"],
+          "emotionalDrivers": ["recognition", "achievement", "uniqueness"]
+        },
+        {
+          "id": "ld2",
+          "label": "Craft — impeccable service, refined quality, seamless comfort",
+          "mappings": [
+            { "trait": "luxurySeeker", "weight": 0.95 },
+            { "trait": "comfortPrioritizer", "weight": 0.9 },
+            { "trait": "qualityFocused", "weight": 0.8 }
+          ],
+          "toneTags": ["luxury", "quality", "refined"],
+          "emotionalDrivers": ["comfort", "ease", "indulgence"]
+        },
+        {
+          "id": "ld3",
+          "label": "I don't prioritize luxury — value matters more",
+          "mappings": [
+            { "trait": "budgetConscious", "weight": 0.8 },
+            { "trait": "authenticitySeeker", "weight": 0.5 }
+          ],
+          "toneTags": ["value", "practical", "thrifty"],
+          "emotionalDrivers": ["practicality", "efficiency", "authenticity"]
+        }
+      ]
+    },
+    {
+      "id": "q20",
+      "prompt": "If travel could change you, you'd want it to...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "tt1",
+          "label": "Help me discover who I am",
+          "mappings": [
+            { "trait": "transformationSeeker", "weight": 0.95 },
+            { "trait": "selfDiscovery", "weight": 0.9 },
+            { "trait": "solitudeEmbracer", "weight": 0.5 }
+          ],
+          "toneTags": ["identity", "self-discovery", "introspection"],
+          "emotionalDrivers": ["clarity", "purpose", "identity"]
+        },
+        {
+          "id": "tt2",
+          "label": "Give me a fresh start or new chapter",
+          "mappings": [
+            { "trait": "transformationSeeker", "weight": 0.9 },
+            { "trait": "escapeSeeker", "weight": 0.75 },
+            { "trait": "energySeeker", "weight": 0.5 }
+          ],
+          "toneTags": ["reinvention", "fresh-start", "renewal"],
+          "emotionalDrivers": ["hope", "change", "possibility"]
+        },
+        {
+          "id": "tt3",
+          "label": "Teach me something deep — a skill, a language, a craft",
+          "mappings": [
+            { "trait": "learningOriented", "weight": 0.95 },
+            { "trait": "transformationSeeker", "weight": 0.8 },
+            { "trait": "authenticitySeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["learning", "skill-building", "immersive"],
+          "emotionalDrivers": ["mastery", "growth", "accomplishment"]
+        },
+        {
+          "id": "tt4",
+          "label": "Help me heal or process something difficult",
+          "mappings": [
+            { "trait": "transformationSeeker", "weight": 0.9 },
+            { "trait": "restorationSeeker", "weight": 0.85 },
+            { "trait": "slowTraveler", "weight": 0.6 }
+          ],
+          "toneTags": ["healing", "therapeutic", "restorative"],
+          "emotionalDrivers": ["healing", "peace", "processing"]
+        },
+        {
+          "id": "tt5",
+          "label": "Let me finally do what I've always dreamed of",
+          "mappings": [
+            { "trait": "adventureChaser", "weight": 0.75 },
+            { "trait": "transformationSeeker", "weight": 0.7 },
+            { "trait": "plannerMindset", "weight": 0.5 }
+          ],
+          "toneTags": ["bucket-list", "dream", "fulfillment"],
+          "emotionalDrivers": ["fulfillment", "accomplishment", "joy"]
+        },
+        {
+          "id": "tt6",
+          "label": "I'm not seeking transformation — just enjoyment",
+          "mappings": [
+            { "trait": "comfortPrioritizer", "weight": 0.6 },
+            { "trait": "restorationSeeker", "weight": 0.5 }
+          ],
+          "toneTags": ["relaxed", "simple", "uncomplicated"],
+          "emotionalDrivers": ["enjoyment", "relaxation", "simplicity"]
+        }
+      ]
+    },
+    {
+      "id": "q21",
+      "prompt": "Your ideal travel companions are...",
+      "type": "single",
+      "answers": [
+        {
+          "id": "sm1",
+          "label": "Friends or new people — the more the merrier",
+          "mappings": [
+            { "trait": "socialConnector", "weight": 0.95 },
+            { "trait": "groupTraveler", "weight": 0.9 },
+            { "trait": "funSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["social", "group", "festive"],
+          "emotionalDrivers": ["connection", "fun", "energy"]
+        },
+        {
+          "id": "sm2",
+          "label": "Family across generations — kids, parents, everyone",
+          "mappings": [
+            { "trait": "familyFocused", "weight": 0.95 },
+            { "trait": "inclusivePlanner", "weight": 0.8 },
+            { "trait": "memoryMaker", "weight": 0.75 }
+          ],
+          "toneTags": ["family", "multigenerational", "inclusive"],
+          "emotionalDrivers": ["legacy", "togetherness", "tradition"]
+        },
+        {
+          "id": "sm3",
+          "label": "Just my partner — intimate and curated",
+          "mappings": [
+            { "trait": "romanticTraveler", "weight": 0.9 },
+            { "trait": "comfortPrioritizer", "weight": 0.6 },
+            { "trait": "authenticitySeeker", "weight": 0.5 }
+          ],
+          "toneTags": ["romantic", "intimate", "couples"],
+          "emotionalDrivers": ["connection", "romance", "intimacy"]
+        },
+        {
+          "id": "sm4",
+          "label": "Locals and communities — I want to connect and give back",
+          "mappings": [
+            { "trait": "authenticitySeeker", "weight": 0.85 },
+            { "trait": "connectionSeeker", "weight": 0.8 },
+            { "trait": "transformationSeeker", "weight": 0.7 }
+          ],
+          "toneTags": ["community", "local", "purposeful"],
+          "emotionalDrivers": ["meaning", "contribution", "connection"]
+        },
+        {
+          "id": "sm5",
+          "label": "Myself — solo is how I travel best",
+          "mappings": [
+            { "trait": "solitudeEmbracer", "weight": 0.95 },
+            { "trait": "independentTraveler", "weight": 0.9 },
+            { "trait": "selfDiscovery", "weight": 0.6 }
+          ],
+          "toneTags": ["solo", "independent", "autonomous"],
+          "emotionalDrivers": ["freedom", "autonomy", "self-discovery"]
+        }
+      ]
     }
   ],
   "traitDefinitions": {
