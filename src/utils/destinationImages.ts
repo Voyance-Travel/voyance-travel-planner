@@ -5,8 +5,11 @@
  * Does NOT rely on database images which have quality issues.
  */
 
-// Import local Rome hero image (no people, historic sites)
-import romeHeroImage from '@/assets/destinations/rome-hero.jpg';
+// Rome: local curated hero images (NO PEOPLE)
+import romeHero2 from '@/assets/destinations/rome-hero-2.jpg';
+import romeHero3 from '@/assets/destinations/rome-hero-3.jpg';
+import romeHero4 from '@/assets/destinations/rome-hero-4.jpg';
+import romeHero5 from '@/assets/destinations/rome-hero-5.jpg';
 
 // Curated high-quality images for popular destinations
 const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
@@ -22,9 +25,10 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1486299267070-83823f5448dd?w=1200',
   ],
   'rome': [
-    romeHeroImage,
-    'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200',
-    'https://images.unsplash.com/photo-1531572753322-ad063cecc140?w=1200',
+    romeHero5,
+    romeHero2,
+    romeHero3,
+    romeHero4,
   ],
   'barcelona': [
     'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=1200',
