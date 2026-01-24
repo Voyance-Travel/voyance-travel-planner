@@ -1866,6 +1866,7 @@ export function EditorialItinerary({
         }}
         activity={swapDrawerActivity}
         destination={destination}
+        existingActivities={days.flatMap(day => day.activities.map(a => a.title).filter(Boolean))}
         onSelectAlternative={handleSelectSwapAlternative}
       />
 

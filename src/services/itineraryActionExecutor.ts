@@ -157,6 +157,11 @@ async function executeSwapAction(
 
   // Build search query from preference hint or reason
   const searchQuery = preference_hint || reason || '';
+  
+  // Collect all existing activity names to exclude from suggestions
+  const existingActivityNames = currentDays.flatMap(d => 
+    d.activities.map(a => a.title || a.name).filter(Boolean)
+  ) as string[];
 
   // Fetch alternatives using the existing edge function
   const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
@@ -170,6 +175,7 @@ async function executeSwapAction(
       },
       destination,
       searchQuery,
+      excludeActivities: existingActivityNames,
     },
   });
 
@@ -269,10 +275,19 @@ async function executeRegenerateAction(
   // Get alternatives for each unlocked activity
   const updatedActivities = [...day.activities];
   const allAlternatives: AlternativeActivity[] = [];
+  
+  // Build exclusion list - all current activity names plus ones we've already selected
+  const baseExclusions = currentDays.flatMap(d => 
+    d.activities.map(a => a.title || a.name).filter(Boolean)
+  ) as string[];
 
   for (let i = 0; i < day.activities.length; i++) {
     const activity = day.activities[i];
     if (activity.isLocked) continue;
+    
+    // Add any alternatives we've already picked to the exclusion list
+    const usedAlternatives = allAlternatives.map(a => a.name);
+    const excludeActivities = [...baseExclusions, ...usedAlternatives];
 
     const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
       body: {
@@ -284,6 +299,7 @@ async function executeRegenerateAction(
         },
         destination,
         searchQuery: new_focus || '',
+        excludeActivities,
       },
     });
 

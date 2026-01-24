@@ -24,6 +24,7 @@ interface ActivityAlternativesDrawerProps {
   onClose: () => void;
   activity: ItineraryActivity | null;
   destination?: string;
+  existingActivities?: string[]; // Names of activities already in the itinerary
   onSelectAlternative: (activity: ItineraryActivity) => void;
 }
 
@@ -45,6 +46,7 @@ export default function ActivityAlternativesDrawer({
   onClose,
   activity,
   destination,
+  existingActivities = [],
   onSelectAlternative,
 }: ActivityAlternativesDrawerProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +80,7 @@ export default function ActivityAlternativesDrawer({
           },
           destination,
           searchQuery,
+          excludeActivities: existingActivities,
         },
       });
 
