@@ -88,6 +88,7 @@ export interface EditorialActivity {
   isLocked?: boolean;
   website?: string;
   bookingUrl?: string; // External booking URL for affiliate links
+  viatorProductCode?: string; // Viator product code for API bookings
   // Booking state fields
   bookingState?: BookingItemState;
   quotePriceCents?: number;
@@ -209,6 +210,8 @@ export interface EditorialItineraryProps {
   onBookingAdded?: () => void;
   /** Called when activities are reordered via drag-and-drop */
   onActivityReorder?: (dayIndex: number, activities: EditorialActivity[]) => void;
+  /** Called when user requests payment for an activity */
+  onPaymentRequest?: (activityId: string) => void;
 }
 
 // =============================================================================
@@ -484,6 +487,7 @@ export function EditorialItinerary({
   onSave,
   onRegenerateDay,
   onBookingAdded,
+  onPaymentRequest,
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
@@ -1342,6 +1346,7 @@ export function EditorialItinerary({
                 onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                 onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
                 onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                onPaymentRequest={onPaymentRequest}
               />
             )}
           </motion.div>
