@@ -115,13 +115,30 @@ export function ItineraryAssistant({
     }
   }, [isOpen, messages.length, destination]);
 
+  // Max message length to prevent abuse
+  const MAX_MESSAGE_LENGTH = 500;
+
   const handleSend = useCallback(async () => {
-    if (!inputValue.trim() || isLoading) return;
+    const trimmedInput = inputValue.trim();
+    if (!trimmedInput || isLoading) return;
+
+    // Client-side safety: enforce length limit
+    if (trimmedInput.length > MAX_MESSAGE_LENGTH) {
+      toast.error('Message too long', {
+        description: `Please keep your message under ${MAX_MESSAGE_LENGTH} characters.`,
+      });
+      return;
+    }
+
+    // Client-side safety: basic input sanitization
+    const sanitizedInput = trimmedInput
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .substring(0, MAX_MESSAGE_LENGTH);
 
     const userMessage: ChatMessage = {
       id: `msg_${Date.now()}`,
       role: 'user',
-      content: inputValue.trim(),
+      content: sanitizedInput,
       timestamp: new Date(),
     };
 
@@ -430,9 +447,10 @@ export function ItineraryAssistant({
               <Input
                 ref={inputRef}
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => setInputValue(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
                 placeholder="Ask to swap an activity, adjust pacing..."
-                disabled={isLoading}
+                disabled={isLoading || isExecuting}
+                maxLength={MAX_MESSAGE_LENGTH}
                 className="flex-1"
               />
               <Button 
