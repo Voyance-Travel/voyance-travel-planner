@@ -1123,6 +1123,7 @@ async function getOptimalTransport(
   const hasApiKey = !!Deno.env.get("GOOGLE_MAPS_API_KEY");
 
   if (!hasApiKey) {
+    console.log(`[Transport] No API key, falling back to heuristics`);
     // Only possible fallback without Google is Haversine, which needs coords.
     if (typeof origin !== 'string' && typeof destination !== 'string') {
       return getHaversineTransport(origin, destination, destinationName);
@@ -1130,7 +1131,37 @@ async function getOptimalTransport(
     return null;
   }
 
-  // Try walking first
+  // For address-based routing, try transit first since we can't pre-estimate distance
+  const isAddressBased = typeof origin === 'string' || typeof destination === 'string';
+  
+  if (isAddressBased) {
+    console.log(`[Transport] Address-based routing to ${destinationName}, trying transit first`);
+    // Try transit first for address-based queries
+    const transitResult = await getGoogleTransport(origin, destination, destinationName, 'transit');
+    if (transitResult) {
+      // If transit found and reasonable, use it
+      if (transitResult.durationMinutes <= 45) {
+        return transitResult;
+      }
+    }
+    
+    // Try walking as alternative
+    const walkResult = await getGoogleTransport(origin, destination, destinationName, 'walking');
+    if (walkResult && walkResult.durationMinutes <= 20) {
+      return walkResult;
+    }
+    
+    // Try driving for longer distances
+    const driveResult = await getGoogleTransport(origin, destination, destinationName, 'driving');
+    if (driveResult) {
+      return driveResult;
+    }
+    
+    // Return transit if we have it, otherwise walk
+    return transitResult || walkResult || null;
+  }
+
+  // For coordinate-based routing, try walking first (original logic)
   const walkResult = await getGoogleTransport(origin, destination, destinationName, 'walking');
 
   if (walkResult) {
