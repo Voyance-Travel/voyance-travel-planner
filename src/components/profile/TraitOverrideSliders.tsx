@@ -129,21 +129,113 @@ export default function TraitOverrideSliders({
   onSave,
   className,
 }: TraitOverrideSlidersProps) {
-  // Merge computed traits with existing overrides
-  const [traitValues, setTraitValues] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
-    TRAITS.forEach(trait => {
-      initial[trait.key] = existingOverrides[trait.key] ?? computedTraits[trait.key] ?? 0;
-    });
-    return initial;
-  });
-
-  const [originalValues, setOriginalValues] = useState<Record<string, number>>(traitValues);
+  // State for trait values - will be initialized after preferences are loaded
+  const [traitValues, setTraitValues] = useState<Record<string, number>>({});
+  const [originalValues, setOriginalValues] = useState<Record<string, number>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Load preferences and derive initial trait values
+  useEffect(() => {
+    async function loadPreferencesAndInitialize() {
+      setIsLoading(true);
+      
+      try {
+        // Fetch user preferences to derive trait values
+        const { data: prefs } = await supabase
+          .from('user_preferences')
+          .select('budget_tier, travel_pace, planning_preference, travel_companions, interests, accommodation_style, travel_vibes')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        // Derive trait values from preferences as baseline
+        const derivedFromPrefs: Record<string, number> = {};
+        
+        if (prefs) {
+          // Planning trait: detailed = +7, balanced = 0, spontaneous = -5
+          if (prefs.planning_preference === 'detailed') derivedFromPrefs.planning = 7;
+          else if (prefs.planning_preference === 'spontaneous') derivedFromPrefs.planning = -5;
+          else derivedFromPrefs.planning = 0;
+          
+          // Social trait: based on companions
+          const companions = prefs.travel_companions as string[] | null;
+          if (companions?.includes('solo')) derivedFromPrefs.social = -3;
+          else if (companions?.includes('group')) derivedFromPrefs.social = 5;
+          else derivedFromPrefs.social = 2;
+          
+          // Comfort trait: based on budget and accommodation
+          if (prefs.budget_tier === 'luxury') derivedFromPrefs.comfort = 7;
+          else if (prefs.budget_tier === 'premium') derivedFromPrefs.comfort = 4;
+          else if (prefs.budget_tier === 'budget') derivedFromPrefs.comfort = -3;
+          else derivedFromPrefs.comfort = 0;
+          
+          // Pace trait
+          if (prefs.travel_pace === 'packed' || prefs.travel_pace === 'fast') derivedFromPrefs.pace = 6;
+          else if (prefs.travel_pace === 'relaxed' || prefs.travel_pace === 'slow') derivedFromPrefs.pace = -6;
+          else derivedFromPrefs.pace = 0;
+          
+          // Authenticity trait: based on interests
+          const interests = prefs.interests as string[] | null;
+          if (interests?.includes('culture') || interests?.includes('food') || interests?.includes('local')) {
+            derivedFromPrefs.authenticity = 5;
+          } else {
+            derivedFromPrefs.authenticity = 0;
+          }
+          
+          // Adventure trait
+          const vibes = prefs.travel_vibes as string[] | null;
+          if (interests?.includes('adventure') || vibes?.includes('bold')) {
+            derivedFromPrefs.adventure = 6;
+          } else {
+            derivedFromPrefs.adventure = 0;
+          }
+          
+          // Budget trait (frugal vs splurge)
+          if (prefs.budget_tier === 'budget') derivedFromPrefs.budget = 5;
+          else if (prefs.budget_tier === 'luxury') derivedFromPrefs.budget = -5;
+          else derivedFromPrefs.budget = 0;
+          
+          // Transformation trait
+          if (vibes?.includes('spiritual') || interests?.includes('wellness')) {
+            derivedFromPrefs.transformation = 5;
+          } else {
+            derivedFromPrefs.transformation = 0;
+          }
+        }
+        
+        // Priority: existingOverrides > computedTraits > derivedFromPrefs > 0
+        const initial: Record<string, number> = {};
+        TRAITS.forEach(trait => {
+          initial[trait.key] = 
+            existingOverrides[trait.key] ?? 
+            computedTraits[trait.key] ?? 
+            derivedFromPrefs[trait.key] ?? 
+            0;
+        });
+        
+        setTraitValues(initial);
+        setOriginalValues(initial);
+      } catch (error) {
+        console.error('Failed to load preferences for trait sliders:', error);
+        // Fallback to computed traits
+        const initial: Record<string, number> = {};
+        TRAITS.forEach(trait => {
+          initial[trait.key] = existingOverrides[trait.key] ?? computedTraits[trait.key] ?? 0;
+        });
+        setTraitValues(initial);
+        setOriginalValues(initial);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    loadPreferencesAndInitialize();
+  }, [userId, computedTraits, existingOverrides]);
 
   // Track changes
   useEffect(() => {
+    if (Object.keys(originalValues).length === 0) return;
     const changed = TRAITS.some(
       trait => traitValues[trait.key] !== originalValues[trait.key]
     );
@@ -220,6 +312,14 @@ export default function TraitOverrideSliders({
       setIsSaving(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className={cn("flex items-center justify-center py-12", className)}>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <motion.div
