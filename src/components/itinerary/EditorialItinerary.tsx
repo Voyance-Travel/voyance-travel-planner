@@ -20,7 +20,8 @@ import {
   Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
-  CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check
+  CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
+  Shield, FileText, HeartPulse
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
@@ -2470,12 +2471,205 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
       voltageTips: ['Universal adapters are convenient', 'Check voltage compatibility for hair dryers'],
       emergency: destinationInfo?.emergency || 'Contact local authorities',
       emergencyTips: ['Save emergency numbers in your phone', 'Know your hotel address in local language'],
+      entryRequirements: 'Check visa requirements for your nationality',
+      entryTips: ['Passport must be valid 6+ months beyond travel dates', 'Check visa requirements well in advance', 'Some countries require proof of onward travel', 'Keep digital copies of all documents'],
     };
   };
+
+  // Get entry requirements based on destination
+  const getEntryRequirements = () => {
+    const country = destinationCountry?.toLowerCase() || '';
+    const dest = destination.toLowerCase();
+    
+    // UK
+    if (country.includes('uk') || country.includes('united kingdom') || country.includes('england') || dest.includes('london')) {
+      return {
+        visa: 'US citizens: Visa-free for up to 6 months',
+        visaTips: [
+          'No visa required for tourism (US/EU citizens)',
+          'Must show proof of return/onward travel',
+          'May need to show proof of accommodation',
+          'Electronic Travel Authorisation (ETA) required from 2024 for some nationalities'
+        ],
+        passport: 'Valid passport required',
+        passportTips: [
+          'Passport must be valid for entire stay',
+          'No minimum validity requirement beyond trip',
+          'Blank pages not strictly required',
+          'Keep a photo of passport on your phone'
+        ],
+        health: 'No required vaccinations',
+        healthTips: [
+          'COVID restrictions may apply - check before travel',
+          'NHS available for emergencies (may incur charges)',
+          'European Health Insurance Card (EHIC) no longer valid for UK',
+          'Travel insurance strongly recommended'
+        ],
+      };
+    }
+    
+    // France
+    if (country.includes('france') || dest.includes('paris')) {
+      return {
+        visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
+        visaTips: [
+          'Part of Schengen Area - 90 days in any 180-day period',
+          'ETIAS authorization required from 2025 for US citizens',
+          'No visa required for tourism (US/EU citizens)',
+          'Count all Schengen countries toward 90-day limit'
+        ],
+        passport: 'Valid passport required',
+        passportTips: [
+          'Must be valid 3+ months beyond planned departure from Schengen',
+          'Issued within past 10 years',
+          'At least 2 blank pages recommended',
+          'Keep color copies separate from original'
+        ],
+        health: 'No required vaccinations',
+        healthTips: [
+          'Routine vaccinations should be up to date',
+          'European Health Insurance Card (EHIC) valid for EU citizens',
+          'Pharmacies can provide basic medical advice',
+          'Travel insurance strongly recommended'
+        ],
+      };
+    }
+    
+    // Italy / Rome
+    if (country.includes('italy') || dest.includes('rome') || dest.includes('florence') || dest.includes('venice') || dest.includes('milan')) {
+      return {
+        visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
+        visaTips: [
+          'Part of Schengen Area - 90 days in any 180-day period',
+          'ETIAS authorization required from 2025 for US citizens',
+          'No visa required for tourism (US/EU citizens)',
+          'Register at local police station if staying 8+ days (handled by hotels)'
+        ],
+        passport: 'Valid passport required',
+        passportTips: [
+          'Must be valid 3+ months beyond planned departure from Schengen',
+          'Issued within past 10 years',
+          'At least 2 blank pages recommended',
+          'Carry passport when visiting major sites (security checks)'
+        ],
+        health: 'No required vaccinations',
+        healthTips: [
+          'Routine vaccinations should be up to date',
+          'European Health Insurance Card (EHIC) valid for EU citizens',
+          'Tap water is safe to drink',
+          'Travel insurance strongly recommended'
+        ],
+      };
+    }
+    
+    // Spain
+    if (country.includes('spain') || dest.includes('barcelona') || dest.includes('madrid')) {
+      return {
+        visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
+        visaTips: [
+          'Part of Schengen Area - 90 days in any 180-day period',
+          'ETIAS authorization required from 2025 for US citizens',
+          'No visa required for tourism (US/EU citizens)',
+          'Count all Schengen countries toward 90-day limit'
+        ],
+        passport: 'Valid passport required',
+        passportTips: [
+          'Must be valid 3+ months beyond planned departure from Schengen',
+          'Issued within past 10 years',
+          'At least 2 blank pages recommended',
+          'National ID card accepted for EU citizens'
+        ],
+        health: 'No required vaccinations',
+        healthTips: [
+          'Routine vaccinations should be up to date',
+          'European Health Insurance Card (EHIC) valid for EU citizens',
+          'Pharmacies well-stocked and helpful',
+          'Travel insurance strongly recommended'
+        ],
+      };
+    }
+    
+    // Germany
+    if (country.includes('germany') || dest.includes('berlin') || dest.includes('munich')) {
+      return {
+        visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
+        visaTips: [
+          'Part of Schengen Area - 90 days in any 180-day period',
+          'ETIAS authorization required from 2025 for US citizens',
+          'No visa required for tourism (US/EU citizens)',
+          'Count all Schengen countries toward 90-day limit'
+        ],
+        passport: 'Valid passport required',
+        passportTips: [
+          'Must be valid 3+ months beyond planned departure from Schengen',
+          'Issued within past 10 years',
+          'At least 2 blank pages recommended',
+          'National ID card accepted for EU citizens'
+        ],
+        health: 'No required vaccinations',
+        healthTips: [
+          'Routine vaccinations should be up to date',
+          'European Health Insurance Card (EHIC) valid for EU citizens',
+          'High-quality healthcare system',
+          'Travel insurance strongly recommended'
+        ],
+      };
+    }
+    
+    // Default fallback
+    return {
+      visa: 'Check visa requirements for your nationality',
+      visaTips: [
+        'Requirements vary by passport/nationality',
+        'Apply for visa well in advance if required',
+        'Some visas can take weeks to process',
+        'Check embassy website for latest requirements'
+      ],
+      passport: 'Valid passport required',
+      passportTips: [
+        'Typically must be valid 6+ months beyond travel dates',
+        'Check blank page requirements',
+        'Keep digital and physical copies separate',
+        'Note passport expiration date'
+      ],
+      health: 'Check health advisories',
+      healthTips: [
+        'Consult CDC travel health notices',
+        'Some destinations require vaccinations',
+        'Bring sufficient prescription medications',
+        'Travel insurance strongly recommended'
+      ],
+    };
+  };
+
+  const entryInfo = getEntryRequirements();
 
   const info = getDefaultInfo();
 
   const infoCategories = [
+    // Entry Requirements - Most important first
+    {
+      id: 'visa',
+      icon: <Shield className="h-5 w-5" />,
+      label: 'Visa Requirements',
+      value: entryInfo.visa,
+      tips: entryInfo.visaTips,
+    },
+    {
+      id: 'passport',
+      icon: <FileText className="h-5 w-5" />,
+      label: 'Passport',
+      value: entryInfo.passport,
+      tips: entryInfo.passportTips,
+    },
+    {
+      id: 'health',
+      icon: <HeartPulse className="h-5 w-5" />,
+      label: 'Health & Vaccinations',
+      value: entryInfo.health,
+      tips: entryInfo.healthTips,
+    },
+    // General info
     {
       id: 'currency',
       icon: <Wallet className="h-5 w-5" />,
@@ -2510,13 +2704,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
       label: 'Tipping',
       value: info.tipping,
       tips: info.tippingTips,
-    },
-    {
-      id: 'water',
-      icon: <Info className="h-5 w-5" />,
-      label: 'Water & Safety',
-      value: info.water,
-      tips: info.waterTips,
     },
     {
       id: 'voltage',
