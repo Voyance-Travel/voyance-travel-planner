@@ -111,6 +111,13 @@ interface EnrichedItinerary {
 // Derives a single canonical budget line from tier + traits
 // =============================================================================
 
+// CANONICAL TRAIT POLARITY (matches calculate-travel-dna):
+// - budget:  POSITIVE = frugal/value-focused,  NEGATIVE = splurge/luxury
+// - comfort: POSITIVE = luxury-seeking,        NEGATIVE = budget-conscious
+// This is the single source of truth - do NOT invert elsewhere!
+const BUDGET_TRAIT_POLARITY = 'POSITIVE_IS_FRUGAL' as const;
+const COMFORT_TRAIT_POLARITY = 'POSITIVE_IS_LUXURY' as const;
+
 type SpendStyle = 'value_focused' | 'balanced' | 'splurge_forward';
 type BudgetTierLevel = 'budget' | 'economy' | 'standard' | 'comfort' | 'premium' | 'luxury';
 
@@ -1138,12 +1145,18 @@ function inferArchetypesFromTraits(traitScores: Record<string, number>): Array<{
 /**
  * Build Travel DNA persona context for AI prompt
  * Includes archetype blend, confidence level, trait information, and RECONCILED BUDGET INTENT
+ * 
+ * @param supabase - Supabase client for structured event logging
+ * @param userId - User ID for event logging (optional)
  */
-function buildTravelDNAContext(
+async function buildTravelDNAContext(
   dna: TravelDNAProfile | null, 
   overrides: Record<string, number> | null,
-  budgetTier?: string
-): { context: string; budgetIntent: BudgetIntent | null } {
+  budgetTier?: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase?: any,
+  userId?: string
+): Promise<{ context: string; budgetIntent: BudgetIntent | null }> {
   if (!dna) return { context: '', budgetIntent: null };
 
   const sections: string[] = [];
@@ -1160,25 +1173,35 @@ function buildTravelDNAContext(
   const comfortTrait = traitScores?.comfort as number | undefined;
   const budgetIntent = deriveBudgetIntent(budgetTier, budgetTrait, comfortTrait);
   
-  // Add reconciled budget section FIRST (most important for activity selection)
-  let budgetSection = `\n${'='.repeat(60)}\n💰 BUDGET INTENT (RECONCILED - SINGLE SOURCE OF TRUTH)\n${'='.repeat(60)}`;
-  budgetSection += `\n🎯 ${budgetIntent.notes}`;
-  budgetSection += `\n`;
-  budgetSection += `\nSpend Style: ${budgetIntent.spendStyle.replace('_', '-')}`;
-  budgetSection += `\nPrice Sensitivity: ${budgetIntent.priceSensitivity}/100 (${budgetIntent.priceSensitivity >= 70 ? 'highly price-aware' : budgetIntent.priceSensitivity >= 40 ? 'moderately price-aware' : 'relaxed about prices'})`;
-  budgetSection += `\nSplurge Cadence: ~${budgetIntent.splurgeCadence.dinners} special dinners/trip, ~${budgetIntent.splurgeCadence.experiences} premium experiences/trip`;
+  // Log structured event if conflict detected (for analytics + debugging)
+  if (budgetIntent.conflict && supabase && userId) {
+    try {
+      await supabase.from('voyance_events').insert({
+        user_id: userId,
+        event_type: 'budget_intent_conflict',
+        properties: {
+          budget_tier: budgetTier,
+          budget_trait: budgetTrait,
+          comfort_trait: comfortTrait,
+          resolved_tier: budgetIntent.tier,
+          resolved_spend_style: budgetIntent.spendStyle,
+          price_sensitivity: budgetIntent.priceSensitivity,
+          conflict_details: budgetIntent.conflictDetails,
+          notes: budgetIntent.notes,
+        },
+      });
+      console.log('[BudgetIntent] Logged conflict event to voyance_events');
+    } catch (logErr) {
+      console.warn('[BudgetIntent] Failed to log event:', logErr);
+    }
+  }
   
-  if (budgetIntent.prioritize.length > 0) {
-    budgetSection += `\n\n✅ PRIORITIZE: ${budgetIntent.prioritize.join('; ')}`;
-  }
-  if (budgetIntent.avoid.length > 0) {
-    budgetSection += `\n❌ AVOID: ${budgetIntent.avoid.join('; ')}`;
-  }
-  
-  if (budgetIntent.conflict) {
-    budgetSection += `\n\n⚠️ NOTE: ${budgetIntent.conflictDetails}`;
-    budgetSection += `\n   → This traveler has nuanced spending preferences. Follow the reconciled intent above.`;
-  }
+  // SIMPLIFIED budget section for LLM (per user feedback: keep it short)
+  // Only the essentials: notes line + 2 bullet lists + optional splurge cadence
+  let budgetSection = `\n💰 BUDGET INTENT:\n🎯 ${budgetIntent.notes}`;
+  budgetSection += `\n✅ PRIORITIZE: ${budgetIntent.prioritize.slice(0, 3).join('; ')}`;
+  budgetSection += `\n❌ AVOID: ${budgetIntent.avoid.slice(0, 3).join('; ')}`;
+  budgetSection += `\n📊 Splurge cadence: ${budgetIntent.splurgeCadence.dinners} dinners, ${budgetIntent.splurgeCadence.experiences} experiences`;
   
   sections.push(budgetSection);
   
@@ -2863,7 +2886,8 @@ serve(async (req) => {
       const traitOverrides = userId ? await getTraitOverrides(supabase, userId) : null;
       
       // Build Travel DNA context WITH budget intent reconciliation
-      const travelDNAResult = buildTravelDNAContext(travelDNA, traitOverrides, context.budgetTier);
+      // Now async to support structured event logging for conflicts
+      const travelDNAResult = await buildTravelDNAContext(travelDNA, traitOverrides, context.budgetTier, supabase, userId);
       const travelDNAContext = travelDNAResult.context;
       const budgetIntent = travelDNAResult.budgetIntent;
       
@@ -2872,28 +2896,10 @@ serve(async (req) => {
         console.log(`[Stage 1.3] Travel DNA loaded: v${travelDNA.dna_version}, confidence=${confidence}`);
       }
       
-      // Log budget conflict for analytics and debugging
+      // Log budget conflict summary (structured logging already done in buildTravelDNAContext)
       if (budgetIntent?.conflict) {
         console.log(`[Stage 1.3] 🚨 BUDGET CONFLICT FLAG: ${budgetIntent.conflictDetails}`);
         console.log(`[Stage 1.3] Reconciled to: ${budgetIntent.notes}`);
-        
-        // Log to voyance_events for tracking conflict frequency
-        try {
-          await supabase.from('voyance_events').insert({
-            user_id: userId,
-            event_type: 'budget_conflict_detected',
-            event_data: {
-              trip_id: tripId,
-              budget_tier: context.budgetTier,
-              budget_trait: travelDNA?.trait_scores?.budget,
-              comfort_trait: travelDNA?.trait_scores?.comfort,
-              reconciled_spend_style: budgetIntent.spendStyle,
-              conflict_details: budgetIntent.conflictDetails,
-            },
-          });
-        } catch (logError) {
-          console.warn('[Stage 1.3] Failed to log budget conflict event:', logError);
-        }
       }
       
       // =======================================================================

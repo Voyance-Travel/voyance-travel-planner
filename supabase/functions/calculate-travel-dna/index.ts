@@ -9,6 +9,13 @@ const corsHeaders = {
 // TRAVEL DNA V2 - TYPES & INTERFACES
 // ============================================================================
 
+// CANONICAL TRAIT POLARITY (used across the entire system):
+// - budget:  POSITIVE = frugal/value-focused,  NEGATIVE = splurge/luxury
+// - comfort: POSITIVE = luxury-seeking,        NEGATIVE = budget-conscious
+// This is the single source of truth - do NOT invert elsewhere!
+const BUDGET_TRAIT_POLARITY = 'POSITIVE_IS_FRUGAL' as const;
+const COMFORT_TRAIT_POLARITY = 'POSITIVE_IS_LUXURY' as const;
+
 type Trait = 'planning' | 'social' | 'comfort' | 'pace' | 'authenticity' | 'adventure' | 'budget' | 'transformation';
 
 const ALL_TRAITS: Trait[] = ['planning', 'social', 'comfort', 'pace', 'authenticity', 'adventure', 'budget', 'transformation'];
@@ -480,17 +487,18 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'a3': { deltas: { authenticity: 4, planning: 3 }, label: 'Food researcher' },
   'a4': { deltas: { social: 5, planning: -2 }, label: 'Group-oriented' },
   
-  // Q2: Dream destination
+// Q2: Dream destination
   'b1': { deltas: { authenticity: 6, transformation: 3 }, label: 'History lover' },
   'b2': { deltas: { adventure: 5, authenticity: 3, social: -3 }, label: 'Nature seeker' },
   'b3': { deltas: { social: 4, pace: 3, adventure: 2 }, label: 'City lover' },
-  'b4': { deltas: { comfort: 6, budget: 5 }, label: 'Luxury seeker' },
+  'b4': { deltas: { comfort: 6, budget: -5 }, label: 'Luxury seeker' },  // FIXED: budget negative = splurge
   
   // Q3: Budget - BIPOLAR (budget-conscious vs big-spender)
-  'c1': { deltas: { budget: -5, adventure: 2, comfort: -3 }, label: 'Budget-conscious' },
+  // CANONICAL POLARITY: budget positive = frugal/value-focused, negative = splurge/luxury
+  'c1': { deltas: { budget: 5, adventure: 2, comfort: -3 }, label: 'Budget-conscious' },  // FIXED: positive = frugal
   'c2': { deltas: { budget: 0, comfort: 2 }, label: 'Balanced spender' },
-  'c3': { deltas: { comfort: 5, budget: 4 }, label: 'Quality-first' },
-  'c4': { deltas: { budget: 7, comfort: 6 }, label: 'No-expense-spared' },
+  'c3': { deltas: { comfort: 5, budget: -4 }, label: 'Quality-first' },  // FIXED: negative = splurge
+  'c4': { deltas: { budget: -7, comfort: 6 }, label: 'No-expense-spared' },  // FIXED: negative = splurge
   
   // Q4: Pace - BIPOLAR (slow vs active)
   'd1': { deltas: { pace: -7, authenticity: 4 }, label: 'Slow & immersive' },
@@ -520,7 +528,7 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   
   // Q8: Accommodation
   'h1': { deltas: { authenticity: 4, comfort: 2 }, label: 'Boutique hotel' },
-  'h2': { deltas: { comfort: 6, budget: 5 }, label: 'Luxury resort' },
+  'h2': { deltas: { comfort: 6, budget: -5 }, label: 'Luxury resort' },  // FIXED: negative = splurge
   'h3': { deltas: { authenticity: 4, social: -2 }, label: 'Local rental' },
   'h4': { deltas: { planning: 2, comfort: 2 }, label: 'Chain hotel' },
   'h5': { deltas: { adventure: 4, authenticity: 3 }, label: 'Unique stays' },
@@ -557,11 +565,11 @@ const LEGACY_ANSWER_MAPPINGS: Record<string, AnswerDelta> = {
   'bold': { deltas: { adventure: 5, transformation: 2, pace: 2 }, label: 'Bold vibe' },
   'spiritual': { deltas: { transformation: 5, authenticity: 4, pace: -2 }, label: 'Spiritual vibe' },
   
-  // Budget
-  'budget': { deltas: { budget: -4, comfort: -2, adventure: 2 }, label: 'Budget tier' },
+  // Budget - CANONICAL POLARITY: positive = frugal, negative = splurge
+  'budget': { deltas: { budget: 4, comfort: -2, adventure: 2 }, label: 'Budget tier' },  // FIXED: positive = frugal
   'moderate': { deltas: { budget: 0, comfort: 2 }, label: 'Moderate tier' },
-  'premium': { deltas: { budget: 4, comfort: 4 }, label: 'Premium tier' },
-  'luxury': { deltas: { budget: 7, comfort: 6 }, label: 'Luxury tier' },
+  'premium': { deltas: { budget: -4, comfort: 4 }, label: 'Premium tier' },  // FIXED: negative = splurge
+  'luxury': { deltas: { budget: -7, comfort: 6 }, label: 'Luxury tier' },  // FIXED: negative = splurge
   
   // Pace
   'relaxed': { deltas: { pace: -6, comfort: 2 }, label: 'Relaxed pace' },
