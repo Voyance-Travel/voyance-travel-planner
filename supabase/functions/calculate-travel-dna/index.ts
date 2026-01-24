@@ -41,11 +41,30 @@ interface ArchetypeMatch {
   reasons: Array<{ trait: Trait; effect: 'boost' | 'penalty'; amount: number; note?: string }>;
 }
 
+// NEW: Explainability structure
+interface WhyThisResult {
+  primary_archetype_reasons: string[];  // Human-readable reasons for primary archetype
+  trait_explanations: Array<{
+    trait: Trait;
+    value: number;
+    explanation: string;
+    contributing_answers: string[];
+  }>;
+  confidence_explanation: string;
+  top_evidence: Array<{
+    question_id: string;
+    answer_id: string;
+    answer_label: string;
+    impact_summary: string;
+  }>;
+}
+
 interface TravelDNAv2Result {
   version: 2;
   raw_trait_scores: TraitScores;
   trait_scores: TraitScores;
   trait_signal_strength: Partial<Record<Trait, number>>;
+  trait_fill_rates: Record<Trait, number>;  // NEW: percent-of-possible per trait
   trait_contributions: TraitContribution[];
   archetype_matches: ArchetypeMatch[];
   confidence: number;
@@ -62,6 +81,11 @@ interface TravelDNAv2Result {
   perfect_trip_preview: string;
   summary: string;
   calculated_at: string;
+  // NEW: Explainability and disambiguation
+  why_this_result: WhyThisResult;
+  needs_disambiguation: boolean;
+  disambiguation_reason?: string;
+  disambiguation_traits?: Trait[];
 }
 
 interface QuizAnswers {
@@ -589,6 +613,8 @@ interface TraitCalculationResult {
   rawScores: TraitScores;
   finalScores: TraitScores;
   signalStrength: Partial<Record<Trait, number>>;
+  fillRates: Record<Trait, number>;  // NEW: percent-of-possible per trait (0-100)
+  possibleMax: TraitScores;  // NEW: maximum possible score per trait given answered questions
   contributions: TraitContribution[];
 }
 
@@ -605,8 +631,58 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     transformation: 0,
   };
   
+  // NEW: Track maximum possible contribution per trait from answered questions
+  const possibleMax: TraitScores = {
+    planning: 0,
+    social: 0,
+    comfort: 0,
+    pace: 0,
+    authenticity: 0,
+    adventure: 0,
+    budget: 0,
+    transformation: 0,
+  };
+  
   const contributions: TraitContribution[] = [];
   const signalStrength: Partial<Record<Trait, number>> = {};
+  
+  // Smoothing prior (prevents extreme scores from few answers)
+  const PRIOR = 1;
+  
+  /**
+   * Get max possible delta for each trait from a question's answer options
+   */
+  function getMaxPossibleForQuestion(questionId: string, answerOptions: string[], mappings: Record<string, AnswerDelta>): Partial<TraitScores> {
+    const maxByTrait: Partial<TraitScores> = {};
+    
+    for (const answerId of answerOptions) {
+      const delta = mappings[answerId];
+      if (!delta) continue;
+      
+      for (const [trait, value] of Object.entries(delta.deltas)) {
+        const absValue = Math.abs(value as number);
+        const current = maxByTrait[trait as Trait] || 0;
+        if (absValue > current) {
+          maxByTrait[trait as Trait] = absValue;
+        }
+      }
+    }
+    
+    return maxByTrait;
+  }
+  
+  /**
+   * Add to possibleMax for traits touched by this question
+   */
+  function updatePossibleMax(questionId: string, mapping: Record<string, AnswerDelta>, multiplier: number = 1.0) {
+    // Get all answer options for this question
+    const answerOptions = Object.keys(mapping);
+    const maxContribs = getMaxPossibleForQuestion(questionId, answerOptions, mapping);
+    
+    for (const [trait, maxVal] of Object.entries(maxContribs)) {
+      possibleMax[trait as Trait] += (maxVal as number) * multiplier;
+    }
+  }
   
   /**
    * Apply a single answer's deltas with normalization
@@ -642,6 +718,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.traveler_type];
     if (delta) {
       applyAnswerDeltas('traveler_type', answers.traveler_type, delta, 1.0);
+      updatePossibleMax('traveler_type', LEGACY_ANSWER_MAPPINGS, 1.0);
     }
   }
   
@@ -656,6 +733,8 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('travel_vibes', vibe, delta, multiplier);
       }
     }
+    // Count as one question for possibleMax
+    updatePossibleMax('travel_vibes', LEGACY_ANSWER_MAPPINGS, 1.0);
   }
   
   // Process budget (single select)
@@ -663,6 +742,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.budget];
     if (delta) {
       applyAnswerDeltas('budget', answers.budget, delta, 1.0);
+      updatePossibleMax('budget_q', LEGACY_ANSWER_MAPPINGS, 1.0);
     }
   }
   
@@ -671,6 +751,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.pace];
     if (delta) {
       applyAnswerDeltas('pace', answers.pace, delta, 1.0);
+      updatePossibleMax('pace_q', LEGACY_ANSWER_MAPPINGS, 1.0);
     }
   }
   
@@ -679,6 +760,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.planning_style];
     if (delta) {
       applyAnswerDeltas('planning_style', answers.planning_style, delta, 1.0);
+      updatePossibleMax('planning_style', LEGACY_ANSWER_MAPPINGS, 1.0);
     }
   }
   
@@ -693,6 +775,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('travel_companions', companion, delta, multiplier);
       }
     }
+    updatePossibleMax('travel_companions', LEGACY_ANSWER_MAPPINGS, 1.0);
   }
   
   // Process interests (multi-select) - NORMALIZED
@@ -706,6 +789,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('interests', interest, delta, multiplier);
       }
     }
+    updatePossibleMax('interests', LEGACY_ANSWER_MAPPINGS, 1.0);
   }
   
   // Process accommodation (single select)
@@ -713,6 +797,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.accommodation];
     if (delta) {
       applyAnswerDeltas('accommodation', answers.accommodation, delta, 1.0);
+      updatePossibleMax('accommodation', LEGACY_ANSWER_MAPPINGS, 1.0);
     }
   }
   
@@ -727,6 +812,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('hotel_priorities', priority, delta, multiplier);
       }
     }
+    updatePossibleMax('hotel_priorities', { ...ANSWER_DELTAS, ...LEGACY_ANSWER_MAPPINGS }, 1.0);
   }
   
   // Process weather_preference (multi-select) - NORMALIZED
@@ -740,6 +826,15 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('weather_preference', weather, delta, multiplier);
       }
     }
+    updatePossibleMax('weather_preference', { ...ANSWER_DELTAS, ...LEGACY_ANSWER_MAPPINGS }, 1.0);
+  }
+  
+  // Calculate fill rates (percent-of-possible with smoothing)
+  const fillRates: Record<Trait, number> = {} as Record<Trait, number>;
+  for (const trait of ALL_TRAITS) {
+    const denom = possibleMax[trait] + PRIOR;
+    const num = Math.abs(rawScores[trait]) + PRIOR * 0.5;  // Neutral prior
+    fillRates[trait] = denom > 0 ? Math.round((num / denom) * 100) : 0;
   }
   
   // Apply saturation to produce final scores
@@ -758,6 +853,8 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     rawScores,
     finalScores,
     signalStrength,
+    fillRates,
+    possibleMax,
     contributions,
   };
 }
@@ -1013,8 +1110,130 @@ function extractToneTags(traits: TraitScores, contributions: TraitContribution[]
 }
 
 // ============================================================================
-// AI PERFECT TRIP GENERATION
+// "WHY THIS RESULT" EXPLAINABILITY BUILDER
 // ============================================================================
+
+function buildWhyThisResult(
+  primaryArchetype: ArchetypeV2,
+  secondaryArchetype: ArchetypeV2 | null,
+  primaryMatch: ArchetypeMatch,
+  traits: TraitScores,
+  topContributors: TraitContribution[],
+  confidence: number
+): WhyThisResult {
+  // Build human-readable reasons for primary archetype
+  const primaryReasons: string[] = [];
+  
+  // From match reasons
+  for (const reason of primaryMatch.reasons.slice(0, 3)) {
+    if (reason.effect === 'boost') {
+      const traitLabel = formatTraitLabel(reason.trait, traits[reason.trait]);
+      primaryReasons.push(`Your ${traitLabel} aligns with ${primaryArchetype.name}`);
+    }
+  }
+  
+  // From top contributors
+  for (const contrib of topContributors.slice(0, 2)) {
+    if (contrib.label) {
+      primaryReasons.push(`You selected "${contrib.label}"`);
+    }
+  }
+  
+  // Build trait explanations
+  const traitExplanations: WhyThisResult['trait_explanations'] = [];
+  
+  for (const trait of ALL_TRAITS) {
+    const value = traits[trait];
+    if (Math.abs(value) >= 3) {  // Only explain significant traits
+      const contributingAnswers = topContributors
+        .filter(c => c.deltas[trait] !== undefined && Math.abs(c.deltas[trait] as number) >= 1)
+        .map(c => c.label || c.answer_id)
+        .slice(0, 3);
+      
+      traitExplanations.push({
+        trait,
+        value,
+        explanation: formatTraitExplanation(trait, value),
+        contributing_answers: contributingAnswers,
+      });
+    }
+  }
+  
+  // Build confidence explanation
+  let confidenceExplanation: string;
+  if (confidence >= 80) {
+    confidenceExplanation = 'High confidence - your answers strongly point to this archetype';
+  } else if (confidence >= 60) {
+    confidenceExplanation = 'Good confidence - your profile shows clear preferences with some flexibility';
+  } else if (confidence >= 40) {
+    confidenceExplanation = 'Moderate confidence - you have a blend of different travel styles';
+  } else {
+    confidenceExplanation = 'Still learning about you - your profile shows diverse preferences';
+  }
+  
+  // Build top evidence
+  const topEvidence: WhyThisResult['top_evidence'] = topContributors.slice(0, 4).map(c => ({
+    question_id: c.question_id,
+    answer_id: c.answer_id,
+    answer_label: c.label || c.answer_id,
+    impact_summary: formatImpactSummary(c.deltas),
+  }));
+  
+  return {
+    primary_archetype_reasons: primaryReasons.slice(0, 4),
+    trait_explanations: traitExplanations.slice(0, 5),
+    confidence_explanation: confidenceExplanation,
+    top_evidence: topEvidence,
+  };
+}
+
+function formatTraitLabel(trait: Trait, value: number): string {
+  const labels: Record<Trait, [string, string]> = {
+    planning: ['spontaneous nature', 'love of planning'],
+    social: ['solo preference', 'social energy'],
+    comfort: ['adventure-first mindset', 'comfort-seeking style'],
+    pace: ['relaxed pace', 'active pace'],
+    authenticity: ['mainstream preferences', 'authenticity focus'],
+    adventure: ['safe choices', 'adventurous spirit'],
+    budget: ['value focus', 'luxury preference'],
+    transformation: ['leisure focus', 'growth mindset'],
+  };
+  
+  const [low, high] = labels[trait];
+  return value >= 0 ? high : low;
+}
+
+function formatTraitExplanation(trait: Trait, value: number): string {
+  const intensity = Math.abs(value) >= 7 ? 'strongly' : Math.abs(value) >= 4 ? 'moderately' : 'somewhat';
+  const direction = value >= 0 ? 'high' : 'low';
+  
+  const explanations: Record<Trait, [string, string]> = {
+    planning: ['You prefer to go with the flow', 'You like having things planned out'],
+    social: ['You prefer solo or intimate travel', 'You thrive in social settings'],
+    comfort: ['You prioritize experience over comfort', 'You appreciate comfort and quality'],
+    pace: ['You prefer a relaxed, unhurried pace', 'You like to pack in activities'],
+    authenticity: ['You enjoy popular attractions', 'You seek authentic, local experiences'],
+    adventure: ['You prefer familiar experiences', 'You seek adventure and new challenges'],
+    budget: ['You prioritize value', 'You enjoy premium experiences'],
+    transformation: ['Travel is about relaxation', 'Travel is about personal growth'],
+  };
+  
+  const [low, high] = explanations[trait];
+  return `${intensity} ${direction === 'high' ? high : low}`;
+}
+
+function formatImpactSummary(deltas: Partial<TraitScores>): string {
+  const parts: string[] = [];
+  for (const [trait, value] of Object.entries(deltas)) {
+    if (value && Math.abs(value) >= 2) {
+      const direction = value > 0 ? '+' : '';
+      parts.push(`${trait}: ${direction}${Math.round(value)}`);
+    }
+  }
+  return parts.slice(0, 3).join(', ') || 'minor impact';
+}
+
+//
 
 async function generatePerfectTrip(
   archetype: ArchetypeV2,
@@ -1176,9 +1395,10 @@ serve(async (req) => {
     console.log('[TravelDNA V2] Quiz answers:', Object.keys(answers));
     
     // Step 1: Calculate trait scores with contributions
-    const { rawScores, finalScores, signalStrength, contributions } = calculateTraitScoresV2(answers);
+    const { rawScores, finalScores, signalStrength, fillRates, contributions } = calculateTraitScoresV2(answers);
     console.log('[TravelDNA V2] Raw scores:', rawScores);
     console.log('[TravelDNA V2] Final scores (saturated):', finalScores);
+    console.log('[TravelDNA V2] Fill rates:', fillRates);
     
     // Step 2: Match archetypes with blends
     const { matches, confidence } = matchArchetypesV2(finalScores, contributions);
@@ -1228,12 +1448,56 @@ serve(async (req) => {
         : 'with some flexibility';
     const summary = `You are ${confidenceText} a ${primaryArchetype.name}${blendText}. ${primaryArchetype.tagline}`;
     
+    // Step 9: Build "Why This Result" explainability
+    const whyThisResult = buildWhyThisResult(
+      primaryArchetype,
+      secondaryArchetype || null,
+      primaryMatch,
+      finalScores,
+      topContributors,
+      confidence
+    );
+    
+    // Step 10: Determine if disambiguation is needed
+    const top2Gap = secondaryMatch ? Math.abs(primaryMatch.pct - secondaryMatch.pct) : 100;
+    const needsDisambiguation = confidence < 60 || top2Gap <= 10;
+    let disambiguationReason: string | undefined;
+    let disambiguationTraits: Trait[] | undefined;
+    
+    if (needsDisambiguation) {
+      if (confidence < 60) {
+        disambiguationReason = 'Low confidence - mixed signals in profile';
+      } else if (top2Gap <= 10) {
+        disambiguationReason = `Close match between ${primaryArchetype.name} and ${secondaryArchetype?.name || 'secondary'}`;
+      }
+      
+      // Find traits that differentiate top 2 archetypes
+      if (primaryArchetype && secondaryArchetype) {
+        const primaryTraits = new Set(primaryArchetype.primaryTraits.map(t => t.trait));
+        const secondaryTraits = new Set(secondaryArchetype.primaryTraits.map(t => t.trait));
+        
+        // Traits that differ between archetypes
+        disambiguationTraits = ALL_TRAITS.filter(t => 
+          (primaryTraits.has(t) && !secondaryTraits.has(t)) ||
+          (!primaryTraits.has(t) && secondaryTraits.has(t))
+        );
+        
+        // If no differentiating traits, use primary traits of both
+        if (disambiguationTraits.length === 0) {
+          disambiguationTraits = [...primaryTraits, ...secondaryTraits].slice(0, 3) as Trait[];
+        }
+      }
+    }
+    
+    console.log('[TravelDNA V2] Needs disambiguation:', needsDisambiguation, disambiguationReason);
+    
     // Build V2 result
     const result: TravelDNAv2Result = {
       version: 2,
       raw_trait_scores: rawScores,
       trait_scores: finalScores,
       trait_signal_strength: signalStrength,
+      trait_fill_rates: fillRates,
       trait_contributions: contributions,
       archetype_matches: matches,
       confidence,
@@ -1250,6 +1514,10 @@ serve(async (req) => {
       perfect_trip_preview: perfectTrip,
       summary,
       calculated_at: new Date().toISOString(),
+      why_this_result: whyThisResult,
+      needs_disambiguation: needsDisambiguation,
+      disambiguation_reason: disambiguationReason,
+      disambiguation_traits: disambiguationTraits,
     };
     
     console.log('[TravelDNA V2] Calculation complete');
