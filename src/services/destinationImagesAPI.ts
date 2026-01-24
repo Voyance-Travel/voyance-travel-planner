@@ -7,6 +7,20 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import {
+  getDestinationImages as getCuratedDestinationImages,
+  hasCuratedImages,
+} from '@/utils/destinationImages';
+
+// Bump to invalidate any stale React Query caches that may still contain people photos.
+const IMAGE_QUERY_VERSION = 'img_v2_no_people_rome';
+
+function isRomeDestination(destination?: string): boolean {
+  if (!destination) return false;
+  const d = destination.toLowerCase().trim();
+  const cityOnly = d.split(',')[0]?.trim();
+  return cityOnly === 'rome';
+}
 
 // ============================================================================
 // TYPES
@@ -60,11 +74,33 @@ function normalizeDestinationQuery(destination?: string): string | undefined {
 export async function getDestinationImages(
   params: GetImagesParams = {}
 ): Promise<DestinationImage[]> {
+  const normalizedDestination = normalizeDestinationQuery(params.destination);
+
+  // Hard rule: Rome destination hero/gallery images must never come from third-party sources
+  // (they can include people). Use our curated local assets instead.
+  if (
+    isRomeDestination(normalizedDestination) &&
+    normalizedDestination &&
+    (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all') &&
+    hasCuratedImages(normalizedDestination)
+  ) {
+    const type = (params.imageType === 'gallery' ? 'gallery' : 'hero') as DestinationImage['type'];
+    const limit = params.limit ?? (params.imageType === 'gallery' ? 6 : 1);
+    const urls = getCuratedDestinationImages(normalizedDestination, limit);
+    return urls.map((url, i) => ({
+      id: `curated-local-${type}-${i}`,
+      url,
+      alt: `${normalizedDestination} photo ${i + 1}`,
+      type,
+      source: 'database',
+    }));
+  }
+
   // Call backend function via POST body for reliability (no querystring invoke)
   const { data, error } = await supabase.functions.invoke('destination-images', {
     body: {
       destinationId: params.destinationId,
-      destination: normalizeDestinationQuery(params.destination),
+      destination: normalizedDestination,
       imageType: params.imageType,
       limit: params.limit,
     },
@@ -146,7 +182,7 @@ export async function getActivityImages(
  */
 export function useDestinationImages(params: GetImagesParams = {}) {
   return useQuery({
-    queryKey: ['destination-images', params],
+    queryKey: ['destination-images', IMAGE_QUERY_VERSION, params],
     queryFn: () => getDestinationImages(params),
     enabled: !!(params.destinationId || params.destination),
     staleTime: 1000 * 60 * 60, // 1 hour
@@ -158,7 +194,7 @@ export function useDestinationImages(params: GetImagesParams = {}) {
  */
 export function useHeroImage(destinationId: string | undefined, destinationName?: string) {
   return useQuery({
-    queryKey: ['hero-image', destinationId || null, destinationName || null],
+    queryKey: ['hero-image', IMAGE_QUERY_VERSION, destinationId || null, destinationName || null],
     queryFn: () => {
       if (destinationId) return getHeroImage(destinationId, destinationName);
       return getHeroImageByName(destinationName!);
@@ -173,7 +209,7 @@ export function useHeroImage(destinationId: string | undefined, destinationName?
  */
 export function useGalleryImages(destinationId: string | undefined, limit: number = 10) {
   return useQuery({
-    queryKey: ['gallery-images', destinationId, limit],
+    queryKey: ['gallery-images', IMAGE_QUERY_VERSION, destinationId, limit],
     queryFn: () => getGalleryImages(destinationId!, limit),
     enabled: !!destinationId,
     staleTime: 1000 * 60 * 60,
@@ -185,7 +221,7 @@ export function useGalleryImages(destinationId: string | undefined, limit: numbe
  */
 export function useActivityImages(destinationId: string | undefined, limit: number = 5) {
   return useQuery({
-    queryKey: ['activity-images', destinationId, limit],
+    queryKey: ['activity-images', IMAGE_QUERY_VERSION, destinationId, limit],
     queryFn: () => getActivityImages(destinationId!, limit),
     enabled: !!destinationId,
     staleTime: 1000 * 60 * 60,
