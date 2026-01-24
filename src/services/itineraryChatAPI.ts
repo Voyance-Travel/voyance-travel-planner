@@ -1,0 +1,143 @@
+/**
+ * Itinerary Assistant API Service
+ * Frontend interface for the constrained itinerary chatbot
+ */
+
+import { supabase } from '@/integrations/supabase/client';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  actions?: ItineraryAction[];
+  timestamp: Date;
+}
+
+export interface ItineraryAction {
+  type: 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day';
+  params: Record<string, unknown>;
+  status: 'pending' | 'applied' | 'declined';
+}
+
+export interface ItineraryContext {
+  tripId: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  days: Array<{
+    dayNumber: number;
+    date: string;
+    activities: Array<{
+      index: number;
+      title: string;
+      category?: string;
+      time: string;
+      cost?: number;
+      isLocked?: boolean;
+    }>;
+  }>;
+}
+
+export interface ChatResponse {
+  message: string;
+  actions: Array<{
+    type: string;
+    params: Record<string, unknown>;
+  }>;
+  capturedPreferences: Array<{
+    type: string;
+    value: string;
+    confidence: string;
+  }>;
+}
+
+// ============================================================================
+// API FUNCTIONS
+// ============================================================================
+
+/**
+ * Send a message to the itinerary assistant
+ */
+export async function sendChatMessage(
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  itineraryContext: ItineraryContext,
+  conversationId?: string
+): Promise<ChatResponse> {
+  const { data, error } = await supabase.functions.invoke('itinerary-chat', {
+    body: {
+      messages,
+      itineraryContext,
+      conversationId,
+      stream: false,
+    },
+  });
+
+  if (error) {
+    console.error('[ItineraryChat] Error:', error);
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+/**
+ * Generate a unique conversation ID
+ */
+export function generateConversationId(): string {
+  return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
+
+/**
+ * Get action display info
+ */
+export function getActionDisplayInfo(action: { type: string; params: Record<string, unknown> }): {
+  title: string;
+  description: string;
+  icon: 'swap' | 'pace' | 'filter' | 'refresh';
+} {
+  switch (action.type) {
+    case 'suggest_activity_swap':
+      return {
+        title: `Swap activity on Day ${action.params.target_day}`,
+        description: action.params.reason as string || `Find alternatives for "${action.params.target_activity_title}"`,
+        icon: 'swap',
+      };
+    case 'adjust_day_pacing':
+      const adjustment = action.params.adjustment as string;
+      return {
+        title: `Adjust Day ${action.params.target_day} pacing`,
+        description: adjustment === 'more_relaxed' 
+          ? 'Make the day more relaxed with fewer activities'
+          : 'Pack in more activities for an action-filled day',
+        icon: 'pace',
+      };
+    case 'apply_filter':
+      return {
+        title: `Apply ${action.params.filter_type} filter`,
+        description: `Filter for: ${action.params.filter_value}`,
+        icon: 'filter',
+      };
+    case 'regenerate_day':
+      return {
+        title: `Regenerate Day ${action.params.target_day}`,
+        description: action.params.new_focus as string || 'Create a new itinerary for this day',
+        icon: 'refresh',
+      };
+    default:
+      return {
+        title: 'Unknown action',
+        description: '',
+        icon: 'swap',
+      };
+  }
+}
+
+export default {
+  sendChatMessage,
+  generateConversationId,
+  getActionDisplayInfo,
+};

@@ -10,6 +10,7 @@ import { LiveItineraryView } from '@/components/itinerary/LiveItineraryView';
 import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
+import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import { supabase } from '@/integrations/supabase/client';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useAuth } from '@/contexts/AuthContext';
@@ -920,6 +921,44 @@ export default function TripDetail() {
           </div>
         </div>
       </section>
+
+      {/* Itinerary Assistant - Floating Chatbot */}
+      {hasItinerary && (
+        <ItineraryAssistant
+          tripId={trip.id}
+          destination={trip.destination}
+          startDate={trip.start_date}
+          endDate={trip.end_date}
+          days={(() => {
+            const metadata = trip.itinerary_data as Record<string, unknown> | null;
+            const rawDays = (metadata?.days as unknown[]) || [];
+            return rawDays.map((day: unknown, idx: number) => {
+              const d = day as Record<string, unknown>;
+              const activities = (d.activities as unknown[]) || [];
+              return {
+                dayNumber: (d.dayNumber as number) || idx + 1,
+                date: (d.date as string) || '',
+                activities: activities.map((act: unknown, actIdx: number) => {
+                  const a = act as Record<string, unknown>;
+                  return {
+                    id: (a.id as string) || `act-${idx}-${actIdx}`,
+                    index: actIdx,
+                    title: (a.title as string) || (a.name as string) || 'Activity',
+                    category: a.category as string | undefined,
+                    time: (a.startTime as string) || (a.time as string) || '',
+                    cost: (a.cost as { amount: number })?.amount,
+                    isLocked: (a.isLocked as boolean) || false,
+                  };
+                }),
+              };
+            });
+          })()}
+          onActionApply={(action) => {
+            // TODO: Wire up action handlers for swap, pacing, filter, regenerate
+            console.log('[ItineraryAssistant] Action applied:', action);
+          }}
+        />
+      )}
     </MainLayout>
   );
 }

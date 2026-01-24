@@ -3082,6 +3082,53 @@ export type Database = {
         }
         Relationships: []
       }
+      itinerary_customization_requests: {
+        Row: {
+          action_taken: string | null
+          activity_id: string | null
+          conversation_id: string | null
+          created_at: string
+          extracted_preferences: Json | null
+          id: string
+          request_type: string
+          trip_id: string
+          user_id: string
+          user_message: string
+        }
+        Insert: {
+          action_taken?: string | null
+          activity_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          extracted_preferences?: Json | null
+          id?: string
+          request_type: string
+          trip_id: string
+          user_id: string
+          user_message: string
+        }
+        Update: {
+          action_taken?: string | null
+          activity_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          extracted_preferences?: Json | null
+          id?: string
+          request_type?: string
+          trip_id?: string
+          user_id?: string
+          user_message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_customization_requests_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plan_entitlements: {
         Row: {
           created_at: string | null
