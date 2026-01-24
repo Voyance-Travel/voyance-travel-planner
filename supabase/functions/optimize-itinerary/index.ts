@@ -99,6 +99,15 @@ interface Day {
   };
 }
 
+// Transport mode options (from user preferences dialog)
+type TransportModeOption = 'bus' | 'train' | 'rideshare' | 'taxi' | 'walking' | 'cheapest';
+type DistanceUnit = 'km' | 'miles';
+
+interface TransportPreferences {
+  allowedModes?: TransportModeOption[];
+  distanceUnit?: DistanceUnit;
+}
+
 interface OptimizeRequest {
   tripId: string;
   destination: string;
@@ -117,6 +126,7 @@ interface OptimizeRequest {
   travelers?: number;
   nights?: number;
   budgetTier?: string;
+  transportPreferences?: TransportPreferences;
 }
 
 interface UserItineraryPreferences {
@@ -1534,7 +1544,15 @@ serve(async (req) => {
       nights = 1,
       preferredDowntimeMinutes,
       maxActivitiesPerDay,
+      transportPreferences,
     } = body;
+
+    // Extract transport preferences with defaults
+    const allowedModes = transportPreferences?.allowedModes || ['bus', 'train', 'rideshare', 'taxi', 'walking'];
+    const distanceUnit = transportPreferences?.distanceUnit || 'km';
+    const useCheapest = allowedModes.includes('cheapest');
+    
+    console.log(`[optimize-itinerary] Transport prefs: modes=${allowedModes.join(',')}, unit=${distanceUnit}`);
 
     // Create supabase client for caching and user preferences
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1694,6 +1712,38 @@ serve(async (req) => {
       // NOTE: Transportation is attached to the *current* activity, representing how to get to the NEXT activity.
       // This matches the frontend rendering which shows "Transportation to next" under the current row.
       if (enableRealTransport) {
+        // Helper: format distance in user's preferred unit
+        const formatDistance = (meters: number): string => {
+          const km = meters / 1000;
+          if (distanceUnit === 'miles') {
+            const miles = km * 0.621371;
+            return miles < 0.1 
+              ? `${Math.round(meters * 3.28084)} ft`
+              : `${miles.toFixed(1)} mi`;
+          } else {
+            return meters < 1000
+              ? `${meters}m`
+              : `${km.toFixed(1)} km`;
+          }
+        };
+
+        // Helper: check if a transport mode is allowed by user preferences
+        const isModeAllowed = (method: string): boolean => {
+          if (useCheapest) return true; // Cheapest ignores mode restrictions
+          const modeMap: Record<string, TransportModeOption[]> = {
+            walk: ['walking'],
+            metro: ['train', 'bus'],
+            transit: ['train', 'bus'],
+            train: ['train'],
+            bus: ['bus'],
+            uber: ['rideshare'],
+            driving: ['rideshare', 'taxi'],
+            taxi: ['taxi'],
+          };
+          const userModes = modeMap[method.toLowerCase()] || [];
+          return userModes.some(m => allowedModes.includes(m));
+        };
+
         const stableHash = (input: string): number => {
           let hash = 0;
           for (let i = 0; i < input.length; i++) {
@@ -1751,59 +1801,119 @@ serve(async (req) => {
             estimatedDistanceKm = hashRange(seed, 15, 40) / 10; // 1.5-4km
           }
           
-          // SMART MODE SELECTION based on distance
-          let method: 'walk' | 'metro' | 'uber' | 'taxi' | 'train' = 'walk';
-          let durationMins: number;
-          let cost = 0;
-          let instructions: string;
+          // Helper: check if a mode is allowed by user preferences
+          const isAllowed = (mode: string): boolean => {
+            if (useCheapest) return true; // Cheapest mode ignores restrictions
+            const modeMap: Record<string, TransportModeOption[]> = {
+              walk: ['walking'],
+              metro: ['train', 'bus'],
+              train: ['train'],
+              bus: ['bus'],
+              uber: ['rideshare'],
+              taxi: ['taxi'],
+            };
+            const userModes = modeMap[mode] || [];
+            return userModes.some(m => allowedModes.includes(m));
+          };
+
+          // Helper: pick best allowed mode from options
+          const pickAllowedMode = (
+            preferredModes: Array<{ mode: 'walk' | 'metro' | 'uber' | 'taxi' | 'train'; cost: number; durationMins: number; label: string }>
+          ): { mode: 'walk' | 'metro' | 'uber' | 'taxi' | 'train'; cost: number; durationMins: number; label: string } | null => {
+            // If cheapest mode, sort by cost
+            if (useCheapest) {
+              const sorted = [...preferredModes].sort((a, b) => a.cost - b.cost);
+              return sorted[0] || null;
+            }
+            // Otherwise, pick first allowed
+            for (const opt of preferredModes) {
+              if (isAllowed(opt.mode)) return opt;
+            }
+            // Fallback to walking if nothing else allowed
+            if (isAllowed('walk')) {
+              return preferredModes.find(m => m.mode === 'walk') || null;
+            }
+            return preferredModes[0] || null;
+          };
           
-          if (estimatedDistanceKm < 1.0) {
-            // Under 1km: always walk
-            method = 'walk';
-            durationMins = Math.round(estimatedDistanceKm * 12); // ~5 km/h walking
-            cost = 0;
-            instructions = `${Math.round(durationMins)} minute walk to ${destName}`;
-          } else if (estimatedDistanceKm < 8.0) {
-            // 1-8km: prefer transit in cities
-            method = 'metro';
-            durationMins = Math.round(5 + estimatedDistanceKm * 2.5); // Wait + travel
-            cost = 3;
-            instructions = `Take public transit to ${destName} (${estimatedDistanceKm.toFixed(1)}km)`;
-          } else if (estimatedDistanceKm < 20) {
-            // 8-20km: rideshare or taxi
-            method = 'uber';
-            durationMins = Math.round(estimatedDistanceKm * 2); // ~30km/h in city
-            cost = Math.round(5 + estimatedDistanceKm * 1.5);
-            instructions = `Take a rideshare to ${destName} (${estimatedDistanceKm.toFixed(1)}km, ~${cost} USD)`;
-          } else {
-            // 20km+: likely airport or inter-city, use taxi/train
-            method = 'taxi';
-            durationMins = Math.round(estimatedDistanceKm * 1.5); // Faster on highways
-            cost = Math.round(30 + (estimatedDistanceKm - 20) * 1.2);
-            instructions = `Take a taxi to ${destName} (${estimatedDistanceKm.toFixed(1)}km, ~${cost} USD)`;
+          // Build mode options based on distance
+          const modeOptions: Array<{ mode: 'walk' | 'metro' | 'uber' | 'taxi' | 'train'; cost: number; durationMins: number; label: string }> = [];
+          
+          // Walking is always an option (free)
+          const walkDuration = Math.round(estimatedDistanceKm * 12);
+          modeOptions.push({ mode: 'walk', cost: 0, durationMins: walkDuration, label: 'Walk' });
+          
+          // Transit options for medium distances
+          if (estimatedDistanceKm >= 0.8) {
+            const transitDuration = Math.round(5 + estimatedDistanceKm * 2.5);
+            modeOptions.push({ mode: 'metro', cost: 3, durationMins: transitDuration, label: 'Transit' });
           }
           
-          // Override for late night (after dinner going to nightlife or hotel)
+          // Rideshare/taxi for longer distances
+          if (estimatedDistanceKm >= 2) {
+            const rideShareDuration = Math.round(estimatedDistanceKm * 2);
+            const rideShareCost = Math.round(5 + estimatedDistanceKm * 1.5);
+            modeOptions.push({ mode: 'uber', cost: rideShareCost, durationMins: rideShareDuration, label: 'Rideshare' });
+            
+            const taxiCost = Math.round(8 + estimatedDistanceKm * 1.8);
+            modeOptions.push({ mode: 'taxi', cost: taxiCost, durationMins: rideShareDuration, label: 'Taxi' });
+          }
+
+          // Pick the best allowed mode
+          let selected = pickAllowedMode(modeOptions);
+          
+          // If nothing selected, default to walk
+          if (!selected) {
+            selected = { mode: 'walk', cost: 0, durationMins: walkDuration, label: 'Walk' };
+          }
+          
+          // Apply late night override (safety upgrade to rideshare)
           if (isNightlife(toCat) || (isDiningish(fromCat) && toCat === 'accommodation')) {
-            if (method === 'metro' && estimatedDistanceKm > 2) {
-              method = 'uber';
-              cost = Math.round(8 + estimatedDistanceKm * 1.2);
-              instructions = `Take a rideshare to ${destName} (late night, safer option)`;
+            if (selected.mode === 'metro' && estimatedDistanceKm > 2 && isAllowed('uber')) {
+              selected = { 
+                mode: 'uber', 
+                cost: Math.round(8 + estimatedDistanceKm * 1.2), 
+                durationMins: Math.round(estimatedDistanceKm * 2),
+                label: 'Rideshare (late night)'
+              };
             }
           }
 
+          // Format distance based on user's preferred unit
           const distanceMeters = Math.round(estimatedDistanceKm * 1000);
-          const distanceText = distanceMeters < 1000
-            ? `${distanceMeters}m`
-            : `${estimatedDistanceKm.toFixed(1)}km`;
+          let distanceText: string;
+          if (distanceUnit === 'miles') {
+            const miles = estimatedDistanceKm * 0.621371;
+            distanceText = miles < 0.1 
+              ? `${Math.round(distanceMeters * 3.28084)} ft`
+              : `${miles.toFixed(1)} mi`;
+          } else {
+            distanceText = distanceMeters < 1000
+              ? `${distanceMeters}m`
+              : `${estimatedDistanceKm.toFixed(1)} km`;
+          }
+          
+          // Build instructions
+          let instructions: string;
+          if (selected.mode === 'walk') {
+            instructions = `${selected.durationMins} minute walk to ${destName}`;
+          } else if (selected.mode === 'metro') {
+            instructions = `Take public transit to ${destName} (${distanceText})`;
+          } else if (selected.mode === 'uber') {
+            instructions = `Take a rideshare to ${destName} (${distanceText}, ~$${selected.cost})`;
+          } else if (selected.mode === 'taxi') {
+            instructions = `Take a taxi to ${destName} (${distanceText}, ~$${selected.cost})`;
+          } else {
+            instructions = `${selected.label} to ${destName} (${distanceText})`;
+          }
 
           return {
-            method,
-            duration: `${durationMins} min`,
-            durationMinutes: durationMins,
+            method: selected.mode,
+            duration: `${selected.durationMins} min`,
+            durationMinutes: selected.durationMins,
             distance: distanceText,
             distanceMeters,
-            estimatedCost: { amount: cost, currency: 'USD' },
+            estimatedCost: { amount: selected.cost, currency: 'USD' },
             instructions,
           };
         };
@@ -1847,13 +1957,29 @@ serve(async (req) => {
               continue;
             }
 
+            // Check if the returned mode is allowed by user preferences
+            if (!isModeAllowed(transport.method)) {
+              console.log(`[optimize-itinerary] Mode "${transport.method}" not allowed for leg "${from.title}" → "${to.title}", using estimated transport`);
+              activities[i] = {
+                ...from,
+                transportation: estimateNoCoords(from, to, seed),
+              };
+              transportCalculated++;
+              continue;
+            }
+
+            // Format distance in user's preferred unit
+            const formattedDistance = transport.distanceMeters 
+              ? formatDistance(transport.distanceMeters)
+              : transport.distance;
+
             activities[i] = {
               ...from,
               transportation: {
                 method: transport.method,
                 duration: transport.duration,
                 durationMinutes: transport.durationMinutes,
-                distance: transport.distance,
+                distance: formattedDistance,
                 distanceMeters: transport.distanceMeters,
                 estimatedCost: transport.estimatedCost,
                 instructions: transport.instructions,
