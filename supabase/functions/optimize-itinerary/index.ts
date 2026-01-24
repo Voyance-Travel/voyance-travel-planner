@@ -981,9 +981,14 @@ function toRoutesApiLocation(loc: GoogleLocationInput) {
 async function getGoogleRoutesTransitTransport(
   origin: GoogleLocationInput,
   destination: GoogleLocationInput,
-  destinationName: string,
-  apiKey: string
+  destinationName: string
 ): Promise<TransportResult | null> {
+  // Use dedicated Routes API key if available, fallback to general Maps key
+  const apiKey = Deno.env.get("GOOGLE_ROUTES_API_KEY") || Deno.env.get("GOOGLE_MAPS_API_KEY");
+  if (!apiKey) {
+    console.log('[Transit] (Routes API) No API key available');
+    return null;
+  }
   try {
     const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
     const body = {
@@ -1072,7 +1077,7 @@ async function getGoogleTransport(
     // Use Directions API for transit to get detailed route info
     if (mode === 'transit') {
       // Prefer Routes API (newer) to avoid legacy Directions API activation issues.
-      const routesApiResult = await getGoogleRoutesTransitTransport(origin, destination, destinationName, apiKey);
+      const routesApiResult = await getGoogleRoutesTransitTransport(origin, destination, destinationName);
       if (routesApiResult) return routesApiResult;
 
       // Fallback to legacy Directions API (some keys/projects still support it)
