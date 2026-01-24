@@ -1,9 +1,70 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// =============================================================================
+// CACHING UTILITIES (24-hour TTL using search_cache table)
+// =============================================================================
+
+function generateCacheKey(placeName: string, destination: string): string {
+  const normalized = `reviews:${placeName.toLowerCase().trim()}:${destination.toLowerCase().trim()}`;
+  return normalized.replace(/\s+/g, '_').substring(0, 255);
+}
+
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { persistSession: false } }
+  );
+}
+
+async function getCachedReviews(placeName: string, destination: string): Promise<ReviewsResponse | null> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const cacheKey = generateCacheKey(placeName, destination);
+    
+    const { data, error } = await supabase
+      .from('search_cache')
+      .select('results')
+      .eq('search_key', cacheKey)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+    
+    if (error || !data) return null;
+    
+    console.log(`[fetch-reviews] Cache HIT for "${placeName}" in ${destination}`);
+    return data.results as ReviewsResponse;
+  } catch {
+    return null;
+  }
+}
+
+async function cacheReviews(placeName: string, destination: string, response: ReviewsResponse): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const cacheKey = generateCacheKey(placeName, destination);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+    
+    await supabase
+      .from('search_cache')
+      .upsert({
+        search_key: cacheKey,
+        search_type: 'reviews',
+        results: response,
+        expires_at: expiresAt,
+        created_at: new Date().toISOString(),
+      }, { onConflict: 'search_key' });
+    
+    console.log(`[fetch-reviews] Cached reviews for "${placeName}" in ${destination}`);
+  } catch (error) {
+    console.error('[fetch-reviews] Cache write error:', error);
+  }
+}
 
 // =============================================================================
 // TYPES
@@ -575,6 +636,15 @@ serve(async (req) => {
 
     console.log(`[fetch-reviews] Fetching reviews for "${placeName}" in ${destination}`);
 
+    // Check cache first (24-hour TTL)
+    const cachedResult = await getCachedReviews(placeName, destination);
+    if (cachedResult) {
+      return new Response(
+        JSON.stringify(cachedResult),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Get API keys
     const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
     const TRIPADVISOR_API_KEY = Deno.env.get('TRIPADVISOR_API_KEY');
@@ -629,6 +699,9 @@ serve(async (req) => {
       },
       totalFetched: mergedReviews.length,
     };
+
+    // Cache the response for 24 hours
+    await cacheReviews(placeName, destination, response);
 
     console.log(`[fetch-reviews] Returning ${response.totalFetched} reviews from ${Object.values(response.sources).filter(Boolean).length} sources`);
 
