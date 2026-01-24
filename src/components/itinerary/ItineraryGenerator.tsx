@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useItineraryGeneration, GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UsageLimitNotice } from '@/components/common/UsageLimitNotice';
+import { PreferenceNudge, usePreferenceCompletion } from '@/components/common/PreferenceNudge';
 import { format, parseISO } from 'date-fns';
 
 interface ItineraryGeneratorProps {
@@ -65,7 +66,13 @@ export function ItineraryGenerator({
   const freeBuildsRemaining = entitlements?.limits?.freeBuildsRemaining ?? 1;
   const freeBuildsLimit = entitlements?.limits?.fullBuilds ?? 1;
 
+  // Get preference completion status
+  const { data: preferenceStatus } = usePreferenceCompletion();
+  const showPreferenceNudge = preferenceStatus && 
+    (preferenceStatus.personalizationLevel === 'none' || preferenceStatus.personalizationLevel === 'basic');
+
   const [hasStarted, setHasStarted] = useState(false);
+  const [showNudgeCard, setShowNudgeCard] = useState(true);
 
   const handleGenerate = async () => {
     setHasStarted(true);
@@ -145,6 +152,18 @@ export function ItineraryGenerator({
               {budgetTier || 'Standard'}
             </Badge>
           </div>
+
+          {/* Preference completion nudge */}
+          {showPreferenceNudge && showNudgeCard && (
+            <div className="mb-6">
+              <PreferenceNudge 
+                variant="card"
+                showProceedButton
+                onProceedAnyway={() => setShowNudgeCard(false)}
+                onDismiss={() => setShowNudgeCard(false)}
+              />
+            </div>
+          )}
 
           {/* Usage limit notice for free users */}
           {!isPaid && freeBuildsRemaining > 0 && (
