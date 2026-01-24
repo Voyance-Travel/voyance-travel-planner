@@ -168,14 +168,13 @@ export function QuizCompletion({ onContinue }: QuizCompletionProps) {
             You're all set!
           </h1>
           <p className="text-lg text-muted-foreground mb-2">
-            We've saved your travel preferences.
+            We've created your Travel DNA profile.
           </p>
           <p className="text-muted-foreground mb-8">
-            Now let's find your perfect destination and create an unforgettable journey.
+            View your unique travel personality and start planning your perfect trip.
           </p>
         </motion.div>
 
-        {/* CTA Buttons */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -187,7 +186,7 @@ export function QuizCompletion({ onContinue }: QuizCompletionProps) {
             size="lg"
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
           >
-            Start Planning My Trip
+            View My Travel DNA
           </Button>
           <Button 
             variant="ghost"
