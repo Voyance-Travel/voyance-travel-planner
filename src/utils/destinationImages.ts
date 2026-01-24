@@ -5,9 +5,6 @@
  * Does NOT rely on database images which have quality issues.
  */
 
-// Import local Rome hero image
-import romeHeroImage from '@/assets/destinations/rome-hero.jpg';
-
 // Curated high-quality images for popular destinations
 const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
   // Europe
@@ -22,7 +19,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1486299267070-83823f5448dd?w=1200',
   ],
   'rome': [
-    romeHeroImage,
+    'https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=1200',
     'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200',
     'https://images.unsplash.com/photo-1531572753322-ad063cecc140?w=1200',
   ],
