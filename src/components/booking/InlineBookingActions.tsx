@@ -191,8 +191,8 @@ function getActivityLinkType(
 }
 
 /**
- * Generate a smart restaurant search URL
- * Prioritizes finding the actual restaurant website/reservation page
+ * Generate a restaurant URL using Google Maps
+ * Maps links work reliably and show location, hours, reviews, and website
  */
 function generateRestaurantSearchUrl(restaurantName: string, destination: string): string {
   // Clean up the restaurant name (remove common prefixes like "Dinner at", "Lunch at", etc.)
@@ -201,9 +201,9 @@ function generateRestaurantSearchUrl(restaurantName: string, destination: string
     .replace(/\s*restaurant$/i, '')
     .trim();
   
-  // Generate a targeted search for the restaurant's website or reservation
-  const searchQuery = encodeURIComponent(`${cleanName} ${destination} restaurant official website reservations`);
-  return `https://www.google.com/search?q=${searchQuery}`;
+  // Use Google Maps search - works reliably and shows restaurant info, reviews, website
+  const searchQuery = encodeURIComponent(`${cleanName} restaurant ${destination}`);
+  return `https://www.google.com/maps/search/?api=1&query=${searchQuery}`;
 }
 
 export function InlineBookingActions({
