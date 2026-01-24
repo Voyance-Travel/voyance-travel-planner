@@ -23,6 +23,7 @@ import {
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
+import { DraggableActivityList } from './DraggableActivityList';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -200,9 +201,13 @@ export interface EditorialItineraryProps {
   heroImageUrl?: string;
   isEditable?: boolean;
   originCity?: string;
+  /** Activity IDs to highlight (e.g., from chatbot suggestions) */
+  highlightedActivityIds?: string[];
   onSave?: (days: EditorialDay[]) => Promise<void>;
   onRegenerateDay?: (dayNumber: number) => Promise<EditorialDay | null>;
   onBookingAdded?: () => void;
+  /** Called when activities are reordered via drag-and-drop */
+  onActivityReorder?: (dayIndex: number, activities: EditorialActivity[]) => void;
 }
 
 // =============================================================================
@@ -3046,6 +3051,7 @@ interface DayCardProps {
   isRegenerating: boolean;
   isEditable: boolean;
   tripId: string;
+  highlightedActivityIds?: string[]; // Activities to highlight (from chatbot)
   getPaymentForItem: (itemType: 'flight' | 'hotel' | 'activity', itemId: string) => TripPayment | undefined;
   refreshPayments: () => void;
   onToggle: () => void;
@@ -3053,6 +3059,7 @@ interface DayCardProps {
   onActivityLock: (dayIndex: number, activityId: string) => void;
   onActivityMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onActivityRemove: (dayIndex: number, activityId: string) => void;
+  onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
   onAddActivity: () => void;
@@ -3072,6 +3079,7 @@ function DayCard({
   isRegenerating,
   isEditable,
   tripId,
+  highlightedActivityIds = [],
   getPaymentForItem,
   refreshPayments,
   onToggle,
@@ -3079,6 +3087,7 @@ function DayCard({
   onActivityLock,
   onActivityMove,
   onActivityRemove,
+  onActivityReorder,
   onDayLock,
   onDayRegenerate,
   onAddActivity,
@@ -3202,32 +3211,42 @@ function DayCard({
             transition={{ duration: 0.3 }}
           >
             <div className="border-t border-border">
-              {day.activities.map((activity, activityIndex) => (
-                <ActivityRow
-                  key={activity.id}
-                  activity={activity}
-                  destination={cleanDestination}
-                  dayIndex={dayIndex}
-                  activityIndex={activityIndex}
-                  totalActivities={day.activities.length}
-                  isLast={activityIndex === day.activities.length - 1}
-                  isEditable={isEditable}
-                  travelers={travelers}
-                  budgetTier={budgetTier}
-                  tripCurrency={tripCurrency}
-                  tripId={tripId}
-                  showTransportDetails={showTransportDetails}
-                  existingPayment={getPaymentForItem('activity', activity.id)}
-                  onPaymentSuccess={refreshPayments}
-                  onLock={onActivityLock}
-                  onSwap={onActivitySwap}
-                  onMove={onActivityMove}
-                  onRemove={onActivityRemove}
-                  onTimeEdit={onTimeEdit}
-                  onPaymentRequest={onPaymentRequest}
-                  onBookingStateChange={onBookingStateChange}
-                />
-              ))}
+              <DraggableActivityList
+                items={day.activities}
+                onReorder={(reordered) => onActivityReorder?.(reordered)}
+                highlightedIds={highlightedActivityIds}
+                disabled={!isEditable}
+                renderItem={(activity, activityIndex, isDragging, isHighlighted) => (
+                  <div className={cn(
+                    "transition-all duration-300",
+                    isHighlighted && "bg-primary/5"
+                  )}>
+                    <ActivityRow
+                      activity={activity}
+                      destination={cleanDestination}
+                      dayIndex={dayIndex}
+                      activityIndex={activityIndex}
+                      totalActivities={day.activities.length}
+                      isLast={activityIndex === day.activities.length - 1}
+                      isEditable={isEditable}
+                      travelers={travelers}
+                      budgetTier={budgetTier}
+                      tripCurrency={tripCurrency}
+                      tripId={tripId}
+                      showTransportDetails={showTransportDetails}
+                      existingPayment={getPaymentForItem('activity', activity.id)}
+                      onPaymentSuccess={refreshPayments}
+                      onLock={onActivityLock}
+                      onSwap={onActivitySwap}
+                      onMove={onActivityMove}
+                      onRemove={onActivityRemove}
+                      onTimeEdit={onTimeEdit}
+                      onPaymentRequest={onPaymentRequest}
+                      onBookingStateChange={onBookingStateChange}
+                    />
+                  </div>
+                )}
+              />
             </div>
 
             {/* Day Footer */}
