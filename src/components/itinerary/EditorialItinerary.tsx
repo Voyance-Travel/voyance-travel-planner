@@ -515,6 +515,10 @@ export function EditorialItinerary({
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
+  
+  // Edit Flight/Hotel modal state
+  const [editFlightOpen, setEditFlightOpen] = useState(false);
+  const [editHotelOpen, setEditHotelOpen] = useState(false);
 
   // Optimize preferences dialog state
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false);
@@ -1446,12 +1450,25 @@ export function EditorialItinerary({
                     </p>
                   </div>
                 </div>
-                {flightCost > 0 && (
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Total</p>
-                    <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(flightCost, tripCurrency)}</p>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {flightSelection?.outbound && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setEditFlightOpen(true)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Edit3 className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  )}
+                  {flightCost > 0 && (
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Total</p>
+                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(flightCost, tripCurrency)}</p>
+                    </div>
+                  )}
+                </div>
               </div>
               
               {flightSelection?.outbound ? (
@@ -1649,12 +1666,25 @@ export function EditorialItinerary({
                     </p>
                   </div>
                 </div>
-                {hotelCost > 0 && (
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Total</p>
-                    <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(hotelCost, tripCurrency)}</p>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {hotelSelection?.name && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setEditHotelOpen(true)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Edit3 className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  )}
+                  {hotelCost > 0 && (
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Total</p>
+                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(hotelCost, tripCurrency)}</p>
+                    </div>
+                  )}
+                </div>
               </div>
               
               {hotelSelection?.name ? (
@@ -1876,6 +1906,84 @@ export function EditorialItinerary({
         images={hotelSelection?.images || []}
         hotelName={hotelSelection?.name}
       />
+
+      {/* Edit Flight Dialog */}
+      {editFlightOpen && (
+        <Dialog open={editFlightOpen} onOpenChange={setEditFlightOpen}>
+          <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plane className="h-5 w-5 text-primary" />
+                Edit Flight Details
+              </DialogTitle>
+            </DialogHeader>
+            <AddFlightInline
+              tripId={tripId}
+              destination={destination}
+              startDate={startDate}
+              endDate={endDate}
+              travelers={travelers}
+              origin={originCity}
+              onFlightAdded={() => {
+                setEditFlightOpen(false);
+                onBookingAdded?.();
+              }}
+              editMode={true}
+              existingOutbound={flightSelection?.outbound ? {
+                airline: flightSelection.outbound.airline || '',
+                flightNumber: flightSelection.outbound.flightNumber || '',
+                departureAirport: flightSelection.outbound.departure?.airport || '',
+                arrivalAirport: flightSelection.outbound.arrival?.airport || '',
+                departureTime: flightSelection.outbound.departure?.time || '',
+                arrivalTime: flightSelection.outbound.arrival?.time || '',
+                departureDate: flightSelection.outbound.departure?.date || startDate,
+              } : undefined}
+              existingReturn={flightSelection?.return ? {
+                airline: flightSelection.return.airline || '',
+                flightNumber: flightSelection.return.flightNumber || '',
+                departureAirport: flightSelection.return.departure?.airport || '',
+                arrivalAirport: flightSelection.return.arrival?.airport || '',
+                departureTime: flightSelection.return.departure?.time || '',
+                arrivalTime: flightSelection.return.arrival?.time || '',
+                departureDate: flightSelection.return.departure?.date || endDate,
+              } : undefined}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Hotel Dialog */}
+      {editHotelOpen && (
+        <Dialog open={editHotelOpen} onOpenChange={setEditHotelOpen}>
+          <DialogContent className="sm:max-w-[450px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Hotel className="h-5 w-5 text-primary" />
+                Edit Hotel Details
+              </DialogTitle>
+            </DialogHeader>
+            <AddHotelInline
+              tripId={tripId}
+              destination={destination}
+              startDate={startDate}
+              endDate={endDate}
+              travelers={travelers}
+              onHotelAdded={() => {
+                setEditHotelOpen(false);
+                onBookingAdded?.();
+              }}
+              editMode={true}
+              existingHotel={hotelSelection?.name ? {
+                name: hotelSelection.name,
+                address: hotelSelection.address || '',
+                neighborhood: '',
+                checkInTime: hotelSelection.checkIn || '15:00',
+                checkOutTime: hotelSelection.checkOut || '11:00',
+              } : undefined}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Activity Alternatives Drawer (AI Swap) */}
       <ActivityAlternativesDrawer
