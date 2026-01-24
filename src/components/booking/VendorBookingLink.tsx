@@ -79,8 +79,12 @@ export function VendorBookingLink({
   ...props
 }: VendorBookingLinkProps) {
   // Use direct URL if provided, otherwise generate search URL
+  const hasDirectUrl = !!externalBookingUrl;
   const bookingUrl = externalBookingUrl || generateVendorSearchUrl(preferredVendor, activityName, destination);
-  const vendorName = getVendorDisplayName(preferredVendor);
+  
+  // Detect vendor from URL if we have a direct link
+  const detectedVendor = hasDirectUrl ? detectVendorFromUrl(externalBookingUrl!) : preferredVendor;
+  const vendorName = getVendorDisplayName(detectedVendor);
 
   const handleClick = () => {
     window.open(bookingUrl, '_blank', 'noopener,noreferrer');
@@ -91,6 +95,11 @@ export function VendorBookingLink({
   const formattedPrice = estimatedPrice 
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(estimatedPrice)
     : null;
+
+  // Determine label based on whether we have a direct URL or are searching
+  const linkLabel = hasDirectUrl 
+    ? `View on ${vendorName}` 
+    : `Find on ${vendorName}`;
 
   return (
     <Button
@@ -103,12 +112,23 @@ export function VendorBookingLink({
       <ExternalLink className="h-3.5 w-3.5" />
       {children || (
         <>
-          Book on {vendorName}
+          {linkLabel}
           {formattedPrice && <span className="text-muted-foreground">~{formattedPrice}</span>}
         </>
       )}
     </Button>
   );
+}
+
+/**
+ * Detect vendor from a URL
+ */
+function detectVendorFromUrl(url: string): 'viator' | 'getyourguide' | 'tripadvisor' {
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.includes('viator.com')) return 'viator';
+  if (lowerUrl.includes('getyourguide.com')) return 'getyourguide';
+  if (lowerUrl.includes('tripadvisor.com')) return 'tripadvisor';
+  return 'viator'; // Default fallback
 }
 
 /**

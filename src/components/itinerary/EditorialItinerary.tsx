@@ -3877,6 +3877,9 @@ function ActivityRow({
                 bookedAt: activity.bookedAt,
                 cancelledAt: activity.cancelledAt,
                 website: activity.website,
+                bookingUrl: activity.bookingUrl,
+                viatorProductCode: activity.viatorProductCode,
+                externalBookingUrl: activity.bookingUrl, // Pass actual URL for vendor links
                 cost,
                 currency: activity.cost?.currency || 'USD',
               }}
