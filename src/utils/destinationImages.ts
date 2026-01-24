@@ -265,11 +265,16 @@ export function getDestinationImage(destination: string): string {
  */
 export function getDestinationImages(destination: string, count = 3): string[] {
   const normalized = destination.toLowerCase().trim();
+  // Also try extracting just the city name (before comma)
+  const cityOnly = normalized.split(',')[0].trim();
   
-  // Check curated images first
+  // Check curated images first with multiple matching strategies
   const images = CURATED_DESTINATION_IMAGES[normalized] 
     || CURATED_DESTINATION_IMAGES[normalized.replace(/\s+/g, '-')]
-    || CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')];
+    || CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')]
+    || CURATED_DESTINATION_IMAGES[cityOnly]
+    || CURATED_DESTINATION_IMAGES[cityOnly.replace(/\s+/g, '-')]
+    || CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')];
   
   if (images) {
     return images.slice(0, count);
@@ -284,10 +289,14 @@ export function getDestinationImages(destination: string, count = 3): string[] {
  */
 export function hasCuratedImages(destination: string): boolean {
   const normalized = destination.toLowerCase().trim();
+  const cityOnly = normalized.split(',')[0].trim();
   return !!(
     CURATED_DESTINATION_IMAGES[normalized] ||
     CURATED_DESTINATION_IMAGES[normalized.replace(/\s+/g, '-')] ||
-    CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')]
+    CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')] ||
+    CURATED_DESTINATION_IMAGES[cityOnly] ||
+    CURATED_DESTINATION_IMAGES[cityOnly.replace(/\s+/g, '-')] ||
+    CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')]
   );
 }
 
