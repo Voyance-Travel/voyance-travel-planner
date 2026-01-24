@@ -3913,6 +3913,86 @@ export type Database = {
           },
         ]
       }
+      trip_learnings: {
+        Row: {
+          accommodation_feedback: string | null
+          best_time_of_day: string | null
+          completed_at: string | null
+          created_at: string
+          destination: string | null
+          discovered_dislikes: string[] | null
+          discovered_likes: string[] | null
+          highlights: Json | null
+          id: string
+          lessons_summary: string | null
+          overall_rating: number | null
+          pacing_feedback: string | null
+          pain_points: Json | null
+          skipped_activities: Json | null
+          tips_for_others: string | null
+          travel_party_notes: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+          would_change: string | null
+          would_return: boolean | null
+        }
+        Insert: {
+          accommodation_feedback?: string | null
+          best_time_of_day?: string | null
+          completed_at?: string | null
+          created_at?: string
+          destination?: string | null
+          discovered_dislikes?: string[] | null
+          discovered_likes?: string[] | null
+          highlights?: Json | null
+          id?: string
+          lessons_summary?: string | null
+          overall_rating?: number | null
+          pacing_feedback?: string | null
+          pain_points?: Json | null
+          skipped_activities?: Json | null
+          tips_for_others?: string | null
+          travel_party_notes?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+          would_change?: string | null
+          would_return?: boolean | null
+        }
+        Update: {
+          accommodation_feedback?: string | null
+          best_time_of_day?: string | null
+          completed_at?: string | null
+          created_at?: string
+          destination?: string | null
+          discovered_dislikes?: string[] | null
+          discovered_likes?: string[] | null
+          highlights?: Json | null
+          id?: string
+          lessons_summary?: string | null
+          overall_rating?: number | null
+          pacing_feedback?: string | null
+          pain_points?: Json | null
+          skipped_activities?: Json | null
+          tips_for_others?: string | null
+          travel_party_notes?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+          would_change?: string | null
+          would_return?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_learnings_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_members: {
         Row: {
           accepted_at: string | null
