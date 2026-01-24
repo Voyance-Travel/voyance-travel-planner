@@ -3824,7 +3824,8 @@ function ActivityRow({
               );
             })()}
             {/* Tips */}
-            {activity.tips && (
+            {/* Only show tips for venue-type activities, NOT for free time/downtime/transport */}
+            {activity.tips && !isDowntime && !isTransport && !isCheckIn && (
               <div className="flex items-start gap-2 mt-2 p-2 bg-primary/5 rounded-md text-xs">
                 <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
                 <span className="text-muted-foreground">{activity.tips}</span>
