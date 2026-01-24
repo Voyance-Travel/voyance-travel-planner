@@ -2,9 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, MapPin, Calendar, Users, ImageOff, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { supabase } from '@/integrations/supabase/client';
-import { getCachedImages, prefetchDestinationImages } from '@/utils/imagePrefetch';
-import { getDestinationImages, hasCuratedImages } from '@/utils/destinationImages';
+import { prefetchDestinationImages } from '@/utils/imagePrefetch';
 
 interface DynamicDestinationPhotosProps {
   destination: string;
@@ -61,42 +59,7 @@ export default function DynamicDestinationPhotos({
     }
 
     const loadImages = async () => {
-      // TIER 0: Check curated static images first (instant, no API call)
-      if (hasCuratedImages(cleanDestination)) {
-        const curatedUrls = getDestinationImages(cleanDestination, 4);
-        console.log('[DynamicPhotos] Using curated images for:', cleanDestination, curatedUrls.length);
-        setImages(
-          curatedUrls.map((url, i) => ({
-            id: `curated-${i}`,
-            url,
-            alt: `${cleanDestination} view ${i + 1}`,
-            type: 'hero',
-            source: 'curated' as const,
-          }))
-        );
-        setIsLoading(false);
-        fetchedRef.current = cleanDestination;
-        return;
-      }
-
-      // TIER 1: Check if images are already cached from previous API calls
-      const cachedUrls = getCachedImages(cleanDestination);
-      if (cachedUrls.length > 0) {
-        console.log('[DynamicPhotos] Using cached images for:', cleanDestination, cachedUrls.length);
-        setImages(
-          cachedUrls.map((url, i) => ({
-            id: `cached-${i}`,
-            url,
-            alt: `${cleanDestination} view ${i + 1}`,
-            type: 'hero',
-            source: 'database' as const,
-          }))
-        );
-        setIsLoading(false);
-        fetchedRef.current = cleanDestination;
-        return;
-      }
-
+      // Use centralized API that enforces curated images for Rome (no people)
       setIsLoading(true);
       setError(false);
 
@@ -106,23 +69,17 @@ export default function DynamicDestinationPhotos({
         // Trigger prefetch to populate persistent cache for future use
         prefetchDestinationImages(cleanDestination);
 
-        const { data, error: fetchError } = await supabase.functions.invoke('destination-images', {
-          body: {
-            destination: cleanDestination,
-            imageType: 'hero',
-            limit: 4,
-          },
+        // Use centralized API - handles Rome curated images automatically
+        const { getDestinationImages: fetchDestinationImages } = await import('@/services/destinationImagesAPI');
+        const fetchedImages = await fetchDestinationImages({
+          destination: cleanDestination,
+          imageType: 'hero',
+          limit: 4,
         });
 
-        if (fetchError) {
-          console.error('[DynamicPhotos] Error:', fetchError);
-          setError(true);
-          return;
-        }
-
-        if (data?.images && data.images.length > 0) {
-          console.log('[DynamicPhotos] Got images:', data.images.length, 'source:', data.source);
-          setImages(data.images);
+        if (fetchedImages.length > 0) {
+          console.log('[DynamicPhotos] Got images:', fetchedImages.length);
+          setImages(fetchedImages);
           fetchedRef.current = cleanDestination;
         } else {
           console.log('[DynamicPhotos] No images returned');
