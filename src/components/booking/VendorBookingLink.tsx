@@ -1,6 +1,9 @@
 /**
  * Vendor Booking Link Component
  * Generates affiliate/external links to booking vendors like Viator, GetYourGuide, TripAdvisor
+ * 
+ * NOTE: Viator blocks search URL redirects. We only link to Viator when we have a verified
+ * product URL from the Partner API. For fallback searches, we use GetYourGuide instead.
  */
 
 import { ExternalLink } from 'lucide-react';
@@ -23,6 +26,7 @@ interface VendorBookingLinkProps extends Omit<ButtonProps, 'onClick'> {
 
 /**
  * Generate a search URL for the given vendor
+ * NOTE: Viator blocks search redirects, so we use GetYourGuide as fallback
  */
 function generateVendorSearchUrl(
   vendor: 'viator' | 'getyourguide' | 'tripadvisor',
@@ -30,21 +34,16 @@ function generateVendorSearchUrl(
   destination: string
 ): string {
   const query = encodeURIComponent(`${activityName} ${destination}`);
-  const destQuery = encodeURIComponent(destination);
-  const activityQuery = encodeURIComponent(activityName);
 
   switch (vendor) {
-    case 'viator':
-      // Viator search URL
-      return `https://www.viator.com/searchResults/all?text=${query}`;
     case 'getyourguide':
-      // GetYourGuide search URL
       return `https://www.getyourguide.com/s/?q=${query}`;
     case 'tripadvisor':
-      // TripAdvisor experiences search
       return `https://www.tripadvisor.com/Search?q=${query}&searchSessionId=&searchNearby=false&geo=&sid=&blockRedirect=true&ssrc=A&rf=1`;
+    case 'viator':
     default:
-      return `https://www.viator.com/searchResults/all?text=${query}`;
+      // Viator blocks search redirects - use GetYourGuide as fallback
+      return `https://www.getyourguide.com/s/?q=${query}`;
   }
 }
 
@@ -60,8 +59,19 @@ function getVendorDisplayName(vendor: 'viator' | 'getyourguide' | 'tripadvisor')
     case 'tripadvisor':
       return 'TripAdvisor';
     default:
-      return 'Viator';
+      return 'GetYourGuide';
   }
+}
+
+/**
+ * Detect vendor from a URL
+ */
+function detectVendorFromUrl(url: string): 'viator' | 'getyourguide' | 'tripadvisor' {
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.includes('viator.com')) return 'viator';
+  if (lowerUrl.includes('getyourguide.com')) return 'getyourguide';
+  if (lowerUrl.includes('tripadvisor.com')) return 'tripadvisor';
+  return 'getyourguide'; // Default fallback (no longer Viator)
 }
 
 export function VendorBookingLink({
@@ -80,10 +90,12 @@ export function VendorBookingLink({
 }: VendorBookingLinkProps) {
   // Use direct URL if provided, otherwise generate search URL
   const hasDirectUrl = !!externalBookingUrl;
+  
+  // If we have a Viator URL, use it directly. Otherwise generate search (defaults to GYG)
   const bookingUrl = externalBookingUrl || generateVendorSearchUrl(preferredVendor, activityName, destination);
   
   // Detect vendor from URL if we have a direct link
-  const detectedVendor = hasDirectUrl ? detectVendorFromUrl(externalBookingUrl!) : preferredVendor;
+  const detectedVendor = hasDirectUrl ? detectVendorFromUrl(externalBookingUrl!) : 'getyourguide';
   const vendorName = getVendorDisplayName(detectedVendor);
 
   const handleClick = () => {
@@ -121,17 +133,6 @@ export function VendorBookingLink({
 }
 
 /**
- * Detect vendor from a URL
- */
-function detectVendorFromUrl(url: string): 'viator' | 'getyourguide' | 'tripadvisor' {
-  const lowerUrl = url.toLowerCase();
-  if (lowerUrl.includes('viator.com')) return 'viator';
-  if (lowerUrl.includes('getyourguide.com')) return 'getyourguide';
-  if (lowerUrl.includes('tripadvisor.com')) return 'tripadvisor';
-  return 'viator'; // Default fallback
-}
-
-/**
  * Compact text link variant for inline use
  */
 export function VendorBookingTextLink({
@@ -141,8 +142,10 @@ export function VendorBookingTextLink({
   preferredVendor = 'viator',
   className,
 }: Pick<VendorBookingLinkProps, 'activityName' | 'destination' | 'externalBookingUrl' | 'preferredVendor' | 'className'>) {
+  const hasDirectUrl = !!externalBookingUrl;
   const bookingUrl = externalBookingUrl || generateVendorSearchUrl(preferredVendor, activityName, destination);
-  const vendorName = getVendorDisplayName(preferredVendor);
+  const detectedVendor = hasDirectUrl ? detectVendorFromUrl(externalBookingUrl!) : 'getyourguide';
+  const vendorName = getVendorDisplayName(detectedVendor);
 
   return (
     <a
