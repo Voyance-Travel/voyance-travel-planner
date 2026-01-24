@@ -3743,6 +3743,7 @@ function ActivityRow({
                 
                 if (isNonReviewable) return null;
                 
+                // Only show rating badge if we have a rating
                 if (rating) {
                   return (
                     <Badge 
@@ -3759,6 +3760,13 @@ function ActivityRow({
                     </Badge>
                   );
                 }
+                
+                // Only show "See Reviews" button if activity has review count or reviews data
+                const hasReviews = (activity as any).reviewCount > 0 || 
+                                   (activity as any).review_count > 0 ||
+                                   ((activity as any).reviews && (activity as any).reviews.length > 0);
+                
+                if (!hasReviews) return null;
                 
                 return (
                   <button
