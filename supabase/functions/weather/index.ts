@@ -130,6 +130,10 @@ const regionMapping: Record<string, string> = {
   'tokyo': 'default', 'new york': 'default', 'los angeles': 'mediterranean', 'miami': 'tropical',
 };
 
+function cToF(c: number): number {
+  return (c * 9) / 5 + 32;
+}
+
 function getSeason(date: Date): string {
   const month = date.getMonth();
   if (month >= 2 && month <= 4) return 'spring';
@@ -151,7 +155,14 @@ function generateFallbackForecast(destination: string, startDate: string, days: 
   const patterns = seasonalPatterns[region] || seasonalPatterns['default'];
   const start = new Date(startDate);
   const season = getSeason(start);
-  const base = patterns[season];
+  const baseC = patterns[season];
+  // IMPORTANT: Open-Meteo is requested in Fahrenheit. Normalize fallback to Fahrenheit too,
+  // otherwise the UI will show e.g. 20° as 20°F for April Lisbon.
+  const base = {
+    ...baseC,
+    high: Math.round(cToF(baseC.high)),
+    low: Math.round(cToF(baseC.low)),
+  };
 
   const forecast = [];
   for (let i = 0; i < days; i++) {
@@ -159,7 +170,7 @@ function generateFallbackForecast(destination: string, startDate: string, days: 
     date.setDate(date.getDate() + i);
     const variance = Math.random() * 4 - 2;
 
-    forecast.push({
+     forecast.push({
       date: date.toISOString().split('T')[0],
       high: Math.round(base.high + variance),
       low: Math.round(base.low + variance),
