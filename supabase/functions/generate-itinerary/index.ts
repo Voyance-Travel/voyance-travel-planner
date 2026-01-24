@@ -2463,6 +2463,56 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
         warnings.push(`Activity ${i + 1} (${act.title || 'unknown'}): Logistics should have $0 cost`);
       }
     }
+
+    // =========================================================================
+    // DUPLICATE ACTIVITY DETECTION - No same activity type back-to-back
+    // =========================================================================
+    if (i > 0) {
+      const prevAct = day.activities[i - 1];
+      const currTitle = (act.title || '').toLowerCase();
+      const prevTitle = (prevAct.title || '').toLowerCase();
+      
+      // Extract activity concept (e.g., "pastel de nata baking class" -> "pastel de nata baking")
+      const extractConcept = (title: string): string => {
+        // Remove venue names (usually after "at" or "with")
+        const conceptPart = title.split(/\s+at\s+|\s+with\s+|\s+@\s+/i)[0];
+        // Remove common suffixes
+        return conceptPart
+          .replace(/\s*(class|tour|experience|visit|workshop|session|lesson)$/i, '')
+          .trim();
+      };
+      
+      const currConcept = extractConcept(currTitle);
+      const prevConcept = extractConcept(prevTitle);
+      
+      // Check for same concept back-to-back (similarity > 80%)
+      const conceptSimilarity = (a: string, b: string): boolean => {
+        if (!a || !b || a.length < 5 || b.length < 5) return false;
+        // Exact match
+        if (a === b) return true;
+        // One contains the other
+        if (a.includes(b) || b.includes(a)) return true;
+        // Key words match (e.g., "pastel de nata" in both)
+        const aWords = new Set(a.split(/\s+/));
+        const bWords = new Set(b.split(/\s+/));
+        const intersection = [...aWords].filter(w => bWords.has(w) && w.length > 3);
+        const minLen = Math.min(aWords.size, bWords.size);
+        return minLen > 0 && intersection.length / minLen > 0.6;
+      };
+      
+      if (conceptSimilarity(currConcept, prevConcept)) {
+        errors.push(`Activities ${i} and ${i + 1} are too similar: "${prevAct.title}" followed by "${act.title}" - AVOID duplicate concepts back-to-back`);
+      }
+      
+      // Check for same activity category repeating (excluding meals and transport)
+      const skipCategories = ['dining', 'transport', 'accommodation', 'breakfast', 'lunch', 'dinner', 'downtime'];
+      if (act.category && prevAct.category && 
+          act.category.toLowerCase() === prevAct.category.toLowerCase() &&
+          !skipCategories.includes(act.category.toLowerCase())) {
+        // Same category back-to-back (e.g., two "activity" entries that are both cooking classes)
+        warnings.push(`Activities ${i} and ${i + 1} are both "${act.category}" - consider more variety`);
+      }
+    }
   }
 
   // First day checks
@@ -2542,8 +2592,10 @@ async function generateSingleDayWithRetry(
     '4. Airport transfers: bookingRequired=false (user arranges transport)',
     '5. Free time/leisure: bookingRequired=false, cost.amount=0',
     '6. Only tours, museums, and ticketed attractions should have bookingRequired=true',
-    isFirstDay ? '7. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
-    isLastDay && context.totalDays > 1 ? '7. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+    '7. NO DUPLICATE ACTIVITIES: NEVER schedule the same type of activity back-to-back (e.g., two cooking classes, two wine tastings, two walking tours). Each consecutive activity must be a DIFFERENT experience type.',
+    '8. VARIETY RULE: If suggesting a cooking class, wine tasting, or similar experience, only include ONE per day. Diversify across museums, outdoor activities, cultural sites, dining, and relaxation.',
+    isFirstDay ? '9. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
+    isLastDay && context.totalDays > 1 ? '9. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
   let lastError: Error | null = null;
