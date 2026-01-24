@@ -190,6 +190,22 @@ function getActivityLinkType(
   return 'vendor_booking';
 }
 
+/**
+ * Generate a smart restaurant search URL
+ * Prioritizes finding the actual restaurant website/reservation page
+ */
+function generateRestaurantSearchUrl(restaurantName: string, destination: string): string {
+  // Clean up the restaurant name (remove common prefixes like "Dinner at", "Lunch at", etc.)
+  const cleanName = restaurantName
+    .replace(/^(dinner|lunch|breakfast|brunch|meal|dining)\s*(at|@)\s*/i, '')
+    .replace(/\s*restaurant$/i, '')
+    .trim();
+  
+  // Generate a targeted search for the restaurant's website or reservation
+  const searchQuery = encodeURIComponent(`${cleanName} ${destination} restaurant official website reservations`);
+  return `https://www.google.com/search?q=${searchQuery}`;
+}
+
 export function InlineBookingActions({
   activity,
   destination,
@@ -279,22 +295,22 @@ export function InlineBookingActions({
           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
         >
           <ExternalLink className="h-3 w-3" />
-          View Menu
+          View Menu & Reserve
         </a>
       );
     }
     
     if (linkType === 'find_restaurant') {
-      const searchQuery = encodeURIComponent(`${activity.title} ${destination} menu`);
+      const searchUrl = generateRestaurantSearchUrl(activity.title, destination);
       return (
         <a
-          href={`https://www.google.com/search?q=${searchQuery}`}
+          href={searchUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:underline"
+          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
         >
           <ExternalLink className="h-3 w-3" />
-          Find Restaurant
+          View Restaurant
         </a>
       );
     }
@@ -333,22 +349,23 @@ export function InlineBookingActions({
         className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
       >
         <ExternalLink className="h-3 w-3" />
-        View Menu
+        View Menu & Reserve
       </a>
     );
   }
   
   if (linkType === 'find_restaurant') {
-    const searchQuery = encodeURIComponent(`${activity.title} ${destination} menu`);
+    // Use the smart search that cleans up the name and targets official websites
+    const searchUrl = generateRestaurantSearchUrl(activity.title, destination);
     return (
       <a
-        href={`https://www.google.com/search?q=${searchQuery}`}
+        href={searchUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:underline"
+        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
       >
         <ExternalLink className="h-3 w-3" />
-        Find Restaurant
+        View Restaurant
       </a>
     );
   }
