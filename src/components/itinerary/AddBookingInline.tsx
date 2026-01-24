@@ -8,16 +8,25 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Hotel, Plus, ArrowRight, Loader2 } from 'lucide-react';
+import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
+import { cn } from '@/lib/utils';
+import { 
+  type HotelBooking, 
+  findOverlappingHotel, 
+  isValidDateRange 
+} from '@/utils/hotelValidation';
 
 // Types for manual entry
 export interface ManualFlightEntry {
@@ -31,9 +40,12 @@ export interface ManualFlightEntry {
 }
 
 export interface ManualHotelEntry {
+  id?: string;
   name: string;
   address: string;
   neighborhood?: string;
+  checkInDate?: string; // YYYY-MM-DD
+  checkOutDate?: string; // YYYY-MM-DD
   checkInTime?: string;
   checkOutTime?: string;
 }
@@ -62,6 +74,8 @@ interface AddHotelInlineProps {
   // Edit mode props
   editMode?: boolean;
   existingHotel?: ManualHotelEntry;
+  // Multi-hotel support
+  existingHotels?: import('@/utils/hotelValidation').HotelBooking[];
 }
 
 // ============================================================================
@@ -340,20 +354,36 @@ export function AddHotelInline({
   travelers,
   onHotelAdded,
   editMode = false,
-  existingHotel
+  existingHotel,
+  existingHotels = []
 }: AddHotelInlineProps) {
   const navigate = useNavigate();
   const [showManualEntry, setShowManualEntry] = useState(editMode);
   const [isSaving, setIsSaving] = useState(false);
   
-  const [hotelData, setHotelData] = useState<ManualHotelEntry>(
-    existingHotel || {
+  // Parse trip dates for calendar bounds
+  const tripStartDate = parseISO(startDate);
+  const tripEndDate = parseISO(endDate);
+  
+  const [hotelData, setHotelData] = useState<ManualHotelEntry>(() => {
+    if (existingHotel) return existingHotel;
+    return {
       name: '',
       address: '',
       neighborhood: '',
+      checkInDate: startDate,
+      checkOutDate: endDate,
       checkInTime: '15:00',
       checkOutTime: '11:00',
-    }
+    };
+  });
+  
+  // Date picker state
+  const [checkInDate, setCheckInDate] = useState<Date | undefined>(
+    hotelData.checkInDate ? parseISO(hotelData.checkInDate) : tripStartDate
+  );
+  const [checkOutDate, setCheckOutDate] = useState<Date | undefined>(
+    hotelData.checkOutDate ? parseISO(hotelData.checkOutDate) : tripEndDate
   );
 
   const handleBrowseHotels = () => {
@@ -372,6 +402,33 @@ export function AddHotelInline({
       toast.error('Please enter the hotel name');
       return;
     }
+    
+    if (!checkInDate || !checkOutDate) {
+      toast.error('Please select check-in and check-out dates');
+      return;
+    }
+    
+    const checkInStr = format(checkInDate, 'yyyy-MM-dd');
+    const checkOutStr = format(checkOutDate, 'yyyy-MM-dd');
+    
+    // Validate date range
+    if (!isValidDateRange(checkInStr, checkOutStr)) {
+      toast.error('Check-out date must be after check-in date');
+      return;
+    }
+    
+    // Check for overlapping hotels
+    const overlapping = findOverlappingHotel(
+      checkInStr, 
+      checkOutStr, 
+      existingHotels,
+      existingHotel?.id // Exclude current hotel if editing
+    );
+    
+    if (overlapping) {
+      toast.error(`Dates overlap with "${overlapping.name}" (${format(parseISO(overlapping.checkInDate), 'MMM d')} - ${format(parseISO(overlapping.checkOutDate), 'MMM d')})`);
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -385,13 +442,15 @@ export function AddHotelInline({
       
       const enrichment = await enrichHotel(hotelData.name, cleanDestination);
       
-      const hotelSelection = {
-        id: `manual-${Date.now()}`,
+      const newHotel: HotelBooking = {
+        id: existingHotel?.id || `manual-${Date.now()}`,
         name: hotelData.name,
         address: enrichment?.address || hotelData.address,
         neighborhood: hotelData.neighborhood || hotelData.address,
-        checkIn: hotelData.checkInTime,
-        checkOut: hotelData.checkOutTime,
+        checkInDate: checkInStr,
+        checkOutDate: checkOutStr,
+        checkInTime: hotelData.checkInTime,
+        checkOutTime: hotelData.checkOutTime,
         website: enrichment?.website,
         googleMapsUrl: enrichment?.googleMapsUrl,
         images: enrichment?.photos,
@@ -400,10 +459,27 @@ export function AddHotelInline({
         isManualEntry: true,
         isEnriched: !!enrichment,
       };
+      
+      // Build updated hotels array
+      let updatedHotels: HotelBooking[];
+      if (existingHotel?.id) {
+        // Editing existing - replace it
+        updatedHotels = existingHotels.map(h => 
+          h.id === existingHotel.id ? newHotel : h
+        );
+      } else {
+        // Adding new hotel
+        updatedHotels = [...existingHotels, newHotel];
+      }
+      
+      // Sort by check-in date
+      updatedHotels.sort((a, b) => 
+        parseISO(a.checkInDate).getTime() - parseISO(b.checkInDate).getTime()
+      );
 
       const { error } = await supabase
         .from('trips')
-        .update({ hotel_selection: hotelSelection })
+        .update({ hotel_selection: JSON.parse(JSON.stringify(updatedHotels)) })
         .eq('id', tripId);
 
       if (error) throw error;
@@ -429,18 +505,24 @@ export function AddHotelInline({
           Browse Hotels
         </Button>
         <Button variant="outline" onClick={() => setShowManualEntry(true)}>
-          Enter Details
+          {editMode ? 'Edit Details' : 'Enter Details'}
         </Button>
       </div>
 
       {/* Manual Entry Dialog */}
       <Dialog open={showManualEntry} onOpenChange={setShowManualEntry}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Hotel className="h-5 w-5 text-primary" />
-              Enter Your Hotel Details
+              {editMode ? 'Edit Hotel Details' : 'Add Hotel'}
             </DialogTitle>
+            <DialogDescription>
+              {existingHotels.length > 0 
+                ? `You have ${existingHotels.length} hotel(s). Add another or edit dates to avoid overlap.`
+                : 'Enter your hotel details and stay dates.'
+              }
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -451,6 +533,76 @@ export function AddHotelInline({
                 value={hotelData.name}
                 onChange={(e) => setHotelData(prev => ({ ...prev, name: e.target.value }))}
               />
+            </div>
+            
+            {/* Check-in / Check-out Date Pickers */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Check-in Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !checkInDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {checkInDate ? format(checkInDate, "MMM d, yyyy") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={checkInDate}
+                      onSelect={(date) => {
+                        setCheckInDate(date);
+                        // Auto-adjust checkout if needed
+                        if (date && checkOutDate && date >= checkOutDate) {
+                          const nextDay = new Date(date);
+                          nextDay.setDate(nextDay.getDate() + 1);
+                          setCheckOutDate(nextDay);
+                        }
+                      }}
+                      disabled={(date) => date < tripStartDate || date > tripEndDate}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <div className="space-y-1.5">
+                <Label className="text-xs">Check-out Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !checkOutDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {checkOutDate ? format(checkOutDate, "MMM d, yyyy") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={checkOutDate}
+                      onSelect={setCheckOutDate}
+                      disabled={(date) => 
+                        date < (checkInDate || tripStartDate) || 
+                        date > tripEndDate
+                      }
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
             
             <div>
@@ -497,7 +649,7 @@ export function AddHotelInline({
             </Button>
             <Button onClick={handleSaveManualHotel} disabled={isSaving} className="gap-2">
               {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSaving ? 'Finding Hotel...' : 'Save Hotel'}
+              {isSaving ? 'Finding Hotel...' : (editMode ? 'Update Hotel' : 'Add Hotel')}
             </Button>
           </DialogFooter>
         </DialogContent>
