@@ -48,7 +48,8 @@ async function cacheReviews(placeName: string, destination: string, response: Re
   try {
     const supabase = getSupabaseAdmin();
     const cacheKey = generateCacheKey(placeName, destination);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+    // Cache reviews for 30 days - they don't change frequently
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     
     await supabase
       .from('search_cache')
@@ -60,7 +61,7 @@ async function cacheReviews(placeName: string, destination: string, response: Re
         created_at: new Date().toISOString(),
       }, { onConflict: 'search_key' });
     
-    console.log(`[fetch-reviews] Cached reviews for "${placeName}" in ${destination}`);
+    console.log(`[fetch-reviews] Cached reviews for "${placeName}" in ${destination} (30-day TTL)`);
   } catch (error) {
     console.error('[fetch-reviews] Cache write error:', error);
   }

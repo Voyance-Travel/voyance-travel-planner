@@ -176,6 +176,11 @@ export function InlineBookingActions({
   const primaryAction = getPrimaryAction(bookableActivity);
 
   // If booking is not required, show external link or nothing
+  // Check for non-bookable activities FIRST (free time, transport, etc.)
+  if (isNonBookableActivity(activity.title, activity.category)) {
+    return null;
+  }
+
   if (!activity.bookingRequired) {
     if (activity.website) {
       return (
@@ -224,10 +229,7 @@ export function InlineBookingActions({
     );
   }
 
-  // Non-bookable activities (hotel checkout, free time, transport, etc.) - no booking UI
-  if (isNonBookableActivity(activity.title, activity.category)) {
-    return null;
-  }
+  // (Non-bookable check moved to top of component)
 
   // Handle primary action based on state
   const handlePrimaryAction = async () => {
