@@ -796,6 +796,81 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     perfectTripPreview: "A pilgrimage on the Camino de Santiago, walking through grief, meeting fellow seekers, and arriving in Santiago transformed.",
     emoji: "🕊️"
   },
+  retirement_ranger: {
+    id: 'retirement_ranger',
+    name: 'The Retirement Ranger',
+    category: 'TRANSFORMER',
+    hookLine: "Finally free to explore without limits.",
+    coreDescription: "The calendar is yours now. No more vacation days to hoard, no more rushed weekend trips. You've earned the right to travel slow, go far, and stay as long as you like.",
+    whatThisMeans: [
+      "Extended trips are now the norm, not the exception",
+      "You prioritize comfort without guilt",
+      "Off-season travel is your secret weapon",
+      "You mentor younger travelers with hard-won wisdom"
+    ],
+    superpowers: [
+      "Patience perfected over decades",
+      "Deep appreciation for every moment",
+      "Freedom to change plans on a whim"
+    ],
+    growthEdges: [
+      "New technology can enhance travel",
+      "Solo adventures build new confidence",
+      "Backpackers have wisdom too"
+    ],
+    perfectTripPreview: "Three months in Portugal, renting a villa, learning to cook bacalhau, making friends with neighbors, and finally reading all those books.",
+    emoji: "🌅"
+  },
+  balanced_story_collector: {
+    id: 'balanced_story_collector',
+    name: 'The Balanced Story Collector',
+    category: 'CONNECTOR',
+    hookLine: "Every journey adds a chapter worth reading.",
+    coreDescription: "You don't fit into neat boxes, and that's your superpower. You balance adventure with rest, solo time with social connection, and spontaneity with just enough planning. Every trip becomes a story worth telling.",
+    whatThisMeans: [
+      "You adapt your travel style to each destination",
+      "Some days you explore hard, others you rest completely",
+      "You value both deep connections and solo reflection",
+      "You're equally happy in luxury or simplicity"
+    ],
+    superpowers: [
+      "Reading what each trip calls for",
+      "Balancing opposing needs gracefully",
+      "Collecting diverse experiences without burnout"
+    ],
+    growthEdges: [
+      "Sometimes committing fully reveals hidden magic",
+      "Not every trip needs to be 'balanced'",
+      "Extremes can be exhilarating"
+    ],
+    perfectTripPreview: "Two weeks in Portugal—Lisbon's nightlife, silent mornings in Sintra, a cooking class with strangers who become friends, and lazy beach days in the Algarve.",
+    emoji: "📖"
+  },
+  flexible_wanderer: {
+    id: 'flexible_wanderer',
+    name: 'The Flexible Wanderer',
+    category: 'EXPLORER',
+    hookLine: "Plans are just suggestions—the road decides.",
+    coreDescription: "You book one-way tickets and figure out the rest later. Itineraries feel like prisons, and the best experiences come from happy accidents. You trust the journey to unfold.",
+    whatThisMeans: [
+      "You rarely book more than 24 hours ahead",
+      "Missed trains have led to your best memories",
+      "You carry everything you need in one bag",
+      "You've extended 'one week' trips into months"
+    ],
+    superpowers: [
+      "Thriving in uncertainty",
+      "Seizing unexpected opportunities",
+      "Minimal packing, maximum freedom"
+    ],
+    growthEdges: [
+      "Some destinations reward advance booking",
+      "Travel companions need some structure",
+      "Peak season requires planning"
+    ],
+    perfectTripPreview: "Landing in Bangkok with no return ticket, following recommendations from hostel strangers, ending up in Laos, then Vietnam, returning home when it feels right.",
+    emoji: "🌬️"
+  },
 };
 
 export function getArchetypeNarrative(archetypeId: string): ArchetypeNarrative {
