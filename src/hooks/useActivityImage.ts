@@ -112,8 +112,8 @@ export function useActivityImage(
       return;
     }
 
-    // Skip fetching for transport/accommodation/downtime
-    const skipCategories = ['transport', 'transportation', 'accommodation', 'downtime', 'free_time'];
+    // Skip fetching for transport/downtime only - accommodation can now fetch hotel images
+    const skipCategories = ['transport', 'transportation', 'downtime', 'free_time'];
     if (skipCategories.includes(category?.toLowerCase() || '')) {
       setImageUrl(getCategoryFallback(category));
       setSource('fallback');
