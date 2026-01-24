@@ -929,6 +929,7 @@ export default function TripDetail() {
           destination={trip.destination}
           startDate={trip.start_date}
           endDate={trip.end_date}
+          isLocalTrip={trip.user_id === 'local'}
           days={(() => {
             const metadata = trip.itinerary_data as Record<string, unknown> | null;
             const rawDays = (metadata?.days as unknown[]) || [];
@@ -938,24 +939,35 @@ export default function TripDetail() {
               return {
                 dayNumber: (d.dayNumber as number) || idx + 1,
                 date: (d.date as string) || '',
+                theme: d.theme as string | undefined,
+                description: d.description as string | undefined,
                 activities: activities.map((act: unknown, actIdx: number) => {
                   const a = act as Record<string, unknown>;
                   return {
                     id: (a.id as string) || `act-${idx}-${actIdx}`,
-                    index: actIdx,
                     title: (a.title as string) || (a.name as string) || 'Activity',
+                    name: (a.name as string) || (a.title as string),
                     category: a.category as string | undefined,
-                    time: (a.startTime as string) || (a.time as string) || '',
-                    cost: (a.cost as { amount: number })?.amount,
+                    startTime: (a.startTime as string) || (a.time as string) || '',
+                    time: (a.time as string) || (a.startTime as string) || '',
+                    cost: a.cost as { amount?: number } | undefined,
                     isLocked: (a.isLocked as boolean) || false,
+                    description: a.description as string | undefined,
+                    location: a.location as { name?: string; address?: string } | undefined,
                   };
                 }),
               };
             });
           })()}
-          onActionApply={(action) => {
-            // TODO: Wire up action handlers for swap, pacing, filter, regenerate
-            console.log('[ItineraryAssistant] Action applied:', action);
+          onItineraryUpdate={(updatedDays) => {
+            // Refresh trip data to reflect changes - serialize for Json compatibility
+            setTrip(prev => prev ? {
+              ...prev,
+              itinerary_data: JSON.parse(JSON.stringify({
+                ...(prev.itinerary_data as Record<string, unknown> || {}),
+                days: updatedDays,
+              })),
+            } : null);
           }}
         />
       )}
