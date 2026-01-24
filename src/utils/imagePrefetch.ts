@@ -19,12 +19,16 @@ const imageCache = new Map<string, PrefetchedImage[]>();
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 // Bump cache key to invalidate any previously persisted destination images
 // (e.g., a Rome image with people that got cached and kept reappearing).
-const STORAGE_KEY = 'voyance_destination_image_cache_v2';
+const STORAGE_KEY = 'voyance_destination_image_cache_v3';
 
 // Explicitly ban specific known-bad images (e.g., photos with people).
 // Keep this list tight and only add URLs that must never be shown.
 const BANNED_IMAGE_URLS = new Set<string>([
   'https://media-cdn.tripadvisor.com/media/photo-s/31/94/59/97/caption.jpg',
+  // Lisbon tuk-tuk tourists image
+  'https://media-cdn.tripadvisor.com/media/photo-s/1a/d6/08/7e/caption.jpg',
+  'https://media-cdn.tripadvisor.com/media/photo-m/1280/1a/d6/08/7e/caption.jpg',
+  'https://media-cdn.tripadvisor.com/media/photo-o/1a/d6/08/7e/caption.jpg',
 ]);
 
 function filterBanned(urls: string[]): string[] {
