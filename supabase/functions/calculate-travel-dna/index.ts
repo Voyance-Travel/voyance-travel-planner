@@ -64,7 +64,7 @@ interface TravelDNAv2Result {
   raw_trait_scores: TraitScores;
   trait_scores: TraitScores;
   trait_signal_strength: Partial<Record<Trait, number>>;
-  trait_fill_rates: Record<Trait, number>;  // NEW: percent-of-possible per trait
+  trait_fill_rates: Record<Trait, number>;  // percent-of-possible per trait (0 if untouchable)
   trait_contributions: TraitContribution[];
   archetype_matches: ArchetypeMatch[];
   confidence: number;
@@ -81,11 +81,14 @@ interface TravelDNAv2Result {
   perfect_trip_preview: string;
   summary: string;
   calculated_at: string;
-  // NEW: Explainability and disambiguation
+  // Explainability and disambiguation
   why_this_result: WhyThisResult;
   needs_disambiguation: boolean;
   disambiguation_reason?: string;
   disambiguation_traits?: Trait[];
+  next_question_ids?: string[];  // NEW: Specific questions to ask for disambiguation
+  tension_label?: string;        // NEW: One-liner resolving apparent contradictions
+  tension_explanation?: string;  // NEW: Explanation of the tension resolution
 }
 
 interface QuizAnswers {
@@ -535,7 +538,10 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'j4': { deltas: { authenticity: 4, transformation: 3, pace: -2 }, label: 'Extended trips' },
 };
 
-// Legacy answer mappings (for old quiz responses)
+// ============================================================================
+// LEGACY ANSWER MAPPINGS - Must be declared BEFORE QUESTION_MAPPINGS
+// ============================================================================
+
 const LEGACY_ANSWER_MAPPINGS: Record<string, AnswerDelta> = {
   // Traveler type
   'explorer': { deltas: { adventure: 4, authenticity: 5, transformation: 3 }, label: 'Explorer type' },
@@ -589,6 +595,141 @@ const LEGACY_ANSWER_MAPPINGS: Record<string, AnswerDelta> = {
   'vacation_rental': { deltas: { authenticity: 3, social: -1 }, label: 'Vacation rental' },
   'resort': { deltas: { comfort: 5, pace: -2 }, label: 'Resort' },
 };
+
+// ============================================================================
+// QUESTION-SPECIFIC MAPPINGS - For accurate possibleMax calculation
+// Each question maps to ONLY the answers that are valid for that question
+// ============================================================================
+
+const QUESTION_MAPPINGS: Record<string, Record<string, AnswerDelta>> = {
+  // Quiz 1.0 questions use LEGACY_ANSWER_MAPPINGS but scoped to valid answers
+  traveler_type: {
+    explorer: LEGACY_ANSWER_MAPPINGS.explorer,
+    escape_artist: LEGACY_ANSWER_MAPPINGS.escape_artist,
+    curated_luxe: LEGACY_ANSWER_MAPPINGS.curated_luxe,
+    story_seeker: LEGACY_ANSWER_MAPPINGS.story_seeker,
+  },
+  travel_vibes: {
+    coastal: LEGACY_ANSWER_MAPPINGS.coastal,
+    urban: LEGACY_ANSWER_MAPPINGS.urban,
+    mountain: LEGACY_ANSWER_MAPPINGS.mountain,
+    quiet: LEGACY_ANSWER_MAPPINGS.quiet,
+    bold: LEGACY_ANSWER_MAPPINGS.bold,
+    spiritual: LEGACY_ANSWER_MAPPINGS.spiritual,
+  },
+  budget: {
+    budget: LEGACY_ANSWER_MAPPINGS.budget,
+    moderate: LEGACY_ANSWER_MAPPINGS.moderate,
+    premium: LEGACY_ANSWER_MAPPINGS.premium,
+    luxury: LEGACY_ANSWER_MAPPINGS.luxury,
+  },
+  pace: {
+    relaxed: LEGACY_ANSWER_MAPPINGS.relaxed,
+    balanced: LEGACY_ANSWER_MAPPINGS.balanced,
+    active: LEGACY_ANSWER_MAPPINGS.active,
+  },
+  planning_style: {
+    detailed: LEGACY_ANSWER_MAPPINGS.detailed,
+    flexible: LEGACY_ANSWER_MAPPINGS.flexible,
+    spontaneous: LEGACY_ANSWER_MAPPINGS.spontaneous,
+  },
+  travel_companions: {
+    solo: LEGACY_ANSWER_MAPPINGS.solo,
+    partner: LEGACY_ANSWER_MAPPINGS.partner,
+    family: LEGACY_ANSWER_MAPPINGS.family,
+    friends: LEGACY_ANSWER_MAPPINGS.friends,
+  },
+  interests: {
+    food: LEGACY_ANSWER_MAPPINGS.food,
+    culture: LEGACY_ANSWER_MAPPINGS.culture,
+    nature: LEGACY_ANSWER_MAPPINGS.nature,
+    art: LEGACY_ANSWER_MAPPINGS.art,
+    nightlife: LEGACY_ANSWER_MAPPINGS.nightlife,
+    wellness: LEGACY_ANSWER_MAPPINGS.wellness,
+    adventure: LEGACY_ANSWER_MAPPINGS.adventure,
+    shopping: LEGACY_ANSWER_MAPPINGS.shopping,
+  },
+  accommodation: {
+    boutique: LEGACY_ANSWER_MAPPINGS.boutique,
+    chain: LEGACY_ANSWER_MAPPINGS.chain,
+    vacation_rental: LEGACY_ANSWER_MAPPINGS.vacation_rental,
+    resort: LEGACY_ANSWER_MAPPINGS.resort,
+  },
+  // Quiz 2.0 question mappings (if using ANSWER_DELTAS)
+  morning_routine: { a1: ANSWER_DELTAS.a1, a2: ANSWER_DELTAS.a2, a3: ANSWER_DELTAS.a3, a4: ANSWER_DELTAS.a4 },
+  dream_destination: { b1: ANSWER_DELTAS.b1, b2: ANSWER_DELTAS.b2, b3: ANSWER_DELTAS.b3, b4: ANSWER_DELTAS.b4 },
+  budget_style: { c1: ANSWER_DELTAS.c1, c2: ANSWER_DELTAS.c2, c3: ANSWER_DELTAS.c3, c4: ANSWER_DELTAS.c4 },
+  pace_style: { d1: ANSWER_DELTAS.d1, d2: ANSWER_DELTAS.d2, d3: ANSWER_DELTAS.d3, d4: ANSWER_DELTAS.d4 },
+  planning_preference: { e1: ANSWER_DELTAS.e1, e2: ANSWER_DELTAS.e2, e3: ANSWER_DELTAS.e3, e4: ANSWER_DELTAS.e4 },
+  companions: { f1: ANSWER_DELTAS.f1, f2: ANSWER_DELTAS.f2, f3: ANSWER_DELTAS.f3, f4: ANSWER_DELTAS.f4 },
+  activities: { g1: ANSWER_DELTAS.g1, g2: ANSWER_DELTAS.g2, g3: ANSWER_DELTAS.g3, g4: ANSWER_DELTAS.g4, g5: ANSWER_DELTAS.g5, g6: ANSWER_DELTAS.g6 },
+  accommodation_style: { h1: ANSWER_DELTAS.h1, h2: ANSWER_DELTAS.h2, h3: ANSWER_DELTAS.h3, h4: ANSWER_DELTAS.h4, h5: ANSWER_DELTAS.h5 },
+  climate: { i1: ANSWER_DELTAS.i1, i2: ANSWER_DELTAS.i2, i3: ANSWER_DELTAS.i3, i4: ANSWER_DELTAS.i4 },
+  trip_length: { j1: ANSWER_DELTAS.j1, j2: ANSWER_DELTAS.j2, j3: ANSWER_DELTAS.j3, j4: ANSWER_DELTAS.j4 },
+};
+
+// ============================================================================
+// DISAMBIGUATION QUESTION PICKER - Maps traits to questions that clarify them
+// ============================================================================
+
+const DISAMBIGUATION_QUESTIONS_BY_TRAIT: Record<Trait, string[]> = {
+  pace: ['day_structure', 'morning_style', 'activity_density'],
+  authenticity: ['tourist_vs_local', 'food_style', 'neighborhood_preference'],
+  comfort: ['hotel_vs_experiences', 'service_level', 'transport_preference'],
+  adventure: ['risk_tolerance', 'activity_type', 'outdoor_preference'],
+  social: ['group_size', 'interaction_style', 'dining_preference'],
+  planning: ['booking_style', 'spontaneity_tolerance', 'research_depth'],
+  budget: ['splurge_priority', 'value_definition', 'budget_flexibility'],
+  transformation: ['trip_purpose', 'growth_focus', 'learning_style'],
+};
+
+// ============================================================================
+// TENSION RESOLVERS - One-liners for common profile contradictions
+// ============================================================================
+
+interface TensionPattern {
+  condition: (traits: TraitScores) => boolean;
+  label: string;
+  explanation: string;
+}
+
+const TENSION_PATTERNS: TensionPattern[] = [
+  {
+    condition: (t) => t.comfort >= 5 && t.budget <= -3,
+    label: 'value-focused premium',
+    explanation: 'You appreciate quality but are strategic about where you splurge—maximizing comfort ROI.',
+  },
+  {
+    condition: (t) => t.pace <= -4 && t.adventure >= 4,
+    label: 'selective intensity',
+    explanation: "You prefer a relaxed base pace punctuated by bold peak experiences—quality over quantity.",
+  },
+  {
+    condition: (t) => t.social <= -3 && t.authenticity >= 5,
+    label: 'solo immersive',
+    explanation: 'You seek deep local connections on your own terms—meaningful encounters, not constant company.',
+  },
+  {
+    condition: (t) => t.planning >= 5 && t.adventure >= 4,
+    label: 'planned spontaneity',
+    explanation: 'You research thoroughly so you can be spontaneous with confidence—adventure with a safety net.',
+  },
+  {
+    condition: (t) => t.comfort >= 4 && t.authenticity >= 5,
+    label: 'curated authentic',
+    explanation: "You want genuine local experiences without sacrificing comfort—the best of both worlds.",
+  },
+  {
+    condition: (t) => t.pace >= 4 && t.transformation >= 4,
+    label: 'intense growth',
+    explanation: 'You pack in experiences not for the checklist, but for maximum personal transformation.',
+  },
+  {
+    condition: (t) => t.budget >= 5 && t.adventure >= 5,
+    label: 'premium adventure',
+    explanation: 'You seek thrilling experiences with excellent logistics—adventure without roughing it.',
+  },
+];
 
 // ============================================================================
 // SATURATION CONSTANT - Controls how quickly traits reach extremes
@@ -673,13 +814,28 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
   
   /**
    * Add to possibleMax for traits touched by this question
+   * FIXED: Now uses question-specific mappings from QUESTION_MAPPINGS
    */
-  function updatePossibleMax(questionId: string, mapping: Record<string, AnswerDelta>, multiplier: number = 1.0) {
-    // Get all answer options for this question
-    const answerOptions = Object.keys(mapping);
-    const maxContribs = getMaxPossibleForQuestion(questionId, answerOptions, mapping);
+  function updatePossibleMax(questionId: string, multiplier: number = 1.0) {
+    // Get question-specific mapping (not the global LEGACY_ANSWER_MAPPINGS!)
+    const qMap = QUESTION_MAPPINGS[questionId];
+    if (!qMap) {
+      console.warn(`[TravelDNA] No QUESTION_MAPPINGS for: ${questionId}`);
+      return;
+    }
     
-    for (const [trait, maxVal] of Object.entries(maxContribs)) {
+    // Calculate max possible contribution for each trait from this question's answers only
+    const maxByTrait: Partial<Record<Trait, number>> = {};
+    for (const delta of Object.values(qMap)) {
+      if (!delta) continue;
+      for (const [trait, value] of Object.entries(delta.deltas)) {
+        const absVal = Math.abs(value as number);
+        maxByTrait[trait as Trait] = Math.max(maxByTrait[trait as Trait] ?? 0, absVal);
+      }
+    }
+    
+    // Add to possibleMax with multiplier
+    for (const [trait, maxVal] of Object.entries(maxByTrait)) {
       possibleMax[trait as Trait] += (maxVal as number) * multiplier;
     }
   }
@@ -718,7 +874,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.traveler_type];
     if (delta) {
       applyAnswerDeltas('traveler_type', answers.traveler_type, delta, 1.0);
-      updatePossibleMax('traveler_type', LEGACY_ANSWER_MAPPINGS, 1.0);
+      updatePossibleMax('traveler_type', 1.0);
     }
   }
   
@@ -734,7 +890,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
       }
     }
     // Count as one question for possibleMax
-    updatePossibleMax('travel_vibes', LEGACY_ANSWER_MAPPINGS, 1.0);
+    updatePossibleMax('travel_vibes', 1.0);
   }
   
   // Process budget (single select)
@@ -742,7 +898,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.budget];
     if (delta) {
       applyAnswerDeltas('budget', answers.budget, delta, 1.0);
-      updatePossibleMax('budget_q', LEGACY_ANSWER_MAPPINGS, 1.0);
+      updatePossibleMax('budget', 1.0);  // Use 'budget' key which matches QUESTION_MAPPINGS
     }
   }
   
@@ -751,7 +907,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.pace];
     if (delta) {
       applyAnswerDeltas('pace', answers.pace, delta, 1.0);
-      updatePossibleMax('pace_q', LEGACY_ANSWER_MAPPINGS, 1.0);
+      updatePossibleMax('pace', 1.0);  // Use 'pace' key which matches QUESTION_MAPPINGS
     }
   }
   
@@ -760,7 +916,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.planning_style];
     if (delta) {
       applyAnswerDeltas('planning_style', answers.planning_style, delta, 1.0);
-      updatePossibleMax('planning_style', LEGACY_ANSWER_MAPPINGS, 1.0);
+      updatePossibleMax('planning_style', 1.0);
     }
   }
   
@@ -775,7 +931,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('travel_companions', companion, delta, multiplier);
       }
     }
-    updatePossibleMax('travel_companions', LEGACY_ANSWER_MAPPINGS, 1.0);
+    updatePossibleMax('travel_companions', 1.0);
   }
   
   // Process interests (multi-select) - NORMALIZED
@@ -789,7 +945,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('interests', interest, delta, multiplier);
       }
     }
-    updatePossibleMax('interests', LEGACY_ANSWER_MAPPINGS, 1.0);
+    updatePossibleMax('interests', 1.0);
   }
   
   // Process accommodation (single select)
@@ -797,11 +953,12 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
     const delta = LEGACY_ANSWER_MAPPINGS[answers.accommodation];
     if (delta) {
       applyAnswerDeltas('accommodation', answers.accommodation, delta, 1.0);
-      updatePossibleMax('accommodation', LEGACY_ANSWER_MAPPINGS, 1.0);
+      updatePossibleMax('accommodation', 1.0);
     }
   }
   
   // Process hotel_priorities (multi-select) - NORMALIZED
+  // NOTE: hotel_priorities may use mixed deltas, but QUESTION_MAPPINGS covers it
   if (answers.hotel_priorities?.length) {
     const k = answers.hotel_priorities.length;
     const multiplier = 1 / Math.min(k, 3);
@@ -812,7 +969,7 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('hotel_priorities', priority, delta, multiplier);
       }
     }
-    updatePossibleMax('hotel_priorities', { ...ANSWER_DELTAS, ...LEGACY_ANSWER_MAPPINGS }, 1.0);
+    updatePossibleMax('accommodation_style', 1.0);  // Use accommodation_style from QUESTION_MAPPINGS
   }
   
   // Process weather_preference (multi-select) - NORMALIZED
@@ -826,15 +983,21 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
         applyAnswerDeltas('weather_preference', weather, delta, multiplier);
       }
     }
-    updatePossibleMax('weather_preference', { ...ANSWER_DELTAS, ...LEGACY_ANSWER_MAPPINGS }, 1.0);
+    updatePossibleMax('climate', 1.0);  // Use climate from QUESTION_MAPPINGS
   }
   
-  // Calculate fill rates (percent-of-possible with smoothing)
+  // Calculate fill rates (percent-of-possible)
+  // FIXED: Return 0 if trait had no opportunity to be influenced (possibleMax=0)
   const fillRates: Record<Trait, number> = {} as Record<Trait, number>;
   for (const trait of ALL_TRAITS) {
-    const denom = possibleMax[trait] + PRIOR;
-    const num = Math.abs(rawScores[trait]) + PRIOR * 0.5;  // Neutral prior
-    fillRates[trait] = denom > 0 ? Math.round((num / denom) * 100) : 0;
+    if (possibleMax[trait] <= 0) {
+      // No questions touched this trait - fill rate is 0, not 50%
+      fillRates[trait] = 0;
+    } else {
+      const denom = possibleMax[trait] + PRIOR;
+      const num = Math.abs(rawScores[trait]) + PRIOR * 0.5;  // Neutral prior
+      fillRates[trait] = Math.round((num / denom) * 100);
+    }
   }
   
   // Apply saturation to produce final scores
@@ -1458,11 +1621,12 @@ serve(async (req) => {
       confidence
     );
     
-    // Step 10: Determine if disambiguation is needed
+    // Step 10: Determine if disambiguation is needed + pick next questions
     const top2Gap = secondaryMatch ? Math.abs(primaryMatch.pct - secondaryMatch.pct) : 100;
     const needsDisambiguation = confidence < 60 || top2Gap <= 10;
     let disambiguationReason: string | undefined;
     let disambiguationTraits: Trait[] | undefined;
+    let nextQuestionIds: string[] | undefined;
     
     if (needsDisambiguation) {
       if (confidence < 60) {
@@ -1473,23 +1637,60 @@ serve(async (req) => {
       
       // Find traits that differentiate top 2 archetypes
       if (primaryArchetype && secondaryArchetype) {
-        const primaryTraits = new Set(primaryArchetype.primaryTraits.map(t => t.trait));
-        const secondaryTraits = new Set(secondaryArchetype.primaryTraits.map(t => t.trait));
+        const primaryTraitSet = new Set(primaryArchetype.primaryTraits.map(t => t.trait));
+        const secondaryTraitSet = new Set(secondaryArchetype.primaryTraits.map(t => t.trait));
         
         // Traits that differ between archetypes
         disambiguationTraits = ALL_TRAITS.filter(t => 
-          (primaryTraits.has(t) && !secondaryTraits.has(t)) ||
-          (!primaryTraits.has(t) && secondaryTraits.has(t))
+          (primaryTraitSet.has(t) && !secondaryTraitSet.has(t)) ||
+          (!primaryTraitSet.has(t) && secondaryTraitSet.has(t))
         );
         
         // If no differentiating traits, use primary traits of both
         if (disambiguationTraits.length === 0) {
-          disambiguationTraits = [...primaryTraits, ...secondaryTraits].slice(0, 3) as Trait[];
+          disambiguationTraits = [...primaryTraitSet, ...secondaryTraitSet].slice(0, 3) as Trait[];
+        }
+      }
+      
+      // Step 10b: Pick disambiguation questions based on traits with low fill rates
+      // Rank by: (1) low fill rate (unknown trait) and (2) importance to top 2 archetypes
+      if (disambiguationTraits && disambiguationTraits.length > 0) {
+        // Sort disambiguation traits by fill rate (ascending - lowest first)
+        const sortedTraits = [...disambiguationTraits].sort((a, b) => 
+          (fillRates[a] || 0) - (fillRates[b] || 0)
+        );
+        
+        // Pick questions for the top trait(s)
+        const questionsToAsk = new Set<string>();
+        for (const trait of sortedTraits.slice(0, 2)) {
+          const possibleQuestions = DISAMBIGUATION_QUESTIONS_BY_TRAIT[trait];
+          if (possibleQuestions) {
+            // Add first question from each trait's list
+            questionsToAsk.add(possibleQuestions[0]);
+          }
+        }
+        
+        if (questionsToAsk.size > 0) {
+          nextQuestionIds = Array.from(questionsToAsk).slice(0, 3);
+          console.log(`[TravelDNA V2] Disambiguation questions selected:`, nextQuestionIds);
         }
       }
     }
     
     console.log('[TravelDNA V2] Needs disambiguation:', needsDisambiguation, disambiguationReason);
+    
+    // Step 11: Detect and resolve tension patterns
+    let tensionLabel: string | undefined;
+    let tensionExplanation: string | undefined;
+    
+    for (const pattern of TENSION_PATTERNS) {
+      if (pattern.condition(finalScores)) {
+        tensionLabel = pattern.label;
+        tensionExplanation = pattern.explanation;
+        console.log(`[TravelDNA V2] Tension detected: ${tensionLabel}`);
+        break;  // Use first matching pattern
+      }
+    }
     
     // Build V2 result
     const result: TravelDNAv2Result = {
@@ -1518,6 +1719,9 @@ serve(async (req) => {
       needs_disambiguation: needsDisambiguation,
       disambiguation_reason: disambiguationReason,
       disambiguation_traits: disambiguationTraits,
+      next_question_ids: nextQuestionIds,
+      tension_label: tensionLabel,
+      tension_explanation: tensionExplanation,
     };
     
     console.log('[TravelDNA V2] Calculation complete');
