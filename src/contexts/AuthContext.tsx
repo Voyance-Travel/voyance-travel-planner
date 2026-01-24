@@ -26,6 +26,12 @@ export interface TravelPreferences {
   pace?: string;
   interests?: string[];
   accommodation?: string;
+  planning?: string;
+  // Quiz question IDs map to these fields
+  traveler_type?: string;
+  travel_vibes?: string[];
+  travel_companions?: string[];
+  primary_goal?: string;
 }
 
 interface AuthContextType {
@@ -331,13 +337,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     console.log('[Auth] Saving preferences to Supabase:', preferences);
     
-    // Save to Supabase
-    const { error } = await supabase.from('user_preferences').upsert({
+    // Map quiz answer keys to database columns
+    // Quiz uses: pace, interests, budget, accommodation, planning
+    const dbPayload: Record<string, unknown> = {
       user_id: session.user.id,
-      budget_tier: preferences.budget,
-      travel_pace: preferences.pace,
-      accommodation_style: preferences.accommodation,
-    }, { onConflict: 'user_id' });
+      quiz_completed: true,
+      completed_at: new Date().toISOString(),
+    };
+    
+    // Map each quiz field to its database column
+    if (preferences.budget) dbPayload.budget_tier = preferences.budget;
+    if (preferences.pace) dbPayload.travel_pace = preferences.pace;
+    if (preferences.accommodation) dbPayload.accommodation_style = preferences.accommodation;
+    if (preferences.planning) dbPayload.planning_preference = preferences.planning;
+    if (preferences.interests) dbPayload.interests = preferences.interests;
+    if (preferences.travel_companions) dbPayload.travel_companions = preferences.travel_companions;
+    if (preferences.travel_vibes) dbPayload.travel_vibes = preferences.travel_vibes;
+    if (preferences.traveler_type) dbPayload.traveler_type = preferences.traveler_type;
+    if (preferences.primary_goal) dbPayload.primary_goal = preferences.primary_goal;
+    
+    // Save to Supabase - cast to satisfy TypeScript
+    const { error } = await supabase.from('user_preferences').upsert(
+      dbPayload as any,
+      { onConflict: 'user_id' }
+    );
     
     if (error) {
       console.error('[Auth] Error saving preferences:', error);
@@ -349,7 +372,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Update local state
     setUser({ 
       ...user, 
-      preferences: { ...user.preferences, ...preferences } 
+      preferences: { ...user.preferences, ...preferences },
+      quizCompleted: true,
     });
   };
 

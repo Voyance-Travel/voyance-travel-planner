@@ -54,6 +54,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { AirportAutocomplete } from './AirportAutocomplete';
 
 // Preference categories for nested tabs
 const PREFERENCE_TABS = [
@@ -349,6 +350,24 @@ interface SectionProps {
 }
 
 function TravelStyleSection({ preferences, onUpdate, isSaving }: SectionProps) {
+  // Interest options that match quiz options
+  const interestOptions = [
+    { value: 'culture', label: 'Culture & History', icon: '🏛️' },
+    { value: 'food', label: 'Food & Cuisine', icon: '🍜' },
+    { value: 'nature', label: 'Nature & Outdoors', icon: '🏔️' },
+    { value: 'adventure', label: 'Adventure & Thrills', icon: '🎢' },
+    { value: 'relaxation', label: 'Relaxation & Wellness', icon: '🧘' },
+    { value: 'nightlife', label: 'Nightlife & Entertainment', icon: '🎭' },
+  ];
+
+  const toggleInterest = (value: string) => {
+    const current = preferences?.interests || [];
+    const updated = current.includes(value)
+      ? current.filter((v) => v !== value)
+      : [...current, value];
+    onUpdate('interests', updated);
+  };
+
   return (
     <div className="space-y-8">
       <SectionHeader 
@@ -364,9 +383,40 @@ function TravelStyleSection({ preferences, onUpdate, isSaving }: SectionProps) {
           className="grid gap-3"
         >
           <RadioOption value="relaxed" label="Relaxed" description="1-2 activities per day" />
-          <RadioOption value="moderate" label="Moderate" description="3-4 activities per day" />
+          <RadioOption value="balanced" label="Balanced" description="3-4 activities per day" />
           <RadioOption value="active" label="Active" description="5+ activities per day" />
         </RadioGroup>
+      </PreferenceGroup>
+
+      {/* Interests - from quiz */}
+      <PreferenceGroup label="What draws you to a destination?">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {interestOptions.map((option) => {
+            const isSelected = preferences?.interests?.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => toggleInterest(option.value)}
+                className={cn(
+                  "relative p-4 rounded-xl border-2 text-left transition-all",
+                  isSelected
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
+                )}
+              >
+                {isSelected && (
+                  <div className="absolute top-2 right-2">
+                    <Check className="h-4 w-4 text-primary" />
+                  </div>
+                )}
+                <span className="text-2xl mb-2 block">{option.icon}</span>
+                <span className="text-sm font-medium">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">Select all that apply</p>
       </PreferenceGroup>
 
       {/* Budget Preference */}
@@ -382,16 +432,29 @@ function TravelStyleSection({ preferences, onUpdate, isSaving }: SectionProps) {
         </RadioGroup>
       </PreferenceGroup>
 
+      {/* Accommodation Style */}
+      <PreferenceGroup label="Where do you prefer to stay?">
+        <RadioGroup
+          value={preferences?.accommodation_style || ''}
+          onValueChange={(value) => onUpdate('accommodation_style', value)}
+          className="grid gap-3"
+        >
+          <RadioOption value="hostel" label="Hostels & Shared 🛏️" description="Social and affordable" />
+          <RadioOption value="hotel" label="Hotels & Resorts 🏨" description="Comfort and amenities" />
+          <RadioOption value="unique" label="Unique Stays 🏡" description="Airbnbs, treehouses, boats" />
+        </RadioGroup>
+      </PreferenceGroup>
+
       {/* Planning Preference */}
-      <PreferenceGroup label="Planning preference">
+      <PreferenceGroup label="How do you like to plan?">
         <RadioGroup
           value={preferences?.planning_preference || ''}
           onValueChange={(value) => onUpdate('planning_preference', value)}
           className="grid gap-3"
         >
-          <RadioOption value="structured" label="Structured itinerary" description="Every day planned out" />
-          <RadioOption value="flexible" label="Flexible schedule" description="General plan with room to adapt" />
-          <RadioOption value="spontaneous" label="Spontaneous adventure" description="Go with the flow" />
+          <RadioOption value="detailed" label="Detailed Planner 📅" description="Every hour accounted for" />
+          <RadioOption value="flexible" label="Flexible Framework 📋" description="Key plans, room to wander" />
+          <RadioOption value="spontaneous" label="Spontaneous 🎲" description="Go with the flow" />
         </RadioGroup>
       </PreferenceGroup>
     </div>
@@ -408,14 +471,14 @@ function FlightsSection({ preferences, onUpdate, isSaving }: SectionProps) {
       
       {/* Home Airport */}
       <PreferenceGroup label="Home Airport" required>
-        <Input
-          placeholder="LAX, JFK, ORD..."
-          value={preferences?.home_airport || ''}
-          onChange={(e) => onUpdate('home_airport', e.target.value.toUpperCase().slice(0, 3))}
-          maxLength={3}
-          className="max-w-[120px] uppercase"
+        <AirportAutocomplete
+          value={preferences?.home_airport}
+          onSelect={(code) => onUpdate('home_airport', code)}
+          placeholder="Search your home airport..."
         />
-        <p className="text-xs text-muted-foreground mt-1">3-letter airport code</p>
+        <p className="text-xs text-muted-foreground mt-2">
+          Start typing to search by city or airport code
+        </p>
       </PreferenceGroup>
 
       {/* Cabin Class */}
