@@ -289,74 +289,174 @@ async function fetchFoursquareReviews(
   maxReviews: number
 ): Promise<{ place: PlaceDetails | null; reviews: Review[] }> {
   try {
-    // Step 1: Search for place
-    const searchParams = new URLSearchParams({
-      query: placeName,
-      near: destination,
-      limit: '1',
-      fields: 'fsq_id,name,categories,rating,stats,price,location,photos,website,tel,hours,tips',
-    });
+    // Determine if this is a v3 key (starts with fsq) or a v2 OAuth token
+    const isV3Key = apiKey.startsWith('fsq');
 
-    const searchResponse = await fetch(
-      `https://api.foursquare.com/v3/places/search?${searchParams.toString()}`,
-      {
-        headers: {
-          Authorization: apiKey,
-          accept: 'application/json',
-        },
+    if (isV3Key) {
+      // ===== V3 Places API =====
+      const searchParams = new URLSearchParams({
+        query: placeName,
+        near: destination,
+        limit: '1',
+        fields: 'fsq_id,name,categories,rating,stats,price,location,photos,website,tel,hours,tips',
+      });
+
+      const searchResponse = await fetch(
+        `https://api.foursquare.com/v3/places/search?${searchParams.toString()}`,
+        {
+          headers: {
+            Authorization: apiKey,
+            accept: 'application/json',
+          },
+        }
+      );
+
+      if (!searchResponse.ok) {
+        console.error('[Foursquare v3] Search error:', await searchResponse.text());
+        return { place: null, reviews: [] };
       }
-    );
 
-    if (!searchResponse.ok) {
-      console.error('[Foursquare] Search error:', await searchResponse.text());
-      return { place: null, reviews: [] };
+      const searchData = await searchResponse.json();
+      const results = searchData.results || [];
+
+      if (results.length === 0) {
+        console.log('[Foursquare v3] No places found');
+        return { place: null, reviews: [] };
+      }
+
+      const place = results[0];
+      const categories = (place.categories as Array<{ name: string }>) || [];
+      const location = place.location as { formatted_address?: string; latitude?: number; longitude?: number } | undefined;
+      const photos = place.photos as Array<{ prefix: string; suffix: string }> | undefined;
+      const stats = place.stats as { total_ratings?: number } | undefined;
+      const tips = place.tips as Array<{ id: string; created_at: string; text: string; agree_count?: number }> | undefined;
+
+      const placeDetails: PlaceDetails = {
+        name: (place.name as string) || placeName,
+        address: location?.formatted_address || '',
+        rating: ((place.rating as number) || 0) / 2, // Foursquare uses 0-10
+        totalReviews: stats?.total_ratings || 0,
+        priceLevel: place.price as number | undefined,
+        categories: categories.map(c => c.name).slice(0, 5),
+        photos: photos?.slice(0, 5).map(p => `${p.prefix}400x300${p.suffix}`),
+        website: place.website as string | undefined,
+        phone: place.tel as string | undefined,
+        coordinates: location?.latitude && location?.longitude
+          ? { lat: location.latitude, lng: location.longitude }
+          : undefined,
+      };
+
+      const reviews: Review[] = (tips || []).slice(0, maxReviews).map(tip => ({
+        id: `foursquare_${tip.id}`,
+        source: 'foursquare' as const,
+        authorName: 'Foursquare User',
+        rating: 4,
+        text: tip.text,
+        relativeTime: formatRelativeTime(tip.created_at),
+        publishedAt: tip.created_at,
+        helpful: tip.agree_count,
+      }));
+
+      console.log(`[Foursquare v3] Found ${reviews.length} tips/reviews`);
+      return { place: placeDetails, reviews };
+
+    } else {
+      // ===== V2 API (oauth_token style) =====
+      // Step 1: Search for venue
+      const v = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+      const searchParams = new URLSearchParams({
+        oauth_token: apiKey,
+        v,
+        query: placeName,
+        near: destination,
+        limit: '1',
+      });
+
+      const searchResponse = await fetch(
+        `https://api.foursquare.com/v2/venues/search?${searchParams.toString()}`
+      );
+
+      if (!searchResponse.ok) {
+        console.error('[Foursquare v2] Search error:', await searchResponse.text());
+        return { place: null, reviews: [] };
+      }
+
+      const searchData = await searchResponse.json();
+      const venues = searchData?.response?.venues || [];
+
+      if (venues.length === 0) {
+        console.log('[Foursquare v2] No venues found');
+        return { place: null, reviews: [] };
+      }
+
+      const venue = venues[0];
+      const venueId = venue.id as string;
+
+      // Step 2: Get venue details (includes tips)
+      const detailsParams = new URLSearchParams({ oauth_token: apiKey, v });
+      const detailsResponse = await fetch(
+        `https://api.foursquare.com/v2/venues/${venueId}?${detailsParams.toString()}`
+      );
+
+      if (!detailsResponse.ok) {
+        console.error('[Foursquare v2] Details error:', await detailsResponse.text());
+        return { place: null, reviews: [] };
+      }
+
+      const detailsData = await detailsResponse.json();
+      const venueDetails = detailsData?.response?.venue;
+
+      if (!venueDetails) {
+        return { place: null, reviews: [] };
+      }
+
+      const categories = (venueDetails.categories as Array<{ name: string }>) || [];
+      const location = venueDetails.location as { formattedAddress?: string[]; lat?: number; lng?: number } | undefined;
+      const bestPhoto = venueDetails.bestPhoto as { prefix: string; suffix: string } | undefined;
+      const price = venueDetails.price as { tier?: number } | undefined;
+      const rating = venueDetails.rating as number | undefined;
+      const ratingSignals = venueDetails.ratingSignals as number | undefined;
+      const contact = venueDetails.contact as { formattedPhone?: string } | undefined;
+      const url = venueDetails.url as string | undefined;
+
+      const placeDetails: PlaceDetails = {
+        name: (venueDetails.name as string) || placeName,
+        address: location?.formattedAddress?.join(', ') || '',
+        rating: rating ? rating / 2 : 0, // 0-10 -> 0-5
+        totalReviews: ratingSignals || 0,
+        priceLevel: price?.tier,
+        categories: categories.map(c => c.name).slice(0, 5),
+        photos: bestPhoto ? [`${bestPhoto.prefix}400x300${bestPhoto.suffix}`] : undefined,
+        website: url,
+        phone: contact?.formattedPhone,
+        coordinates: location?.lat && location?.lng
+          ? { lat: location.lat, lng: location.lng }
+          : undefined,
+      };
+
+      // Tips from venue details
+      const tipsGroup = venueDetails.tips?.groups?.[0]?.items || [];
+      const reviews: Review[] = (tipsGroup as Array<{
+        id: string;
+        createdAt: number;
+        text: string;
+        agreeCount?: number;
+        user?: { firstName?: string; lastName?: string; photo?: { prefix: string; suffix: string } };
+      }>).slice(0, maxReviews).map(tip => ({
+        id: `foursquare_${tip.id}`,
+        source: 'foursquare' as const,
+        authorName: tip.user ? `${tip.user.firstName || ''} ${tip.user.lastName || ''}`.trim() || 'Foursquare User' : 'Foursquare User',
+        authorPhoto: tip.user?.photo ? `${tip.user.photo.prefix}100x100${tip.user.photo.suffix}` : undefined,
+        rating: 4, // tips don't have individual ratings
+        text: tip.text,
+        relativeTime: formatRelativeTime(new Date(tip.createdAt * 1000).toISOString()),
+        publishedAt: new Date(tip.createdAt * 1000).toISOString(),
+        helpful: tip.agreeCount,
+      }));
+
+      console.log(`[Foursquare v2] Found ${reviews.length} tips/reviews`);
+      return { place: placeDetails, reviews };
     }
-
-    const searchData = await searchResponse.json();
-    const results = searchData.results || [];
-
-    if (results.length === 0) {
-      console.log('[Foursquare] No places found');
-      return { place: null, reviews: [] };
-    }
-
-    const place = results[0];
-    const categories = (place.categories as Array<{ name: string }>) || [];
-    const location = place.location as { formatted_address?: string; latitude?: number; longitude?: number } | undefined;
-    const photos = place.photos as Array<{ prefix: string; suffix: string }> | undefined;
-    const stats = place.stats as { total_ratings?: number } | undefined;
-    const tips = place.tips as Array<{ id: string; created_at: string; text: string; agree_count?: number }> | undefined;
-
-    const placeDetails: PlaceDetails = {
-      name: (place.name as string) || placeName,
-      address: location?.formatted_address || '',
-      rating: ((place.rating as number) || 0) / 2, // Foursquare uses 0-10
-      totalReviews: stats?.total_ratings || 0,
-      priceLevel: place.price as number | undefined,
-      categories: categories.map(c => c.name).slice(0, 5),
-      photos: photos?.slice(0, 5).map(p => `${p.prefix}400x300${p.suffix}`),
-      website: place.website as string | undefined,
-      phone: place.tel as string | undefined,
-      coordinates: location?.latitude && location?.longitude
-        ? { lat: location.latitude, lng: location.longitude }
-        : undefined,
-    };
-
-    // Foursquare calls reviews "tips"
-    const reviews: Review[] = (tips || []).slice(0, maxReviews).map(tip => ({
-      id: `foursquare_${tip.id}`,
-      source: 'foursquare' as const,
-      authorName: 'Foursquare User',
-      rating: 4, // Tips don't have individual ratings, assume positive
-      text: tip.text,
-      relativeTime: formatRelativeTime(tip.created_at),
-      publishedAt: tip.created_at,
-      helpful: tip.agree_count,
-    }));
-
-    console.log(`[Foursquare] Found ${reviews.length} tips/reviews`);
-    return { place: placeDetails, reviews };
-
   } catch (error) {
     console.error('[Foursquare] Fetch error:', error);
     return { place: null, reviews: [] };
