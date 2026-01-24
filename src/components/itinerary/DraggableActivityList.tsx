@@ -5,7 +5,7 @@
  * Uses @dnd-kit for accessibility-friendly drag and drop.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -91,7 +91,7 @@ function SortableItem({ id, isHighlighted, disabled, children }: SortableItemPro
   );
 }
 
-export function DraggableActivityList<T extends { id: string }>({
+function DraggableActivityListInner<T extends { id: string }>({
   items,
   onReorder,
   renderItem,
@@ -100,16 +100,17 @@ export function DraggableActivityList<T extends { id: string }>({
 }: DraggableActivityListProps<T>) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // Require 8px of movement before starting drag
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 8,
+    },
+  });
+  
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: sortableKeyboardCoordinates,
+  });
+
+  const sensors = useSensors(pointerSensor, keyboardSensor);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -137,6 +138,8 @@ export function DraggableActivityList<T extends { id: string }>({
   const activeItem = activeId ? items.find((item) => item.id === activeId) : null;
   const activeIndex = activeId ? items.findIndex((item) => item.id === activeId) : -1;
 
+  const itemIds = useMemo(() => items.map(i => i.id), [items]);
+
   return (
     <DndContext
       sensors={sensors}
@@ -145,7 +148,7 @@ export function DraggableActivityList<T extends { id: string }>({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
         {items.map((item, index) => {
           const isHighlighted = highlightedIds.includes(item.id);
           return (
@@ -171,6 +174,15 @@ export function DraggableActivityList<T extends { id: string }>({
       </DragOverlay>
     </DndContext>
   );
+}
+
+export function DraggableActivityList<T extends { id: string }>(props: DraggableActivityListProps<T>) {
+  // Guard against empty items to prevent hook issues
+  if (!props.items || props.items.length === 0) {
+    return null;
+  }
+  
+  return <DraggableActivityListInner {...props} />;
 }
 
 export default DraggableActivityList;
