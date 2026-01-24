@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO, isAfter, isBefore, differenceInDays } from 'date-fns';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
@@ -60,11 +60,14 @@ interface ItineraryDay {
 export default function TripDetail() {
   const { tripId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const shouldAutoGenerate = searchParams.get('generate') === 'true';
   const [trip, setTrip] = useState<Trip | null>(null);
   const [activities, setActivities] = useState<TripActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [autoStartGeneration, setAutoStartGeneration] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
   const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
@@ -73,6 +76,7 @@ export default function TripDetail() {
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
   const debriefPromptAttempted = useRef(false);
+  const autoGenerateTriggered = useRef(false);
 
   // Check if trip already has a learning submitted
   const { data: existingLearning } = useTripLearning(tripId || '');
@@ -216,7 +220,7 @@ export default function TripDetail() {
   };
 
   // Handle clicking "Generate Itinerary" - ensure trip is in DB first
-  const handleShowGenerator = async () => {
+  const handleShowGenerator = async (autoStart = false) => {
     if (!trip) return;
 
     // Check if trip is only in localStorage (user_id is 'local' or missing)
@@ -230,8 +234,31 @@ export default function TripDetail() {
       }
     }
 
+    setAutoStartGeneration(autoStart);
     setShowGenerator(true);
   };
+
+  // Auto-trigger generation when ?generate=true is in URL
+  useEffect(() => {
+    if (
+      shouldAutoGenerate && 
+      trip && 
+      !loading && 
+      !autoGenerateTriggered.current &&
+      !hasItineraryData(trip)
+    ) {
+      autoGenerateTriggered.current = true;
+      handleShowGenerator(true);
+    }
+  }, [shouldAutoGenerate, trip, loading]);
+
+  // Helper to check if trip has itinerary data
+  function hasItineraryData(t: Trip | null): boolean {
+    if (!t) return false;
+    const meta = t.itinerary_data as Record<string, unknown> | null;
+    const rawDays = meta?.days as unknown[] | undefined;
+    return Array.isArray(rawDays) && rawDays.length > 0;
+  }
 
   const loadLocalTrip = (id: string): Trip | null => {
     try {
@@ -738,6 +765,7 @@ export default function TripDetail() {
               tripType={trip.trip_type || undefined}
               budgetTier={trip.budget_tier || undefined}
               userId={user?.id}
+              autoStart={autoStartGeneration}
               onComplete={handleGenerationComplete}
               onCancel={() => setShowGenerator(false)}
             />
@@ -776,7 +804,7 @@ export default function TripDetail() {
                   
                   <Button 
                     size="lg" 
-                    onClick={handleShowGenerator} 
+                    onClick={() => handleShowGenerator(false)} 
                     disabled={isSyncingTrip}
                     className="gap-2 shadow-lg"
                   >

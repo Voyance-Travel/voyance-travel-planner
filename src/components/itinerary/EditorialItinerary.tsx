@@ -11,7 +11,7 @@
  * - Save changes
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronUp, ChevronDown, MapPin, Clock, Star, Save,
@@ -493,7 +493,12 @@ export function EditorialItinerary({
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   const [activeTab, setActiveTab] = useState<'itinerary' | 'payments' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
+    // Auto-select "Today" if trip is active
+    const todayIndex = initialDays.findIndex(d => d.date && isToday(parseISO(d.date)));
+    return todayIndex >= 0 ? todayIndex : 0;
+  });
+  const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -559,6 +564,14 @@ export function EditorialItinerary({
   
   // Determine effective editability based on permission
   const effectiveIsEditable = isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
+
+  // Scroll selected day button into view
+  useEffect(() => {
+    const btn = dayButtonRefs.current[selectedDayIndex];
+    if (btn) {
+      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [selectedDayIndex]);
 
   // Fetch payments on mount
   useEffect(() => {
@@ -1304,6 +1317,7 @@ export function EditorialItinerary({
                     return (
                       <button
                         key={day.dayNumber}
+                        ref={el => { dayButtonRefs.current[index] = el; }}
                         onClick={() => {
                           setSelectedDayIndex(index);
                           setExpandedDays([day.dayNumber]);
