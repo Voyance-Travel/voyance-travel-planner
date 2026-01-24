@@ -5,6 +5,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { Json } from '@/integrations/supabase/types';
 
 // ============================================================================
 // TYPES
@@ -145,17 +146,17 @@ export async function submitTripLearning(input: CreateTripLearningInput): Promis
   // Upsert the learning
   const { data, error } = await supabase
     .from('trip_learnings')
-    .upsert({
+    .upsert([{
       user_id: user.id,
       trip_id: input.trip_id,
       destination: input.destination || null,
       overall_rating: input.overall_rating || null,
       would_return: input.would_return ?? null,
-      highlights: (input.highlights || []) as unknown as Record<string, unknown>[],
+      highlights: JSON.parse(JSON.stringify(input.highlights || [])) as Json,
       pacing_feedback: input.pacing_feedback || null,
       accommodation_feedback: input.accommodation_feedback || null,
-      pain_points: (input.pain_points || []) as unknown as Record<string, unknown>[],
-      skipped_activities: (input.skipped_activities || []) as unknown as Record<string, unknown>[],
+      pain_points: JSON.parse(JSON.stringify(input.pain_points || [])) as Json,
+      skipped_activities: JSON.parse(JSON.stringify(input.skipped_activities || [])) as Json,
       discovered_likes: input.discovered_likes || null,
       discovered_dislikes: input.discovered_dislikes || null,
       travel_party_notes: input.travel_party_notes || null,
@@ -163,7 +164,7 @@ export async function submitTripLearning(input: CreateTripLearningInput): Promis
       would_change: input.would_change || null,
       tips_for_others: input.tips_for_others || null,
       completed_at: new Date().toISOString(),
-    }, {
+    }], {
       onConflict: 'user_id,trip_id'
     })
     .select()
