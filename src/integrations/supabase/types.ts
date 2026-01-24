@@ -3494,6 +3494,7 @@ export type Database = {
           dna_version: number | null
           emotional_drivers: string[] | null
           id: string
+          perfect_trip_preview: string | null
           primary_archetype_name: string | null
           secondary_archetype_name: string | null
           session_id: string | null
@@ -3514,6 +3515,7 @@ export type Database = {
           dna_version?: number | null
           emotional_drivers?: string[] | null
           id?: string
+          perfect_trip_preview?: string | null
           primary_archetype_name?: string | null
           secondary_archetype_name?: string | null
           session_id?: string | null
@@ -3534,6 +3536,7 @@ export type Database = {
           dna_version?: number | null
           emotional_drivers?: string[] | null
           id?: string
+          perfect_trip_preview?: string | null
           primary_archetype_name?: string | null
           secondary_archetype_name?: string | null
           session_id?: string | null
