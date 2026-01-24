@@ -4006,9 +4006,9 @@ serve(async (req) => {
     }
 
     // ==========================================================================
-    // ACTION: generate-day - Single day generation with flight/hotel awareness
+    // ACTION: generate-day / regenerate-day - Single day generation with flight/hotel awareness
     // ==========================================================================
-    if (action === 'generate-day') {
+    if (action === 'generate-day' || action === 'regenerate-day') {
       const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, userId } = params;
 
       // Get user preferences
