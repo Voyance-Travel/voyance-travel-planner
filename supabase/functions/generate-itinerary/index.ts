@@ -1042,16 +1042,21 @@ async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAP
     if (dnaProfile?.travel_dna_v2) {
       console.log('[TravelDNA] Found v2 profile with archetype blend');
       
-      // Check polarity version and normalize budget trait if needed
+      // Always normalize budget trait based on polarity version (safer approach)
       const v2Data = dnaProfile.travel_dna_v2;
-      const polarityVersion = v2Data.budget_polarity_version || 1;  // Default to v1 if not present
+      const polarityVersion = (v2Data.budget_polarity_version ?? 1) as 1 | 2;  // Default to v1 if not present
       let normalizedTraitScores = v2Data.trait_scores;
+      const rawBudget = normalizedTraitScores?.budget;
       
-      if (polarityVersion === 1 && normalizedTraitScores?.budget !== undefined) {
-        console.log(`[TravelDNA] Normalizing budget from polarity v1: ${normalizedTraitScores.budget} -> ${-normalizedTraitScores.budget}`);
+      // Always apply normalization - function handles both versions correctly
+      if (rawBudget !== undefined) {
+        const normalizedBudget = normalizeBudgetTraitForPolarity(rawBudget, polarityVersion);
+        if (normalizedBudget !== rawBudget) {
+          console.log(`[TravelDNA] Normalizing budget from polarity v${polarityVersion}: ${rawBudget} -> ${normalizedBudget}`);
+        }
         normalizedTraitScores = {
           ...normalizedTraitScores,
-          budget: normalizeBudgetTraitForPolarity(normalizedTraitScores.budget, 1),
+          budget: normalizedBudget,
         };
       }
       

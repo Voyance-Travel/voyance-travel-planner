@@ -755,60 +755,67 @@ interface TensionPattern {
 // CANONICAL POLARITY: budget positive = frugal/value-focused, negative = splurge/luxury
 // All conditions below follow this rule!
 const TENSION_PATTERNS: TensionPattern[] = [
-  // value-focused premium = high comfort + high frugality (budget positive)
+  // ORDERED BY SPECIFICITY: most specific patterns FIRST to prevent masking
+  
+  // 1. aspirational luxury = highest comfort + strongest frugality (most specific combo)
   {
-    condition: (t) => t.comfort >= 5 && t.budget >= 3,
-    label: 'value-focused premium',
-    explanation: 'You appreciate quality but are strategic about where you splurge—maximizing comfort ROI.',
+    condition: (t) => t.comfort >= 6 && t.budget >= 5,
+    label: 'aspirational luxury',
+    explanation: 'You have refined tastes and seek the best value-for-quality deals—champagne experiences on a beer budget.',
   },
-  // splurge-forward luxury = high comfort + splurge preference (budget negative)
-  {
-    condition: (t) => t.comfort >= 5 && t.budget <= -3,
-    label: 'splurge-forward luxury',
-    explanation: 'You prioritize top-tier experiences and comfort, and cost isn\'t a primary constraint.',
-  },
-  {
-    condition: (t) => t.pace <= -4 && t.adventure >= 4,
-    label: 'selective intensity',
-    explanation: "You prefer a relaxed base pace punctuated by bold peak experiences—quality over quantity.",
-  },
-  {
-    condition: (t) => t.social <= -3 && t.authenticity >= 5,
-    label: 'solo immersive',
-    explanation: 'You seek deep local connections on your own terms—meaningful encounters, not constant company.',
-  },
-  {
-    condition: (t) => t.planning >= 5 && t.adventure >= 4,
-    label: 'planned spontaneity',
-    explanation: 'You research thoroughly so you can be spontaneous with confidence—adventure with a safety net.',
-  },
-  {
-    condition: (t) => t.comfort >= 4 && t.authenticity >= 5,
-    label: 'curated authentic',
-    explanation: "You want genuine local experiences without sacrificing comfort—the best of both worlds.",
-  },
-  {
-    condition: (t) => t.pace >= 4 && t.transformation >= 4,
-    label: 'intense growth',
-    explanation: 'You pack in experiences not for the checklist, but for maximum personal transformation.',
-  },
-  // premium adventure = high adventure + comfortable + value-conscious (budget positive or neutral)
+  // 2. premium adventure = 3 traits required (adventure + comfort + frugal)
   {
     condition: (t) => t.adventure >= 5 && t.comfort >= 4 && t.budget >= 2,
     label: 'premium adventure',
     explanation: 'You seek thrilling experiences with excellent logistics—adventure without roughing it.',
   },
-  // budget adventurer = high adventure + strong frugality
+  // 3. budget adventurer = high adventure + strong frugality
   {
     condition: (t) => t.adventure >= 5 && t.budget >= 5,
     label: 'budget adventurer',
     explanation: 'You love bold experiences and are resourceful about making them happen affordably.',
   },
-  // aspirational luxury = wants comfort but constrained by budget-consciousness
+  // 4. value-focused premium = high comfort + frugality (less specific than aspirational)
   {
-    condition: (t) => t.comfort >= 6 && t.budget >= 5,
-    label: 'aspirational luxury',
-    explanation: 'You have refined tastes and seek the best value-for-quality deals.',
+    condition: (t) => t.comfort >= 5 && t.budget >= 3,
+    label: 'value-focused premium',
+    explanation: 'You appreciate quality but are strategic about where you splurge—maximizing comfort ROI.',
+  },
+  // 5. splurge-forward luxury = high comfort + splurge preference (budget negative)
+  {
+    condition: (t) => t.comfort >= 5 && t.budget <= -3,
+    label: 'splurge-forward luxury',
+    explanation: 'You prioritize top-tier experiences and comfort, and cost isn\'t a primary constraint.',
+  },
+  // 6. selective intensity = slow pace + high adventure
+  {
+    condition: (t) => t.pace <= -4 && t.adventure >= 4,
+    label: 'selective intensity',
+    explanation: "You prefer a relaxed base pace punctuated by bold peak experiences—quality over quantity.",
+  },
+  // 7. solo immersive = low social + high authenticity
+  {
+    condition: (t) => t.social <= -3 && t.authenticity >= 5,
+    label: 'solo immersive',
+    explanation: 'You seek deep local connections on your own terms—meaningful encounters, not constant company.',
+  },
+  // 8. planned spontaneity = high planning + high adventure
+  {
+    condition: (t) => t.planning >= 5 && t.adventure >= 4,
+    label: 'planned spontaneity',
+    explanation: 'You research thoroughly so you can be spontaneous with confidence—adventure with a safety net.',
+  },
+  // 9. curated authentic = comfort + authenticity (broader match)
+  {
+    condition: (t) => t.comfort >= 4 && t.authenticity >= 5,
+    label: 'curated authentic',
+    explanation: "You want genuine local experiences without sacrificing comfort—the best of both worlds.",
+  },
+  // 10. intense growth = high pace + high transformation
+  {
+    condition: (t) => t.pace >= 4 && t.transformation >= 4,
+    label: 'intense growth',
+    explanation: 'You pack in experiences not for the checklist, but for maximum personal transformation.',
   },
 ];
 
