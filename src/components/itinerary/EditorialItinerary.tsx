@@ -1370,6 +1370,7 @@ export function EditorialItinerary({
                 onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
                 onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                 onPaymentRequest={onPaymentRequest}
+                onViewReviews={openReviewsDrawer}
               />
             )}
           </motion.div>
@@ -3293,6 +3294,7 @@ interface DayCardProps {
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onPaymentRequest?: (activityId: string) => void;
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
+  onViewReviews?: (activity: EditorialActivity) => void;
 }
 
 function DayCard({
@@ -3321,6 +3323,7 @@ function DayCard({
   onTimeEdit,
   onPaymentRequest,
   onBookingStateChange,
+  onViewReviews,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
@@ -3465,6 +3468,7 @@ function DayCard({
                       onTimeEdit={onTimeEdit}
                       onPaymentRequest={onPaymentRequest}
                       onBookingStateChange={onBookingStateChange}
+                      onViewReviews={onViewReviews}
                     />
                   </div>
                 )}
@@ -3536,6 +3540,7 @@ interface ActivityRowProps {
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onPaymentRequest?: (activityId: string) => void;
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
+  onViewReviews?: (activity: EditorialActivity) => void;
 }
 
 function ActivityRow({
@@ -3560,6 +3565,7 @@ function ActivityRow({
   onTimeEdit,
   onPaymentRequest,
   onBookingStateChange,
+  onViewReviews,
 }: ActivityRowProps) {
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
@@ -3718,7 +3724,15 @@ function ActivityRow({
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
               {rating && (
-                <Badge variant="secondary" className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none">
+                <Badge 
+                  variant="secondary" 
+                  className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none cursor-pointer hover:bg-amber-500/20 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewReviews?.(activity);
+                  }}
+                  title="View reviews"
+                >
                   <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
                   {rating.toFixed(1)}
                 </Badge>
