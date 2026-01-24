@@ -3419,6 +3419,21 @@ serve(async (req) => {
       const userPrefs = userId ? await getUserPreferences(supabase, userId) : null;
       const preferenceContext = buildPreferenceContext(insights, userPrefs);
 
+      // Load trip-specific intents (e.g. "romantic", "mom is coming")
+      let tripIntentsContext = '';
+      if (tripId) {
+        const { data: intents } = await supabase
+          .from('trip_intents')
+          .select('intent_type, intent_value')
+          .eq('trip_id', tripId)
+          .eq('active', true);
+        if (intents && intents.length > 0) {
+          const formatted = intents.map(i => `${i.intent_type}: ${i.intent_value}`).join(', ');
+          tripIntentsContext = `\nTrip-specific requests from user: ${formatted}`;
+          console.log(`[generate-day] Loaded ${intents.length} trip intents for trip ${tripId}`);
+        }
+      }
+
       // CRITICAL: Fetch flight/hotel context for Day 1 and last day timing
       const flightContext = tripId ? await getFlightHotelContext(supabase, tripId) : { context: '' };
       const isFirstDay = dayNumber === 1;
@@ -3528,10 +3543,13 @@ Date: ${date}
 Travelers: ${travelers}
 Budget: ${budgetTier || 'standard'}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
+${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
 ${preferenceContext}
-${previousDayActivities?.length ? `\nAvoid repeating: ${previousDayActivities.join(', ')}` : ''}
+${tripIntentsContext}
+${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
-Generate activities following the timing constraints specified in the system prompt.`;
+Generate activities following the timing constraints specified in the system prompt.
+IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
       try {
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

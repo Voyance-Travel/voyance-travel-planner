@@ -432,6 +432,34 @@ ${itineraryDescription}`;
       log("Saved customization request", { userId, actionType: actions[0]?.type });
     }
 
+    // Persist captured preferences as trip intents so future refreshes respect them
+    if (itineraryContext.tripId && capturedPreferences.length > 0) {
+      const serviceSupabase = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      );
+
+      const intentsToInsert = capturedPreferences.map(p => ({
+        trip_id: itineraryContext.tripId,
+        user_id: userId,
+        intent_type: p.type,        // e.g. "travel_style", "avoid", "interests"
+        intent_value: p.value,      // e.g. "romantic", "mom is coming"
+        confidence: p.confidence,
+        active: true,
+      }));
+
+      // Upsert so repeated captures don't duplicate
+      const { error: intentError } = await serviceSupabase
+        .from("trip_intents")
+        .upsert(intentsToInsert, { onConflict: "trip_id,intent_type,intent_value", ignoreDuplicates: true });
+
+      if (intentError) {
+        log("Failed to save trip intents", { error: intentError.message });
+      } else {
+        log("Saved trip intents", { count: intentsToInsert.length });
+      }
+    }
+
     return new Response(
       JSON.stringify({
         message: textContent,
