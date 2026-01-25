@@ -217,14 +217,8 @@ function IdentityTabContent({
   );
 }
 
-/** Perfect Trip Preview - concise teaser */
+/** Perfect Trip Preview - simple display */
 function PerfectTripPreview({ preview }: { preview: string }) {
-  // Extract just the first sentence or ~60 chars
-  const firstSentence = preview.split(/[.!?]/)[0];
-  const displayText = firstSentence.length > 80 
-    ? firstSentence.slice(0, 80).trim() + '…'
-    : firstSentence + '.';
-
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -236,7 +230,7 @@ function PerfectTripPreview({ preview }: { preview: string }) {
         Your Perfect Trip
       </p>
       <p className="text-base text-foreground/80 italic">
-        "{displayText}"
+        "{preview}"
       </p>
       <Button variant="link" asChild className="mt-2 px-0 gap-1 text-sm text-muted-foreground hover:text-foreground">
         <Link to={ROUTES.START}>
