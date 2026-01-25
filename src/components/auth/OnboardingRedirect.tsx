@@ -1,16 +1,17 @@
 /**
  * OnboardingRedirect Component
  * 
- * Checks if a newly authenticated user has completed their preferences/quiz.
- * If not, shows a gentle nudge modal encouraging them to complete it for better itineraries.
+ * Checks if a newly authenticated user has completed their preferences.
+ * If not, shows a gentle nudge modal encouraging them to fill out preferences for better itineraries.
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ArrowRight, X, Clock } from 'lucide-react';
+import { Settings, ArrowRight, X, Clock, Utensils, Plane, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreferenceCompletion } from '@/hooks/usePreferenceCompletion';
 import { ROUTES } from '@/config/routes';
 
 const ONBOARDING_SHOWN_KEY = 'voyance_onboarding_nudge_shown';
@@ -18,15 +19,18 @@ const NUDGE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export function OnboardingRedirect() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const { data: preferenceStatus, isLoading: isLoadingPreferences } = usePreferenceCompletion();
   const navigate = useNavigate();
   const [showNudge, setShowNudge] = useState(false);
 
   useEffect(() => {
-    // Only check after auth is fully loaded
-    if (isLoading || !isAuthenticated || !user) return;
+    // Only check after auth and preferences are fully loaded
+    if (isLoading || isLoadingPreferences || !isAuthenticated || !user) return;
 
-    // If user has already completed the quiz, don't show anything
-    if (user.quizCompleted) return;
+    // If user has excellent personalization, don't show anything
+    if (preferenceStatus?.personalizationLevel === 'excellent' || preferenceStatus?.personalizationLevel === 'good') {
+      return;
+    }
 
     // Check if we've shown the nudge recently
     const lastShown = localStorage.getItem(ONBOARDING_SHOWN_KEY);
@@ -40,7 +44,12 @@ export function OnboardingRedirect() {
     // Show the nudge modal
     setShowNudge(true);
     localStorage.setItem(ONBOARDING_SHOWN_KEY, Date.now().toString());
-  }, [isLoading, isAuthenticated, user]);
+  }, [isLoading, isLoadingPreferences, isAuthenticated, user, preferenceStatus]);
+
+  const handleGoToPreferences = () => {
+    setShowNudge(false);
+    navigate(ROUTES.PROFILE.VIEW + '?tab=preferences');
+  };
 
   const handleTakeQuiz = () => {
     setShowNudge(false);
@@ -50,6 +59,10 @@ export function OnboardingRedirect() {
   const handleDismiss = () => {
     setShowNudge(false);
   };
+
+  // Determine what's missing for personalized messaging
+  const hasQuiz = preferenceStatus?.hasQuiz ?? false;
+  const completionPercent = preferenceStatus?.completionPercent ?? 0;
 
   return (
     <AnimatePresence>
@@ -89,52 +102,79 @@ export function OnboardingRedirect() {
                   transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
                   className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center"
                 >
-                  <Sparkles className="h-8 w-8 text-primary" />
+                  <Settings className="h-8 w-8 text-primary" />
                 </motion.div>
               </div>
 
-              {/* Content */}
+              {/* Content - Dynamic based on what's missing */}
               <div className="text-center space-y-3">
                 <h2 className="text-2xl font-display font-bold text-foreground">
-                  Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}! 🎉
+                  {hasQuiz 
+                    ? 'Complete Your Preferences' 
+                    : `Welcome${user?.name ? `, ${user.name.split(' ')[0]}` : ''}! 🎉`
+                  }
                 </h2>
                 <p className="text-muted-foreground">
-                  Take our 2-minute Travel Quiz and we'll create personalized itineraries that match your unique travel style.
+                  {hasQuiz 
+                    ? `You're ${completionPercent}% there! Add a few more details for perfectly tailored itineraries.`
+                    : 'Tell us about your travel style and we\'ll create personalized itineraries just for you.'
+                  }
                 </p>
               </div>
 
-              {/* Benefits */}
+              {/* Benefits - show what preferences unlock */}
               <div className="mt-6 space-y-2">
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <span className="text-green-600 text-xs">✓</span>
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <Plane className="h-4 w-4 text-blue-600" />
                   </div>
-                  <span>Activities tailored to your interests</span>
+                  <span>Flight preferences from your home airport</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <span className="text-green-600 text-xs">✓</span>
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+                    <Utensils className="h-4 w-4 text-orange-600" />
                   </div>
-                  <span>Pace & budget that fits you</span>
+                  <span>Dining spots that match your diet</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <span className="text-green-600 text-xs">✓</span>
+                  <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
+                    <Heart className="h-4 w-4 text-rose-600" />
                   </div>
-                  <span>Discover your Travel DNA personality</span>
+                  <span>Activities based on your interests & pace</span>
                 </div>
               </div>
 
               {/* Actions */}
               <div className="mt-8 space-y-3">
-                <Button
-                  onClick={handleTakeQuiz}
-                  className="w-full h-12 gap-2"
-                  size="lg"
-                >
-                  Take the Quiz
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
+                {!hasQuiz ? (
+                  <>
+                    <Button
+                      onClick={handleTakeQuiz}
+                      className="w-full h-12 gap-2"
+                      size="lg"
+                    >
+                      Take the 2-min Quiz
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      onClick={handleGoToPreferences}
+                      variant="outline"
+                      className="w-full h-12 gap-2"
+                      size="lg"
+                    >
+                      Go to Preferences
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={handleGoToPreferences}
+                    className="w-full h-12 gap-2"
+                    size="lg"
+                  >
+                    Complete Preferences
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
                 <button
                   onClick={handleDismiss}
                   className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -144,10 +184,12 @@ export function OnboardingRedirect() {
               </div>
 
               {/* Time estimate */}
-              <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                <span>Takes about 2 minutes</span>
-              </div>
+              {!hasQuiz && (
+                <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>Quiz takes about 2 minutes</span>
+                </div>
+              )}
             </div>
           </motion.div>
         </motion.div>
