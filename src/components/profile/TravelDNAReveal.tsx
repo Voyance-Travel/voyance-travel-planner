@@ -217,15 +217,13 @@ function IdentityTabContent({
   );
 }
 
-/** Perfect Trip Preview with truncation */
+/** Perfect Trip Preview - concise teaser */
 function PerfectTripPreview({ preview }: { preview: string }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const MAX_LENGTH = 100;
-  const shouldTruncate = preview.length > MAX_LENGTH;
-  
-  const displayText = shouldTruncate && !isExpanded 
-    ? preview.slice(0, MAX_LENGTH).trim() + '...'
-    : preview;
+  // Extract just the first sentence or ~60 chars
+  const firstSentence = preview.split(/[.!?]/)[0];
+  const displayText = firstSentence.length > 80 
+    ? firstSentence.slice(0, 80).trim() + '…'
+    : firstSentence + '.';
 
   return (
     <motion.div 
@@ -234,30 +232,18 @@ function PerfectTripPreview({ preview }: { preview: string }) {
       transition={{ delay: 0.7 }}
       className="pt-6 border-t border-border"
     >
-      <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground mb-3">
+      <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground mb-2">
         Your Perfect Trip
       </p>
-      <blockquote className="text-lg md:text-xl font-serif text-foreground/90 leading-relaxed italic">
+      <p className="text-base text-foreground/80 italic">
         "{displayText}"
-      </blockquote>
-      <div className="flex items-center gap-4 mt-4">
-        {shouldTruncate && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="px-0 text-muted-foreground hover:text-foreground"
-          >
-            {isExpanded ? 'Show less' : 'Read more'}
-          </Button>
-        )}
-        <Button variant="link" asChild className="px-0 gap-1 text-muted-foreground hover:text-foreground">
-          <Link to={ROUTES.START}>
-            Plan a trip like this
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </Button>
-      </div>
+      </p>
+      <Button variant="link" asChild className="mt-2 px-0 gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link to={ROUTES.START}>
+          Plan a trip like this
+          <ChevronRight className="h-4 w-4" />
+        </Link>
+      </Button>
     </motion.div>
   );
 }
