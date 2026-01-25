@@ -29,7 +29,8 @@ import {
   useSendFriendRequestByEmail,
   useAcceptFriendRequest,
   useDeclineFriendRequest,
-  useRemoveFriend
+  useRemoveFriend,
+  getDisplayName
 } from '@/services/supabase/friends';
 import LinkToTripModal from './LinkToTripModal';
 import FriendProfileCard from './FriendProfileCard';
@@ -312,14 +313,14 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                         <Avatar className="h-12 w-12 cursor-pointer hover:opacity-80 transition-opacity">
                           <AvatarImage src={friendship.friend?.avatar_url || undefined} />
                           <AvatarFallback className="bg-muted text-muted-foreground font-medium">
-                            {(friendship.friend?.display_name || '?')[0].toUpperCase()}
+                            {getDisplayName(friendship.friend)[0].toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                       </button>
                     </FriendProfileCard>
                     <div>
                       <p className="text-sm font-medium text-foreground">
-                        {friendship.friend?.display_name || 'Unknown'}
+                        {getDisplayName(friendship.friend)}
                       </p>
                       {friendship.friend?.handle && (
                         <p className="text-xs text-muted-foreground">@{friendship.friend.handle}</p>
@@ -379,12 +380,12 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                     <Avatar className="h-12 w-12">
                       <AvatarImage src={request.requester?.avatar_url || undefined} />
                       <AvatarFallback className="bg-muted text-muted-foreground font-medium">
-                        {(request.requester?.display_name || '?')[0].toUpperCase()}
+                        {getDisplayName(request.requester)[0].toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="text-sm font-medium text-foreground">
-                        {request.requester?.display_name || 'Unknown'}
+                        {getDisplayName(request.requester)}
                       </p>
                       {request.requester?.handle && (
                         <p className="text-xs text-muted-foreground">@{request.requester.handle}</p>
@@ -440,12 +441,12 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                     <Avatar className="h-12 w-12">
                       <AvatarImage src={request.addressee?.avatar_url || undefined} />
                       <AvatarFallback className="bg-muted text-muted-foreground font-medium">
-                        {(request.addressee?.display_name || '?')[0].toUpperCase()}
+                        {getDisplayName(request.addressee)[0].toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="text-sm font-medium text-foreground">
-                        {request.addressee?.display_name || 'Unknown'}
+                        {getDisplayName(request.addressee)}
                       </p>
                       {request.addressee?.handle && (
                         <p className="text-xs text-muted-foreground">@{request.addressee.handle}</p>
