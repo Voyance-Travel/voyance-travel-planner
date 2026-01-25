@@ -31,6 +31,16 @@ interface BudgetAllocation {
   activities: number;
 }
 
+interface SelectedHotelData {
+  id: string;
+  name: string;
+  rating: number;
+  pricePerNight: number;
+  location: string;
+  amenities: string[];
+  image: string;
+}
+
 interface PlannerFormData {
   destination: string;
   name: string;
@@ -45,6 +55,7 @@ interface PlannerFormData {
   selectedDepartureFlight: string | null;
   selectedReturnFlight: string | null;
   selectedHotel: string | null;
+  selectedHotelData: SelectedHotelData | null;
   tripId: string | null;
 }
 
@@ -111,6 +122,7 @@ export default function Planner() {
       selectedDepartureFlight: null,
       selectedReturnFlight: null,
       selectedHotel: null,
+      selectedHotelData: null,
       tripId: tripPlannerState.tripId,
     };
   });
@@ -327,9 +339,39 @@ export default function Planner() {
         setCurrentStep('hotels');
         return;
       }
-      case 'hotels':
+      case 'hotels': {
+        // Save hotel selection to database before moving on
+        if (formData.tripId && formData.selectedHotelData && isAuthenticated) {
+          const nights = Math.ceil(
+            (new Date(formData.endDate).getTime() - new Date(formData.startDate).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          
+          const hotelSelection = {
+            id: formData.selectedHotelData.id,
+            name: formData.selectedHotelData.name,
+            location: formData.selectedHotelData.location,
+            neighborhood: formData.selectedHotelData.location,
+            rating: formData.selectedHotelData.rating,
+            pricePerNight: formData.selectedHotelData.pricePerNight,
+            roomType: 'Standard Room',
+            amenities: formData.selectedHotelData.amenities,
+            imageUrl: formData.selectedHotelData.image,
+            checkIn: formData.startDate,
+            checkOut: formData.endDate,
+            nights,
+          };
+          
+          await supabase
+            .from('trips')
+            .update({ 
+              hotel_selection: hotelSelection,
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', formData.tripId);
+        }
         setCurrentStep('booking');
         break;
+      }
       default:
         break;
     }
@@ -465,7 +507,10 @@ export default function Planner() {
           <HotelSelection
             formData={formData}
             selectedHotel={formData.selectedHotel}
-            onSelectHotel={(id) => updateFormData({ selectedHotel: id })}
+            onSelectHotel={(id, hotel) => updateFormData({ 
+              selectedHotel: id, 
+              selectedHotelData: hotel 
+            })}
             onContinue={() => handleStepComplete('hotels')}
             onBack={handleBack}
           />
