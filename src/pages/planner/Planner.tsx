@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { format } from 'date-fns';
 import { getDestinationById } from '@/lib/destinations';
+import { enrichHotel } from '@/services/hotelAPI';
 
 type PlannerStep = 'context' | 'flights' | 'hotels' | 'booking' | 'itinerary';
 
@@ -346,6 +347,16 @@ export default function Planner() {
             (new Date(formData.endDate).getTime() - new Date(formData.startDate).getTime()) / (1000 * 60 * 60 * 24)
           );
           
+          // Enrich hotel with address, photos, etc. from Google Places
+          const cleanDestination = formData.destination
+            .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+            .trim();
+          
+          const enrichment = await enrichHotel(
+            formData.selectedHotelData.name, 
+            cleanDestination
+          );
+          
           const hotelSelection = {
             id: formData.selectedHotelData.id,
             name: formData.selectedHotelData.name,
@@ -355,10 +366,16 @@ export default function Planner() {
             pricePerNight: formData.selectedHotelData.pricePerNight,
             roomType: 'Standard Room',
             amenities: formData.selectedHotelData.amenities,
-            imageUrl: formData.selectedHotelData.image,
+            imageUrl: enrichment?.photos?.[0] || formData.selectedHotelData.image,
+            images: enrichment?.photos,
+            address: enrichment?.address,
+            website: enrichment?.website,
+            googleMapsUrl: enrichment?.googleMapsUrl,
+            placeId: enrichment?.placeId,
             checkIn: formData.startDate,
             checkOut: formData.endDate,
             nights,
+            isEnriched: !!enrichment,
           };
           
           await supabase
