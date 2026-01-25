@@ -2418,6 +2418,56 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // ---------------------------------------------------------------------------
+  // Text normalization helpers (robust duplicate detection across punctuation,
+  // accents/diacritics, and minor wording differences)
+  // ---------------------------------------------------------------------------
+  const normalizeText = (input: string): string => {
+    return (input || '')
+      .toLowerCase()
+      // Remove diacritics (e.g., João → Joao)
+      .normalize('NFD')
+      // deno-lint-ignore no-control-regex
+      .replace(/[\u0300-\u036f]/g, '')
+      // Replace punctuation with spaces
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  type ExperienceType =
+    | 'culinary_class'
+    | 'wine_tasting'
+    | 'walking_tour'
+    | 'museum_gallery'
+    | 'shopping'
+    | 'dining'
+    | 'transport'
+    | 'accommodation'
+    | 'other';
+
+  const getExperienceType = (act: StrictActivity): ExperienceType => {
+    const title = normalizeText(act.title || '');
+    const category = normalizeText(act.category || '');
+
+    // Always respect explicit logistics categories first
+    if (category.includes('transport')) return 'transport';
+    if (category.includes('accommodation')) return 'accommodation';
+
+    // Culinary class/workshop detection (THIS is the big pain point)
+    const isClassLike = /\b(class|workshop|lesson|masterclass|experience|session)\b/.test(title);
+    const isCulinary = /\b(cook|cooking|culinary|chef|bake|baking|pastry|patisserie|food)\b/.test(title);
+    if (isClassLike && isCulinary) return 'culinary_class';
+
+    if (/\b(wine|tasting|vineyard|winery)\b/.test(title)) return 'wine_tasting';
+    if (/\b(walking tour|guided tour|city tour|history tour)\b/.test(title)) return 'walking_tour';
+    if (/\b(museum|gallery|exhibit|exhibition)\b/.test(title)) return 'museum_gallery';
+    if (category.includes('shopping') || /\b(shop|shopping|market)\b/.test(title)) return 'shopping';
+    if (category.includes('dining') || /\b(dinner|lunch|breakfast|brunch|restaurant)\b/.test(title)) return 'dining';
+
+    return 'other';
+  };
+
   // Basic structure checks
   if (!day.dayNumber || day.dayNumber !== dayNumber) {
     errors.push(`Day number mismatch: expected ${dayNumber}, got ${day.dayNumber}`);
@@ -2482,16 +2532,17 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     // =========================================================================
     if (i > 0) {
       const prevAct = day.activities[i - 1];
-      const currTitle = (act.title || '').toLowerCase();
-      const prevTitle = (prevAct.title || '').toLowerCase();
+      const currTitle = normalizeText(act.title || '');
+      const prevTitle = normalizeText(prevAct.title || '');
       
       // Extract activity concept (e.g., "pastel de nata baking class" -> "pastel de nata baking")
       const extractConcept = (title: string): string => {
         // Remove venue names (usually after "at" or "with")
-        const conceptPart = title.split(/\s+at\s+|\s+with\s+|\s+@\s+/i)[0];
-        // Remove common suffixes
+        const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
+        // Remove common generic tokens anywhere (not just at end)
         return conceptPart
-          .replace(/\s*(class|tour|experience|visit|workshop|session|lesson)$/i, '')
+          .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
+          .replace(/\s+/g, ' ')
           .trim();
       };
       
@@ -2516,6 +2567,13 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       if (conceptSimilarity(currConcept, prevConcept)) {
         errors.push(`Activities ${i} and ${i + 1} are too similar: "${prevAct.title}" followed by "${act.title}" - AVOID duplicate concepts back-to-back`);
       }
+
+      // HARD GUARD: back-to-back culinary classes/workshops (even if titles differ)
+      const prevType = getExperienceType(prevAct);
+      const currType = getExperienceType(act);
+      if (prevType === 'culinary_class' && currType === 'culinary_class') {
+        errors.push(`Back-to-back culinary classes are not allowed: "${prevAct.title}" followed by "${act.title}"`);
+      }
       
       // Check for same meal type back-to-back (e.g., two breakfast spots, two dinner restaurants)
       const mealCategories = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'cafe', 'coffee'];
@@ -2534,6 +2592,15 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
         // Same category back-to-back (e.g., two "activity" entries, two "cultural" entries)
         warnings.push(`Activities ${i} and ${i + 1} are both "${act.category}" - consider more variety`);
       }
+    }
+  }
+
+  // Day-level variety rules (prevents “entire itinerary is cooking/baking classes”)
+  if (day.activities?.length) {
+    const types = day.activities.map(getExperienceType);
+    const culinaryCount = types.filter(t => t === 'culinary_class').length;
+    if (culinaryCount > 1) {
+      errors.push(`VARIETY RULE VIOLATION: Only ONE culinary class/workshop is allowed per day (found ${culinaryCount}).`);
     }
   }
 
@@ -2594,7 +2661,7 @@ async function generateSingleDayWithRetry(
   previousDays: StrictDay[],
   flightHotelContext: string,
   LOVABLE_API_KEY: string,
-  maxRetries: number = 2
+  maxRetries: number = 3
 ): Promise<StrictDay> {
   const isFirstDay = dayNumber === 1;
   const isLastDay = dayNumber === context.totalDays;
