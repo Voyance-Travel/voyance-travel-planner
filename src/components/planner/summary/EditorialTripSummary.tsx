@@ -179,8 +179,8 @@ export default function EditorialTripSummary({
       animate={{ opacity: 1 }} 
       className="print:max-w-none"
     >
-      {/* Full-bleed Hero - extend into the nav area */}
-      <div className="relative -mx-4 md:-mx-8 lg:-mx-16 -mt-6 mb-16">
+      {/* Full-bleed Hero */}
+      <div className="relative w-screen left-1/2 -translate-x-1/2 mb-16">
         <div className="relative h-[55vh] min-h-[480px] max-h-[580px] overflow-hidden">
           <DynamicDestinationPhotos 
             destination={data.destination} 
@@ -190,15 +190,15 @@ export default function EditorialTripSummary({
             variant="hero"
             hideOverlayText={true}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-black/40 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
           
           {/* Hero Content */}
-          <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-12 lg:p-16 pb-12 md:pb-16">
+          <div className="absolute inset-0 flex flex-col justify-end px-4 md:px-8 lg:px-16 pb-12 md:pb-16">
             <motion.div
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="max-w-4xl"
+              className="max-w-4xl mx-auto w-full"
             >
               <p className="text-white/70 text-sm font-medium tracking-[0.2em] uppercase mb-3">
                 Your Journey Awaits
@@ -225,7 +225,7 @@ export default function EditorialTripSummary({
             </motion.div>
           </div>
           
-          {/* Countdown Badge - positioned within safe bounds */}
+          {/* Countdown Badge */}
           {daysUntilTrip > 0 && (
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
