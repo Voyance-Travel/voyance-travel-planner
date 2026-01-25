@@ -936,68 +936,55 @@ export function EditorialItinerary({
     }
   }, [days, tripId, destination]);
 
-  // Handle activity lock toggle - persists immediately to database
+  // Handle activity lock toggle - persists immediately to normalized itinerary_activities table
   const handleActivityLock = useCallback(async (dayIndex: number, activityId: string) => {
-    // Update local state immediately for responsive UI
-    let updatedDays: typeof days = [];
-    setDays(prev => {
-      updatedDays = prev.map((day, idx) => {
-        if (idx !== dayIndex) return day;
-        return {
-          ...day,
-          activities: day.activities.map(act =>
-            act.id === activityId ? { ...act, isLocked: !act.isLocked } : act
-          )
-        };
-      });
-      return updatedDays;
-    });
-    setHasChanges(true);
+    // Find current lock state
+    const currentActivity = days[dayIndex]?.activities.find(a => a.id === activityId);
+    const newLockedState = !currentActivity?.isLocked;
     
-    // Persist lock state to database immediately - convert to backend format
-    if (tripId && updatedDays.length > 0) {
+    // Update local state immediately for responsive UI
+    setDays(prev => prev.map((day, idx) => {
+      if (idx !== dayIndex) return day;
+      return {
+        ...day,
+        activities: day.activities.map(act =>
+          act.id === activityId ? { ...act, isLocked: newLockedState } : act
+        )
+      };
+    }));
+    setHasChanges(true);
+    toast.success(newLockedState ? 'Activity locked' : 'Activity unlocked');
+    
+    // Persist lock state directly to itinerary_activities table
+    if (tripId) {
       try {
-        // Convert to backend format to ensure isLocked is properly persisted
-        const backendDays = updatedDays.map(day => ({
-          dayNumber: day.dayNumber,
-          date: day.date,
-          theme: day.theme,
-          activities: day.activities.map(a => ({
-            id: a.id,
-            name: a.title,
-            title: a.title,
-            description: a.description,
-            category: a.category,
-            startTime: a.startTime || a.time,
-            endTime: a.endTime,
-            location: a.location,
-            cost: a.cost,
-            estimatedCost: a.cost,
-            isLocked: a.isLocked, // CRITICAL: Preserve lock state
-            durationMinutes: a.durationMinutes,
-            tags: a.tags,
-          })),
-        }));
-        
         const { error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
-            action: 'save-itinerary',
+            action: 'toggle-activity-lock',
             tripId,
-            itinerary: {
-              days: backendDays,
-              generatedAt: new Date().toISOString(),
-              destination,
-            },
+            activityId,
+            isLocked: newLockedState,
           },
         });
         if (error) {
           console.error('[EditorialItinerary] Failed to persist lock state:', error);
+          // Revert on error
+          setDays(prev => prev.map((day, idx) => {
+            if (idx !== dayIndex) return day;
+            return {
+              ...day,
+              activities: day.activities.map(act =>
+                act.id === activityId ? { ...act, isLocked: !newLockedState } : act
+              )
+            };
+          }));
+          toast.error('Failed to save lock state');
         }
       } catch (err) {
         console.error('[EditorialItinerary] Lock persist error:', err);
       }
     }
-  }, [tripId, destination, days]);
+  }, [tripId, days]);
 
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
     setDays(prev => prev.map((day, idx) => {
