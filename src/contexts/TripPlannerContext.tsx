@@ -328,6 +328,44 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         tripId = data.id;
       }
 
+      // Save trip occasion as a trip_intent for AI personalization
+      if (tripId && state.basics.tripType) {
+        const occasionLabels: Record<string, string> = {
+          'romantic': 'Romantic couples getaway',
+          'anniversary': 'Anniversary celebration trip',
+          'honeymoon': 'Honeymoon trip',
+          'birthday': 'Birthday celebration trip',
+          'girls-trip': "Girls' trip with friends",
+          'guys-trip': "Guys' trip with friends", 
+          'family': 'Family vacation with children',
+          'adult-family': 'Adult family trip (no young children)',
+          'solo': 'Solo adventure trip',
+          'friends': 'Friends group trip',
+          'business': 'Business trip with leisure time',
+          'adventure': 'Adventure and outdoor activities focused',
+          'wellness': 'Wellness and relaxation retreat',
+          'leisure': 'General leisure vacation',
+        };
+        
+        const intentValue = occasionLabels[state.basics.tripType] || state.basics.tripType;
+        
+        // Upsert the occasion intent (replace if exists)
+        await supabase
+          .from('trip_intents')
+          .upsert({
+            trip_id: tripId,
+            user_id: user.id,
+            intent_type: 'occasion',
+            intent_value: intentValue,
+            active: true,
+          }, {
+            onConflict: 'trip_id,intent_type',
+            ignoreDuplicates: false,
+          });
+        
+        console.log('[TripPlanner] Trip occasion intent saved:', state.basics.tripType);
+      }
+
       setState(prev => ({
         ...prev,
         tripId,
