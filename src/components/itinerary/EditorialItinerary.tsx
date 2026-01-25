@@ -522,6 +522,7 @@ export function EditorialItinerary({
   const [hasChanges, setHasChanges] = useState(false);
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
+  const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -1344,7 +1345,27 @@ export function EditorialItinerary({
     toast.success('Activity time updated');
   }, []);
 
-  // Create and copy invite link
+  // Update existing activity (full edit)
+  const handleUpdateActivity = useCallback((dayIndex: number, activityIndex: number, updates: Partial<EditorialActivity>) => {
+    setDays(prev => prev.map((day, dIdx) => {
+      if (dIdx !== dayIndex) return day;
+      return {
+        ...day,
+        activities: day.activities.map((activity, aIdx) => {
+          if (aIdx !== activityIndex) return activity;
+          return {
+            ...activity,
+            ...updates,
+            time: updates.startTime || activity.startTime || activity.time,
+          };
+        }),
+      };
+    }));
+    setHasChanges(true);
+    setEditActivityModal(null);
+    toast.success('Activity updated');
+  }, []);
+
   const handleCreateShareLink = useCallback(async () => {
     setIsCreatingInvite(true);
     try {
@@ -1657,6 +1678,7 @@ export function EditorialItinerary({
                 onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                 onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
                 onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                 onPaymentRequest={onPaymentRequest}
                 onViewReviews={openReviewsDrawer}
               />
@@ -3739,6 +3761,7 @@ interface DayCardProps {
   onDayRegenerate: () => void;
   onAddActivity: () => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
+  onActivityEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onPaymentRequest?: (activityId: string) => void;
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
@@ -3770,6 +3793,7 @@ function DayCard({
   onDayRegenerate,
   onAddActivity,
   onTimeEdit,
+  onActivityEdit,
   onPaymentRequest,
   onBookingStateChange,
   onViewReviews,
@@ -3918,6 +3942,7 @@ function DayCard({
                       onMoveToDay={onMoveToDay}
                       onRemove={onActivityRemove}
                       onTimeEdit={onTimeEdit}
+                      onEdit={onActivityEdit}
                       onPaymentRequest={onPaymentRequest}
                       onBookingStateChange={onBookingStateChange}
                       onViewReviews={onViewReviews}
@@ -3992,6 +4017,7 @@ interface ActivityRowProps {
   onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onRemove: (dayIndex: number, activityId: string) => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
+  onEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onPaymentRequest?: (activityId: string) => void;
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
@@ -4019,6 +4045,7 @@ function ActivityRow({
   onMoveToDay,
   onRemove,
   onTimeEdit,
+  onEdit,
   onPaymentRequest,
   onBookingStateChange,
   onViewReviews,
