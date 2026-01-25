@@ -817,77 +817,55 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* EDITORIAL SPLIT LAYOUT - Magazine Style */}
-      <section className="relative min-h-[85vh] flex flex-col lg:flex-row">
-        {/* Left: Full-bleed Hero Image */}
-        <div className="relative w-full lg:w-1/2 h-[50vh] lg:h-auto lg:min-h-[85vh]">
+      {/* Full-width Editorial Hero */}
+      <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
+        {/* Background Image */}
+        <div className="absolute inset-0">
           <img 
             src={itineraryOnlyMode ? heroItineraryImage : heroHotelImage}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover"
+            className="w-full h-full object-cover"
           />
-          {/* Subtle vignette overlay */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-transparent lg:bg-gradient-to-l" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
-          
-          {/* Editorial headline on image - visible on mobile, hidden on desktop */}
-          <div className="absolute inset-0 flex items-end lg:items-center p-8 lg:p-12">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              className="lg:hidden"
-            >
-              <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-3 ${itineraryOnlyMode ? 'text-amber-300' : 'text-sky-300'}`}>
-                {itineraryOnlyMode ? 'Trip Booked' : 'Need Accommodation'}
-              </p>
-              <h1 className="font-serif text-4xl md:text-5xl font-light text-white leading-[1.05] drop-shadow-lg">
-                {itineraryOnlyMode ? (
-                  <>Build My<br /><em className="italic">Itinerary</em></>
-                ) : (
-                  <>Find My<br /><em className="italic">Hotel</em></>
-                )}
-              </h1>
-            </motion.div>
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-background" />
         </div>
 
-        {/* Right: Editorial Form Panel */}
-        <div className={`relative w-full lg:w-1/2 flex flex-col justify-center ${itineraryOnlyMode ? 'bg-gradient-to-br from-amber-50/80 via-background to-background' : 'bg-gradient-to-br from-sky-50/60 via-background to-background'}`}>
-          <div className="px-6 py-12 lg:px-12 lg:py-16 xl:px-20 max-w-xl mx-auto lg:mx-0 w-full">
-            {/* Desktop headline - hidden on mobile */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="hidden lg:block mb-10"
-            >
-              <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 ${itineraryOnlyMode ? 'text-amber-600' : 'text-sky-600'}`}>
-                {itineraryOnlyMode ? 'Trip Booked' : 'Need Accommodation'}
-              </p>
-              <h1 className="font-serif text-4xl xl:text-5xl font-light text-foreground leading-[1.1] mb-4">
-                {itineraryOnlyMode ? (
-                  <>Build My <em className="italic">Itinerary</em></>
-                ) : (
-                  <>Find My <em className="italic">Hotel</em></>
-                )}
-              </h1>
-              <p className="text-base text-muted-foreground font-light leading-relaxed">
-                {itineraryOnlyMode 
-                  ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
-                  : "Tell us where you're headed, and we'll find the ideal place to stay."
-                }
-              </p>
-            </motion.div>
+        {/* Content */}
+        <div className="relative z-10 w-full max-w-2xl mx-auto px-6 py-16">
+          {/* Editorial Header */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-10"
+          >
+            <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 ${
+              itineraryOnlyMode ? 'text-amber-300' : 'text-sky-300'
+            } drop-shadow-md`}>
+              {itineraryOnlyMode ? 'Flight Booked' : 'Need Accommodation'}
+            </p>
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-white drop-shadow-lg leading-tight">
+              {itineraryOnlyMode ? (
+                <>Build My <em className="italic">Itinerary</em></>
+              ) : (
+                <>Find My <em className="italic">Hotel</em></>
+              )}
+            </h1>
+            <p className="mt-4 text-lg text-white/90 drop-shadow-md max-w-lg mx-auto">
+              {itineraryOnlyMode
+                ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
+                : "Tell us where you're headed, and we'll find the ideal place to stay."}
+            </p>
+          </motion.div>
 
-            {/* Form */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.15 }}
-              className="space-y-6"
-            >
-              {/* Departure City - Now FIRST */}
+          {/* Form Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+            className="bg-white/95 dark:bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 md:p-8"
+          >
+            <div className="space-y-5">
+              {/* Departure City - Only for hotel flow */}
               {!itineraryOnlyMode && (
                 <div className="space-y-2">
                   <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
@@ -960,7 +938,7 @@ export default function Start() {
                       <Button
                         variant="outline"
                         className={cn(
-                          "w-full h-12 justify-between text-left font-normal bg-background/50",
+                          "w-full h-12 justify-between text-left font-normal",
                           !startDate && "text-muted-foreground"
                         )}
                       >
@@ -975,7 +953,6 @@ export default function Start() {
                         month={calendarMonth}
                         onMonthChange={setCalendarMonth}
                         onSelect={(date) => {
-                          console.log('[Calendar] Start date selected:', date, 'ISO:', date?.toISOString(), 'Local:', date?.toLocaleDateString());
                           setStartDate(date);
                           if (date && (!endDate || isBefore(endDate, date))) {
                             setEndDate(addDays(date, 7));
@@ -983,7 +960,7 @@ export default function Start() {
                         }}
                         disabled={(date) => isBefore(date, today)}
                         initialFocus
-                        className={cn("p-3 pointer-events-auto")}
+                        className="p-3 pointer-events-auto"
                       />
                     </PopoverContent>
                   </Popover>
@@ -998,7 +975,7 @@ export default function Start() {
                       <Button
                         variant="outline"
                         className={cn(
-                          "w-full h-12 justify-between text-left font-normal bg-background/50",
+                          "w-full h-12 justify-between text-left font-normal",
                           !endDate && "text-muted-foreground"
                         )}
                       >
@@ -1012,20 +989,17 @@ export default function Start() {
                         selected={endDate}
                         month={calendarMonth}
                         onMonthChange={setCalendarMonth}
-                        onSelect={(date) => {
-                          console.log('[Calendar] End date selected:', date, 'ISO:', date?.toISOString(), 'Local:', date?.toLocaleDateString());
-                          setEndDate(date);
-                        }}
+                        onSelect={(date) => setEndDate(date)}
                         disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, today)}
                         initialFocus
-                        className={cn("p-3 pointer-events-auto")}
+                        className="p-3 pointer-events-auto"
                       />
                     </PopoverContent>
                   </Popover>
                 </div>
               </div>
 
-              {/* Travelers - Refined */}
+              {/* Travelers */}
               <div className="space-y-2">
                 <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                   Travelers
@@ -1043,7 +1017,7 @@ export default function Start() {
                             ? itineraryOnlyMode 
                               ? "bg-amber-500 text-white border-amber-500"
                               : "bg-sky-500 text-white border-sky-500"
-                            : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground bg-background/50"
+                            : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                         )}
                       >
                         {num}
@@ -1081,7 +1055,7 @@ export default function Start() {
                           ? itineraryOnlyMode 
                             ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
                             : "bg-sky-500/10 border-sky-500 text-sky-700 font-medium"
-                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-background/50"
+                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       )}
                     >
                       <span className="text-xs">{occasion.emoji}</span>
@@ -1114,7 +1088,7 @@ export default function Start() {
                               ? itineraryOnlyMode 
                                 ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
                                 : "bg-sky-500/10 border-sky-500 text-sky-700 font-medium"
-                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-background/50"
+                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                           )}
                         >
                           <span className="text-xs">{occasion.emoji}</span>
@@ -1126,7 +1100,7 @@ export default function Start() {
                 </Collapsible>
               </div>
 
-              {/* Optional Budget Section - Collapsible */}
+              {/* Optional Budget Section */}
               <Collapsible open={showBudget} onOpenChange={setShowBudget}>
                 <CollapsibleTrigger asChild>
                   <button
@@ -1139,7 +1113,7 @@ export default function Start() {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-4 space-y-3">
                   <div>
-                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans mb-2">
+                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
                       Budget Per Person (USD)
                     </label>
                     <div className="relative">
@@ -1149,13 +1123,12 @@ export default function Start() {
                         placeholder="e.g. 2000"
                         value={budgetAmount || ''}
                         onChange={(e) => setBudgetAmount(e.target.value ? Number(e.target.value) : undefined)}
-                        className="h-12 pl-9 text-base bg-background/50"
+                        className="h-12 pl-9 text-base"
                         min={0}
                       />
                     </div>
                   </div>
                   
-                  {/* Budget disclaimer for low amounts */}
                   {budgetAmount && budgetAmount < 500 && (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                       <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
@@ -1194,7 +1167,7 @@ export default function Start() {
                               ? itineraryOnlyMode 
                                 ? "bg-amber-500 text-white border-amber-500"
                                 : "bg-sky-500 text-white border-sky-500"
-                              : "border-border text-muted-foreground hover:border-primary/50 bg-background/50"
+                              : "border-border text-muted-foreground hover:border-primary/50"
                           )}
                         >
                           {preset.label}
@@ -1204,83 +1177,83 @@ export default function Start() {
                   </div>
                 </CollapsibleContent>
               </Collapsible>
+            </div>
 
-              {/* CTA Button - Primary */}
-              <div className="pt-4 space-y-4">
-                <Button
-                  onClick={handleStart}
-                  disabled={!isFormValid}
-                  className={cn(
-                    "w-full h-14 text-base font-medium rounded-xl shadow-lg transition-all",
-                    itineraryOnlyMode 
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-amber-500/25' 
-                      : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25'
-                  )}
-                  size="lg"
+            {/* CTA Button */}
+            <div className="pt-6 space-y-4">
+              <Button
+                onClick={handleStart}
+                disabled={!isFormValid}
+                className={cn(
+                  "w-full h-14 text-base font-medium rounded-xl shadow-lg transition-all",
+                  itineraryOnlyMode 
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-amber-500/25' 
+                    : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25'
+                )}
+                size="lg"
+              >
+                {itineraryOnlyMode ? (
+                  <>
+                    <Sparkles className="h-5 w-5 mr-2" />
+                    Build My Itinerary
+                  </>
+                ) : (
+                  <>
+                    <Building2 className="h-5 w-5 mr-2" />
+                    Find My Hotel
+                  </>
+                )}
+              </Button>
+              
+              {/* Cross-sell to other flow */}
+              {!itineraryOnlyMode && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!destinationSelection.cityName) {
+                      toast.error('Please select a destination');
+                      return;
+                    }
+                    if (!startDate || !endDate) {
+                      toast.error('Please select your travel dates');
+                      return;
+                    }
+                    
+                    const start = format(startDate, 'yyyy-MM-dd');
+                    const end = format(endDate, 'yyyy-MM-dd');
+                    
+                    setBasics({
+                      destination: destinationSelection.cityName,
+                      startDate: start,
+                      endDate: end,
+                      travelers,
+                      originCity: originSelection.cityName,
+                      budgetTier: 'moderate',
+                    });
+                    
+                    const tripId = await saveTrip();
+                    if (tripId) {
+                      navigate(`/trip/${tripId}?generate=true`);
+                    } else {
+                      toast.error('Please sign in to generate an itinerary');
+                    }
+                  }}
+                  className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {itineraryOnlyMode ? (
-                    <>
-                      <Sparkles className="h-5 w-5 mr-2" />
-                      Build My Itinerary
-                    </>
-                  ) : (
-                    <>
-                      <Building2 className="h-5 w-5 mr-2" />
-                      Find My Hotel
-                    </>
-                  )}
-                </Button>
-                
-                {/* Cross-sell to other flow */}
-                {!itineraryOnlyMode && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!destinationSelection.cityName) {
-                        toast.error('Please select a destination');
-                        return;
-                      }
-                      if (!startDate || !endDate) {
-                        toast.error('Please select your travel dates');
-                        return;
-                      }
-                      
-                      const start = format(startDate, 'yyyy-MM-dd');
-                      const end = format(endDate, 'yyyy-MM-dd');
-                      
-                      setBasics({
-                        destination: destinationSelection.cityName,
-                        startDate: start,
-                        endDate: end,
-                        travelers,
-                        originCity: originSelection.cityName,
-                        budgetTier: 'moderate',
-                      });
-                      
-                      const tripId = await saveTrip();
-                      if (tripId) {
-                        navigate(`/trip/${tripId}?generate=true`);
-                      } else {
-                        toast.error('Please sign in to generate an itinerary');
-                      }
-                    }}
-                    className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Already have your hotel? <span className="text-amber-600 font-medium hover:underline">Build itinerary only →</span>
-                  </button>
-                )}
-                
-                {itineraryOnlyMode && (
-                  <Link
-                    to="/start"
-                    className="block w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Need a hotel too? <span className="text-sky-600 font-medium hover:underline">Find accommodations →</span>
-                  </Link>
-                )}
-              </div>
-            </motion.div>
-          </div>
+                  Already have your hotel? <span className="text-amber-600 font-medium hover:underline">Build itinerary only →</span>
+                </button>
+              )}
+              
+              {itineraryOnlyMode && (
+                <Link
+                  to="/start"
+                  className="block w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Need a hotel too? <span className="text-sky-600 font-medium hover:underline">Find accommodations →</span>
+                </Link>
+              )}
+            </div>
+          </motion.div>
         </div>
       </section>
 
