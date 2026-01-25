@@ -596,12 +596,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               What This Means
             </TabsTrigger>
             <TabsTrigger 
-              value="evolution" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
-            >
-              Evolution
-            </TabsTrigger>
-            <TabsTrigger 
               value="insights" 
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
@@ -618,6 +612,12 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
               Adjust
+            </TabsTrigger>
+            <TabsTrigger 
+              value="evolution" 
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
+            >
+              Evolution
             </TabsTrigger>
           </TabsList>
 
