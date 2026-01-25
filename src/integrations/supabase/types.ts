@@ -4963,6 +4963,7 @@ export type Database = {
           phone_number: string | null
           planning_preference: string | null
           preferred_airlines: string[] | null
+          preferred_cabin_class: string | null
           preferred_downtime_minutes: number | null
           preferred_group_size: string | null
           preferred_regions: string[] | null
@@ -5041,6 +5042,7 @@ export type Database = {
           phone_number?: string | null
           planning_preference?: string | null
           preferred_airlines?: string[] | null
+          preferred_cabin_class?: string | null
           preferred_downtime_minutes?: number | null
           preferred_group_size?: string | null
           preferred_regions?: string[] | null
@@ -5119,6 +5121,7 @@ export type Database = {
           phone_number?: string | null
           planning_preference?: string | null
           preferred_airlines?: string[] | null
+          preferred_cabin_class?: string | null
           preferred_downtime_minutes?: number | null
           preferred_group_size?: string | null
           preferred_regions?: string[] | null
