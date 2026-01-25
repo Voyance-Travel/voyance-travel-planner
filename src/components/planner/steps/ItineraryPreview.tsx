@@ -324,6 +324,16 @@ export default function ItineraryPreview({
 
   // Handle activity lock toggle - persists immediately to normalized itinerary_activities table
   const handleActivityLock = useCallback(async (activityId: string, locked: boolean) => {
+    // Find the activity's context for fallback matching
+    let activityContext: { dayNumber: number; title: string; time?: string } | null = null;
+    for (const day of localDays) {
+      const activity = day.activities.find(a => a.id === activityId);
+      if (activity) {
+        activityContext = { dayNumber: day.dayNumber, title: activity.title, time: activity.time };
+        break;
+      }
+    }
+    
     // Update local state immediately for responsive UI
     setLocalDays(prev => prev.map(day => ({
       ...day,
@@ -343,6 +353,10 @@ export default function ItineraryPreview({
             tripId,
             activityId,
             isLocked: locked,
+            // Include fallback matching info for non-UUID IDs
+            dayNumber: activityContext?.dayNumber,
+            activityTitle: activityContext?.title,
+            startTime: activityContext?.time,
           },
         });
         if (error) {
@@ -360,7 +374,7 @@ export default function ItineraryPreview({
         console.error('[ItineraryPreview] Lock persist error:', err);
       }
     }
-  }, [tripId]);
+  }, [tripId, localDays]);
 
   // Handle activity swap
   const handleActivitySwap = useCallback((oldActivityId: string, newActivity: ItineraryActivity) => {
