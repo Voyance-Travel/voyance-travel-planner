@@ -7,6 +7,7 @@ import HowItWorksCarousel from '@/components/home/HowItWorksCarousel';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
 import TravelQuote from '@/components/home/TravelQuote';
 import FinalCTA from '@/components/home/FinalCTA';
+import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { scrollToTop } from '@/utils/scrollUtils';
 
 export default function Home() {
@@ -21,6 +22,7 @@ export default function Home() {
 
   return (
     <main className="antialiased relative">
+      <OnboardingRedirect />
       <TopNav />
       <div className="bg-background overflow-hidden relative">
         <CinematicHero />
