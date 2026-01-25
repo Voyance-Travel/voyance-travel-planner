@@ -56,6 +56,7 @@ export interface RecommendationRequest {
   partySize?: number;
   maxResults?: number;
   budgetLevel?: 'budget' | 'moderate' | 'upscale' | 'fine_dining';
+  minRating?: number;
 }
 
 export interface RecommendationResponse {
@@ -139,6 +140,7 @@ export async function getRestaurantsForMealSlot(
     coordinates,
     maxResults: 5,
     budgetLevel: budgetLevel as RecommendationRequest['budgetLevel'],
+    minRating: 4.0, // Only recommend 4+ star restaurants
   });
 
   return response.recommendations;
@@ -159,6 +161,7 @@ export async function getAlternativeRestaurants(
     mealType,
     coordinates,
     maxResults: 6,
+    minRating: 4.0, // Only recommend 4+ star restaurants
   });
 
   // Filter out the current restaurant
