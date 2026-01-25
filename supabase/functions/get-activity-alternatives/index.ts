@@ -15,7 +15,8 @@ interface RequestBody {
   };
   destination?: string;
   searchQuery?: string;
-  excludeActivities?: string[]; // Names of activities to exclude (already in itinerary)
+  excludeActivities?: string[];
+  suggestionMode?: 'similar' | 'different' | 'filter';
 }
 
 interface AlternativeActivity {
@@ -32,37 +33,43 @@ interface AlternativeActivity {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const body: RequestBody = await req.json();
-    const { currentActivity, destination, searchQuery, excludeActivities } = body;
+    const { currentActivity, destination, searchQuery, excludeActivities, suggestionMode } = body;
 
     console.log('[get-activity-alternatives] Request:', {
       activity: currentActivity.name,
       destination,
       searchQuery,
+      suggestionMode,
       excludeCount: excludeActivities?.length || 0,
     });
 
-    // Try AI-powered alternatives first, fall back to templates
     let alternatives: AlternativeActivity[];
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (LOVABLE_API_KEY) {
       try {
-        alternatives = await getAIAlternatives(currentActivity, destination, searchQuery, LOVABLE_API_KEY, excludeActivities);
+        alternatives = await getAIAlternatives(
+          currentActivity, 
+          destination, 
+          searchQuery, 
+          LOVABLE_API_KEY, 
+          excludeActivities,
+          suggestionMode
+        );
       } catch (aiError) {
         console.error('[get-activity-alternatives] AI fallback to templates:', aiError);
-        alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery);
+        alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
       }
     } else {
       console.log('[get-activity-alternatives] No API key, using templates');
-      alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery);
+      alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
     }
 
     return new Response(
@@ -73,6 +80,7 @@ serve(async (req) => {
           query: searchQuery,
           basedOn: currentActivity.name,
           destination,
+          suggestionMode,
         },
       }),
       {
@@ -96,32 +104,75 @@ serve(async (req) => {
   }
 });
 
-// AI-powered alternatives using Lovable AI
 async function getAIAlternatives(
   activity: RequestBody['currentActivity'],
   destination?: string,
   searchQuery?: string,
   apiKey?: string,
-  excludeActivities?: string[]
+  excludeActivities?: string[],
+  suggestionMode?: string
 ): Promise<AlternativeActivity[]> {
   const locationName = destination || 'the destination';
   const activityType = activity.type || 'activity';
   
-  // Build exclusion list for the prompt
   const exclusionNote = excludeActivities && excludeActivities.length > 0
-    ? `\n\nIMPORTANT: Do NOT suggest any of these places (already in the traveler's itinerary or previously suggested):\n- ${excludeActivities.join('\n- ')}`
+    ? `\n\nIMPORTANT: Do NOT suggest any of these places (already in the traveler's itinerary):\n- ${excludeActivities.join('\n- ')}`
     : '';
-  
-  const userPrompt = searchQuery 
-    ? `The user is looking for: "${searchQuery}". Find activities matching this request in ${locationName}.${exclusionNote}`
-    : `Find 4 alternative activities similar to "${activity.name}" (${activityType}) in ${locationName}.${exclusionNote}`;
 
-  const systemPrompt = `You are a travel activity recommendation expert. Generate creative, real-world activity alternatives for travelers.
-  
-For ${locationName}, suggest actual places and experiences that exist or could realistically exist there.
-Consider the local culture, popular attractions, and hidden gems.
-Vary the price points and experience types (premium, budget-friendly, unique local, group-friendly).
-NEVER suggest the same activity or location that appears in the exclusion list.`;
+  let userPrompt: string;
+  let systemPrompt: string;
+
+  if (suggestionMode === 'different' || searchQuery === 'completely_different') {
+    // User wants something completely different
+    userPrompt = `The traveler has "${activity.name}" (${activityType}) in their itinerary but wants something COMPLETELY DIFFERENT.
+    
+Suggest 4 activities in ${locationName} that are:
+- Different category/type than ${activityType}
+- Different vibe and experience style
+- Variety of price points
+- Mix of popular and hidden gems
+
+Do NOT suggest anything similar to ${activity.name}.${exclusionNote}`;
+
+    systemPrompt = `You are a creative travel expert who helps travelers discover unexpected experiences.
+Generate 4 diverse activity alternatives that break from the traveler's current choice.
+Think outside the box - if they have a museum, suggest a food tour. If they have hiking, suggest a spa.
+Each suggestion should feel like a fresh, exciting alternative.`;
+
+  } else if (searchQuery && searchQuery !== 'completely_different') {
+    // User has a specific filter/category in mind
+    userPrompt = `Find 4 activities matching: "${searchQuery}" in ${locationName}.
+
+The traveler is replacing "${activity.name}" and looking for something specific.
+Focus on real, bookable experiences that match their search.${exclusionNote}`;
+
+    systemPrompt = `You are a travel activity recommendation expert for ${locationName}.
+Generate 4 activities that match the user's search criteria.
+Include a mix of:
+- Popular well-reviewed options
+- Hidden gems and local favorites
+- Different price points
+Be specific with real place names and locations.`;
+
+  } else {
+    // Default: similar alternatives
+    userPrompt = `Find 4 alternative activities SIMILAR to "${activity.name}" (${activityType}) in ${locationName}.
+
+Suggest activities that:
+- Are the same general category/type
+- Offer a similar experience level
+- Vary in price (budget, mid-range, premium options)
+- Include both popular and lesser-known alternatives${exclusionNote}`;
+
+    systemPrompt = `You are a travel activity recommendation expert for ${locationName}.
+Generate 4 alternatives similar to the current activity but offering variety.
+Include:
+- A premium/upgraded version of the experience
+- A budget-friendly alternative
+- A local hidden gem in the same category
+- A popular alternative with great reviews
+Be specific with real place names when possible.`;
+  }
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -149,9 +200,9 @@ NEVER suggest the same activity or location that appears in the exclusion list.`
                   items: {
                     type: "object",
                     properties: {
-                      name: { type: "string", description: "Activity name" },
+                      name: { type: "string", description: "Activity name - be specific with real place names" },
                       description: { type: "string", description: "Brief description (1-2 sentences)" },
-                      category: { type: "string", description: "Category like dining, cultural, adventure, relaxation, shopping" },
+                      category: { type: "string", description: "Category: dining, cultural, adventure, relaxation, shopping, nightlife, tours, nature" },
                       estimatedDuration: { type: "string", description: "Duration like '2 hours' or '3.5 hours'" },
                       estimatedCost: { type: "number", description: "Cost in USD" },
                       location: { type: "string", description: "Specific location or area name" },
@@ -182,7 +233,6 @@ NEVER suggest the same activity or location that appears in the exclusion list.`
 
   const data = await response.json();
   
-  // Extract tool call result
   const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
   if (!toolCall?.function?.arguments) {
     throw new Error('No tool call response from AI');
@@ -191,66 +241,159 @@ NEVER suggest the same activity or location that appears in the exclusion list.`
   const parsed = JSON.parse(toolCall.function.arguments);
   const activities = parsed.activities || [];
 
-  // Add unique IDs
   return activities.map((act: Omit<AlternativeActivity, 'id'>, idx: number) => ({
     ...act,
     id: `ai-alt-${Date.now()}-${idx}`,
   }));
 }
 
-// Template-based alternatives as fallback
 function generateTemplateAlternatives(
   activity: RequestBody['currentActivity'],
   destination?: string,
-  searchQuery?: string
+  searchQuery?: string,
+  suggestionMode?: string
 ): AlternativeActivity[] {
   const activityType = activity.type?.toLowerCase() || 'activity';
   const locationName = destination || 'the area';
 
-  // If there's a search query, generate search-based results
+  // Different alternatives (completely different experiences)
+  if (suggestionMode === 'different' || searchQuery === 'completely_different') {
+    const differentOptions: AlternativeActivity[] = [
+      {
+        id: `diff-1-${Date.now()}`,
+        name: `Local Food Tour in ${locationName}`,
+        description: 'Explore the culinary scene with tastings at multiple local spots.',
+        category: 'dining',
+        estimatedDuration: '3 hours',
+        estimatedCost: 75,
+        location: 'Various locations',
+        rating: 4.8,
+        matchScore: 85,
+        whyRecommended: 'A completely different experience to explore local flavors',
+      },
+      {
+        id: `diff-2-${Date.now()}`,
+        name: `Sunset Boat Cruise`,
+        description: 'Relax on the water with stunning views as the sun sets.',
+        category: 'relaxation',
+        estimatedDuration: '2 hours',
+        estimatedCost: 65,
+        location: 'Waterfront',
+        rating: 4.7,
+        matchScore: 82,
+        whyRecommended: 'Peaceful alternative with beautiful scenery',
+      },
+      {
+        id: `diff-3-${Date.now()}`,
+        name: `Artisan Market & Shopping`,
+        description: 'Browse unique handcrafted goods and local products.',
+        category: 'shopping',
+        estimatedDuration: '2.5 hours',
+        estimatedCost: 0,
+        location: 'Market District',
+        rating: 4.5,
+        matchScore: 78,
+        whyRecommended: 'Discover local crafts and take home unique souvenirs',
+      },
+      {
+        id: `diff-4-${Date.now()}`,
+        name: `Spa & Wellness Experience`,
+        description: 'Rejuvenate with a relaxing spa treatment or massage.',
+        category: 'relaxation',
+        estimatedDuration: '2 hours',
+        estimatedCost: 95,
+        location: 'Wellness Center',
+        rating: 4.9,
+        matchScore: 80,
+        whyRecommended: 'Perfect for unwinding and self-care',
+      },
+    ];
+    return differentOptions;
+  }
+
+  // Search/filter based alternatives
   if (searchQuery) {
+    const query = searchQuery.toLowerCase();
+    let category = 'activity';
+    let baseName = searchQuery;
+
+    if (query.includes('food') || query.includes('dining') || query.includes('restaurant')) {
+      category = 'dining';
+      baseName = 'Culinary';
+    } else if (query.includes('outdoor') || query.includes('nature') || query.includes('hiking')) {
+      category = 'adventure';
+      baseName = 'Outdoor';
+    } else if (query.includes('wine') || query.includes('drinks') || query.includes('bar')) {
+      category = 'dining';
+      baseName = 'Wine & Drinks';
+    } else if (query.includes('art') || query.includes('museum') || query.includes('culture')) {
+      category = 'cultural';
+      baseName = 'Art & Culture';
+    } else if (query.includes('shopping') || query.includes('market')) {
+      category = 'shopping';
+      baseName = 'Shopping';
+    } else if (query.includes('spa') || query.includes('relax') || query.includes('wellness')) {
+      category = 'relaxation';
+      baseName = 'Wellness';
+    } else if (query.includes('photo') || query.includes('scenic') || query.includes('instagram')) {
+      category = 'tours';
+      baseName = 'Photo Tour';
+    }
+
     return [
       {
         id: `search-1-${Date.now()}`,
-        name: `${searchQuery} Experience in ${locationName}`,
-        description: `A curated experience based on your search for "${searchQuery}".`,
-        category: activityType,
+        name: `${baseName} Experience in ${locationName}`,
+        description: `A curated ${baseName.toLowerCase()} experience with local highlights.`,
+        category,
         estimatedDuration: '2-3 hours',
-        estimatedCost: 75,
+        estimatedCost: 65,
         location: locationName,
-        rating: 4.6,
-        matchScore: 90,
-        whyRecommended: `Matches your search for "${searchQuery}"`,
+        rating: 4.7,
+        matchScore: 92,
+        whyRecommended: `Top-rated ${baseName.toLowerCase()} option`,
       },
       {
         id: `search-2-${Date.now()}`,
-        name: `Premium ${searchQuery} Tour`,
-        description: `An upscale version of your requested experience with VIP access.`,
-        category: activityType,
-        estimatedDuration: '3-4 hours',
-        estimatedCost: 150,
+        name: `Premium ${baseName} Tour`,
+        description: `An upscale ${baseName.toLowerCase()} experience with VIP access.`,
+        category,
+        estimatedDuration: '3 hours',
+        estimatedCost: 120,
         location: `Central ${locationName}`,
         rating: 4.9,
-        matchScore: 85,
+        matchScore: 88,
         whyRecommended: 'Premium option with exclusive access',
       },
       {
         id: `search-3-${Date.now()}`,
-        name: `Local ${searchQuery} Discovery`,
-        description: `Off-the-beaten-path experience led by local experts.`,
-        category: activityType,
+        name: `Local ${baseName} Discovery`,
+        description: `Off-the-beaten-path ${baseName.toLowerCase()} led by local experts.`,
+        category,
         estimatedDuration: '2 hours',
         estimatedCost: 45,
         location: 'Local neighborhood',
-        rating: 4.7,
-        matchScore: 82,
+        rating: 4.6,
+        matchScore: 85,
         whyRecommended: 'Authentic local experience',
+      },
+      {
+        id: `search-4-${Date.now()}`,
+        name: `${baseName} for Groups`,
+        description: `Social ${baseName.toLowerCase()} experience perfect for travelers.`,
+        category,
+        estimatedDuration: '2.5 hours',
+        estimatedCost: 40,
+        location: 'Meeting point',
+        rating: 4.5,
+        matchScore: 80,
+        whyRecommended: 'Great value and social atmosphere',
       },
     ];
   }
 
-  // Category-based templates
-  const templates: Record<string, AlternativeActivity[]> = {
+  // Default: similar alternatives based on current activity type
+  const categoryTemplates: Record<string, AlternativeActivity[]> = {
     dining: [
       {
         id: `alt-dining-1-${Date.now()}`,
@@ -287,6 +430,18 @@ function generateTemplateAlternatives(
         rating: 4.9,
         matchScore: 85,
         whyRecommended: 'Interactive experience with takeaway skills',
+      },
+      {
+        id: `alt-dining-4-${Date.now()}`,
+        name: 'Hidden Gem Bistro',
+        description: 'Locals-only restaurant with incredible home-style cooking.',
+        category: 'dining',
+        estimatedDuration: '1.5 hours',
+        estimatedCost: 35,
+        location: 'Residential area',
+        rating: 4.6,
+        matchScore: 82,
+        whyRecommended: 'Budget-friendly local favorite',
       },
     ],
     cultural: [
@@ -326,6 +481,18 @@ function generateTemplateAlternatives(
         matchScore: 82,
         whyRecommended: 'Unique behind-the-scenes access',
       },
+      {
+        id: `alt-cultural-4-${Date.now()}`,
+        name: 'Evening Cultural Performance',
+        description: 'Experience traditional music, dance, or theater.',
+        category: 'cultural',
+        estimatedDuration: '2 hours',
+        estimatedCost: 60,
+        location: 'Cultural Center',
+        rating: 4.8,
+        matchScore: 85,
+        whyRecommended: 'Immersive evening entertainment',
+      },
     ],
     adventure: [
       {
@@ -364,15 +531,27 @@ function generateTemplateAlternatives(
         matchScore: 84,
         whyRecommended: 'Eco-friendly and active exploration',
       },
+      {
+        id: `alt-adventure-4-${Date.now()}`,
+        name: 'Sunrise/Sunset Adventure',
+        description: 'Experience magical golden hour from a unique vantage point.',
+        category: 'adventure',
+        estimatedDuration: '2 hours',
+        estimatedCost: 55,
+        location: 'Scenic viewpoint',
+        rating: 4.9,
+        matchScore: 88,
+        whyRecommended: 'Unforgettable photo opportunities',
+      },
     ],
   };
 
-  // Return matching category or default activity templates
-  const categoryTemplates = templates[activityType] || [
+  // Return matching category or default templates
+  const templates = categoryTemplates[activityType] || [
     {
       id: `alt-default-1-${Date.now()}`,
       name: `Premium ${activity.name || 'Experience'}`,
-      description: `An enhanced version with exclusive access and personalized service.`,
+      description: 'An enhanced version with exclusive access and personalized service.',
       category: activityType,
       estimatedDuration: '2 hours',
       estimatedCost: 100,
@@ -405,7 +584,19 @@ function generateTemplateAlternatives(
       matchScore: 80,
       whyRecommended: 'Perfect for meeting new people',
     },
+    {
+      id: `alt-default-4-${Date.now()}`,
+      name: `Budget-Friendly ${activityType}`,
+      description: 'Great experience without breaking the bank.',
+      category: activityType,
+      estimatedDuration: '2 hours',
+      estimatedCost: 25,
+      location: locationName,
+      rating: 4.4,
+      matchScore: 78,
+      whyRecommended: 'Best value option available',
+    },
   ];
 
-  return categoryTemplates;
+  return templates;
 }
