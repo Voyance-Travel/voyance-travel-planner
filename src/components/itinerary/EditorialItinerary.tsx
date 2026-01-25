@@ -58,6 +58,7 @@ import { useTripPermission, useTripCollaborators } from '@/services/tripCollabor
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
 import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
+import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDrawer';
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 
 // =============================================================================
@@ -552,6 +553,10 @@ export function EditorialItinerary({
   const [swapTarget, setSwapTarget] = useState<{ dayIndex: number; activityId: string } | null>(null);
   const [swapDrawerActivity, setSwapDrawerActivity] = useState<ItineraryActivity | null>(null);
 
+  // Restaurant Search Drawer state
+  const [restaurantDrawerOpen, setRestaurantDrawerOpen] = useState(false);
+  const [restaurantDrawerMealType, setRestaurantDrawerMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'any'>('any');
+
   // Reviews Drawer state
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
   const [reviewsTarget, setReviewsTarget] = useState<{ 
@@ -673,6 +678,29 @@ export function EditorialItinerary({
     );
   };
 
+  // Check if an activity is a dining type
+  const isDiningActivity = useCallback((activity: EditorialActivity): boolean => {
+    const activityType = getActivityType(activity);
+    return ['dining', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee', 'food'].includes(activityType);
+  }, []);
+
+  // Get meal type from activity
+  const getMealTypeFromActivity = useCallback((activity: EditorialActivity): 'breakfast' | 'lunch' | 'dinner' | 'any' => {
+    const activityType = getActivityType(activity);
+    const title = (activity.title || '').toLowerCase();
+    
+    if (activityType === 'breakfast' || title.includes('breakfast') || title.includes('brunch')) {
+      return 'breakfast';
+    }
+    if (activityType === 'lunch' || title.includes('lunch')) {
+      return 'lunch';
+    }
+    if (activityType === 'dinner' || title.includes('dinner')) {
+      return 'dinner';
+    }
+    return 'any';
+  }, []);
+
   // Open the AI swap drawer for an activity
   const openSwapDrawer = useCallback((dayIndex: number, activity: EditorialActivity) => {
     if (activity.isLocked) {
@@ -702,8 +730,15 @@ export function EditorialItinerary({
       tags: activity.tags || [],
       isLocked: !!activity.isLocked,
     });
-    setSwapDrawerOpen(true);
-  }, [travelers, budgetTier]);
+
+    // For dining activities, open the restaurant-specific drawer
+    if (isDiningActivity(activity)) {
+      setRestaurantDrawerMealType(getMealTypeFromActivity(activity));
+      setRestaurantDrawerOpen(true);
+    } else {
+      setSwapDrawerOpen(true);
+    }
+  }, [travelers, budgetTier, isDiningActivity, getMealTypeFromActivity]);
 
   // Handle selecting an alternative from the drawer
   const handleSelectSwapAlternative = useCallback((newActivity: ItineraryActivity) => {
@@ -2258,6 +2293,20 @@ export function EditorialItinerary({
         placeType={reviewsTarget?.placeType}
         activityRating={reviewsTarget?.activityRating}
         activityReviewCount={reviewsTarget?.activityReviewCount}
+      />
+
+      {/* Restaurant Search Drawer */}
+      <RestaurantSearchDrawer
+        open={restaurantDrawerOpen}
+        onClose={() => {
+          setRestaurantDrawerOpen(false);
+          setSwapTarget(null);
+          setSwapDrawerActivity(null);
+        }}
+        activity={swapDrawerActivity}
+        destination={destination}
+        mealType={restaurantDrawerMealType}
+        onSelectRestaurant={handleSelectSwapAlternative}
       />
 
       {/* Share Trip Modal */}
