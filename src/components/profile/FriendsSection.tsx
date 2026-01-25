@@ -30,6 +30,7 @@ import {
   useAcceptFriendRequest,
   useDeclineFriendRequest,
   useRemoveFriend,
+  useCancelFriendRequest,
   getDisplayName
 } from '@/services/supabase/friends';
 import LinkToTripModal from './LinkToTripModal';
@@ -64,6 +65,7 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
   const acceptRequest = useAcceptFriendRequest();
   const declineRequest = useDeclineFriendRequest();
   const removeFriend = useRemoveFriend();
+  const cancelRequest = useCancelFriendRequest();
 
   const handleSendInvite = async () => {
     const email = emailInput.trim().toLowerCase();
@@ -119,6 +121,14 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
     if (!confirm('Remove this friend?')) return;
     try {
       await removeFriend.mutateAsync(friendshipId);
+    } catch (error) {
+      // Error handled in mutation
+    }
+  };
+
+  const handleCancelRequest = async (friendshipId: string) => {
+    try {
+      await cancelRequest.mutateAsync(friendshipId);
     } catch (error) {
       // Error handled in mutation
     }
@@ -453,10 +463,22 @@ export default function FriendsSection({ userId, className }: FriendsSectionProp
                       )}
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-xs font-normal">
-                    <Clock className="h-3 w-3 mr-1" />
-                    Pending
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs font-normal">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Pending
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleCancelRequest(request.id)}
+                      disabled={cancelRequest.isPending}
+                      className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3.5 w-3.5 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
                 </motion.div>
               ))}
             </div>
