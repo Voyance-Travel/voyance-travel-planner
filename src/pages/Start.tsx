@@ -818,18 +818,16 @@ export default function Start() {
       />
       
       {/* Editorial Hero Section with Background Image */}
-      <section className={`relative pt-24 pb-8 md:pt-32 md:pb-12 overflow-hidden ${itineraryOnlyMode ? 'bg-gradient-to-b from-amber-50/30 to-background' : 'bg-gradient-to-b from-sky-50/30 to-background'}`}>
+      <section className="relative pt-24 pb-8 md:pt-32 md:pb-12 overflow-hidden">
         {/* Hero Background Image - Different per mode */}
         <div className="absolute inset-0">
           <img 
             src={itineraryOnlyMode ? heroItineraryImage : heroHotelImage}
             alt=""
-            className={`w-full h-full object-cover ${itineraryOnlyMode ? 'brightness-100 contrast-105 saturate-110' : 'brightness-95 contrast-110 saturate-105'}`}
+            className="w-full h-full object-cover"
           />
-          <div className={`absolute inset-0 backdrop-blur-[1px] ${itineraryOnlyMode 
-            ? 'bg-gradient-to-b from-amber-900/30 via-background/55 to-background' 
-            : 'bg-gradient-to-b from-sky-900/30 via-background/55 to-background'
-          }`} />
+          {/* Clean gradient overlay - no blur */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-background" />
         </div>
         
         <div className="relative max-w-4xl mx-auto px-6 text-center">
@@ -838,12 +836,12 @@ export default function Start() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            {/* Eyebrow - Distinct per mode */}
-            <p className={`text-xs tracking-[0.25em] uppercase font-medium mb-4 ${itineraryOnlyMode ? 'text-amber-600' : 'text-sky-600'}`}>
+            {/* Eyebrow - White text with shadow for contrast */}
+            <p className={`text-xs tracking-[0.25em] uppercase font-semibold mb-4 drop-shadow-md ${itineraryOnlyMode ? 'text-amber-300' : 'text-sky-300'}`}>
               {itineraryOnlyMode ? 'Trip Booked' : 'Need Accommodation'}
             </p>
             
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-light text-foreground mb-5 leading-[1.1]">
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-light text-white mb-5 leading-[1.1] drop-shadow-lg">
               {itineraryOnlyMode ? (
                 <>Build My <br className="hidden md:block" /><em className="italic">Itinerary</em></>
               ) : (
@@ -851,7 +849,7 @@ export default function Start() {
               )}
             </h1>
             
-            <p className="text-lg text-muted-foreground font-light leading-relaxed max-w-xl mx-auto">
+            <p className="text-lg text-white/90 font-light leading-relaxed max-w-xl mx-auto drop-shadow-md">
               {itineraryOnlyMode 
                 ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
                 : "Tell us where you're headed, and we'll find the ideal place to stay."
