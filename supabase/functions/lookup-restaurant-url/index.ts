@@ -29,7 +29,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Looking up URL for: ${restaurantName} in ${destination}`);
+    console.log(`[lookup-restaurant-url] Looking up: "${restaurantName}" in ${destination}`);
 
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
@@ -42,19 +42,20 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a restaurant URL lookup assistant. Your ONLY job is to find the official website URL for a restaurant. 
-            
-IMPORTANT RULES:
-1. Return ONLY the official restaurant website URL (their own domain, not a third-party site)
-2. If they have a reservation page, prefer that URL (e.g., OpenTable direct link to the restaurant, or their own /reservations page)
-3. If no official website exists, return their official social media page (Instagram or Facebook)
-4. If you cannot find any official presence, respond with "NOT_FOUND"
-5. DO NOT return Yelp, TripAdvisor, Google Maps, or generic directory URLs
-6. Your response must be ONLY the URL, nothing else - no explanation, no formatting`
+            content: `You are a restaurant URL finder. Find the official website for restaurants.
+
+RULES:
+1. Search for the restaurant's official website, reservation page, or menu page
+2. Acceptable URLs: the restaurant's own domain, their page on OpenTable, Resy, TheFork, or similar booking platforms
+3. If you find their Instagram or Facebook page but no website, return that
+4. If the query looks like a generic dining experience (e.g., "Traditional Fado Dinner Experience") rather than a specific restaurant name, try to identify what specific restaurant or venue offers this experience and return its URL
+5. DO NOT return Yelp, TripAdvisor, Google Maps, Google search results, or generic directory URLs
+6. If you truly cannot find any official presence, respond with exactly: NOT_FOUND
+7. Your response must be ONLY the URL - no explanation, no markdown, no extra text`
           },
           {
             role: 'user',
-            content: `Find the official website URL for "${restaurantName}" restaurant in ${destination}`
+            content: `Find the official website or booking page for "${restaurantName}" in ${destination}`
           }
         ],
       }),
@@ -62,7 +63,7 @@ IMPORTANT RULES:
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Perplexity API error:', response.status, errorText);
+      console.error('[lookup-restaurant-url] Perplexity API error:', response.status, errorText);
       return new Response(
         JSON.stringify({ success: false, error: 'Search failed' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -72,25 +73,36 @@ IMPORTANT RULES:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     
-    console.log('Perplexity response:', content);
+    console.log('[lookup-restaurant-url] Perplexity response:', content);
 
     // Validate it looks like a URL
-    if (content === 'NOT_FOUND' || !content.startsWith('http')) {
+    if (content === 'NOT_FOUND' || content.toLowerCase().includes('not_found') || !content.startsWith('http')) {
+      console.log('[lookup-restaurant-url] No URL found, returning fallback');
       return new Response(
         JSON.stringify({ success: true, url: null, fallback: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Clean up the URL (remove any trailing punctuation or whitespace)
-    const cleanUrl = content.replace(/[.,;:!?\s]+$/, '');
+    // Extract just the URL if there's extra text
+    const urlMatch = content.match(/https?:\/\/[^\s"'<>]+/);
+    const cleanUrl = urlMatch ? urlMatch[0].replace(/[.,;:!?\s]+$/, '') : null;
 
+    if (!cleanUrl) {
+      console.log('[lookup-restaurant-url] Could not extract valid URL from response');
+      return new Response(
+        JSON.stringify({ success: true, url: null, fallback: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[lookup-restaurant-url] Found URL:', cleanUrl);
     return new Response(
       JSON.stringify({ success: true, url: cleanUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error looking up restaurant URL:', error);
+    console.error('[lookup-restaurant-url] Error:', error);
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

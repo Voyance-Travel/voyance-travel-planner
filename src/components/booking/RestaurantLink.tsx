@@ -2,7 +2,7 @@
  * RestaurantLink Component
  * 
  * Uses AI-powered search (Perplexity) to find the official restaurant website URL.
- * Falls back to a general web search if no direct URL is found.
+ * If no direct URL is found, no link is shown (we don't want to redirect to search engines).
  */
 
 import { useState, useEffect } from 'react';
@@ -30,34 +30,25 @@ function cleanRestaurantName(name: string): string {
     .trim();
 }
 
-function generateSearchFallback(restaurantName: string, destination: string): string {
-  const cleanName = cleanRestaurantName(restaurantName);
-  const q = encodeURIComponent(`${cleanName} ${destination} official website`);
-  return `https://www.google.com/search?q=${q}`;
-}
-
 export function RestaurantLink({ restaurantName, destination, className }: RestaurantLinkProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [usedFallback, setUsedFallback] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     
     async function lookupUrl() {
+      // Log what we're looking up for debugging
+      console.log('[RestaurantLink] Looking up:', restaurantName, 'in', destination);
+      
       const cacheKey = getCacheKey(restaurantName, destination);
       
       // Check cache first
       const cached = urlCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        console.log('[RestaurantLink] Cache hit for:', restaurantName, '-> URL:', cached.url);
         if (!cancelled) {
-          if (cached.url) {
-            setUrl(cached.url);
-            setUsedFallback(false);
-          } else {
-            setUrl(generateSearchFallback(restaurantName, destination));
-            setUsedFallback(true);
-          }
+          setUrl(cached.url); // Will be null if no URL was found
           setIsLoading(false);
         }
         return;
@@ -65,6 +56,7 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
       
       try {
         const cleanName = cleanRestaurantName(restaurantName);
+        console.log('[RestaurantLink] Calling API with cleaned name:', cleanName);
         
         const { data, error } = await supabase.functions.invoke('lookup-restaurant-url', {
           body: { restaurantName: cleanName, destination }
@@ -72,23 +64,22 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
         
         if (!cancelled) {
           if (error || !data?.success || !data?.url) {
-            // Cache the miss and use fallback
+            // Cache the miss - no URL found
+            console.log('[RestaurantLink] No URL found for:', cleanName);
             urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
-            setUrl(generateSearchFallback(restaurantName, destination));
-            setUsedFallback(true);
+            setUrl(null);
           } else {
             // Cache the hit
+            console.log('[RestaurantLink] Found URL for:', cleanName, '->', data.url);
             urlCache.set(cacheKey, { url: data.url, timestamp: Date.now() });
             setUrl(data.url);
-            setUsedFallback(false);
           }
           setIsLoading(false);
         }
       } catch (err) {
-        console.error('Error looking up restaurant URL:', err);
+        console.error('[RestaurantLink] Error looking up URL:', err);
         if (!cancelled) {
-          setUrl(generateSearchFallback(restaurantName, destination));
-          setUsedFallback(true);
+          setUrl(null);
           setIsLoading(false);
         }
       }
@@ -110,6 +101,8 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
     );
   }
 
+  // Don't show any link if we couldn't find the official URL
+  // No more Google/Yelp fallback - either direct link or nothing
   if (!url) {
     return null;
   }
@@ -122,7 +115,7 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
       className={`inline-flex items-center gap-1.5 text-xs text-primary hover:underline ${className || ''}`}
     >
       <ExternalLink className="h-3 w-3" />
-      {usedFallback ? 'Find Restaurant' : 'View Restaurant'}
+      View Restaurant
     </a>
   );
 }
