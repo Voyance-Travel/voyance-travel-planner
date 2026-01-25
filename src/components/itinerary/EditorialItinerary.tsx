@@ -462,6 +462,13 @@ function getActivityRating(activity: EditorialActivity): number | null {
   return null;
 }
 
+function getActivityReviewCount(activity: EditorialActivity): number | null {
+  if (typeof activity.rating === 'object' && activity.rating?.totalReviews) {
+    return activity.rating.totalReviews;
+  }
+  return null;
+}
+
 function getActivityPhoto(activity: EditorialActivity): string | null {
   if (!activity.photos || activity.photos.length === 0) return null;
   const photo = activity.photos[0];
@@ -3935,6 +3942,7 @@ function ActivityRow({
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
+  const reviewCount = getActivityReviewCount(activity);
   const cost = getActivityCost(activity, travelers, budgetTier);
   // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);
@@ -4121,7 +4129,7 @@ function ActivityRow({
                   return (
                     <Badge 
                       variant="secondary" 
-                      className="text-xs gap-0.5 bg-amber-500/10 text-amber-600 border-none cursor-pointer hover:bg-amber-500/20 transition-colors"
+                      className="text-xs gap-1 bg-amber-500/10 text-amber-600 border-none cursor-pointer hover:bg-amber-500/20 transition-colors"
                       onClick={(e) => {
                         e.stopPropagation();
                         onViewReviews?.(activity);
@@ -4130,6 +4138,9 @@ function ActivityRow({
                     >
                       <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
                       {rating.toFixed(1)}
+                      {reviewCount && reviewCount > 0 && (
+                        <span className="text-amber-600/70">({reviewCount > 999 ? `${(reviewCount / 1000).toFixed(1)}k` : reviewCount})</span>
+                      )}
                     </Badge>
                   );
                 }

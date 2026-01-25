@@ -173,7 +173,7 @@ export default function ReviewsDrawer({
                       {place.rating.toFixed(1)}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {place.totalReviews.toLocaleString()} reviews
+                      {reviews.length} reviews shown
                     </div>
                   </div>
                 </div>
