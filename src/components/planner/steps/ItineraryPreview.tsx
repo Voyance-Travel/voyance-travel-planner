@@ -265,6 +265,10 @@ export default function ItineraryPreview({
     
     setRegeneratingDayNumber(dayNumber);
     
+    // Find current day's activities to pass as currentActivities for locked activity preservation
+    const currentDay = localDays.find(d => d.dayNumber === dayNumber);
+    const currentActivities = currentDay?.activities || [];
+    
     try {
       const { data, error } = await import('@/integrations/supabase/client').then(m => 
         m.supabase.functions.invoke('generate-itinerary', {
@@ -274,6 +278,7 @@ export default function ItineraryPreview({
             dayNumber,
             destination: tripDetails.destination,
             keepActivities,
+            currentActivities, // CRITICAL: Pass full activities so backend can preserve isLocked
             preferences: {
               hotelLocation: itineraryContext.hotelLocation,
               arrivalTime: itineraryContext.arrivalTime,
@@ -300,7 +305,7 @@ export default function ItineraryPreview({
     } finally {
       setRegeneratingDayNumber(null);
     }
-  }, [tripId, tripDetails.destination, itineraryContext]);
+  }, [tripId, tripDetails.destination, itineraryContext, localDays]);
 
   // Handle activity lock toggle
   const handleActivityLock = useCallback((activityId: string, locked: boolean) => {
