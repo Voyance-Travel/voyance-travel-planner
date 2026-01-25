@@ -19,7 +19,8 @@ import {
   Sparkles,
   Zap,
   Plane,
-  CheckCircle
+  CheckCircle,
+  Search
 } from 'lucide-react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
@@ -525,55 +526,65 @@ export default function Profile() {
 
             {/* Quick Actions with Images */}
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Plan Trip Card */}
-              <div className="group relative overflow-hidden rounded-2xl border border-border bg-card">
+              {/* Full Trip Planning Card */}
+              <div className="group relative overflow-hidden rounded-2xl border-2 border-primary/20 bg-card">
                 <div className="absolute inset-0">
                   <img 
-                    src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800" 
-                    alt="Plan your trip"
-                    className="w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-105 transition-all duration-500"
+                    src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800" 
+                    alt="Find flights and hotels"
+                    className="w-full h-full object-cover opacity-15 group-hover:opacity-25 group-hover:scale-105 transition-all duration-500"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-card/60" />
                 </div>
                 <div className="relative p-6">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center mb-4">
-                    <Compass className="h-6 w-6 text-white" />
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[10px] tracking-widest uppercase font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
+                      Full Service
+                    </span>
                   </div>
-                  <h3 className="font-semibold text-foreground mb-1">Plan a New Trip</h3>
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center mb-4">
+                    <Plane className="h-6 w-6 text-white" />
+                  </div>
+                  <h3 className="font-semibold text-foreground mb-1">Find Flights + Hotel</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Find flights, hotels, and build a complete itinerary with AI assistance.
+                    We'll search for flights, find the perfect hotel, then build your itinerary.
                   </p>
                   <Button asChild>
                     <Link to="/start">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Start Planning
+                      <Search className="h-4 w-4 mr-2" />
+                      Search Flights
                     </Link>
                   </Button>
                 </div>
               </div>
 
-              {/* Quick Itinerary Card */}
+              {/* Already Booked Card */}
               <div className="group relative overflow-hidden rounded-2xl border border-border bg-card">
                 <div className="absolute inset-0">
                   <img 
                     src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800" 
-                    alt="Quick itinerary"
-                    className="w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-105 transition-all duration-500"
+                    alt="Build itinerary"
+                    className="w-full h-full object-cover opacity-15 group-hover:opacity-25 group-hover:scale-105 transition-all duration-500"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-card/60" />
                 </div>
                 <div className="relative p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[10px] tracking-widest uppercase font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                      Already Booked
+                    </span>
+                  </div>
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center mb-4">
                     <Sparkles className="h-6 w-6 text-white" />
                   </div>
-                  <h3 className="font-semibold text-foreground mb-1">Quick Itinerary Builder</h3>
+                  <h3 className="font-semibold text-foreground mb-1">I Have My Flights</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Just want an AI-generated itinerary? Skip the flight & hotel search.
+                    Got your travel booked? We'll just build the perfect daily activities.
                   </p>
-                  <Button asChild variant="secondary">
+                  <Button asChild variant="outline">
                     <Link to="/start?mode=itinerary">
-                      <Zap className="h-4 w-4 mr-2" />
-                      Build Itinerary Only
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Build Itinerary
                     </Link>
                   </Button>
                 </div>

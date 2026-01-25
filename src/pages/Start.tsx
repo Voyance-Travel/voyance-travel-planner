@@ -836,21 +836,21 @@ export default function Start() {
           >
             {/* Eyebrow */}
             <p className="text-xs tracking-[0.25em] uppercase text-primary font-medium mb-4">
-              {itineraryOnlyMode ? 'Quick Itinerary' : 'Trip Planner'}
+              {itineraryOnlyMode ? 'Already Booked' : 'Full Trip Planning'}
             </p>
             
             <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-light text-foreground mb-5 leading-[1.1]">
               {itineraryOnlyMode ? (
-                <>Create your perfect <br className="hidden md:block" /><em className="italic">day-by-day</em> itinerary</>
+                <>Build your <br className="hidden md:block" /><em className="italic">day-by-day</em> itinerary</>
               ) : (
-                <>Where will your next <br className="hidden md:block" /><em className="italic">adventure</em> take you?</>
+                <>Find flights, hotels <br className="hidden md:block" />& <em className="italic">plan everything</em></>
               )}
             </h1>
             
             <p className="text-lg text-muted-foreground font-light leading-relaxed max-w-xl mx-auto">
               {itineraryOnlyMode 
-                ? "Already have your flights and hotel? We'll craft a personalized itinerary tailored to your interests."
-                : "Tell us your destination and dates. We'll find the perfect hotel and build an unforgettable experience."
+                ? "You've got flights and a place to stay—let us handle the daily activities."
+                : "We'll search for the best flights and hotels, then build your perfect itinerary."
               }
             </p>
           </motion.div>
