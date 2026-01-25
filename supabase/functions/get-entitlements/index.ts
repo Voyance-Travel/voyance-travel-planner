@@ -84,14 +84,31 @@ serve(async (req) => {
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header provided");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "No authorization header provided" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
 
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    
+    if (userError) {
+      logStep("Auth error", { message: userError.message });
+      return new Response(JSON.stringify({ error: "Session expired or invalid" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
     
     const user = userData.user;
-    if (!user?.email) throw new Error("User not authenticated");
+    if (!user?.email) {
+      return new Response(JSON.stringify({ error: "User not authenticated" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     // Default to free plan
