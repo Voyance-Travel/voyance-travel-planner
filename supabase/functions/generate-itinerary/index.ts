@@ -2163,6 +2163,9 @@ function buildPreferenceContext(insights: any, prefs: any): string {
 
     // FOOD PREFERENCES (Likes/Dislikes) - Critical for restaurant selection!
     const foodItems: string[] = [];
+    // Quality requirement - ALWAYS included
+    foodItems.push(`⭐ QUALITY REQUIREMENT: ONLY recommend restaurants with 4+ star ratings`);
+    foodItems.push(`   → No low-quality, poorly-reviewed, or tourist-trap venues`);
     if (prefs.food_likes?.length) {
       foodItems.push(`✅ FOOD LOVES: ${prefs.food_likes.join(', ')}`);
       foodItems.push(`   → Prioritize restaurants/cafes that specialize in these cuisines`);
@@ -4798,6 +4801,7 @@ General Requirements:
 - Provide realistic cost estimates in local currency
 - Account for travel time between activities
 - Include meals (breakfast, lunch, dinner as appropriate for the time of day)
+- ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 - Every activity MUST have a "title" field (the display name)
 - All times MUST be in 24-hour HH:MM format
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}`;
