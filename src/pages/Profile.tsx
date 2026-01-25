@@ -46,6 +46,7 @@ import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
 import { Wallet } from 'lucide-react';
 import { getTripStats, TripStats } from '@/services/userAPI';
 import { calculateEvolutionPath, TRAVELER_STAGES } from '@/data/evolutionData';
+import { getArchetypeNarrative } from '@/data/archetypeNarratives';
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
 
 // Use the centralized pricing config from src/config/pricing.ts
@@ -392,13 +393,15 @@ export default function Profile() {
   );
   const travelerStatus = TRAVELER_STAGES[evolution.currentStage]?.name || 'Traveler';
 
-  // Use actual Travel DNA from database, fallback to preference-based archetype
-  const displayArchetype = actualTravelDNA?.archetype || (user?.preferences ? (
-    user.preferences.style === 'luxury' ? 'Refined Explorer' 
-    : user.preferences.style === 'adventure' ? 'Bold Adventurer'
-    : user.preferences.style === 'cultural' ? 'Culture Seeker'
-    : 'Mindful Traveler'
-  ) : null);
+  // Use actual Travel DNA from database - format properly using narrative lookup
+  const displayArchetype = actualTravelDNA?.archetype 
+    ? getArchetypeNarrative(actualTravelDNA.archetype).name 
+    : (user?.preferences ? (
+        user.preferences.style === 'luxury' ? 'Refined Explorer' 
+        : user.preferences.style === 'adventure' ? 'Bold Adventurer'
+        : user.preferences.style === 'cultural' ? 'Culture Seeker'
+        : 'Mindful Traveler'
+      ) : null);
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
