@@ -45,7 +45,7 @@ import { AddCreditsModal } from '@/components/checkout';
 import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
 import { Wallet } from 'lucide-react';
 import { getTripStats, TripStats } from '@/services/userAPI';
-
+import { calculateEvolutionPath, TRAVELER_STAGES } from '@/data/evolutionData';
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
 
 // Use the centralized pricing config from src/config/pricing.ts
@@ -148,7 +148,7 @@ export default function Profile() {
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const { data: userCredits, refetch: refetchCredits } = useUserCredits();
   const [tripStats, setTripStats] = useState<TripStats | null>(null);
-
+  const [actualTravelDNA, setActualTravelDNA] = useState<{ archetype: string; category?: string } | null>(null);
   // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated) {
@@ -195,6 +195,29 @@ export default function Profile() {
       }
     }
     loadTripStats();
+  }, [user?.id]);
+
+  // Load actual Travel DNA from database
+  useEffect(() => {
+    async function loadTravelDNA() {
+      if (!user?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from('travel_dna_profiles')
+          .select('primary_archetype_name')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (!error && data?.primary_archetype_name) {
+          setActualTravelDNA({
+            archetype: data.primary_archetype_name,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load travel DNA:', error);
+      }
+    }
+    loadTravelDNA();
   }, [user?.id]);
 
   const [searchParams] = useSearchParams();
@@ -359,18 +382,23 @@ export default function Profile() {
     upcomingTrips: tripStats?.upcomingTrips ?? upcomingTrips.length,
   };
 
-  const travelDNA = user?.preferences ? {
-    archetype: user.preferences.style === 'luxury' ? 'Refined Explorer' 
-             : user.preferences.style === 'adventure' ? 'Bold Adventurer'
-             : user.preferences.style === 'cultural' ? 'Culture Seeker'
-             : 'Mindful Traveler',
-    traits: [
-      user.preferences.style,
-      user.preferences.pace,
-      user.preferences.budget,
-    ].filter(Boolean),
-    interests: user.preferences.interests || [],
-  } : null;
+  // Calculate traveler status using the evolution system
+  const evolution = calculateEvolutionPath(
+    stats.tripsCompleted,
+    actualTravelDNA?.category || 'EXPLORER',
+    {
+      quizCompleted: user?.quizCompleted,
+    }
+  );
+  const travelerStatus = TRAVELER_STAGES[evolution.currentStage]?.name || 'Traveler';
+
+  // Use actual Travel DNA from database, fallback to preference-based archetype
+  const displayArchetype = actualTravelDNA?.archetype || (user?.preferences ? (
+    user.preferences.style === 'luxury' ? 'Refined Explorer' 
+    : user.preferences.style === 'adventure' ? 'Bold Adventurer'
+    : user.preferences.style === 'cultural' ? 'Culture Seeker'
+    : 'Mindful Traveler'
+  ) : null);
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
@@ -411,9 +439,12 @@ export default function Profile() {
                 {user?.name || 'Traveler'}
               </h1>
               <p className="text-muted-foreground">{user?.email}</p>
-              {travelDNA && (
+              {(displayArchetype || travelerStatus) && (
                 <p className="text-sm text-primary font-medium mt-1">
-                  {travelDNA.archetype}
+                  {displayArchetype || travelerStatus}
+                  {displayArchetype && travelerStatus && displayArchetype !== travelerStatus && (
+                    <span className="text-muted-foreground font-normal"> • {travelerStatus}</span>
+                  )}
                 </p>
               )}
             </div>
