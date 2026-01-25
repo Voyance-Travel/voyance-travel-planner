@@ -141,25 +141,25 @@ export default function TopNav() {
                   <NotificationBell />
                 </div>
 
-                {/* Plan Trip + Hotels Link */}
-                <Link
-                  to={ROUTES.START}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                    isTransparent ? 'text-white/80 hover:text-white' : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                {/* Full Trip Planning - Find flights & hotel */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(ROUTES.START)}
+                  className={`gap-2 ${isTransparent ? 'border-white/30 text-white hover:bg-white/10 hover:text-white' : ''}`}
                 >
-                  <Calendar className="h-3.5 w-3.5" />
-                  Plan Trip
-                </Link>
+                  <Plane className="h-3.5 w-3.5" />
+                  Find Flights + Hotel
+                </Button>
 
-                {/* Quick Itinerary Button */}
+                {/* Already Booked - Just need itinerary */}
                 <Button
                   size="sm"
                   onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
                   <Sparkles className="h-4 w-4" />
-                  Quick Itinerary
+                  I Have My Flights
                 </Button>
 
                 {/* User Dropdown */}
@@ -391,19 +391,20 @@ export default function TopNav() {
                       );
                     })}
                     <div className="pt-2 space-y-2">
-                      <Link
-                        to={ROUTES.START}
-                        className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => navigate(ROUTES.START)}
                       >
-                        <Calendar className="h-4 w-4" />
-                        Plan Trip
-                      </Link>
+                        <Plane className="h-4 w-4" />
+                        Find Flights + Hotel
+                      </Button>
                       <Button
                         className="w-full gap-2"
                         onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                       >
                         <Sparkles className="h-4 w-4" />
-                        Quick Itinerary
+                        I Have My Flights
                       </Button>
                     </div>
                     <button
