@@ -155,36 +155,23 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const isLast = currentStep === TOUR_STEPS.length - 1;
   const isCentered = step.position === 'center' || !highlightRect;
 
-  // Calculate tooltip position
+  // Calculate tooltip position - always center horizontally on screen for consistency
   const getTooltipStyle = (): React.CSSProperties => {
     if (isCentered || !highlightRect) {
-      return {
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-      };
+      return {};
     }
 
-    const padding = 16;
-    const tooltipWidth = 320;
-    const tooltipHeight = 200;
+    const padding = 20;
+    const tooltipHeight = 220;
 
     switch (step.position) {
       case 'bottom':
         return {
           top: highlightRect.bottom + padding,
-          left: Math.min(
-            Math.max(highlightRect.left + highlightRect.width / 2 - tooltipWidth / 2, padding),
-            window.innerWidth - tooltipWidth - padding
-          ),
         };
       case 'top':
         return {
           bottom: window.innerHeight - highlightRect.top + padding,
-          left: Math.min(
-            Math.max(highlightRect.left + highlightRect.width / 2 - tooltipWidth / 2, padding),
-            window.innerWidth - tooltipWidth - padding
-          ),
         };
       case 'left':
         return {
@@ -192,7 +179,6 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
             Math.max(highlightRect.top + highlightRect.height / 2 - tooltipHeight / 2, padding),
             window.innerHeight - tooltipHeight - padding
           ),
-          right: window.innerWidth - highlightRect.left + padding,
         };
       case 'right':
         return {
@@ -200,14 +186,9 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
             Math.max(highlightRect.top + highlightRect.height / 2 - tooltipHeight / 2, padding),
             window.innerHeight - tooltipHeight - padding
           ),
-          left: highlightRect.right + padding,
         };
       default:
-        return {
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-        };
+        return {};
     }
   };
 
@@ -266,15 +247,17 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
           </motion.div>
         )}
 
-        {/* Tooltip card - uses flex centering when no target element or position is 'center' */}
+        {/* Tooltip card - always centered horizontally for consistent UX */}
         <div 
-          className={cn(
-            "pointer-events-auto",
-            isCentered 
-              ? "fixed inset-0 flex items-center justify-center p-4" 
-              : "absolute"
-          )}
-          style={isCentered ? { zIndex: 101 } : undefined}
+          className="pointer-events-auto fixed inset-x-0 flex justify-center p-4"
+          style={{ 
+            zIndex: 101,
+            ...(step.position === 'bottom' && highlightRect ? { top: highlightRect.bottom + 20 } : {}),
+            ...(step.position === 'top' && highlightRect ? { bottom: window.innerHeight - highlightRect.top + 20 } : {}),
+            ...(step.position === 'left' && highlightRect ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } : {}),
+            ...(step.position === 'right' && highlightRect ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } : {}),
+            ...(isCentered ? { top: '50%', transform: 'translateY(-50%)' } : {}),
+          }}
         >
           <motion.div
             key={step.id}
@@ -283,7 +266,6 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
             className="w-[320px] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
-            style={isCentered ? undefined : getTooltipStyle()}
           >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-primary/10 to-transparent">

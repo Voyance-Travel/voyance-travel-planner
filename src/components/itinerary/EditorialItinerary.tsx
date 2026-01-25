@@ -1593,8 +1593,8 @@ export function EditorialItinerary({
                 <ChevronLeft className="w-5 h-5" />
               </Button>
 
-              <div className="flex-1 overflow-x-auto" data-tour="day-picker">
-                <div className="flex gap-2 justify-center">
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex gap-2 justify-center" data-tour="day-picker">
                   {days.map((day, index) => {
                     const dayDate = day.date ? parseISO(day.date) : null;
                     const isSelected = index === selectedDayIndex;
