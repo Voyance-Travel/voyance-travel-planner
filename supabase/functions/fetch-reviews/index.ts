@@ -293,9 +293,9 @@ async function fetchTripAdvisorReviews(
       };
     }
 
-    // Step 3: Get reviews
+    // Step 3: Get reviews (request more to get a better selection)
     const reviewsResponse = await fetch(
-      `https://api.content.tripadvisor.com/api/v1/location/${locationId}/reviews?key=${apiKey}&language=en`,
+      `https://api.content.tripadvisor.com/api/v1/location/${locationId}/reviews?key=${apiKey}&language=en&limit=20`,
       { headers: { accept: 'application/json' } }
     );
 
@@ -553,11 +553,13 @@ function mergeReviews(
   foursquareReviews: Review[],
   maxTotal: number
 ): Review[] {
-  // Interleave reviews from different sources for variety
+  // Strategy: Google has a 5-review limit, so prioritize getting more from TripAdvisor/Foursquare
+  // First, interleave available reviews, then pad with remaining from any source
   const merged: Review[] = [];
   const sources = [googleReviews, tripAdvisorReviews, foursquareReviews];
   let i = 0;
 
+  // First pass: interleave reviews round-robin style
   while (merged.length < maxTotal) {
     let added = false;
     for (const source of sources) {
@@ -571,6 +573,20 @@ function mergeReviews(
     i++;
   }
 
+  // Second pass: if we haven't hit maxTotal, add any remaining reviews
+  if (merged.length < maxTotal) {
+    for (const source of sources) {
+      for (const review of source) {
+        if (!merged.find(r => r.id === review.id)) {
+          merged.push(review);
+          if (merged.length >= maxTotal) break;
+        }
+      }
+      if (merged.length >= maxTotal) break;
+    }
+  }
+
+  console.log(`[mergeReviews] Merged ${merged.length} total from G:${googleReviews.length} TA:${tripAdvisorReviews.length} FS:${foursquareReviews.length}`);
   return merged;
 }
 
