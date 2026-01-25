@@ -2179,10 +2179,10 @@ export function EditorialItinerary({
 }
 
 // =============================================================================
-// DESTINATION CAROUSEL COMPONENT
+// DESTINATION HERO IMAGE COMPONENT (Single static image - no carousel)
 // =============================================================================
 
-interface DestinationCarouselProps {
+interface DestinationHeroImageProps {
   destination: string;
   destinationCountry?: string;
 }
@@ -2198,11 +2198,10 @@ function normalizeDestination(dest: string): string {
     .trim();
 }
 
-function DestinationCarousel({ destination, destinationCountry }: DestinationCarouselProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [images, setImages] = useState<string[]>([]);
-  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+function DestinationCarousel({ destination, destinationCountry }: DestinationHeroImageProps) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   
   // Normalize destination (remove airport codes like "Rome (FCO)" -> "Rome")
   const cleanDestination = normalizeDestination(destination);
@@ -2231,74 +2230,46 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
     return `data:image/svg+xml;base64,${btoa(svg)}`;
   };
 
-  // Fetch destination images using centralized API (respects Rome no-people rule)
+  // Fetch single destination image using centralized API
   useEffect(() => {
-    async function fetchImages() {
+    async function fetchImage() {
       setIsLoading(true);
+      setHasError(false);
       try {
-        const isRome = cleanDestination.toLowerCase().trim().split(',')[0] === 'rome';
-        const shuffleOnce = <T,>(arr: T[]): T[] => {
-          const copy = [...arr];
-          for (let i = copy.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [copy[i], copy[j]] = [copy[j], copy[i]];
-          }
-          return copy;
-        };
-
-        // Use centralized API that enforces curated images for Rome
         const { getDestinationImages } = await import('@/services/destinationImagesAPI');
         const images = await getDestinationImages({
           destination: queryDestination,
-          imageType: 'gallery',
-          limit: 6,
+          imageType: 'hero',
+          limit: 1, // Only 1 image - no carousel
         });
         
         if (images.length > 0) {
-          const urls = images.map((img) => img.url);
-          const urlsToUse = isRome ? shuffleOnce(urls) : urls;
-          setImages(urlsToUse);
-          setCurrentIndex(isRome && urlsToUse.length > 1 ? Math.floor(Math.random() * urlsToUse.length) : 0);
+          setImageUrl(images[0].url);
         } else {
-          setImages([generateGradientDataUrl(cleanDestination)]);
-          setCurrentIndex(0);
+          setImageUrl(generateGradientDataUrl(cleanDestination));
         }
       } catch (err) {
-        console.error('[DestinationCarousel] Failed to fetch images:', err);
-        setImages([generateGradientDataUrl(cleanDestination)]);
-        setCurrentIndex(0);
+        console.error('[DestinationHeroImage] Failed to fetch image:', err);
+        setImageUrl(generateGradientDataUrl(cleanDestination));
       } finally {
         setIsLoading(false);
       }
     }
     
     if (cleanDestination) {
-      fetchImages();
+      fetchImage();
     }
   }, [cleanDestination, queryDestination]);
 
-  // Filter out failed images for navigation
-  const validImages = images.filter(img => !failedImages.has(img));
-  const displayImages = validImages.length > 0 ? validImages : images;
-  const safeIndex = currentIndex >= displayImages.length ? 0 : currentIndex;
-  
-  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % Math.max(1, displayImages.length));
-  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + Math.max(1, displayImages.length)) % Math.max(1, displayImages.length));
-
-  // Handle image load error - skip to next image instead of showing gradient
-  const handleImageError = (failedUrl: string) => {
-    setFailedImages(prev => new Set([...prev, failedUrl]));
-    // Auto-skip to next valid image
-    const remaining = images.filter(img => !failedImages.has(img) && img !== failedUrl);
-    if (remaining.length > 0) {
-      const nextValidIndex = images.indexOf(remaining[0]);
-      if (nextValidIndex !== -1 && nextValidIndex !== currentIndex) {
-        setCurrentIndex(nextValidIndex >= images.length ? 0 : nextValidIndex);
-      }
+  // Handle image load error - fall back to gradient
+  const handleImageError = () => {
+    if (!hasError) {
+      setHasError(true);
+      setImageUrl(generateGradientDataUrl(cleanDestination));
     }
   };
 
-  if (isLoading || displayImages.length === 0) {
+  if (isLoading || !imageUrl) {
     return (
       <div className="relative overflow-hidden rounded-xl mb-6">
         <div className="relative h-48 md:h-64 bg-gradient-to-br from-primary/20 to-accent/20 animate-pulse flex items-center justify-center">
@@ -2317,45 +2288,18 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
     <div className="relative overflow-hidden rounded-xl mb-6">
       <div className="relative h-48 md:h-64">
         <img
-          src={displayImages[safeIndex]}
-          alt={`${cleanDestination} photo ${safeIndex + 1}`}
-          className="w-full h-full object-cover transition-opacity duration-300"
-          onError={() => handleImageError(displayImages[safeIndex])}
+          src={imageUrl}
+          alt={`${cleanDestination} hero`}
+          className="w-full h-full object-cover"
+          onError={handleImageError}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-serif text-white drop-shadow-lg">{cleanDestination}</h2>
-            {destinationCountry && (
-              <p className="text-white/80 text-sm">{destinationCountry}</p>
-            )}
-          </div>
-          {displayImages.length > 1 && (
-            <div className="flex gap-2">
-              <Button variant="secondary" size="icon" onClick={prevSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
-                <ChevronLeft className="h-4 w-4 text-white" />
-              </Button>
-              <Button variant="secondary" size="icon" onClick={nextSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
-                <ChevronRight className="h-4 w-4 text-white" />
-              </Button>
-            </div>
+        <div className="absolute bottom-4 left-4 right-4">
+          <h2 className="text-2xl md:text-3xl font-serif text-white drop-shadow-lg">{cleanDestination}</h2>
+          {destinationCountry && (
+            <p className="text-white/80 text-sm">{destinationCountry}</p>
           )}
         </div>
-        {/* Dots */}
-        {displayImages.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-            {displayImages.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentIndex(idx)}
-                className={cn(
-                  "w-2 h-2 rounded-full transition-colors",
-                  idx === safeIndex ? "bg-white" : "bg-white/40"
-                )}
-              />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
