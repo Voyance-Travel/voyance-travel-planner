@@ -358,6 +358,8 @@ async function executeRegenerateAction(
       dayNumber: target_day,
       destination,
       keepActivities,
+      // Pass the full current activities so edge function can preserve locked ones
+      currentActivities: day.activities,
       // Soft hint only; generator may ignore unknown preference keys
       preferences: new_focus ? { dayFocus: new_focus } : undefined,
     },

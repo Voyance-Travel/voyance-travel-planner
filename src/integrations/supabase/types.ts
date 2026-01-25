@@ -3129,6 +3129,50 @@ export type Database = {
           },
         ]
       }
+      itinerary_versions: {
+        Row: {
+          activities: Json
+          created_at: string
+          created_by_action: string | null
+          day_metadata: Json | null
+          day_number: number
+          id: string
+          is_current: boolean | null
+          trip_id: string
+          version_number: number
+        }
+        Insert: {
+          activities: Json
+          created_at?: string
+          created_by_action?: string | null
+          day_metadata?: Json | null
+          day_number: number
+          id?: string
+          is_current?: boolean | null
+          trip_id: string
+          version_number?: number
+        }
+        Update: {
+          activities?: Json
+          created_at?: string
+          created_by_action?: string | null
+          day_metadata?: Json | null
+          day_number?: number
+          id?: string
+          is_current?: boolean | null
+          trip_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_versions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plan_entitlements: {
         Row: {
           created_at: string | null
