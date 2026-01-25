@@ -474,7 +474,6 @@ export default function Planner() {
         {currentStep === 'booking' && (
           <BookingOptions
             tripSummary={calculateTripSummary()}
-            priceLockExpiry={new Date(Date.now() + 30 * 60 * 1000)} // 30 min from now
             onBook={handleBook}
             onSave={handleSave}
             onBuildItinerary={handleBuildItinerary}

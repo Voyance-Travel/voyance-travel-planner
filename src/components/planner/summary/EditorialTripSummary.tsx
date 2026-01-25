@@ -83,7 +83,6 @@ interface EditorialTripSummaryProps {
   onBack: () => void;
   onActivitiesBudgetChange?: (budget: number) => void;
   isLoading?: boolean;
-  priceLockExpiry?: Date;
 }
 
 const formatCabin = (cabin: string): string => {
@@ -104,7 +103,6 @@ export default function EditorialTripSummary({
   onBack,
   onActivitiesBudgetChange,
   isLoading,
-  priceLockExpiry,
 }: EditorialTripSummaryProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [costExpanded, setCostExpanded] = useState(true);
@@ -119,9 +117,6 @@ export default function EditorialTripSummary({
   const daysUntilTrip = Math.ceil(
     (new Date(data.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
-  const timeRemaining = priceLockExpiry
-    ? Math.max(0, Math.floor((priceLockExpiry.getTime() - Date.now()) / 60000))
-    : 0;
 
   // Calculate breakdown
   const flightSubtotal = ((data.outboundFlight?.price || 0) + (data.returnFlight?.price || 0)) * data.travelers;
@@ -296,29 +291,6 @@ export default function EditorialTripSummary({
             </Button>
           </div>
         </motion.div>
-
-        {/* Price Lock Alert */}
-        {priceLockExpiry && timeRemaining > 0 && (
-          <motion.div
-            initial={{ y: 10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.35 }}
-            className="mb-12 p-6 rounded-none border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-50/80 to-transparent"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Clock className="w-6 h-6 text-amber-600" />
-                <div>
-                  <p className="font-medium text-amber-900">Price locked for {timeRemaining} minutes</p>
-                  <p className="text-sm text-amber-700/80">Complete your booking to secure these rates</p>
-                </div>
-              </div>
-              <Button onClick={onBook} className="bg-amber-600 hover:bg-amber-700">
-                Book Now
-              </Button>
-            </div>
-          </motion.div>
-        )}
 
         {/* Two Column Layout */}
         <div className="grid lg:grid-cols-3 gap-12 lg:gap-16">
