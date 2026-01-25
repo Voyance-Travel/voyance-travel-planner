@@ -4955,6 +4955,61 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           
           console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
         }
+        // =======================================================================
+        // STEP: ENRICH NEW ACTIVITIES (ratings, photos, coordinates)
+        // This ensures regenerated activities have the same rich data as initial generation
+        // =======================================================================
+        const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || '';
+        
+        // Only enrich unlocked (newly generated) activities
+        const activitiesToEnrich = normalizedActivities.filter((a: { isLocked?: boolean }) => !a.isLocked);
+        const alreadyEnriched = normalizedActivities.filter((a: { isLocked?: boolean }) => a.isLocked);
+        
+        if (activitiesToEnrich.length > 0 && GOOGLE_MAPS_API_KEY) {
+          console.log(`[generate-day] Enriching ${activitiesToEnrich.length} new activities with ratings/photos...`);
+          
+          // Enrich in parallel batches of 3 to avoid rate limits
+          const batchSize = 3;
+          const enrichedActivities: StrictActivity[] = [];
+          
+          for (let i = 0; i < activitiesToEnrich.length; i += batchSize) {
+            const batch = activitiesToEnrich.slice(i, i + batchSize);
+            const enrichedBatch = await Promise.all(
+              batch.map(async (act: StrictActivity) => {
+                try {
+                  const result = await enrichActivityWithRetry(
+                    act,
+                    destination,
+                    supabaseUrl,
+                    supabaseKey,
+                    GOOGLE_MAPS_API_KEY,
+                    1 // maxRetries
+                  );
+                  return result.activity;
+                } catch (e) {
+                  console.log(`[generate-day] Enrichment failed for "${act.title}":`, e);
+                  return act; // Return original if enrichment fails
+                }
+              })
+            );
+            enrichedActivities.push(...enrichedBatch);
+          }
+          
+          // Merge enriched activities back with locked ones and sort by time
+          normalizedActivities = [...enrichedActivities, ...alreadyEnriched];
+          normalizedActivities.sort((a: { startTime?: string }, b: { startTime?: string }) => {
+            const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+            const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+            return aTime - bTime;
+          });
+          
+          const enrichedWithRatings = enrichedActivities.filter((a: { rating?: unknown }) => a.rating).length;
+          console.log(`[generate-day] Enrichment complete: ${enrichedWithRatings}/${activitiesToEnrich.length} activities got ratings`);
+        } else if (!GOOGLE_MAPS_API_KEY) {
+          console.log('[generate-day] Skipping enrichment: GOOGLE_MAPS_API_KEY not configured');
+        }
 
         generatedDay.activities = normalizedActivities;
 
