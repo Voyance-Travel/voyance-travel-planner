@@ -291,6 +291,7 @@ export default function ItineraryPreview({
             action: 'regenerate-day',
             tripId,
             dayNumber,
+            totalDays: localDays.length, // CRITICAL: Required for isFirstDay/isLastDay logic
             destination: tripDetails.destination,
             keepActivities,
             currentActivities: backendActivities, // Backend format with isLocked
