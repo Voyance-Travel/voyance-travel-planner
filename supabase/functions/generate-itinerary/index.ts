@@ -1612,7 +1612,8 @@ async function getUserPreferences(supabase: any, userId: string) {
         primary_goal,
         emotional_drivers,
         food_likes,
-        food_dislikes
+        food_dislikes,
+        ai_assistance_level
       `)
       .eq('user_id', userId)
       .maybeSingle();
@@ -2067,6 +2068,28 @@ function buildPreferenceContext(insights: any, prefs: any): string {
         'spontaneous': 'Minimal planning preferred - focus on must-see highlights, leave gaps for discovery',
       };
       personaItems.push(`Planning style: ${planningMap[prefs.planning_preference] || prefs.planning_preference}`);
+    }
+    
+    // AI Assistance Level - affects how detailed the itinerary output is
+    if (prefs.ai_assistance_level) {
+      const aiLevelInstructions: Record<string, string> = {
+        'full': `🤖 FULL AI PLANNING: 
+   → Provide SPECIFIC venue names, restaurant recommendations, and exact addresses
+   → Include detailed timing, booking links, and insider tips
+   → Suggest specific dishes to order, best seats, and optimal visiting strategies
+   → Fill in all details - user wants turnkey itinerary ready to follow`,
+        'balanced': `🤝 COLLABORATIVE PLANNING:
+   → Provide specific recommendations but leave some flexibility
+   → Name top venues but also suggest "alternatively, explore the neighborhood"
+   → Balance detailed suggestions with room for personal discovery`,
+        'minimal': `👤 MINIMAL ASSISTANCE - SKELETON ITINERARY:
+   → Provide GENERAL suggestions, NOT specific venue names
+   → Use phrases like "Breakfast in [neighborhood]" instead of specific restaurants
+   → Say "Afternoon: Explore [area] - museums/galleries" instead of naming venues
+   → Leave timing flexible: "Morning", "Afternoon", "Evening" blocks only
+   → User prefers to fill in their own specific choices`,
+      };
+      personaItems.push(aiLevelInstructions[prefs.ai_assistance_level] || '');
     }
     
     if (personaItems.length > 0) {
