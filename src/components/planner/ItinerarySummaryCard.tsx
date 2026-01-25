@@ -20,7 +20,7 @@ interface Activity {
   time: string;
   type: 'activity' | 'meal' | 'hotel' | 'transport';
   description?: string;
-  location?: string;
+  location?: string | { name?: string; address?: string };
   price?: number;
   duration?: string;
 }
@@ -215,7 +215,9 @@ export default function ItinerarySummaryCard({
                                       {activity.location && (
                                         <span className="flex items-center gap-1">
                                           <MapPin className="w-4 h-4" />
-                                          {activity.location}
+                                          {typeof activity.location === 'string' 
+                                            ? activity.location 
+                                            : activity.location.name || activity.location.address}
                                         </span>
                                       )}
                                     </div>
