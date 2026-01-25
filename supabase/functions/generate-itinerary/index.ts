@@ -61,6 +61,24 @@ interface StrictActivity {
   priceLevel?: number; // 1-4 scale
   googleMapsUrl?: string;
   reviewHighlights?: string[];
+  // =========================================================================
+  // PERSONALIZATION GUARANTEE FIELDS - Phase 1
+  // These fields make personalization provable and machine-checkable
+  // =========================================================================
+  personalization?: {
+    /** Machine-checkable tags tied to user inputs (e.g., ["romantic", "local-authentic", "seafood-lover", "low-pace"]) */
+    tags: string[];
+    /** 1-2 sentences explaining why this activity fits THIS user's specific preferences/traits */
+    whyThisFits: string;
+    /** AI confidence in this recommendation (0-1) */
+    confidence: number;
+    /** Which user inputs influenced this choice */
+    matchedInputs: string[];
+  };
+  /** Source provider for venue verification */
+  sourceProvider?: 'google_places' | 'foursquare' | 'viator' | 'internal_db' | 'ai_generated';
+  /** External provider ID for deduplication and verification */
+  providerId?: string;
 }
 
 interface StrictDay {
@@ -132,7 +150,281 @@ interface EnrichedItinerary {
 }
 
 // =============================================================================
-// BUDGET INTENT RECONCILIATION
+// PERSONALIZATION VALIDATOR - Phase 3
+// Validates itinerary output against user preferences to ensure real customization
+// =============================================================================
+
+interface ValidationContext {
+  foodDislikes: string[];
+  foodLikes: string[];
+  dietaryRestrictions: string[];
+  avoidList: string[];
+  mobilityNeeds: string[];
+  pacePreference: 'relaxed' | 'moderate' | 'packed';
+  budgetTier: string;
+  traitScores: Record<string, number>;
+  tripIntents: string[];
+}
+
+interface ValidationResult {
+  isValid: boolean;
+  violations: ValidationViolation[];
+  warnings: ValidationWarning[];
+  personalizationScore: number; // 0-100
+  stats: {
+    activitiesChecked: number;
+    personalizationFieldsPresent: number;
+    personalizationFieldsMissing: number;
+    matchedInputsTotal: number;
+  };
+}
+
+interface ValidationViolation {
+  type: 'avoid_list' | 'dietary' | 'pace' | 'missing_personalization' | 'empty_matched_inputs' | 'duplicate';
+  activityId: string;
+  activityTitle: string;
+  dayNumber: number;
+  details: string;
+  severity: 'critical' | 'major' | 'minor';
+}
+
+interface ValidationWarning {
+  type: string;
+  message: string;
+  activityId?: string;
+}
+
+/**
+ * Validates the generated itinerary against user preferences
+ * Returns violations that should cause rejection/regeneration
+ */
+function validateItineraryPersonalization(
+  days: StrictDay[],
+  ctx: ValidationContext
+): ValidationResult {
+  console.log('[Validator] Starting personalization validation...');
+  
+  const violations: ValidationViolation[] = [];
+  const warnings: ValidationWarning[] = [];
+  const seenActivities = new Set<string>();
+  
+  let activitiesChecked = 0;
+  let personalizationPresent = 0;
+  let personalizationMissing = 0;
+  let matchedInputsTotal = 0;
+  
+  for (const day of days) {
+    const dayActivities = day.activities || [];
+    
+    // Check pace constraint
+    const nonTransportActivities = dayActivities.filter(a => a.category !== 'transport' && a.category !== 'accommodation');
+    const expectedMax = ctx.pacePreference === 'relaxed' ? 4 : ctx.pacePreference === 'moderate' ? 6 : 8;
+    const expectedMin = ctx.pacePreference === 'relaxed' ? 2 : ctx.pacePreference === 'moderate' ? 3 : 4;
+    
+    if (nonTransportActivities.length > expectedMax) {
+      violations.push({
+        type: 'pace',
+        activityId: '',
+        activityTitle: `Day ${day.dayNumber}`,
+        dayNumber: day.dayNumber,
+        details: `Too many activities (${nonTransportActivities.length}) for ${ctx.pacePreference} pace (max ${expectedMax})`,
+        severity: 'major'
+      });
+    }
+    
+    if (nonTransportActivities.length < expectedMin && day.dayNumber !== 1 && day.dayNumber !== days.length) {
+      warnings.push({
+        type: 'pace_low',
+        message: `Day ${day.dayNumber} has only ${nonTransportActivities.length} activities for ${ctx.pacePreference} pace`
+      });
+    }
+    
+    for (const activity of dayActivities) {
+      activitiesChecked++;
+      
+      const titleLower = activity.title.toLowerCase();
+      const descLower = (activity.description || '').toLowerCase();
+      const tagsLower = (activity.tags || []).map(t => t.toLowerCase());
+      const locationLower = (activity.location?.name || '').toLowerCase();
+      
+      // Check for duplicates (same title in same trip)
+      const activityKey = `${titleLower}::${locationLower}`;
+      if (seenActivities.has(activityKey)) {
+        violations.push({
+          type: 'duplicate',
+          activityId: activity.id,
+          activityTitle: activity.title,
+          dayNumber: day.dayNumber,
+          details: `Duplicate activity found: "${activity.title}"`,
+          severity: 'major'
+        });
+      }
+      seenActivities.add(activityKey);
+      
+      // Check avoid list (food dislikes, general avoids)
+      const allAvoid = [...ctx.foodDislikes, ...ctx.avoidList].map(a => a.toLowerCase());
+      for (const avoid of allAvoid) {
+        if (avoid.length < 3) continue; // Skip short items like "no"
+        if (
+          titleLower.includes(avoid) ||
+          descLower.includes(avoid) ||
+          tagsLower.some(t => t.includes(avoid))
+        ) {
+          violations.push({
+            type: 'avoid_list',
+            activityId: activity.id,
+            activityTitle: activity.title,
+            dayNumber: day.dayNumber,
+            details: `Contains avoided item: "${avoid}"`,
+            severity: 'critical'
+          });
+        }
+      }
+      
+      // Check dietary restrictions (critical for dining)
+      if (activity.category === 'dining') {
+        for (const restriction of ctx.dietaryRestrictions.map(r => r.toLowerCase())) {
+          // Check if the activity explicitly accommodates the restriction
+          const accommodates = 
+            tagsLower.some(t => t.includes(restriction) || t.includes('vegan') || t.includes('vegetarian')) ||
+            descLower.includes(restriction) ||
+            descLower.includes('dietary') ||
+            descLower.includes('allergy');
+          
+          // Only warn, don't fail - dining may not explicitly state "vegetarian friendly"
+          if (!accommodates && restriction.length > 3) {
+            warnings.push({
+              type: 'dietary_unchecked',
+              message: `Dining "${activity.title}" doesn't explicitly mention accommodation for: ${restriction}`,
+              activityId: activity.id
+            });
+          }
+        }
+      }
+      
+      // Check personalization fields exist
+      if (!activity.personalization) {
+        personalizationMissing++;
+        violations.push({
+          type: 'missing_personalization',
+          activityId: activity.id,
+          activityTitle: activity.title,
+          dayNumber: day.dayNumber,
+          details: 'Missing personalization object (required for customization proof)',
+          severity: 'major'
+        });
+      } else {
+        personalizationPresent++;
+        
+        // Check matchedInputs is not empty
+        if (!activity.personalization.matchedInputs?.length) {
+          violations.push({
+            type: 'empty_matched_inputs',
+            activityId: activity.id,
+            activityTitle: activity.title,
+            dayNumber: day.dayNumber,
+            details: 'personalization.matchedInputs is empty - must reference at least 1 user input',
+            severity: 'minor'
+          });
+        } else {
+          matchedInputsTotal += activity.personalization.matchedInputs.length;
+        }
+        
+        // Validate whyThisFits references something specific
+        const whyFits = (activity.personalization.whyThisFits || '').toLowerCase();
+        const hasSpecificReference = 
+          whyFits.includes('your') ||
+          whyFits.includes('trait') ||
+          whyFits.includes('preference') ||
+          whyFits.includes('score') ||
+          whyFits.includes('intent') ||
+          ctx.tripIntents.some(intent => whyFits.includes(intent.toLowerCase()));
+        
+        if (!hasSpecificReference) {
+          warnings.push({
+            type: 'generic_why',
+            message: `"${activity.title}" has generic whyThisFits - doesn't reference specific user inputs`,
+            activityId: activity.id
+          });
+        }
+      }
+    }
+  }
+  
+  // Calculate personalization score
+  const personalizationRatio = activitiesChecked > 0 
+    ? personalizationPresent / activitiesChecked 
+    : 0;
+  const avgMatchedInputs = personalizationPresent > 0 
+    ? matchedInputsTotal / personalizationPresent 
+    : 0;
+  
+  const personalizationScore = Math.min(100, Math.round(
+    (personalizationRatio * 50) + // 50 points for having fields
+    (Math.min(avgMatchedInputs / 2, 1) * 30) + // 30 points for matched inputs (avg 2 = full score)
+    ((1 - violations.length / Math.max(activitiesChecked, 1)) * 20) // 20 points for no violations
+  ));
+  
+  const criticalViolations = violations.filter(v => v.severity === 'critical');
+  const majorViolations = violations.filter(v => v.severity === 'major');
+  
+  // Invalid if: any critical violations OR >20% major violations
+  const isValid = 
+    criticalViolations.length === 0 && 
+    majorViolations.length <= Math.ceil(activitiesChecked * 0.2);
+  
+  console.log(`[Validator] Result: ${isValid ? 'VALID' : 'INVALID'} | Score: ${personalizationScore}/100 | Critical: ${criticalViolations.length} | Major: ${majorViolations.length} | Warnings: ${warnings.length}`);
+  
+  return {
+    isValid,
+    violations,
+    warnings,
+    personalizationScore,
+    stats: {
+      activitiesChecked,
+      personalizationFieldsPresent: personalizationPresent,
+      personalizationFieldsMissing: personalizationMissing,
+      matchedInputsTotal
+    }
+  };
+}
+
+/**
+ * Extract validation context from user preferences
+ */
+function buildValidationContext(
+  prefs: Record<string, any>,
+  budgetIntent: BudgetIntent | null,
+  traitScores: Record<string, number>,
+  tripIntents: string[]
+): ValidationContext {
+  // Determine pace from traits or preferences
+  const paceScore = traitScores.pace || 0;
+  let pacePreference: 'relaxed' | 'moderate' | 'packed' = 'moderate';
+  if (paceScore <= -4) pacePreference = 'relaxed';
+  else if (paceScore >= 4) pacePreference = 'packed';
+  
+  // If explicit pace preference exists, use it
+  if (prefs.travel_pace) {
+    const pace = prefs.travel_pace.toLowerCase();
+    if (pace.includes('relax') || pace.includes('slow')) pacePreference = 'relaxed';
+    else if (pace.includes('pack') || pace.includes('fast') || pace.includes('intensive')) pacePreference = 'packed';
+  }
+  
+  return {
+    foodDislikes: (prefs.food_dislikes || []).filter(Boolean),
+    foodLikes: (prefs.food_likes || []).filter(Boolean),
+    dietaryRestrictions: (prefs.dietary_restrictions || []).filter(Boolean),
+    avoidList: budgetIntent?.avoid || [],
+    mobilityNeeds: [prefs.mobility_needs, prefs.mobility_level, ...(prefs.accessibility_needs || [])].filter(Boolean),
+    pacePreference,
+    budgetTier: budgetIntent?.tier || prefs.budget_tier || 'standard',
+    traitScores,
+    tripIntents
+  };
+}
+
+
 // Derives a single canonical budget line from tier + traits
 // =============================================================================
 
@@ -1009,9 +1301,42 @@ const STRICT_ITINERARY_TOOL = {
                       items: { type: "string" }, 
                       maxItems: 3,
                       description: "2-3 short review snippets highlighting what visitors love"
+                    },
+                    // =========================================================
+                    // PERSONALIZATION GUARANTEE FIELDS
+                    // =========================================================
+                    personalization: {
+                      type: "object",
+                      description: "REQUIRED: Prove why this activity was chosen for THIS specific user",
+                      properties: {
+                        tags: {
+                          type: "array",
+                          items: { type: "string" },
+                          minItems: 2,
+                          maxItems: 6,
+                          description: "Machine-checkable tags tied to user inputs. MUST include at least 2 from: romantic, family-friendly, solo-traveler, local-authentic, tourist-highlight, budget-friendly, premium, splurge, low-pace, high-pace, accessible, adventure, relaxation, foodie, cultural, outdoor, indoor. Match to user's actual preferences."
+                        },
+                        whyThisFits: {
+                          type: "string",
+                          description: "1-2 sentences explaining why this activity fits THIS user. MUST reference at least ONE specific user input (trait, preference, trip intent, or dietary need). Example: 'Chosen for your high authenticity score - this neighborhood gem is off the tourist path' or 'Matches your seafood preference with locally-caught specialties'."
+                        },
+                        confidence: {
+                          type: "number",
+                          minimum: 0,
+                          maximum: 1,
+                          description: "How confident are you this matches the user? 0.9+ = strong match to stated preferences, 0.7-0.9 = good fit, 0.5-0.7 = general recommendation"
+                        },
+                        matchedInputs: {
+                          type: "array",
+                          items: { type: "string" },
+                          minItems: 1,
+                          description: "Which specific user inputs influenced this choice. Examples: 'authenticity_trait:+8', 'food_likes:seafood', 'trip_intent:romantic', 'pace:relaxed', 'budget:premium', 'dietary:vegetarian'"
+                        }
+                      },
+                      required: ["tags", "whyThisFits", "confidence", "matchedInputs"]
                     }
                   },
-                  required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "description", "tags", "bookingRequired", "transportation"]
+                  required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "description", "tags", "bookingRequired", "transportation", "personalization"]
                 }
               }
             },
@@ -4442,9 +4767,42 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         // Log summary
         if (dynamicTransfer) {
           const bookableCount = dynamicTransfer.options.filter(o => o.isBookable).length;
-          console.log(`[Stage 2.5] Transfer pricing complete: ${dynamicTransfer.options.length} options, ${bookableCount} bookable via Viator`);
+        console.log(`[Stage 2.5] Transfer pricing complete: ${dynamicTransfer.options.length} options, ${bookableCount} bookable via Viator`);
         }
       }
+
+      // =======================================================================
+      // STAGE 2.6: Personalization Validation (Phase 3)
+      // Validate itinerary against user preferences before saving
+      // =======================================================================
+      console.log("[Stage 2.6] Validating personalization compliance...");
+      
+      // Build validation context from available preferences
+      const validationCtx = buildValidationContext(
+        prefs || {},
+        budgetIntent,
+        travelDNA?.trait_scores || traitOverrides || {},
+        [] // Trip intents loaded separately for full generation
+      );
+      
+      const validationResult = validateItineraryPersonalization(aiResult.days, validationCtx);
+      
+      // Log validation results
+      console.log(`[Stage 2.6] Personalization score: ${validationResult.personalizationScore}/100`);
+      console.log(`[Stage 2.6] Stats: ${validationResult.stats.personalizationFieldsPresent}/${validationResult.stats.activitiesChecked} activities have personalization fields`);
+      
+      if (validationResult.violations.length > 0) {
+        console.warn(`[Stage 2.6] Violations found: ${validationResult.violations.length}`);
+        validationResult.violations.slice(0, 5).forEach(v => 
+          console.warn(`  - [${v.severity}] ${v.type}: ${v.activityTitle} - ${v.details}`)
+        );
+      }
+      
+      // For now, log warnings but don't reject - we're gathering data on AI compliance
+      // TODO: Enable rejection after baseline is established
+      // if (!validationResult.isValid) {
+      //   console.error("[Stage 2.6] VALIDATION FAILED - would trigger regeneration");
+      // }
 
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
