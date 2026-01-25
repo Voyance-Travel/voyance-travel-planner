@@ -4897,7 +4897,34 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           };
         });
 
-        // CRITICAL: Merge locked activities back into the timeline (strict lock: keep exact time)
+        // CRITICAL: Filter out activities that occur BEFORE arrival time on Day 1
+        // This is a safety net in case the AI ignores the prompt constraints
+        if (isFirstDay && flightContext.arrivalTime24) {
+          const arrivalMins = parseTimeToMinutes(flightContext.arrivalTime24);
+          if (arrivalMins !== null) {
+            const beforeFilter = normalizedActivities.length;
+            normalizedActivities = normalizedActivities.filter((act: { startTime?: string; category?: string; title?: string }) => {
+              const actStart = parseTimeToMinutes(act.startTime || '00:00');
+              if (actStart === null) return true;
+              
+              // Keep activities that start at or after arrival time
+              // Exception: Allow "Arrival at Airport" type activities that match the arrival time
+              const isArrivalActivity = (act.category === 'transport' || act.category === 'logistics') && 
+                (act.title?.toLowerCase().includes('arrival') || act.title?.toLowerCase().includes('airport'));
+              
+              if (actStart < arrivalMins && !isArrivalActivity) {
+                console.log(`[generate-day] FILTERED pre-arrival activity: "${act.title}" at ${act.startTime} (arrival is ${flightContext.arrivalTime24})`);
+                return false;
+              }
+              return true;
+            });
+            
+            if (normalizedActivities.length < beforeFilter) {
+              console.log(`[generate-day] Removed ${beforeFilter - normalizedActivities.length} pre-arrival activities on Day 1`);
+            }
+          }
+        }
+
         if (lockedActivities.length > 0) {
           // Remove any generated activities that conflict with locked activity times
           for (const locked of lockedActivities) {
