@@ -55,6 +55,7 @@ import { useTripPermission, useTripCollaborators } from '@/services/tripCollabor
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
 import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
+import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 
 // =============================================================================
 // TYPES
@@ -1186,6 +1187,8 @@ export function EditorialItinerary({
 
   return (
     <div className="space-y-6">
+      {/* Onboarding Tour for first-time visitors */}
+      <ItineraryOnboardingTour tripId={tripId} />
       {/* Trip Summary Bar - Editorial Style */}
       <div className="py-4 px-4 -mx-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl">
         <div className="flex items-center justify-between gap-4">
@@ -1258,6 +1261,7 @@ export function EditorialItinerary({
                   onClick={handleSave} 
                   disabled={isSaving || !hasChanges} 
                   className="gap-1.5 h-8 text-xs"
+                  data-tour="save-button"
                 >
                   {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                   {hasChanges ? 'Save' : 'Saved ✓'}
@@ -1345,7 +1349,7 @@ export function EditorialItinerary({
                 <ChevronLeft className="w-5 h-5" />
               </Button>
 
-              <div className="flex-1 overflow-x-auto">
+              <div className="flex-1 overflow-x-auto" data-tour="day-picker">
                 <div className="flex gap-2 justify-center">
                   {days.map((day, index) => {
                     const dayDate = day.date ? parseISO(day.date) : null;
@@ -3594,6 +3598,7 @@ function DayCard({
                   disabled={isRegenerating}
                   className="h-8 w-8 hover:bg-accent/10"
                   title="Regenerate Day"
+                  data-tour="regenerate-button"
                 >
                   <RefreshCw className={cn("h-4 w-4", isRegenerating && "animate-spin text-accent")} />
                 </Button>
@@ -4134,6 +4139,7 @@ function ActivityRow({
                       : "hover:bg-secondary text-muted-foreground"
                   )}
                   title={activity.isLocked ? "Unlock to edit" : "Lock"}
+                  data-tour="lock-button"
                 >
                   {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                 </button>
@@ -4145,6 +4151,7 @@ function ActivityRow({
                       <button
                         className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
                         title="More actions"
+                        data-tour="more-actions"
                       >
                         <MoreHorizontal className="h-3.5 w-3.5" />
                       </button>
