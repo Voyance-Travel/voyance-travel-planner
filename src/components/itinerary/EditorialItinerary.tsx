@@ -40,6 +40,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isToday } from 'date-fns';
 import type { ActivityType, ItineraryActivity, WeatherCondition } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { useDestinationImages } from '@/hooks/useDestinationImages';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { WeatherForecast } from './WeatherForecast';
@@ -575,6 +576,9 @@ export function EditorialItinerary({
   
   // Determine effective editability based on permission
   const effectiveIsEditable = isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
+
+  // Fetch 2 destination images for hero and mid-page sections
+  const { heroImage, midImage, isLoading: imagesLoading } = useDestinationImages(destination, destinationCountry);
 
   // Scroll selected day button into view
   useEffect(() => {
@@ -1272,8 +1276,13 @@ export function EditorialItinerary({
         </div>
       </div>
 
-      {/* Destination Photo Carousel */}
-      <DestinationCarousel destination={destination} destinationCountry={destinationCountry} />
+      {/* Destination Hero Image */}
+      <DestinationHeroImage 
+        destination={destination} 
+        destinationCountry={destinationCountry} 
+        imageUrl={heroImage}
+        isLoading={imagesLoading}
+      />
 
       {/* Navigation Tabs */}
       <div className="border-b border-border">
@@ -1476,6 +1485,14 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-8"
           >
+            {/* Destination Mid-page Image */}
+            <DestinationMidImage 
+              destination={destination} 
+              destinationCountry={destinationCountry} 
+              imageUrl={midImage}
+              isLoading={imagesLoading}
+            />
+
             {/* FLIGHT SECTION - Editorial Style */}
             <section className="space-y-5">
               <div className="flex items-center justify-between">
@@ -2179,95 +2196,54 @@ export function EditorialItinerary({
 }
 
 // =============================================================================
-// DESTINATION HERO IMAGE COMPONENT (Single static image - no carousel)
+// DESTINATION IMAGE COMPONENTS (Static images - no carousel)
 // =============================================================================
 
 interface DestinationHeroImageProps {
   destination: string;
   destinationCountry?: string;
+  imageUrl: string | null;
+  isLoading?: boolean;
 }
 
 // Helper to normalize destination strings (remove IATA codes like "(FCO)")
 function normalizeDestination(dest: string): string {
   return (dest || '')
-    // Remove trailing IATA codes like "(FCO)"
     .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
-    // Remove obvious airport keywords (e.g. "Rome Airport")
     .replace(/\b(international\s+)?airport\b/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
-function DestinationCarousel({ destination, destinationCountry }: DestinationHeroImageProps) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+function generateGradientDataUrl(label: string): string {
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) {
+    hash = label.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 40) % 360;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">
+    <defs>
+      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:hsl(${hue1},60%,40%)"/>
+        <stop offset="100%" style="stop-color:hsl(${hue2},70%,30%)"/>
+      </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#g)"/>
+    <text x="50%" y="50%" font-family="system-ui" font-size="52" fill="white" fill-opacity="0.28" text-anchor="middle" dy=".35em">${label}</text>
+  </svg>`;
+
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
+// Hero image at the top
+function DestinationHeroImage({ destination, destinationCountry, imageUrl, isLoading }: DestinationHeroImageProps) {
   const [hasError, setHasError] = useState(false);
-  
-  // Normalize destination (remove airport codes like "Rome (FCO)" -> "Rome")
   const cleanDestination = normalizeDestination(destination);
-  const queryDestination = destinationCountry ? `${cleanDestination}, ${destinationCountry}` : cleanDestination;
-
-  const generateGradientDataUrl = (label: string): string => {
-    let hash = 0;
-    for (let i = 0; i < label.length; i++) {
-      hash = label.charCodeAt(i) + ((hash << 5) - hash);
-    }
-
-    const hue1 = Math.abs(hash % 360);
-    const hue2 = (hue1 + 40) % 360;
-
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">
-      <defs>
-        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:hsl(${hue1},60%,40%)"/>
-          <stop offset="100%" style="stop-color:hsl(${hue2},70%,30%)"/>
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#g)"/>
-      <text x="50%" y="50%" font-family="system-ui" font-size="52" fill="white" fill-opacity="0.28" text-anchor="middle" dy=".35em">${label}</text>
-    </svg>`;
-
-    return `data:image/svg+xml;base64,${btoa(svg)}`;
-  };
-
-  // Fetch single destination image using centralized API
-  useEffect(() => {
-    async function fetchImage() {
-      setIsLoading(true);
-      setHasError(false);
-      try {
-        const { getDestinationImages } = await import('@/services/destinationImagesAPI');
-        const images = await getDestinationImages({
-          destination: queryDestination,
-          imageType: 'hero',
-          limit: 1, // Only 1 image - no carousel
-        });
-        
-        if (images.length > 0) {
-          setImageUrl(images[0].url);
-        } else {
-          setImageUrl(generateGradientDataUrl(cleanDestination));
-        }
-      } catch (err) {
-        console.error('[DestinationHeroImage] Failed to fetch image:', err);
-        setImageUrl(generateGradientDataUrl(cleanDestination));
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    
-    if (cleanDestination) {
-      fetchImage();
-    }
-  }, [cleanDestination, queryDestination]);
-
-  // Handle image load error - fall back to gradient
-  const handleImageError = () => {
-    if (!hasError) {
-      setHasError(true);
-      setImageUrl(generateGradientDataUrl(cleanDestination));
-    }
-  };
+  
+  const displayUrl = hasError ? generateGradientDataUrl(cleanDestination) : (imageUrl || generateGradientDataUrl(cleanDestination));
 
   if (isLoading || !imageUrl) {
     return (
@@ -2288,14 +2264,57 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationHer
     <div className="relative overflow-hidden rounded-xl mb-6">
       <div className="relative h-48 md:h-64">
         <img
-          src={imageUrl}
+          src={displayUrl}
           alt={`${cleanDestination} hero`}
           className="w-full h-full object-cover"
-          onError={handleImageError}
+          onError={() => setHasError(true)}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
         <div className="absolute bottom-4 left-4 right-4">
           <h2 className="text-2xl md:text-3xl font-serif text-white drop-shadow-lg">{cleanDestination}</h2>
+          {destinationCountry && (
+            <p className="text-white/80 text-sm">{destinationCountry}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mid-page image (second static image)
+function DestinationMidImage({ destination, destinationCountry, imageUrl, isLoading }: DestinationHeroImageProps) {
+  const [hasError, setHasError] = useState(false);
+  const cleanDestination = normalizeDestination(destination);
+  
+  const displayUrl = hasError ? generateGradientDataUrl(cleanDestination) : (imageUrl || generateGradientDataUrl(cleanDestination));
+
+  if (isLoading || !imageUrl) {
+    return (
+      <div className="relative overflow-hidden rounded-xl">
+        <div className="relative h-40 md:h-48 bg-gradient-to-br from-primary/20 to-accent/20 animate-pulse flex items-center justify-center">
+          <div className="text-center">
+            <h3 className="text-xl font-serif text-foreground">{cleanDestination}</h3>
+            {destinationCountry && (
+              <p className="text-muted-foreground text-sm">{destinationCountry}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-xl">
+      <div className="relative h-40 md:h-48">
+        <img
+          src={displayUrl}
+          alt={`${cleanDestination} overview`}
+          className="w-full h-full object-cover"
+          onError={() => setHasError(true)}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute bottom-4 left-4 right-4">
+          <h3 className="text-xl font-serif text-white drop-shadow-lg">{cleanDestination}</h3>
           {destinationCountry && (
             <p className="text-white/80 text-sm">{destinationCountry}</p>
           )}
