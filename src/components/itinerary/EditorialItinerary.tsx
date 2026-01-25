@@ -60,7 +60,7 @@ import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizeP
 import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
 import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDrawer';
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
-
+import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -535,6 +535,7 @@ export function EditorialItinerary({
   const [guidedAssistDayIndex, setGuidedAssistDayIndex] = useState<number | null>(null);
   const [pendingGuidedPreferences, setPendingGuidedPreferences] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showShareGuideSheet, setShowShareGuideSheet] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -2368,50 +2369,21 @@ export function EditorialItinerary({
                   </p>
                 </div>
 
-                {/* Share Methods */}
+                {/* Share Guide to Social */}
                 <div className="pt-2 border-t border-border">
-                  <p className="text-xs text-muted-foreground mb-3">Or share via:</p>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={async () => {
-                        if (!shareLink) await handleCreateShareLink();
-                        const link = shareLink || '';
-                        const text = `Join me on a trip to ${destination}!`;
-                        window.open(`mailto:?subject=${encodeURIComponent(text)}&body=${encodeURIComponent(link)}`, '_blank');
-                      }}
-                    >
-                      Email
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={async () => {
-                        if (!shareLink) await handleCreateShareLink();
-                        const link = shareLink || '';
-                        const text = `Join me on a trip to ${destination}! ${link}`;
-                        window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
-                      }}
-                    >
-                      Message
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={async () => {
-                        if (!shareLink) await handleCreateShareLink();
-                        const link = shareLink || '';
-                        const text = `Join me on a trip to ${destination}!`;
-                        window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + link)}`, '_blank');
-                      }}
-                    >
-                      WhatsApp
-                    </Button>
-                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">Share your travel guide:</p>
+                  <Button 
+                    variant="default"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => {
+                      setShowShareModal(false);
+                      setShowShareGuideSheet(true);
+                    }}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Share to Email, Text & Social Media
+                  </Button>
                 </div>
               </>
             )}
@@ -2424,6 +2396,15 @@ export function EditorialItinerary({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Share Guide Sheet - Email, SMS, Social */}
+      <ShareGuideSheet
+        open={showShareGuideSheet}
+        onClose={() => setShowShareGuideSheet(false)}
+        shareLink={shareLink || ''}
+        destination={destination}
+        onGenerateLink={handleCreateShareLink}
+      />
 
       {/* Optimize Preferences Dialog */}
       <OptimizePreferencesDialog
