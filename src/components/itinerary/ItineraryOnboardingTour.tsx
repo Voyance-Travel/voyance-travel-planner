@@ -267,15 +267,21 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
         )}
 
         {/* Tooltip card */}
-        <motion.div
-          key={step.id}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-          className="absolute pointer-events-auto w-[320px] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
-          style={getTooltipStyle()}
+        <div 
+          className={cn(
+            "absolute pointer-events-auto",
+            isCentered && "inset-0 flex items-center justify-center"
+          )}
         >
+          <motion.div
+            key={step.id}
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="w-[320px] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
+            style={isCentered ? {} : getTooltipStyle()}
+          >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-primary/10 to-transparent">
             <div className="flex items-center gap-2">
@@ -341,7 +347,8 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
               {!isLast && <ChevronRight className="h-4 w-4" />}
             </Button>
           </div>
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
     </AnimatePresence>
   );
