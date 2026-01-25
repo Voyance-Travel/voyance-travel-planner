@@ -4975,6 +4975,7 @@ export type Database = {
           schedule_flexibility: string | null
           seat_preference: string | null
           sleep_schedule: string | null
+          social_energy: string | null
           stripe_connect_account_id: string | null
           stripe_connect_onboarding_complete: boolean | null
           stripe_connect_status: string | null
@@ -5054,6 +5055,7 @@ export type Database = {
           schedule_flexibility?: string | null
           seat_preference?: string | null
           sleep_schedule?: string | null
+          social_energy?: string | null
           stripe_connect_account_id?: string | null
           stripe_connect_onboarding_complete?: boolean | null
           stripe_connect_status?: string | null
@@ -5133,6 +5135,7 @@ export type Database = {
           schedule_flexibility?: string | null
           seat_preference?: string | null
           sleep_schedule?: string | null
+          social_energy?: string | null
           stripe_connect_account_id?: string | null
           stripe_connect_onboarding_complete?: boolean | null
           stripe_connect_status?: string | null

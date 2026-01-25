@@ -77,6 +77,7 @@ export interface UserPreferencesPayload {
   sleep_schedule?: string;
   daytime_bias?: string;
   downtime_ratio?: string;
+  social_energy?: string;
 }
 
 export interface TravelDNAPayload {
@@ -122,8 +123,9 @@ const QUIZ_FIELD_MAP: Record<string, keyof UserPreferencesPayload> = {
   'dining_style': 'dining_style',
   'dietary_restrictions': 'dietary_restrictions',
   'weather_preference': 'climate_preferences', // CRITICAL: climate prefs
-  'cabin_class': 'preferred_cabin_class', // NEW: Flight cabin class
-  // flight_preferences is multi-select, handled specially in mapQuizAnswersToPreferences
+  'cabin_class': 'preferred_cabin_class', // Flight cabin class
+  'social_energy': 'social_energy', // Introvert/extrovert preference
+  // flight_preferences is handled specially in mapQuizAnswersToPreferences
   
   // ==== LEGACY/ALTERNATE MAPPINGS (camelCase versions) ====
   'style': 'travel_style',
