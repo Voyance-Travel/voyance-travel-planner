@@ -4879,31 +4879,38 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 .eq('itinerary_day_id', dayRow.id)
                 .eq('is_locked', false);
               
-              // Insert all activities (locked ones are preserved; unlocked are new)
-              const activityRows = normalizedActivities.map((act: {
-                id?: string;
-                title?: string;
-                name?: string;
-                description?: string;
-                category?: string;
-                startTime?: string;
-                endTime?: string;
-                durationMinutes?: number;
-                location?: { name?: string; address?: string };
-                cost?: { amount: number; currency: string };
-                isLocked?: boolean;
-                tags?: string[];
-                bookingRequired?: boolean;
-                tips?: string;
-                photos?: unknown;
-                walkingDistance?: string;
-                walkingTime?: string;
-                transportation?: unknown;
-                rating?: unknown;
-                website?: string;
-                viatorProductCode?: string;
-              }, idx: number) => ({
-                id: act.id, // Keep stable IDs
+              // Insert all activities.
+              // IMPORTANT: The DB primary key is UUID, but the AI/frontend may produce ephemeral string IDs.
+              // We store those in external_id and let the DB generate UUIDs, then we return UUIDs back to the client.
+              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+              const isValidUUID = (str: string | undefined): boolean => !!str && uuidRegex.test(str);
+
+              const makeRow = (
+                act: {
+                  id?: string;
+                  title?: string;
+                  name?: string;
+                  description?: string;
+                  category?: string;
+                  startTime?: string;
+                  endTime?: string;
+                  durationMinutes?: number;
+                  location?: { name?: string; address?: string };
+                  cost?: { amount: number; currency: string };
+                  isLocked?: boolean;
+                  tags?: string[];
+                  bookingRequired?: boolean;
+                  tips?: string;
+                  photos?: unknown;
+                  walkingDistance?: string;
+                  walkingTime?: string;
+                  transportation?: unknown;
+                  rating?: unknown;
+                  website?: string;
+                  viatorProductCode?: string;
+                },
+                idx: number
+              ) => ({
                 itinerary_day_id: dayRow.id,
                 trip_id: tripId,
                 sort_order: idx,
@@ -4927,18 +4934,73 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 rating: act.rating || null,
                 website: act.website || null,
                 viator_product_code: act.viatorProductCode || null,
-              }));
-              
-              // For locked activities, use upsert to preserve them
-              const { error: actError } = await supabase
-                .from('itinerary_activities')
-                .upsert(activityRows, { onConflict: 'id' });
-              
-              if (actError) {
-                console.error('[generate-day] Failed to insert activities:', actError);
-              } else {
-                console.log(`[generate-day] Persisted ${activityRows.length} activities to itinerary_activities`);
+              });
+
+              const uuidRows = normalizedActivities
+                .filter((a: { id?: string }) => isValidUUID(a.id))
+                .map((act: any, idx: number) => ({
+                  id: act.id,
+                  external_id: act.external_id || null,
+                  ...makeRow(act, idx),
+                }));
+
+              const externalRows = normalizedActivities
+                .filter((a: { id?: string }) => !isValidUUID(a.id))
+                .map((act: any, idx: number) => ({
+                  external_id: act.id || null,
+                  ...makeRow(act, idx),
+                }));
+
+              // 1) Preserve/update UUID-based activities (e.g., locked activities already in DB)
+              if (uuidRows.length > 0) {
+                const { error: uuidErr } = await supabase
+                  .from('itinerary_activities')
+                  .upsert(uuidRows, { onConflict: 'id' });
+                if (uuidErr) {
+                  console.error('[generate-day] Failed to upsert UUID activities:', uuidErr);
+                }
               }
+
+              // 2) Upsert external-id based activities (newly generated)
+              let persistedExternal: Array<{ id: string; external_id: string | null; is_locked: boolean | null }> = [];
+              if (externalRows.length > 0) {
+                const { data, error: extErr } = await supabase
+                  .from('itinerary_activities')
+                  .upsert(externalRows, { onConflict: 'trip_id,itinerary_day_id,external_id' })
+                  .select('id, external_id, is_locked');
+                if (extErr) {
+                  console.error('[generate-day] Failed to upsert external-id activities:', extErr);
+                } else {
+                  persistedExternal = (data || []) as any;
+                }
+              }
+
+              // Update the returned payload to use DB UUID ids (so future lock toggles + regen are stable)
+              if (persistedExternal.length > 0) {
+                const map = new Map(
+                  persistedExternal
+                    .filter(r => r.external_id)
+                    .map(r => [r.external_id as string, r])
+                );
+
+                normalizedActivities = normalizedActivities.map((act: any) => {
+                  if (isValidUUID(act.id)) return act;
+                  const row = act.id ? map.get(act.id) : undefined;
+                  if (!row) return act;
+                  return {
+                    ...act,
+                    id: row.id,
+                    isLocked: row.is_locked ?? act.isLocked,
+                  };
+                });
+
+                // Ensure the response day uses the updated IDs
+                generatedDay.activities = normalizedActivities;
+              }
+
+              console.log(
+                `[generate-day] Persisted activities to itinerary_activities (uuid=${uuidRows.length}, external=${externalRows.length})`
+              );
             }
           } catch (persistErr) {
             console.error('[generate-day] Persist error:', persistErr);
@@ -5352,23 +5414,43 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           );
         }
 
-        // Match by day + title + optional start_time in normalized tables
-        let query = supabase
+        // Prefer matching by external_id (frontend ephemeral id) if present in DB
+        const { data: actByExternal } = await supabase
           .from('itinerary_activities')
-          .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+          .select('id')
           .eq('itinerary_day_id', dayRow.id)
           .eq('trip_id', tripId)
-          .eq('title', activityTitle);
-        
-        if (startTime) {
-          query = query.eq('start_time', startTime);
-        }
+          .eq('external_id', activityId)
+          .maybeSingle();
 
-        const { error, count } = await query;
-        updateError = error;
-        updatedCount = count ?? 0;
-        
-        console.log(`[toggle-activity-lock] Fallback match: day=${dayNumber}, title="${activityTitle}", time=${startTime}, updated=${updatedCount}`);
+        if (actByExternal?.id) {
+          const { error, count } = await supabase
+            .from('itinerary_activities')
+            .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+            .eq('id', actByExternal.id)
+            .eq('trip_id', tripId);
+          updateError = error;
+          updatedCount = count ?? 0;
+          console.log(`[toggle-activity-lock] Matched by external_id, updated id=${actByExternal.id}`);
+        } else {
+          // Fallback match by day + title + optional start_time
+          let query = supabase
+            .from('itinerary_activities')
+            .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+            .eq('itinerary_day_id', dayRow.id)
+            .eq('trip_id', tripId)
+            .eq('title', activityTitle);
+          
+          if (startTime) {
+            query = query.eq('start_time', startTime);
+          }
+
+          const { error, count } = await query;
+          updateError = error;
+          updatedCount = count ?? 0;
+          
+          console.log(`[toggle-activity-lock] Fallback match: day=${dayNumber}, title="${activityTitle}", time=${startTime}, updated=${updatedCount}`);
+        }
       }
       
       if (updateError) {

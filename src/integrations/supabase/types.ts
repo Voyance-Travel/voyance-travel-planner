@@ -3091,6 +3091,7 @@ export type Database = {
           description: string | null
           duration_minutes: number | null
           end_time: string | null
+          external_id: string | null
           extra_data: Json | null
           id: string
           is_locked: boolean
@@ -3120,6 +3121,7 @@ export type Database = {
           description?: string | null
           duration_minutes?: number | null
           end_time?: string | null
+          external_id?: string | null
           extra_data?: Json | null
           id?: string
           is_locked?: boolean
@@ -3149,6 +3151,7 @@ export type Database = {
           description?: string | null
           duration_minutes?: number | null
           end_time?: string | null
+          external_id?: string | null
           extra_data?: Json | null
           id?: string
           is_locked?: boolean
