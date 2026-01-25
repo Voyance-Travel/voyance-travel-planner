@@ -1,10 +1,11 @@
 /**
  * Hook to fetch 2 distinct destination images for hero and mid-page sections.
- * Fetches once per destination and provides both images to avoid multiple API calls.
+ * Uses curated images directly for reliability.
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { getDestinationImages } from '@/services/destinationImagesAPI';
+import { getDestinationImages as getCuratedImages, hasCuratedImages } from '@/utils/destinationImages';
+import { getDestinationImages as getAPIImages } from '@/services/destinationImagesAPI';
 
 interface DestinationImagesResult {
   heroImage: string | null;
@@ -21,14 +22,14 @@ function normalizeDestination(dest: string): string {
     .trim();
 }
 
-function generateGradientDataUrl(label: string): string {
-  let hash = 0;
+function generateGradientDataUrl(label: string, variant: number = 0): string {
+  let hash = variant;
   for (let i = 0; i < label.length; i++) {
     hash = label.charCodeAt(i) + ((hash << 5) - hash);
   }
 
   const hue1 = Math.abs(hash % 360);
-  const hue2 = (hue1 + 40) % 360;
+  const hue2 = (hue1 + 40 + variant * 30) % 360;
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">
     <defs>
@@ -69,32 +70,54 @@ export function useDestinationImages(
     async function fetchImages() {
       setIsLoading(true);
       try {
-        // Fetch 2 images at once
-        const images = await getDestinationImages({
+        // First, try to use curated images directly (faster and more reliable)
+        if (hasCuratedImages(cleanDestination)) {
+          const curatedUrls = getCuratedImages(cleanDestination, 2);
+          console.log('[useDestinationImages] Using curated images:', curatedUrls);
+          
+          if (!cancelled && curatedUrls.length >= 2) {
+            // Ensure they're different
+            if (curatedUrls[0] !== curatedUrls[1]) {
+              setHeroImage(curatedUrls[0]);
+              setMidImage(curatedUrls[1]);
+            } else {
+              setHeroImage(curatedUrls[0]);
+              setMidImage(generateGradientDataUrl(cleanDestination, 1));
+            }
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // Fallback to API for non-curated destinations
+        const images = await getAPIImages({
           destination: queryDestination,
           imageType: 'gallery',
           limit: 2,
         });
 
+        console.log('[useDestinationImages] API returned:', images.map(i => i.url));
+
         if (cancelled) return;
 
         if (images.length >= 2) {
-          setHeroImage(images[0].url);
-          setMidImage(images[1].url);
+          // Ensure we have 2 DIFFERENT images
+          const url1 = images[0].url;
+          const url2 = images[1].url !== url1 ? images[1].url : generateGradientDataUrl(cleanDestination, 1);
+          setHeroImage(url1);
+          setMidImage(url2);
         } else if (images.length === 1) {
-          // Only 1 image available - use it for hero, gradient for mid
           setHeroImage(images[0].url);
-          setMidImage(generateGradientDataUrl(cleanDestination));
+          setMidImage(generateGradientDataUrl(cleanDestination, 1));
         } else {
-          // No images - use gradients for both
-          setHeroImage(generateGradientDataUrl(cleanDestination));
-          setMidImage(generateGradientDataUrl(cleanDestination));
+          setHeroImage(generateGradientDataUrl(cleanDestination, 0));
+          setMidImage(generateGradientDataUrl(cleanDestination, 1));
         }
       } catch (err) {
         console.error('[useDestinationImages] Failed to fetch images:', err);
         if (!cancelled) {
-          setHeroImage(generateGradientDataUrl(cleanDestination));
-          setMidImage(generateGradientDataUrl(cleanDestination));
+          setHeroImage(generateGradientDataUrl(cleanDestination, 0));
+          setMidImage(generateGradientDataUrl(cleanDestination, 1));
         }
       } finally {
         if (!cancelled) {
