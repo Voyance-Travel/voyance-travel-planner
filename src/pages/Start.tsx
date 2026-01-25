@@ -817,16 +817,39 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* Full-width Editorial Hero */}
-      <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
-        {/* Background Image */}
-        <div className="absolute inset-0">
-          <img 
-            src={itineraryOnlyMode ? heroItineraryImage : heroHotelImage}
-            alt=""
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-background" />
+      {/* Scrapbook Photo Collage Hero */}
+      <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-gradient-to-br from-stone-100 via-amber-50/50 to-stone-100 dark:from-stone-900 dark:via-stone-800 dark:to-stone-900">
+        {/* Photo Collage Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          {/* Scattered polaroid-style photos */}
+          <div className="absolute -top-8 -left-12 w-48 h-64 rotate-[-12deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute top-16 left-[15%] w-40 h-52 rotate-[8deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute -top-4 right-[20%] w-44 h-56 rotate-[-6deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute top-8 -right-8 w-52 h-64 rotate-[15deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute bottom-[20%] -left-6 w-44 h-56 rotate-[10deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute bottom-12 left-[12%] w-36 h-48 rotate-[-8deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute bottom-[15%] right-[10%] w-48 h-60 rotate-[6deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute -bottom-4 right-[25%] w-40 h-52 rotate-[-14deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
+            <img src="https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=400&q=80" alt="" className="w-full h-full object-cover" />
+          </div>
+          
+          {/* Soft center fade for readability */}
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-stone-100/80 to-stone-100 dark:via-stone-900/80 dark:to-stone-900" />
+          <div className="absolute inset-0 bg-radial-gradient from-stone-100/90 via-stone-100/60 to-transparent dark:from-stone-900/90 dark:via-stone-900/60" style={{ background: 'radial-gradient(ellipse at center, hsl(var(--background) / 0.85) 0%, transparent 70%)' }} />
         </div>
 
         {/* Content */}
@@ -839,18 +862,18 @@ export default function Start() {
             className="text-center mb-10"
           >
             <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 ${
-              itineraryOnlyMode ? 'text-amber-300' : 'text-sky-300'
-            } drop-shadow-md`}>
+              itineraryOnlyMode ? 'text-amber-600' : 'text-sky-600'
+            }`}>
               {itineraryOnlyMode ? 'Flight Booked' : 'Need Accommodation'}
             </p>
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-white drop-shadow-lg leading-tight">
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-foreground leading-tight">
               {itineraryOnlyMode ? (
                 <>Build My <em className="italic">Itinerary</em></>
               ) : (
                 <>Find My <em className="italic">Hotel</em></>
               )}
             </h1>
-            <p className="mt-4 text-lg text-white/90 drop-shadow-md max-w-lg mx-auto">
+            <p className="mt-4 text-lg text-muted-foreground max-w-lg mx-auto">
               {itineraryOnlyMode
                 ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
                 : "Tell us where you're headed, and we'll find the ideal place to stay."}
