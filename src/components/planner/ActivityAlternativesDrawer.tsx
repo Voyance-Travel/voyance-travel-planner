@@ -357,8 +357,8 @@ export default function ActivityAlternativesDrawer({
   const hasAlternatives = similarAlternatives.length > 0 || differentAlternatives.length > 0;
 
   return (
-    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-lg p-0">
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()} modal={true}>
+      <SheetContent side="right" className="w-full sm:max-w-lg p-0 z-[60]">
         <SheetHeader className="p-6 border-b border-border">
           <SheetTitle className="flex items-center gap-2">
             <ArrowRightLeft className="w-5 h-5 text-primary" />
