@@ -20,6 +20,7 @@ import {
 import type { ItineraryActivity } from '@/types/itinerary';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { trackActivitySwap } from '@/services/behaviorTrackingService';
 
 interface ActivityAlternativesDrawerProps {
   open: boolean;
@@ -253,6 +254,21 @@ export default function ActivityAlternativesDrawer({
   const handleSelectAlternative = (alt: AlternativeActivity) => {
     setSelectedId(alt.id);
     
+    // Track the swap for personalization learning
+    if (activity) {
+      trackActivitySwap(
+        activity.id,
+        activity.title,
+        activity.type || 'activity',
+        activity.tags || [],
+        alt.id,
+        alt.name,
+        alt.category,
+        [], // New activity tags will be populated by the AI
+        destination
+      );
+    }
+    
     const newActivity: ItineraryActivity = {
       id: alt.id,
       title: alt.name,
@@ -268,7 +284,7 @@ export default function ActivityAlternativesDrawer({
       rating: alt.rating,
       tags: [],
       isLocked: false,
-      tips: alt.whyRecommended || undefined, // Use the AI recommendation as the new tip
+      tips: alt.whyRecommended || undefined,
     };
 
     // Slight delay for visual feedback, then swap

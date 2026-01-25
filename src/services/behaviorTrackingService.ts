@@ -20,6 +20,8 @@ export type EnrichmentType =
   | 'activity_save'
   | 'activity_remove'
   | 'activity_reorder'
+  | 'activity_swap'      // NEW: User swapped for alternative
+  | 'activity_complete'  // NEW: Activity kept through trip completion
   | 'booking_abandon'
   | 'time_change'
   | 'category_preference';
@@ -218,6 +220,68 @@ export function trackActivityRemoval(
   
   // Track negative category signal
   trackCategoryInteraction(category, 'remove');
+}
+
+/**
+ * Track when user swaps an activity for an alternative
+ * Captures personalization tags from both original and replacement
+ */
+export function trackActivitySwap(
+  originalActivityId: string,
+  originalActivityName: string,
+  originalCategory: string,
+  originalPersonalizationTags: string[],
+  newActivityId: string,
+  newActivityName: string,
+  newCategory: string,
+  newPersonalizationTags: string[],
+  destination?: string
+): void {
+  // Track the swap event with all personalization context
+  trackEvent({
+    enrichment_type: 'activity_swap',
+    entity_type: 'activity',
+    entity_id: originalActivityId,
+    entity_name: originalActivityName,
+    metadata: { 
+      original_category: originalCategory,
+      original_tags: originalPersonalizationTags,
+      new_activity_id: newActivityId,
+      new_activity_name: newActivityName,
+      new_category: newCategory,
+      new_tags: newPersonalizationTags,
+      destination
+    },
+    feedback_tags: originalPersonalizationTags // Tags that were rejected
+  });
+  
+  // Track negative signal for original category
+  trackCategoryInteraction(originalCategory, 'remove');
+  
+  // Track positive signal for new category
+  trackCategoryInteraction(newCategory, 'save');
+}
+
+/**
+ * Track when activity is kept through trip completion (positive signal)
+ */
+export function trackActivityComplete(
+  activityId: string,
+  activityName: string,
+  category: string,
+  personalizationTags: string[],
+  destination?: string
+): void {
+  trackEvent({
+    enrichment_type: 'activity_complete',
+    entity_type: 'activity',
+    entity_id: activityId,
+    entity_name: activityName,
+    metadata: { category, destination },
+    feedback_tags: personalizationTags
+  });
+  
+  trackCategoryInteraction(category, 'complete');
 }
 
 /**
