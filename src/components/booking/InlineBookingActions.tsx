@@ -41,6 +41,8 @@ export interface InlineBookingActivity {
   id: string;
   title: string;
   category?: string;
+  /** Location/venue information - used for restaurant name lookup */
+  location?: { name?: string; address?: string };
   bookingState?: BookingItemState;
   bookingRequired?: boolean;
   quotePriceCents?: number;
@@ -335,9 +337,11 @@ export function InlineBookingActions({
   }
   
   if (linkType === 'find_restaurant') {
+    // Prefer venue name from location over generic activity title
+    const restaurantName = activity.location?.name || activity.title;
     return (
       <RestaurantLink 
-        restaurantName={activity.title} 
+        restaurantName={restaurantName} 
         destination={destination} 
       />
     );
