@@ -236,10 +236,12 @@ export default function Destinations() {
                   Plan My Trip
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-                <Button size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
-                  <Compass className="mr-2 h-4 w-4" />
-                  Browse All Destinations
-                </Button>
+                <Link to="/explore">
+                  <Button size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
+                    <Compass className="mr-2 h-4 w-4" />
+                    Browse All Destinations
+                  </Button>
+                </Link>
               </div>
             </motion.div>
           </div>
