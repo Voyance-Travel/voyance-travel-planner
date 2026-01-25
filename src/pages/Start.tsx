@@ -1064,7 +1064,7 @@ export default function Start() {
               {/* Trip Occasion - Compact */}
               <div className="space-y-3">
                 <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                  What's the occasion?
+                  Trip Type
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {tripOccasions.slice(0, 6).map((occasion) => (
