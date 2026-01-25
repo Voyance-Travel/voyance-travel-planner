@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sheet,
@@ -70,7 +71,8 @@ export default function ActivityAlternativesDrawer({
   const [differentAlternatives, setDifferentAlternatives] = useState<AlternativeActivity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loadingType, setLoadingType] = useState<'initial' | 'similar' | 'different' | 'filter'>('initial');
+  const [loadingType, setLoadingType] = useState<'initial' | 'similar' | 'different' | 'filter' | 'search'>('initial');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch both similar and different alternatives when drawer opens
   useEffect(() => {
@@ -81,6 +83,7 @@ export default function ActivityAlternativesDrawer({
       setSimilarAlternatives([]);
       setDifferentAlternatives([]);
       setActiveFilter(null);
+      setSearchQuery('');
     }
   }, [open, activity]);
 
@@ -202,6 +205,46 @@ export default function ActivityAlternativesDrawer({
     } catch (error) {
       console.error('Error:', error);
       toast.error('Failed to load suggestions');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCustomSearch = async () => {
+    if (!activity || !searchQuery.trim()) return;
+    
+    // Clear filters when doing custom search
+    setActiveFilter(null);
+    setIsLoading(true);
+    setLoadingType('search');
+
+    try {
+      const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
+        body: {
+          currentActivity: {
+            id: activity.id,
+            name: activity.title,
+            type: activity.type,
+            description: activity.description,
+            time: activity.time,
+          },
+          destination,
+          searchQuery: searchQuery.trim(),
+          excludeActivities: existingActivities,
+          suggestionMode: 'search',
+        },
+      });
+
+      if (error) {
+        console.error('Error searching alternatives:', error);
+        toast.error('Failed to search');
+      } else if (data?.alternatives) {
+        setSimilarAlternatives(data.alternatives);
+        setDifferentAlternatives([]);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Failed to search');
     } finally {
       setIsLoading(false);
     }
@@ -332,9 +375,44 @@ export default function ActivityAlternativesDrawer({
           </SheetDescription>
         </SheetHeader>
 
+        {/* Search input */}
+        <div className="p-4 border-b border-border">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleCustomSearch();
+            }}
+            className="flex gap-2"
+          >
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search for something specific..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-10"
+                disabled={isLoading}
+                maxLength={100}
+              />
+            </div>
+            <Button 
+              type="submit" 
+              size="sm" 
+              className="h-10 px-4"
+              disabled={isLoading || !searchQuery.trim()}
+            >
+              {isLoading && loadingType === 'search' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                'Search'
+              )}
+            </Button>
+          </form>
+        </div>
+
         {/* Quick suggestion chips */}
         <div className="p-4 border-b border-border">
-          <p className="text-xs text-muted-foreground mb-3">What are you looking for?</p>
+          <p className="text-xs text-muted-foreground mb-3">Or choose a category:</p>
           <div className="flex flex-wrap gap-2">
             {QUICK_SUGGESTIONS.map((suggestion) => {
               const Icon = suggestion.icon;
@@ -359,7 +437,7 @@ export default function ActivityAlternativesDrawer({
           </div>
         </div>
 
-        <ScrollArea className="h-[calc(100vh-280px)]">
+        <ScrollArea className="h-[calc(100vh-380px)]">
           <div className="p-4 space-y-6">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
