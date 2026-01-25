@@ -442,3 +442,18 @@ export function useRemoveFriend() {
     },
   });
 }
+
+export function useCancelFriendRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: removeFriend, // Same underlying function - deletes the friendship record
+    onSuccess: () => {
+      toast.success('Friend request cancelled');
+      queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to cancel request');
+    },
+  });
+}
