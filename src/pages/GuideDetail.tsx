@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { guides, getGuideBySlug, getRelatedGuides } from '@/data/guides';
 import { toast } from 'sonner';
+import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 // Parse markdown-style content into structured JSX
 function parseContent(content: string) {
   // Remove the main title (# Title) as it's displayed in the hero
@@ -179,11 +180,13 @@ function formatInlineStyles(text: string): string {
 
 export default function GuideDetail() {
   const { slug } = useParams<{ slug: string }>();
-  const [copied, setCopied] = useState(false);
+  const [showShareSheet, setShowShareSheet] = useState(false);
   
   // Find guide by slug or id (for backwards compatibility)
   const guide = slug ? (getGuideBySlug(slug) || guides.find(g => g.slug === slug || String(guides.indexOf(g) + 1) === slug)) : undefined;
   
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+
   if (!guide) {
     return (
       <MainLayout>
@@ -203,35 +206,6 @@ export default function GuideDetail() {
   }
 
   const relatedGuides = getRelatedGuides(guide).slice(0, 3);
-
-  const handleShare = async () => {
-    const shareUrl = window.location.href;
-    const shareData = {
-      title: guide.title,
-      text: guide.summary,
-      url: shareUrl,
-    };
-
-    // Try native share first (mobile)
-    if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      try {
-        await navigator.share(shareData);
-        return;
-      } catch (err) {
-        // User cancelled or share failed, fall through to clipboard
-      }
-    }
-
-    // Fall back to clipboard copy
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      toast.success('Link copied to clipboard');
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error('Failed to copy link');
-    }
-  };
 
   return (
     <MainLayout>
@@ -342,21 +316,20 @@ export default function GuideDetail() {
             variant="outline" 
             size="sm" 
             className="gap-2"
-            onClick={handleShare}
+            onClick={() => setShowShareSheet(true)}
           >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4 text-green-500" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Share2 className="h-4 w-4" />
-                Share Guide
-              </>
-            )}
+            <Share2 className="h-4 w-4" />
+            Share Guide
           </Button>
         </div>
+
+        {/* Share Guide Sheet */}
+        <ShareGuideSheet
+          open={showShareSheet}
+          onClose={() => setShowShareSheet(false)}
+          shareLink={shareUrl}
+          destination={guide.title}
+        />
       </article>
       
       {/* Related Guides */}
