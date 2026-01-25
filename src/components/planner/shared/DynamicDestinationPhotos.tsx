@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, MapPin, Calendar, Users, ImageOff, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { MapPin, Calendar, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { prefetchDestinationImages } from '@/utils/imagePrefetch';
 
@@ -22,6 +22,12 @@ interface DestinationImage {
   source: 'curated' | 'database' | 'google_places' | 'lovable_ai' | 'pexels' | 'fallback';
 }
 
+/**
+ * Simplified destination photos component
+ * - Uses landmark-driven fetching from backend (POI-based queries)
+ * - Shows only 1 photo (single hero, no carousel)
+ * - Backend already uses points_of_interest for relevant landmark searches
+ */
 export default function DynamicDestinationPhotos({
   destination,
   startDate,
@@ -31,69 +37,48 @@ export default function DynamicDestinationPhotos({
   className = '',
   hideOverlayText = false,
 }: DynamicDestinationPhotosProps) {
-  const [images, setImages] = useState<DestinationImage[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
+  const [heroImage, setHeroImage] = useState<DestinationImage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
 
   // Clean destination name (remove airport code)
   const cleanDestination = destination
-    .replace(/\s*\([A-Z]{3}\)\s*$/i, '') // Remove (XXX) airport codes
+    .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
     .trim();
 
-  // Track if we've already fetched for this destination to prevent re-fetching
+  // Track if we've already fetched for this destination
   const fetchedRef = useRef<string | null>(null);
 
-  // Fetch images from cache first, then backend if needed
+  // Fetch single hero image (landmark-driven from backend)
   useEffect(() => {
     if (!cleanDestination) return;
 
-    // Reset carousel index when destination changes
-    setCurrentIndex(0);
-
     // Skip if we already fetched for this exact destination
-    if (fetchedRef.current === cleanDestination && images.length > 0) {
-      console.log('[DynamicPhotos] Already loaded for:', cleanDestination);
+    if (fetchedRef.current === cleanDestination && heroImage) {
       return;
     }
 
-    const loadImages = async () => {
-      const isRome = cleanDestination.toLowerCase().trim().split(',')[0] === 'rome';
-      const shuffleOnce = <T,>(arr: T[]): T[] => {
-        const copy = [...arr];
-        for (let i = copy.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [copy[i], copy[j]] = [copy[j], copy[i]];
-        }
-        return copy;
-      };
-
-      // Use centralized API that enforces curated images for Rome (no people)
+    const loadImage = async () => {
       setIsLoading(true);
       setError(false);
 
       try {
-        console.log('[DynamicPhotos] Fetching images for:', cleanDestination);
+        console.log('[DynamicPhotos] Fetching landmark-driven image for:', cleanDestination);
 
-        // Trigger prefetch to populate persistent cache for future use
+        // Trigger prefetch for future use
         prefetchDestinationImages(cleanDestination);
 
-        // Use centralized API - handles Rome curated images automatically
+        // Fetch only 1 image - backend uses POI-based query for relevance
         const { getDestinationImages: fetchDestinationImages } = await import('@/services/destinationImagesAPI');
         const fetchedImages = await fetchDestinationImages({
           destination: cleanDestination,
           imageType: 'hero',
-          limit: 4,
+          limit: 1, // Only 1 image - no carousel
         });
 
         if (fetchedImages.length > 0) {
-          console.log('[DynamicPhotos] Got images:', fetchedImages.length);
-          const imagesToUse = isRome ? shuffleOnce(fetchedImages) : fetchedImages;
-          setImages(imagesToUse);
-          if (isRome && imagesToUse.length > 1) {
-            setCurrentIndex(Math.floor(Math.random() * imagesToUse.length));
-          }
+          console.log('[DynamicPhotos] Got landmark image:', fetchedImages[0].url.substring(0, 60));
+          setHeroImage(fetchedImages[0]);
           fetchedRef.current = cleanDestination;
         } else {
           console.log('[DynamicPhotos] No images returned');
@@ -107,22 +92,8 @@ export default function DynamicDestinationPhotos({
       }
     };
 
-    loadImages();
+    loadImage();
   }, [cleanDestination]);
-
-  // Auto-rotate images
-  useEffect(() => {
-    if (isHovered || variant === 'compact' || images.length <= 1) return;
-    
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % images.length);
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, [images.length, isHovered, variant]);
-
-  const goNext = useCallback(() => setCurrentIndex((prev) => (prev + 1) % images.length), [images.length]);
-  const goPrev = useCallback(() => setCurrentIndex((prev) => (prev - 1 + images.length) % images.length), [images.length]);
 
   const formatDateRange = () => {
     if (!startDate || !endDate) return null;
@@ -148,41 +119,44 @@ export default function DynamicDestinationPhotos({
     };
   };
 
-  // Loading state
-  if (isLoading) {
-    if (variant === 'compact') {
-      return (
-        <div className={`relative rounded-xl overflow-hidden h-20 ${className}`} style={getGradientStyle()}>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 text-white/60 animate-spin" />
-          </div>
-          <div className="absolute inset-0 p-3 flex items-center">
-            <div className="flex items-center gap-2 text-white text-sm">
-              <MapPin className="w-4 h-4" />
-              <span className="font-medium">{cleanDestination}</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
+  // Compact variant - loading
+  if (isLoading && variant === 'compact') {
     return (
-      <div className={`relative rounded-2xl overflow-hidden ${variant === 'banner' ? 'h-32' : 'h-56 md:h-72'} ${className}`} style={getGradientStyle()}>
+      <div className={`relative rounded-xl overflow-hidden h-20 ${className}`} style={getGradientStyle()}>
         <div className="absolute inset-0 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-white/60 animate-spin" />
+          <Loader2 className="w-5 h-5 text-white/60 animate-spin" />
         </div>
-        <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
-          <div className="flex items-center gap-2 text-white mb-2">
-            <MapPin className="w-5 h-5" />
-            <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
+        <div className="absolute inset-0 p-3 flex items-center">
+          <div className="flex items-center gap-2 text-white text-sm">
+            <MapPin className="w-4 h-4" />
+            <span className="font-medium">{cleanDestination}</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // Error/no images - show gradient
-  if (error || images.length === 0) {
+  // Loading state for hero/banner
+  if (isLoading) {
+    return (
+      <div className={`relative rounded-2xl overflow-hidden ${variant === 'banner' ? 'h-32' : 'h-56 md:h-72'} ${className}`} style={getGradientStyle()}>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-white/60 animate-spin" />
+        </div>
+        {!hideOverlayText && (
+          <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
+            <div className="flex items-center gap-2 text-white mb-2">
+              <MapPin className="w-5 h-5" />
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Error/no image - show gradient with text overlay
+  if (error || !heroImage) {
     if (variant === 'compact') {
       return (
         <div className={`relative rounded-xl overflow-hidden h-20 ${className}`} style={getGradientStyle()}>
@@ -227,38 +201,39 @@ export default function DynamicDestinationPhotos({
 
     return (
       <div className={`relative rounded-2xl overflow-hidden h-56 md:h-72 ${className}`} style={getGradientStyle()}>
-        <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
-          <div className="flex items-center gap-2 text-white mb-2">
-            <MapPin className="w-5 h-5" />
-            <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
+        {!hideOverlayText && (
+          <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
+            <div className="flex items-center gap-2 text-white mb-2">
+              <MapPin className="w-5 h-5" />
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
+            </div>
+            <div className="flex items-center gap-4 text-white/80 text-sm">
+              {formatDateRange() && (
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4" />
+                  {formatDateRange()}
+                </span>
+              )}
+              {travelers && (
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-4 h-4" />
+                  {travelers} traveler{travelers > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-white/80 text-sm">
-            {formatDateRange() && (
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4" />
-                {formatDateRange()}
-              </span>
-            )}
-            {travelers && (
-              <span className="flex items-center gap-1.5">
-                <Users className="w-4 h-4" />
-                {travelers} traveler{travelers > 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     );
   }
 
-  const currentImage = images[currentIndex];
-
+  // Compact variant with image
   if (variant === 'compact') {
     return (
       <div className={`relative rounded-xl overflow-hidden h-20 bg-muted ${className}`}>
         <img
-          src={currentImage.url}
-          alt={currentImage.alt || cleanDestination}
+          src={heroImage.url}
+          alt={heroImage.alt || cleanDestination}
           className="absolute inset-0 w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-transparent" />
@@ -272,28 +247,16 @@ export default function DynamicDestinationPhotos({
     );
   }
 
+  // Banner variant with image
   if (variant === 'banner') {
     return (
-      <div 
-        className={`relative rounded-2xl overflow-hidden h-32 bg-muted ${className}`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <AnimatePresence mode="wait">
-          <motion.img
-            key={currentIndex}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
-            src={currentImage.url}
-            alt={currentImage.alt || cleanDestination}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        </AnimatePresence>
-        
+      <div className={`relative rounded-2xl overflow-hidden h-32 bg-muted ${className}`}>
+        <img
+          src={heroImage.url}
+          alt={heroImage.alt || cleanDestination}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/20" />
-        
         <div className="absolute inset-0 p-5 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 text-white mb-1">
@@ -315,89 +278,28 @@ export default function DynamicDestinationPhotos({
               )}
             </div>
           </div>
-          
-          {images.length > 1 && (
-            <div className="flex gap-1">
-              {images.map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setCurrentIndex(idx)}
-                  className={`w-2 h-2 rounded-full transition-all ${
-                    idx === currentIndex ? 'bg-white w-4' : 'bg-white/40'
-                  }`}
-                />
-              ))}
-            </div>
-          )}
         </div>
       </div>
     );
   }
 
-  // Hero variant (default)
+  // Hero variant (default) - single static image, no carousel
   return (
-    <div 
-      className={`relative rounded-2xl overflow-hidden h-56 md:h-72 bg-muted ${className}`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Background Image Carousel */}
-      <AnimatePresence mode="wait">
-        <motion.img
-          key={currentIndex}
-          initial={{ opacity: 0, scale: 1.05 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.7 }}
-          src={currentImage.url}
-          alt={currentImage.alt || cleanDestination}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      </AnimatePresence>
+    <div className={`relative rounded-2xl overflow-hidden h-56 md:h-72 bg-muted ${className}`}>
+      {/* Single hero image - landmark-driven */}
+      <motion.img
+        initial={{ opacity: 0, scale: 1.02 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        src={heroImage.url}
+        alt={heroImage.alt || cleanDestination}
+        className="absolute inset-0 w-full h-full object-cover"
+      />
       
-      {/* Gradient Overlay */}
+      {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10" />
       
-      {/* Navigation Arrows */}
-      {isHovered && images.length > 1 && (
-        <>
-          <motion.button
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            onClick={goPrev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </motion.button>
-          <motion.button
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            onClick={goNext}
-            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-          >
-            <ChevronRight className="w-6 h-6" />
-          </motion.button>
-        </>
-      )}
-      
-      {/* Dots Indicator */}
-      {images.length > 1 && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex gap-2">
-          {images.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentIndex(idx)}
-              className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                idx === currentIndex 
-                  ? 'bg-white w-6' 
-                  : 'bg-white/40 hover:bg-white/60'
-              }`}
-            />
-          ))}
-        </div>
-      )}
-      
-      {/* Content Overlay - only show if not hidden */}
+      {/* Content overlay */}
       {!hideOverlayText && (
         <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
           <div className="flex items-end justify-between">
@@ -422,12 +324,12 @@ export default function DynamicDestinationPhotos({
               </div>
             </div>
             
-            {/* Image source indicator */}
-            {currentImage.source && currentImage.source !== 'fallback' && (
+            {/* Source indicator */}
+            {heroImage.source && heroImage.source !== 'fallback' && (
               <div className="text-white/50 text-xs">
-                {currentImage.source === 'lovable_ai' && '✨ AI Generated'}
-                {currentImage.source === 'google_places' && '📍 Google Places'}
-                {currentImage.source === 'pexels' && '📷 Pexels'}
+                {heroImage.source === 'lovable_ai' && '✨ AI Generated'}
+                {heroImage.source === 'google_places' && '📍 Places'}
+                {heroImage.source === 'pexels' && '📷 Pexels'}
               </div>
             )}
           </div>
