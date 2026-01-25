@@ -6,9 +6,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Check, ChevronsUpDown, Plane, Loader2 } from 'lucide-react';
+import { Check, Plane, Loader2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import {
   Command,
   CommandEmpty,
@@ -41,7 +40,7 @@ interface AirportAutocompleteProps {
 export function AirportAutocomplete({
   value,
   onSelect,
-  placeholder = "Select airport...",
+  placeholder = "Search your home airport...",
   className,
 }: AirportAutocompleteProps) {
   const [open, setOpen] = useState(false);
@@ -124,34 +123,49 @@ export function AirportAutocomplete({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
+        <button
+          type="button"
           role="combobox"
           aria-expanded={open}
-          className={cn("justify-between min-w-[200px]", className)}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg border border-input bg-background px-4 py-3 text-left text-sm transition-colors",
+            "hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+            !selectedAirport && "text-muted-foreground",
+            className
+          )}
         >
           {selectedAirport ? (
-            <span className="flex items-center gap-2">
-              <Plane className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{selectedAirport.code}</span>
-              <span className="text-muted-foreground truncate">
-                {selectedAirport.city || selectedAirport.name}
-              </span>
-            </span>
+            <>
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 shrink-0">
+                <span className="font-mono font-bold text-primary text-sm">
+                  {selectedAirport.code}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-foreground truncate">
+                  {selectedAirport.name}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {selectedAirport.city}{selectedAirport.country ? `, ${selectedAirport.country}` : ''}
+                </div>
+              </div>
+            </>
           ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <>
+              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span>{placeholder}</span>
+            </>
           )}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+        </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="start">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 bg-popover border border-border shadow-lg z-50" align="start">
         <Command shouldFilter={false}>
           <CommandInput 
-            placeholder="Search by city or airport code..." 
+            placeholder="Type city or airport code..." 
             value={search}
             onValueChange={setSearch}
           />
-          <CommandList>
+          <CommandList className="max-h-[300px]">
             {isLoading && (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -162,7 +176,7 @@ export function AirportAutocomplete({
             )}
             {!isLoading && search.length < 2 && (
               <div className="py-6 text-center text-sm text-muted-foreground">
-                Type at least 2 characters to search
+                Type at least 2 characters
               </div>
             )}
             {airports.length > 0 && (
@@ -172,9 +186,9 @@ export function AirportAutocomplete({
                     key={airport.code}
                     value={airport.code}
                     onSelect={() => handleSelect(airport)}
-                    className="flex items-center gap-3 py-3"
+                    className="flex items-center gap-3 py-3 cursor-pointer"
                   >
-                    <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 shrink-0">
                       <span className="font-mono font-bold text-primary text-sm">
                         {airport.code}
                       </span>
@@ -186,7 +200,7 @@ export function AirportAutocomplete({
                       </div>
                     </div>
                     {value === airport.code && (
-                      <Check className="h-4 w-4 text-primary" />
+                      <Check className="h-4 w-4 text-primary shrink-0" />
                     )}
                   </CommandItem>
                 ))}
