@@ -26,6 +26,8 @@ import {
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
+import heroItineraryImage from '@/assets/hero-itinerary.jpg';
+import heroHotelImage from '@/assets/hero-hotel.jpg';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
@@ -532,9 +534,9 @@ export default function Profile() {
               <div className="group relative overflow-hidden rounded-2xl border-2 border-sky-200/50 bg-gradient-to-br from-card to-sky-50/30">
                 <div className="absolute inset-0">
                   <img 
-                    src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800" 
+                    src={heroHotelImage}
                     alt="Find your hotel"
-                    className="w-full h-full object-cover opacity-15 group-hover:opacity-25 group-hover:scale-105 transition-all duration-500"
+                    className="w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-105 transition-all duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-sky-50/40" />
                 </div>
@@ -564,9 +566,9 @@ export default function Profile() {
               <div className="group relative overflow-hidden rounded-2xl border-2 border-amber-200/50 bg-gradient-to-br from-card to-amber-50/30">
                 <div className="absolute inset-0">
                   <img 
-                    src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800" 
+                    src={heroItineraryImage}
                     alt="Build your itinerary"
-                    className="w-full h-full object-cover opacity-15 group-hover:opacity-25 group-hover:scale-105 transition-all duration-500"
+                    className="w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-105 transition-all duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-amber-50/40" />
                 </div>
