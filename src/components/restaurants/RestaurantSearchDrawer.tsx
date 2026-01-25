@@ -85,8 +85,6 @@ const PRICE_LEVELS = [
 ];
 
 const RATING_OPTIONS = [
-  { value: 0, label: 'Any rating' },
-  { value: 3.5, label: '3.5+ stars' },
   { value: 4.0, label: '4.0+ stars' },
   { value: 4.5, label: '4.5+ stars' },
 ];
@@ -113,7 +111,7 @@ export default function RestaurantSearchDrawer({
   const [showFilters, setShowFilters] = useState(false);
   const [mealType, setMealType] = useState<MealType>(initialMealType);
   const [budgetLevel, setBudgetLevel] = useState<BudgetLevel | ''>('');
-  const [minRating, setMinRating] = useState<number>(0);
+  const [minRating, setMinRating] = useState<number>(4.0); // Default to 4+ stars only
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [selectedDietary, setSelectedDietary] = useState<string[]>([]);
 
@@ -139,6 +137,7 @@ export default function RestaurantSearchDrawer({
         mealType: mealType !== 'any' ? mealType : undefined,
         budgetLevel: budgetLevel || undefined,
         maxResults: 15,
+        minRating: minRating, // Send minimum rating to API
       };
 
       const response = await getRestaurantRecommendations(request);
@@ -238,14 +237,14 @@ export default function RestaurantSearchDrawer({
 
   const activeFilterCount = [
     budgetLevel ? 1 : 0,
-    minRating > 0 ? 1 : 0,
+    minRating > 4.0 ? 1 : 0, // Only count if above default
     selectedCuisines.length > 0 ? 1 : 0,
     selectedDietary.length > 0 ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
   const clearFilters = () => {
     setBudgetLevel('');
-    setMinRating(0);
+    setMinRating(4.0); // Reset to default 4+ stars
     setSelectedCuisines([]);
     setSelectedDietary([]);
   };

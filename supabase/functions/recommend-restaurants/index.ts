@@ -19,6 +19,7 @@ interface RecommendationRequest {
   maxResults?: number;
   budgetLevel?: 'budget' | 'moderate' | 'upscale' | 'fine_dining';
   userId?: string; // For personalization
+  minRating?: number; // Minimum star rating to include (default 4.0)
 }
 
 interface Restaurant {
@@ -641,6 +642,7 @@ serve(async (req) => {
       maxResults = 10,
       budgetLevel,
       userId,
+      minRating = 4.0, // Default to 4+ stars
     } = body;
 
     console.log(`[recommend-restaurants] Request for ${destination}, meal: ${mealType}`);
@@ -697,8 +699,12 @@ serve(async (req) => {
     const uniqueRestaurants = deduplicateRestaurants(allRestaurants);
     console.log(`[recommend-restaurants] ${uniqueRestaurants.length} unique restaurants after dedup`);
 
+    // Filter by minimum rating
+    const filteredByRating = uniqueRestaurants.filter(r => r.rating >= minRating);
+    console.log(`[recommend-restaurants] ${filteredByRating.length} restaurants with ${minRating}+ stars`);
+
     // Score each restaurant
-    const scoredRestaurants = uniqueRestaurants
+    const scoredRestaurants = filteredByRating
       .map(r => scoreRestaurant(r, preferences, insights, budgetLevel))
       .sort((a, b) => b.personalizedScore - a.personalizedScore)
       .slice(0, maxResults);
