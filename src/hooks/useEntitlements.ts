@@ -92,12 +92,38 @@ export function useEntitlements() {
     queryKey: ['entitlements', user?.id],
     queryFn: async (): Promise<EntitlementsResponse> => {
       const { data, error } = await supabase.functions.invoke('get-entitlements');
-      if (error) throw error;
+      
+      // Handle 401 auth errors - session is stale/invalid
+      if (error) {
+        const errorBody = error.message || '';
+        if (errorBody.includes('401') || errorBody.includes('Session expired') || errorBody.includes('invalid')) {
+          console.warn('[Entitlements] Session expired, user may need to re-authenticate');
+          // Don't throw - return empty entitlements to avoid blocking the UI
+          return {
+            user_id: user?.id || '',
+            plans: ['free'],
+            is_paid: false,
+            has_addon: false,
+            subscription_end: null,
+            entitlements: {},
+            usage: {},
+          };
+        }
+        throw error;
+      }
       return data;
     },
     enabled: isAuthenticated && !!user?.id,
     staleTime: 60000, // 1 minute
     refetchOnWindowFocus: true,
+    retry: (failureCount, error) => {
+      // Don't retry auth errors
+      const errorMsg = error?.message || '';
+      if (errorMsg.includes('401') || errorMsg.includes('Session expired')) {
+        return false;
+      }
+      return failureCount < 2;
+    },
   });
 
   // Refresh entitlements (e.g., after checkout)
