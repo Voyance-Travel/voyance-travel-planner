@@ -266,12 +266,15 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
           </motion.div>
         )}
 
-        {/* Tooltip card */}
+        {/* Tooltip card - uses flex centering when no target element or position is 'center' */}
         <div 
           className={cn(
-            "absolute pointer-events-auto",
-            isCentered && "inset-0 flex items-center justify-center"
+            "pointer-events-auto",
+            isCentered 
+              ? "fixed inset-0 flex items-center justify-center p-4" 
+              : "absolute"
           )}
+          style={isCentered ? { zIndex: 101 } : undefined}
         >
           <motion.div
             key={step.id}
@@ -279,8 +282,8 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="w-[320px] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
-            style={isCentered ? {} : getTooltipStyle()}
+            className="w-[320px] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
+            style={isCentered ? undefined : getTooltipStyle()}
           >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-primary/10 to-transparent">
