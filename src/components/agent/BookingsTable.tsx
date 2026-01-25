@@ -196,7 +196,7 @@ export default function BookingsTable({
                         )}
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
 
@@ -210,7 +210,7 @@ export default function BookingsTable({
                         )}
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
 
@@ -240,7 +240,7 @@ export default function BookingsTable({
                         </button>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
 
@@ -271,7 +271,7 @@ export default function BookingsTable({
                         </Button>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
 
@@ -312,7 +312,7 @@ export default function BookingsTable({
                         )}
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
 
@@ -321,7 +321,7 @@ export default function BookingsTable({
                     {booking.priceCents ? (
                       <span className="font-medium">{formatCurrency(booking.priceCents)}</span>
                     ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
 

@@ -360,7 +360,7 @@ export default function TripContext({
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Who's Coming Along?</h2>
-                  <p className="text-sm text-slate-500">Optional — add names or leave anonymous</p>
+                  <p className="text-sm text-slate-500">Optional: add names or leave anonymous</p>
                 </div>
               </div>
             </div>
@@ -580,7 +580,7 @@ export default function TripContext({
                   </div>
                   <div>
                     <p className="font-medium text-slate-900 group-hover:text-primary transition-colors">Just Build My Itinerary</p>
-                    <p className="text-xs text-slate-500">Skip flights & hotels — add them later</p>
+                    <p className="text-xs text-slate-500">Skip flights & hotels, add them later</p>
                   </div>
                 </div>
               </button>

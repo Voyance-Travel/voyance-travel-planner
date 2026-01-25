@@ -93,7 +93,7 @@ export default function TransportationPreferences({
           How will you get around?
         </CardTitle>
         <CardDescription>
-          Select all that apply — we'll tailor your itinerary accordingly
+          Select all that apply. We'll tailor your itinerary accordingly
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -185,7 +185,7 @@ export default function TransportationPreferences({
               {hasRentalCar ? (
                 <>
                   <Check className="w-4 h-4 text-green-500" />
-                  Rental Car Added — Edit Details
+                  Rental Car Added - Edit Details
                 </>
               ) : (
                 <>
