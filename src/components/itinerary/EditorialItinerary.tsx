@@ -1041,6 +1041,14 @@ export function EditorialItinerary({
         const currentDayActivities = day.activities
           ?.map(a => a.title || (a as { name?: string }).name)
           .filter(Boolean) || [];
+
+        // CRITICAL: Preserve locked activities by passing both:
+        // - keepActivities: IDs of locked activities
+        // - currentActivities: full activity objects so backend can merge them back
+        const keepActivities = (day.activities || [])
+          .filter(a => a.isLocked)
+          .map(a => a.id)
+          .filter(Boolean);
         
         const { data, error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
@@ -1054,6 +1062,8 @@ export function EditorialItinerary({
             travelers,
             budgetTier,
             previousDayActivities: currentDayActivities, // Force different venues
+            keepActivities,
+            currentActivities: day.activities,
             variationNonce: Date.now(), // Force new randomness
           }
         });
