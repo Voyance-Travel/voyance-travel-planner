@@ -2414,7 +2414,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = []): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -2466,6 +2466,33 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     if (category.includes('dining') || /\b(dinner|lunch|breakfast|brunch|restaurant)\b/.test(title)) return 'dining';
 
     return 'other';
+  };
+
+  // Extract activity concept (e.g., "pastel de nata baking class" -> "pastel de nata baking")
+  // Moved outside the loop so it can be reused for trip-wide checks
+  const extractConcept = (title: string): string => {
+    // Remove venue names (usually after "at" or "with")
+    const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
+    // Remove common generic tokens anywhere (not just at end)
+    return conceptPart
+      .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  // Concept similarity helper (also used for trip-wide checks)
+  const conceptSimilarity = (a: string, b: string): boolean => {
+    if (!a || !b || a.length < 5 || b.length < 5) return false;
+    // Exact match
+    if (a === b) return true;
+    // One contains the other
+    if (a.includes(b) || b.includes(a)) return true;
+    // Key words match (e.g., "pastel de nata" in both)
+    const aWords = new Set(a.split(/\s+/));
+    const bWords = new Set(b.split(/\s+/));
+    const intersection = [...aWords].filter(w => bWords.has(w) && w.length > 3);
+    const minLen = Math.min(aWords.size, bWords.size);
+    return minLen > 0 && intersection.length / minLen > 0.6;
   };
 
   // Basic structure checks
@@ -2535,35 +2562,11 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       const currTitle = normalizeText(act.title || '');
       const prevTitle = normalizeText(prevAct.title || '');
       
-      // Extract activity concept (e.g., "pastel de nata baking class" -> "pastel de nata baking")
-      const extractConcept = (title: string): string => {
-        // Remove venue names (usually after "at" or "with")
-        const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
-        // Remove common generic tokens anywhere (not just at end)
-        return conceptPart
-          .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-      };
-      
+      // Use hoisted extractConcept function
       const currConcept = extractConcept(currTitle);
       const prevConcept = extractConcept(prevTitle);
       
-      // Check for same concept back-to-back (similarity > 80%)
-      const conceptSimilarity = (a: string, b: string): boolean => {
-        if (!a || !b || a.length < 5 || b.length < 5) return false;
-        // Exact match
-        if (a === b) return true;
-        // One contains the other
-        if (a.includes(b) || b.includes(a)) return true;
-        // Key words match (e.g., "pastel de nata" in both)
-        const aWords = new Set(a.split(/\s+/));
-        const bWords = new Set(b.split(/\s+/));
-        const intersection = [...aWords].filter(w => bWords.has(w) && w.length > 3);
-        const minLen = Math.min(aWords.size, bWords.size);
-        return minLen > 0 && intersection.length / minLen > 0.6;
-      };
-      
+      // Use hoisted conceptSimilarity function
       if (conceptSimilarity(currConcept, prevConcept)) {
         errors.push(`Activities ${i} and ${i + 1} are too similar: "${prevAct.title}" followed by "${act.title}" - AVOID duplicate concepts back-to-back`);
       }
@@ -2604,7 +2607,65 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     }
   }
 
-  // First day checks
+  // ==========================================================================
+  // TRIP-WIDE UNIQUENESS RULES - No activity type should appear more than once per trip
+  // This is the KEY fix: each experience should only happen ONCE across the entire trip
+  // ==========================================================================
+  if (previousDays.length > 0 && day.activities?.length) {
+    // Build set of all previous activity concepts (normalized titles)
+    const previousConcepts = new Set<string>();
+    const previousExperienceTypes: Record<string, number> = {};
+    
+    for (const prevDay of previousDays) {
+      for (const prevAct of prevDay.activities || []) {
+        const concept = extractConcept(normalizeText(prevAct.title || ''));
+        if (concept.length > 5) previousConcepts.add(concept);
+        
+        const expType = getExperienceType(prevAct);
+        previousExperienceTypes[expType] = (previousExperienceTypes[expType] || 0) + 1;
+      }
+    }
+    
+    // Check each activity in current day against trip-wide history
+    for (const act of day.activities) {
+      const actConcept = extractConcept(normalizeText(act.title || ''));
+      const actType = getExperienceType(act);
+      
+      // Skip logistics - those can repeat (transfers, check-ins, etc.)
+      if (actType === 'transport' || actType === 'accommodation' || actType === 'dining') {
+        continue;
+      }
+      
+      // STRICT: No activity should repeat if concept matches too closely
+      for (const prevConcept of previousConcepts) {
+        if (conceptSimilarity(actConcept, prevConcept)) {
+          errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day. Each activity type should only appear ONCE across the entire trip.`);
+          break;
+        }
+      }
+      
+      // STRICT: Culinary classes/workshops can only appear ONCE per TRIP (not per day)
+      if (actType === 'culinary_class' && (previousExperienceTypes['culinary_class'] || 0) >= 1) {
+        errors.push(`TRIP-WIDE LIMIT: A culinary class/workshop was already scheduled on a previous day. Only ONE culinary class/workshop is allowed per ENTIRE TRIP.`);
+      }
+      
+      // STRICT: Wine tastings can only appear ONCE per TRIP
+      if (actType === 'wine_tasting' && (previousExperienceTypes['wine_tasting'] || 0) >= 1) {
+        errors.push(`TRIP-WIDE LIMIT: A wine tasting was already scheduled on a previous day. Only ONE wine tasting is allowed per ENTIRE TRIP.`);
+      }
+      
+      // SOFT: Walking tours - max 2 per trip
+      if (actType === 'walking_tour' && (previousExperienceTypes['walking_tour'] || 0) >= 2) {
+        warnings.push(`Trip has ${previousExperienceTypes['walking_tour'] + 1} walking tours total. Consider more variety.`);
+      }
+      
+      // SOFT: Museum/gallery - max 3 per trip
+      if (actType === 'museum_gallery' && (previousExperienceTypes['museum_gallery'] || 0) >= 3) {
+        warnings.push(`Trip has ${previousExperienceTypes['museum_gallery'] + 1} museums/galleries total. Consider more variety.`);
+      }
+    }
+  }
+
   if (isFirstDay) {
     const hasArrival = day.activities?.some(a => 
       (a.title || '').toLowerCase().includes('arrival') || 
@@ -2682,10 +2743,25 @@ async function generateSingleDayWithRetry(
     '5. Free time/leisure: bookingRequired=false, cost.amount=0',
     '6. Only tours, museums, and ticketed attractions should have bookingRequired=true',
     '7. NO DUPLICATE ACTIVITIES: NEVER schedule the same type of activity back-to-back (e.g., two cooking classes, two wine tastings, two walking tours). Each consecutive activity must be a DIFFERENT experience type.',
-    '8. VARIETY RULE: If suggesting a cooking class, wine tasting, or similar experience, only include ONE per day. Diversify across museums, outdoor activities, cultural sites, dining, and relaxation.',
-    isFirstDay ? '9. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
-    isLastDay && context.totalDays > 1 ? '9. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+    '8. **TRIP-WIDE UNIQUENESS (CRITICAL)**: Each unique experience (cooking class, wine tasting, baking class, etc.) should appear AT MOST ONCE in the ENTIRE trip. If a cooking class was on Day 1, do NOT include another cooking class on Day 2, 3, or any other day. Diversify across completely DIFFERENT experience types each day.',
+    '9. VARIETY PER DAY: Include diverse activities - mix sightseeing, cultural sites, museums, outdoor activities, local markets, viewpoints, and dining. Avoid multiple activities of the same type per day.',
+    isFirstDay ? '10. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
+    isLastDay && context.totalDays > 1 ? '10. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
+
+  // Build list of previous experience types for stricter rejection
+  const previousExperienceTypes = new Set<string>();
+  for (const prevDay of previousDays) {
+    for (const act of prevDay.activities || []) {
+      const title = (act.title || '').toLowerCase();
+      if (/\b(class|workshop|lesson|masterclass)\b/.test(title) && /\b(cook|bake|pastry|culinary|food)\b/.test(title)) {
+        previousExperienceTypes.add('culinary_class');
+      }
+      if (/\b(wine|tasting|vineyard)\b/.test(title)) {
+        previousExperienceTypes.add('wine_tasting');
+      }
+    }
+  }
 
   let lastError: Error | null = null;
   let lastValidation: DayValidationResult | null = null;
@@ -2715,6 +2791,15 @@ ${preferenceContext}
 
 ${flightHotelContext}${retryPrompt}`;
 
+      // Build banned experience types list for this day
+      const bannedTypes: string[] = [];
+      if (previousExperienceTypes.has('culinary_class')) {
+        bannedTypes.push('cooking classes', 'baking classes', 'culinary workshops', 'pastry classes', 'food classes');
+      }
+      if (previousExperienceTypes.has('wine_tasting')) {
+        bannedTypes.push('wine tastings', 'vineyard tours', 'winery visits');
+      }
+
       const userPrompt = `Generate Day ${dayNumber} of ${context.totalDays} for ${context.destination}${context.destinationCountry ? `, ${context.destinationCountry}` : ''}.
 
 DATE: ${date}
@@ -2722,9 +2807,10 @@ TRAVELERS: ${context.travelers}
 BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)
 PACE: ${context.pace || 'moderate'}
 
-${previousActivities.length > 0 ? `AVOID REPEATING: ${previousActivities.slice(-10).join(', ')}\n` : ''}
+${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
+${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
-Generate 4-6 activities for this day following ALL quality rules above.`;
+Generate 4-6 activities for this day following ALL quality rules above. Focus on VARIETY - explore different types of experiences each day.`;
 
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -2863,8 +2949,8 @@ Generate 4-6 activities for this day following ALL quality rules above.`;
         return normalizedAct;
       });
 
-      // Validate the generated day
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays);
+      // Validate the generated day - pass previousDays for trip-wide uniqueness checks
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays);
       lastValidation = validation;
 
       if (validation.errors.length > 0) {
