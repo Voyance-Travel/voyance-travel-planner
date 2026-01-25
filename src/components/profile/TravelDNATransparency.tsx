@@ -1,24 +1,17 @@
 /**
  * Travel DNA Transparency Component
  * 
- * Displays archetype blend, trait scores, and "why we think this" section
- * showing top contributing quiz answers.
+ * Editorial display of archetype blend and trait insights
  */
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   ChevronDown, 
-  ChevronUp, 
-  Info, 
   Sparkles,
-  Scale,
-  Target,
-  AlertCircle
+  BarChart3
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 
@@ -61,23 +54,32 @@ interface TravelDNATransparencyProps {
 // CONSTANTS
 // ============================================================================
 
-const TRAIT_LABELS: Record<string, { negative: string; positive: string; icon: string }> = {
-  planning: { negative: 'Spontaneous', positive: 'Detailed Planner', icon: '📋' },
-  social: { negative: 'Solo Traveler', positive: 'Social Butterfly', icon: '👥' },
-  comfort: { negative: 'Budget-Conscious', positive: 'Luxury-Seeking', icon: '✨' },
-  pace: { negative: 'Relaxed', positive: 'Fast-Paced', icon: '⚡' },
-  authenticity: { negative: 'Tourist-Friendly', positive: 'Local Explorer', icon: '🗺️' },
-  adventure: { negative: 'Safe & Comfortable', positive: 'Thrill-Seeker', icon: '🏔️' },
-  budget: { negative: 'Splurge', positive: 'Frugal', icon: '💰' },
-  transformation: { negative: 'Pure Leisure', positive: 'Growth-Focused', icon: '🌱' },
+const TRAIT_DISPLAY: Record<string, { label: string; low: string; high: string }> = {
+  planning: { label: 'Planning Style', low: 'Spontaneous', high: 'Detailed' },
+  social: { label: 'Social Energy', low: 'Solo', high: 'Social' },
+  comfort: { label: 'Comfort Level', low: 'Budget', high: 'Luxury' },
+  pace: { label: 'Travel Pace', low: 'Relaxed', high: 'Active' },
+  authenticity: { label: 'Experience Type', low: 'Tourist', high: 'Local' },
+  adventure: { label: 'Adventure Level', low: 'Safe', high: 'Adventurous' },
+  budget: { label: 'Spending Style', low: 'Splurge', high: 'Frugal' },
+  transformation: { label: 'Travel Purpose', low: 'Leisure', high: 'Growth' },
 };
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function formatArchetypeName(name: string): string {
+  return name
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
 
 // ============================================================================
 // COMPONENT
 // ============================================================================
 
 export default function TravelDNATransparency({ dnaData, className }: TravelDNATransparencyProps) {
-  const [isWhyOpen, setIsWhyOpen] = useState(false);
   const [isTraitsOpen, setIsTraitsOpen] = useState(false);
 
   if (!dnaData) {
@@ -86,215 +88,161 @@ export default function TravelDNATransparency({ dnaData, className }: TravelDNAT
 
   const { archetype_matches, confidence, trait_scores, trait_contributions } = dnaData;
   const confidenceLevel = confidence ?? 75;
-  const isLowConfidence = confidenceLevel < 60;
 
   // Get top 3 archetypes for blend display
   const topArchetypes = (archetype_matches || []).slice(0, 3);
   
-  // Get top 5 contributing answers
+  // Get top 3 contributing answers
   const topContributions = (trait_contributions || [])
-    .filter(c => c.label) // Only show those with labels
+    .filter(c => c.label)
     .sort((a, b) => {
       const aMagnitude = Object.values(a.deltas).reduce((sum, d) => sum + Math.abs(d), 0);
       const bMagnitude = Object.values(b.deltas).reduce((sum, d) => sum + Math.abs(d), 0);
       return bMagnitude - aMagnitude;
     })
-    .slice(0, 5);
+    .slice(0, 3);
 
   return (
-    <div className={cn("space-y-6", className)}>
-      {/* Archetype Blend Section */}
+    <div className={cn("space-y-8", className)}>
+      {/* Archetype Blend - Editorial Style */}
       {topArchetypes.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
+          className="space-y-5"
         >
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground flex items-center gap-2">
-              <Sparkles className="h-3 w-3" />
-              Archetype Blend
-            </h4>
-            <Badge 
-              variant={isLowConfidence ? "outline" : "secondary"}
-              className={cn(
-                "text-xs",
-                isLowConfidence && "border-amber-500/50 text-amber-600 dark:text-amber-400"
-              )}
-            >
-              {Math.round(confidenceLevel)}% Match
-            </Badge>
+          <div className="flex items-center gap-3">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-medium text-foreground">Your Archetype Blend</h4>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {Math.round(confidenceLevel)}% confidence
+            </span>
           </div>
 
-          {/* Low confidence warning */}
-          {isLowConfidence && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Your profile shows mixed signals. We'll offer more variety in recommendations 
-                until we learn more about your preferences.
-              </p>
-            </div>
-          )}
-
-          {/* Archetype blend bars */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             {topArchetypes.map((archetype, index) => (
-              <div key={archetype.archetype_id} className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground">
-                    {archetype.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              <div key={archetype.archetype_id} className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <span className={cn(
+                    "font-serif",
+                    index === 0 ? "text-lg font-medium text-foreground" : "text-sm text-muted-foreground"
+                  )}>
+                    {formatArchetypeName(archetype.name)}
                   </span>
-                  <span className="text-sm text-muted-foreground">
+                  <span className={cn(
+                    "text-sm tabular-nums",
+                    index === 0 ? "text-primary font-medium" : "text-muted-foreground"
+                  )}>
                     {Math.round(archetype.pct)}%
                   </span>
                 </div>
-                <Progress 
-                  value={archetype.pct} 
-                  className={cn(
-                    "h-2",
-                    index === 0 && "bg-primary/20",
-                    index === 1 && "bg-secondary/20",
-                    index === 2 && "bg-muted"
-                  )}
-                />
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${archetype.pct}%` }}
+                    transition={{ duration: 0.6, delay: index * 0.1 }}
+                    className={cn(
+                      "h-full rounded-full",
+                      index === 0 ? "bg-primary" : "bg-muted-foreground/30"
+                    )}
+                  />
+                </div>
               </div>
             ))}
           </div>
         </motion.div>
       )}
 
-      {/* Trait Scores Section */}
-      {trait_scores && Object.keys(trait_scores).length > 0 && (
-        <Collapsible open={isTraitsOpen} onOpenChange={setIsTraitsOpen}>
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-between text-muted-foreground hover:text-foreground"
-            >
-              <span className="flex items-center gap-2">
-                <Scale className="h-4 w-4" />
-                View Trait Scores
-              </span>
-              {isTraitsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <AnimatePresence>
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="pt-4 space-y-4"
+      {/* What Shaped Your DNA - Editorial Quote Style */}
+      {topContributions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="space-y-4"
+        >
+          <h4 className="text-sm font-medium text-foreground">What shaped this</h4>
+          <div className="space-y-3">
+            {topContributions.map((contribution, index) => (
+              <div 
+                key={`${contribution.question_id}-${contribution.answer_id}`}
+                className="flex items-start gap-3"
               >
-                {Object.entries(trait_scores).map(([trait, score]) => {
-                  const labels = TRAIT_LABELS[trait];
-                  if (!labels || typeof score !== 'number') return null;
-
-                  const normalizedValue = ((score + 10) / 20) * 100; // Convert -10..10 to 0..100
-                  
-                  return (
-                    <div key={trait} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">{labels.negative}</span>
-                        <span className="font-medium text-foreground">
-                          {labels.icon} {trait.charAt(0).toUpperCase() + trait.slice(1)}
-                        </span>
-                        <span className="text-muted-foreground">{labels.positive}</span>
-                      </div>
-                      <div className="relative h-2 bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className="absolute top-0 left-1/2 w-0.5 h-full bg-border z-10"
-                        />
-                        <motion.div
-                          initial={{ width: '50%' }}
-                          animate={{ width: `${normalizedValue}%` }}
-                          transition={{ duration: 0.5, ease: 'easeOut' }}
-                          className={cn(
-                            "absolute top-0 left-0 h-full rounded-full",
-                            score > 0 ? "bg-primary" : "bg-secondary"
-                          )}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </motion.div>
-            </AnimatePresence>
-          </CollapsibleContent>
-        </Collapsible>
+                <span className="text-xs font-medium text-primary mt-0.5">
+                  {index + 1}.
+                </span>
+                <div>
+                  <p className="text-sm text-foreground/80 italic">
+                    "{contribution.label}"
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {Object.entries(contribution.deltas)
+                      .filter(([, delta]) => typeof delta === 'number' && delta !== 0)
+                      .slice(0, 2)
+                      .map(([trait, delta]) => (
+                        <Badge
+                          key={trait}
+                          variant="outline"
+                          className="text-xs font-normal"
+                        >
+                          {TRAIT_DISPLAY[trait]?.label || trait} {(delta as number) > 0 ? '↑' : '↓'}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       )}
 
-      {/* Why We Think This Section */}
-      {topContributions.length > 0 && (
-        <Collapsible open={isWhyOpen} onOpenChange={setIsWhyOpen}>
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-between text-muted-foreground hover:text-foreground"
-            >
-              <span className="flex items-center gap-2">
-                <Target className="h-4 w-4" />
-                Why We Think This
+      {/* Trait Scores - Collapsible */}
+      {trait_scores && Object.keys(trait_scores).length > 0 && (
+        <Collapsible open={isTraitsOpen} onOpenChange={setIsTraitsOpen}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left group">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                View trait scores
               </span>
-              {isWhyOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
+            </div>
+            <ChevronDown className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform duration-200",
+              isTraitsOpen && "rotate-180"
+            )} />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <AnimatePresence>
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="pt-4 space-y-3"
-              >
-                <p className="text-xs text-muted-foreground mb-3">
-                  These quiz answers had the biggest impact on your profile:
-                </p>
-                {topContributions.map((contribution, index) => (
-                  <div 
-                    key={`${contribution.question_id}-${contribution.answer_id}`}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border"
-                  >
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">
-                        {contribution.label || contribution.answer_id}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {Object.entries(contribution.deltas).map(([trait, delta]) => {
-                          if (typeof delta !== 'number' || delta === 0) return null;
-                          return (
-                            <Badge
-                              key={trait}
-                              variant="outline"
-                              className={cn(
-                                "text-xs",
-                                delta > 0 
-                                  ? "border-green-500/50 text-green-600 dark:text-green-400"
-                                  : "border-red-500/50 text-red-600 dark:text-red-400"
-                              )}
-                            >
-                              {trait}: {delta > 0 ? '+' : ''}{delta}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                      {contribution.normalized_multiplier < 1 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          <Info className="h-3 w-3 inline mr-1" />
-                          Weighted at {Math.round(contribution.normalized_multiplier * 100)}% (multi-select)
-                        </p>
-                      )}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="pt-4 space-y-4"
+            >
+              {Object.entries(trait_scores).map(([trait, score]) => {
+                const display = TRAIT_DISPLAY[trait];
+                if (!display || typeof score !== 'number') return null;
+
+                const normalizedValue = ((score + 10) / 20) * 100;
+                
+                return (
+                  <div key={trait} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{display.low}</span>
+                      <span className="font-medium text-foreground">{display.label}</span>
+                      <span>{display.high}</span>
+                    </div>
+                    <div className="relative h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="absolute top-0 left-1/2 w-px h-full bg-border" />
+                      <motion.div
+                        initial={{ width: '50%' }}
+                        animate={{ width: `${normalizedValue}%` }}
+                        transition={{ duration: 0.5 }}
+                        className="absolute top-0 left-0 h-full bg-primary/60 rounded-full"
+                      />
                     </div>
                   </div>
-                ))}
-              </motion.div>
-            </AnimatePresence>
+                );
+              })}
+            </motion.div>
           </CollapsibleContent>
         </Collapsible>
       )}

@@ -447,19 +447,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
           </motion.div>
 
           <div className="flex-1 space-y-3">
-            {/* Category Badge */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.35 }}
-            >
-              <span className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
-                colors.bg, colors.text
-              )}>
-                {categoryInfo.name}
-              </span>
-            </motion.div>
 
             {/* Primary Archetype Name */}
             <motion.h2 
