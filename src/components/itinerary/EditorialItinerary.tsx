@@ -4141,6 +4141,7 @@ function ActivityRow({
               activity={{
                 id: activity.id,
                 title: activity.title,
+                location: activity.location, // Pass venue name for restaurant lookup
                 bookingState: activity.bookingState,
                 bookingRequired: activity.bookingRequired,
                 quotePriceCents: activity.quotePriceCents,
