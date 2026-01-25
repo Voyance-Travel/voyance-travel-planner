@@ -2166,6 +2166,7 @@ function normalizeDestination(dest: string): string {
 function DestinationCarousel({ destination, destinationCountry }: DestinationCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [images, setImages] = useState<string[]>([]);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   
   // Normalize destination (remove airport codes like "Rome (FCO)" -> "Rome")
@@ -2241,10 +2242,28 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
     }
   }, [cleanDestination, queryDestination]);
 
-  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % Math.max(1, images.length));
-  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + Math.max(1, images.length)) % Math.max(1, images.length));
+  // Filter out failed images for navigation
+  const validImages = images.filter(img => !failedImages.has(img));
+  const displayImages = validImages.length > 0 ? validImages : images;
+  const safeIndex = currentIndex >= displayImages.length ? 0 : currentIndex;
+  
+  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % Math.max(1, displayImages.length));
+  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + Math.max(1, displayImages.length)) % Math.max(1, displayImages.length));
 
-  if (isLoading || images.length === 0) {
+  // Handle image load error - skip to next image instead of showing gradient
+  const handleImageError = (failedUrl: string) => {
+    setFailedImages(prev => new Set([...prev, failedUrl]));
+    // Auto-skip to next valid image
+    const remaining = images.filter(img => !failedImages.has(img) && img !== failedUrl);
+    if (remaining.length > 0) {
+      const nextValidIndex = images.indexOf(remaining[0]);
+      if (nextValidIndex !== -1 && nextValidIndex !== currentIndex) {
+        setCurrentIndex(nextValidIndex >= images.length ? 0 : nextValidIndex);
+      }
+    }
+  };
+
+  if (isLoading || displayImages.length === 0) {
     return (
       <div className="relative overflow-hidden rounded-xl mb-6">
         <div className="relative h-48 md:h-64 bg-gradient-to-br from-primary/20 to-accent/20 animate-pulse flex items-center justify-center">
@@ -2263,12 +2282,10 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
     <div className="relative overflow-hidden rounded-xl mb-6">
       <div className="relative h-48 md:h-64">
         <img
-          src={images[currentIndex]}
-          alt={`${cleanDestination} photo ${currentIndex + 1}`}
+          src={displayImages[safeIndex]}
+          alt={`${cleanDestination} photo ${safeIndex + 1}`}
           className="w-full h-full object-cover transition-opacity duration-300"
-          onError={(e) => {
-            e.currentTarget.src = generateGradientDataUrl(cleanDestination);
-          }}
+          onError={() => handleImageError(displayImages[safeIndex])}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
         <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
@@ -2278,7 +2295,7 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
               <p className="text-white/80 text-sm">{destinationCountry}</p>
             )}
           </div>
-          {images.length > 1 && (
+          {displayImages.length > 1 && (
             <div className="flex gap-2">
               <Button variant="secondary" size="icon" onClick={prevSlide} className="h-8 w-8 bg-white/20 backdrop-blur-sm hover:bg-white/40">
                 <ChevronLeft className="h-4 w-4 text-white" />
@@ -2290,15 +2307,15 @@ function DestinationCarousel({ destination, destinationCountry }: DestinationCar
           )}
         </div>
         {/* Dots */}
-        {images.length > 1 && (
+        {displayImages.length > 1 && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-            {images.map((_, idx) => (
+            {displayImages.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentIndex(idx)}
                 className={cn(
                   "w-2 h-2 rounded-full transition-colors",
-                  idx === currentIndex ? "bg-white" : "bg-white/40"
+                  idx === safeIndex ? "bg-white" : "bg-white/40"
                 )}
               />
             ))}
