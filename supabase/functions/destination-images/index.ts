@@ -62,6 +62,8 @@ async function checkCuratedCache(
       .eq("entity_type", entityType)
       // IMPORTANT: exact match to avoid returning unrelated cached images
       .eq("entity_key", normalizedKey)
+      // Exclude blacklisted images (voted down by admins)
+      .eq("is_blacklisted", false)
       // Only return non-expired entries (or entries without expiry)
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
 
@@ -70,8 +72,9 @@ async function checkCuratedCache(
       query = query.ilike("destination", `%${destination}%`);
     }
 
-    // Prefer higher-quality and newer cache entries
+    // Prefer higher-quality and vote score, then newer cache entries
     query = query
+      .order("vote_score", { ascending: false, nullsFirst: false })
       .order("quality_score", { ascending: false, nullsFirst: false })
       .order("updated_at", { ascending: false });
 

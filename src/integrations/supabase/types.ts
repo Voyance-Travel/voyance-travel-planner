@@ -1835,6 +1835,7 @@ export type Database = {
           expires_at: string | null
           id: string
           image_url: string
+          is_blacklisted: boolean | null
           metadata: Json | null
           photo_reference: string | null
           place_id: string | null
@@ -1842,6 +1843,8 @@ export type Database = {
           source: string
           thumbnail_url: string | null
           updated_at: string | null
+          vote_count: number | null
+          vote_score: number | null
         }
         Insert: {
           alt_text?: string | null
@@ -1853,6 +1856,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           image_url: string
+          is_blacklisted?: boolean | null
           metadata?: Json | null
           photo_reference?: string | null
           place_id?: string | null
@@ -1860,6 +1864,8 @@ export type Database = {
           source: string
           thumbnail_url?: string | null
           updated_at?: string | null
+          vote_count?: number | null
+          vote_score?: number | null
         }
         Update: {
           alt_text?: string | null
@@ -1871,6 +1877,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           image_url?: string
+          is_blacklisted?: boolean | null
           metadata?: Json | null
           photo_reference?: string | null
           place_id?: string | null
@@ -1878,6 +1885,8 @@ export type Database = {
           source?: string
           thumbnail_url?: string | null
           updated_at?: string | null
+          vote_count?: number | null
+          vote_score?: number | null
         }
         Relationships: []
       }
@@ -2560,6 +2569,39 @@ export type Database = {
           tags?: Json | null
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      image_votes: {
+        Row: {
+          created_at: string
+          entity_key: string
+          entity_type: string
+          id: string
+          image_url: string
+          metadata: Json | null
+          user_id: string
+          vote: string
+        }
+        Insert: {
+          created_at?: string
+          entity_key: string
+          entity_type?: string
+          id?: string
+          image_url: string
+          metadata?: Json | null
+          user_id: string
+          vote: string
+        }
+        Update: {
+          created_at?: string
+          entity_key?: string
+          entity_type?: string
+          id?: string
+          image_url?: string
+          metadata?: Json | null
+          user_id?: string
+          vote?: string
         }
         Relationships: []
       }

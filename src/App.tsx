@@ -72,6 +72,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 // Admin
 import BulkImport from "./pages/admin/BulkImport";
 import DataCleanup from "./pages/admin/DataCleanup";
+import ImageCuration from "./pages/admin/ImageCuration";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
@@ -182,6 +183,11 @@ const App = () => (
                 <Route path="/admin/data-cleanup" element={
                   <ProtectedRoute>
                     <DataCleanup />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/image-curation" element={
+                  <ProtectedRoute>
+                    <ImageCuration />
                   </ProtectedRoute>
                 } />
                 
