@@ -19,7 +19,8 @@ function normalizeDestination(dest: string): string {
     .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
     .replace(/\b(international\s+)?airport\b/gi, '')
     .replace(/\s{2,}/g, ' ')
-    .trim();
+    .trim()
+    .toLowerCase(); // Ensure lowercase for curated image lookup
 }
 
 function generateGradientDataUrl(label: string, variant: number = 0): string {
