@@ -21,7 +21,7 @@ interface HotelSelectionProps {
     endDate: string;
   };
   selectedHotel: string | null;
-  onSelectHotel: (id: string) => void;
+  onSelectHotel: (id: string, hotel: Hotel) => void;
   onContinue: () => void;
   onBack: () => void;
 }
@@ -74,14 +74,14 @@ function HotelCard({
 }: {
   hotel: Hotel;
   isSelected: boolean;
-  onSelect: () => void;
+  onSelect: (hotel: Hotel) => void;
   nights: number;
 }) {
   const totalPrice = hotel.pricePerNight * nights;
 
   return (
     <motion.button
-      onClick={onSelect}
+      onClick={() => onSelect(hotel)}
       whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
       className={cn(
@@ -198,7 +198,7 @@ export default function HotelSelection({
             key={hotel.id}
             hotel={hotel}
             isSelected={selectedHotel === hotel.id}
-            onSelect={() => onSelectHotel(hotel.id)}
+            onSelect={(h) => onSelectHotel(h.id, h)}
             nights={nights}
           />
         ))}
