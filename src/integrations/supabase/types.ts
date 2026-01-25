@@ -174,6 +174,13 @@ export type Database = {
             foreignKeyName: "activity_feedback_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_feedback_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -1468,6 +1475,13 @@ export type Database = {
             foreignKeyName: "agency_trips_linked_trip_id_fkey"
             columns: ["linked_trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "agency_trips_linked_trip_id_fkey"
+            columns: ["linked_trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -2725,6 +2739,13 @@ export type Database = {
             foreignKeyName: "itinerary_activities_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "itinerary_activities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -2768,6 +2789,13 @@ export type Database = {
           user_message?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "itinerary_customization_requests_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
           {
             foreignKeyName: "itinerary_customization_requests_trip_id_fkey"
             columns: ["trip_id"]
@@ -2828,6 +2856,13 @@ export type Database = {
             foreignKeyName: "itinerary_days_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "itinerary_days_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -2868,6 +2903,13 @@ export type Database = {
           version_number?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "itinerary_versions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
           {
             foreignKeyName: "itinerary_versions_trip_id_fkey"
             columns: ["trip_id"]
@@ -3534,6 +3576,76 @@ export type Database = {
             foreignKeyName: "trip_activities_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_activities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_budget_ledger: {
+        Row: {
+          activity_id: string | null
+          amount_cents: number
+          category: string
+          confidence: string | null
+          created_at: string
+          currency: string | null
+          day_number: number | null
+          description: string | null
+          entry_type: string
+          external_booking_id: string | null
+          id: string
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          activity_id?: string | null
+          amount_cents: number
+          category: string
+          confidence?: string | null
+          created_at?: string
+          currency?: string | null
+          day_number?: number | null
+          description?: string | null
+          entry_type: string
+          external_booking_id?: string | null
+          id?: string
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string | null
+          amount_cents?: number
+          category?: string
+          confidence?: string | null
+          created_at?: string
+          currency?: string | null
+          day_number?: number | null
+          description?: string | null
+          entry_type?: string
+          external_booking_id?: string | null
+          id?: string
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_budget_ledger_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_budget_ledger_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -3568,6 +3680,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
           {
             foreignKeyName: "trip_collaborators_trip_id_fkey"
             columns: ["trip_id"]
@@ -3651,6 +3770,13 @@ export type Database = {
             foreignKeyName: "trip_expenses_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -3691,6 +3817,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_intents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
           {
             foreignKeyName: "trip_intents_trip_id_fkey"
             columns: ["trip_id"]
@@ -3744,6 +3877,13 @@ export type Database = {
           uses_count?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_invites_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
           {
             foreignKeyName: "trip_invites_trip_id_fkey"
             columns: ["trip_id"]
@@ -3828,6 +3968,13 @@ export type Database = {
             foreignKeyName: "trip_learnings_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_learnings_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -3871,6 +4018,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
           {
             foreignKeyName: "trip_members_trip_id_fkey"
             columns: ["trip_id"]
@@ -3963,6 +4117,13 @@ export type Database = {
             foreignKeyName: "trip_payments_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_payments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -4033,6 +4194,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "trip_activities"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_photos_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
           },
           {
             foreignKeyName: "trip_photos_trip_id_fkey"
@@ -4115,6 +4283,13 @@ export type Database = {
             foreignKeyName: "trip_rental_cars_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_rental_cars_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -4193,6 +4368,13 @@ export type Database = {
             foreignKeyName: "trip_settlements_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_settlements_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
@@ -4202,7 +4384,15 @@ export type Database = {
         Row: {
           abandoned_at: string | null
           agent_notes: string | null
+          budget_allocations: Json | null
+          budget_currency: string | null
+          budget_include_flight: boolean | null
+          budget_include_hotel: boolean | null
+          budget_input_mode: string | null
           budget_tier: string | null
+          budget_total_cents: number | null
+          budget_warning_threshold: string | null
+          budget_warnings_enabled: boolean | null
           client_id: string | null
           created_at: string
           destination: string
@@ -4235,7 +4425,15 @@ export type Database = {
         Insert: {
           abandoned_at?: string | null
           agent_notes?: string | null
+          budget_allocations?: Json | null
+          budget_currency?: string | null
+          budget_include_flight?: boolean | null
+          budget_include_hotel?: boolean | null
+          budget_input_mode?: string | null
           budget_tier?: string | null
+          budget_total_cents?: number | null
+          budget_warning_threshold?: string | null
+          budget_warnings_enabled?: boolean | null
           client_id?: string | null
           created_at?: string
           destination: string
@@ -4268,7 +4466,15 @@ export type Database = {
         Update: {
           abandoned_at?: string | null
           agent_notes?: string | null
+          budget_allocations?: Json | null
+          budget_currency?: string | null
+          budget_include_flight?: boolean | null
+          budget_include_hotel?: boolean | null
+          budget_input_mode?: string | null
           budget_tier?: string | null
+          budget_total_cents?: number | null
+          budget_warning_threshold?: string | null
+          budget_warnings_enabled?: boolean | null
           client_id?: string | null
           created_at?: string
           destination?: string
@@ -5008,6 +5214,28 @@ export type Database = {
         }
         Relationships: []
       }
+      trip_budget_summary: {
+        Row: {
+          budget_allocations: Json | null
+          budget_currency: string | null
+          budget_include_flight: boolean | null
+          budget_include_hotel: boolean | null
+          budget_per_person_cents: number | null
+          budget_total_cents: number | null
+          committed_flight_cents: number | null
+          committed_hotel_cents: number | null
+          committed_other_cents: number | null
+          planned_activities_cents: number | null
+          planned_food_cents: number | null
+          planned_total_cents: number | null
+          planned_transit_cents: number | null
+          remaining_cents: number | null
+          total_committed_cents: number | null
+          travelers: number | null
+          trip_id: string | null
+        }
+        Relationships: []
+      }
       trip_finance_ledger: {
         Row: {
           agent_id: string | null
@@ -5076,6 +5304,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
           {
             foreignKeyName: "trip_members_trip_id_fkey"
             columns: ["trip_id"]
