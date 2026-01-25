@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { X, MapPin, Clock, DollarSign, Info } from 'lucide-react';
+import { MapPin, Clock, DollarSign, Info, Star, MessageSquare } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import type { Activity } from '@/lib/destinations';
 
 interface ActivityModalProps {
@@ -14,6 +15,8 @@ interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   destinationImage?: string;
+  destinationName?: string;
+  onViewReviews?: (activityName: string, category: string) => void;
 }
 
 const categoryColors: Record<string, string> = {
@@ -32,8 +35,21 @@ const priceTierLabels: Record<string, string> = {
   luxury: '$$$$',
 };
 
-export function ActivityModal({ activity, isOpen, onClose, destinationImage }: ActivityModalProps) {
+export function ActivityModal({ 
+  activity, 
+  isOpen, 
+  onClose, 
+  destinationImage,
+  destinationName,
+  onViewReviews,
+}: ActivityModalProps) {
   if (!activity) return null;
+
+  const handleViewReviews = () => {
+    if (onViewReviews) {
+      onViewReviews(activity.title, activity.category);
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -86,7 +102,7 @@ export function ActivityModal({ activity, isOpen, onClose, destinationImage }: A
           </p>
 
           {/* What to know */}
-          <div className="bg-secondary/50 rounded-lg p-4">
+          <div className="bg-secondary/50 rounded-lg p-4 mb-4">
             <div className="flex items-start gap-2">
               <Info className="h-4 w-4 mt-0.5 text-accent shrink-0" />
               <div>
@@ -105,10 +121,18 @@ export function ActivityModal({ activity, isOpen, onClose, destinationImage }: A
             </div>
           </div>
 
-          {/* Note about reviews */}
-          <p className="text-xs text-muted-foreground mt-4 text-center">
-            Review aggregation coming soon
-          </p>
+          {/* View Reviews Button */}
+          {onViewReviews && (
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={handleViewReviews}
+            >
+              <MessageSquare className="h-4 w-4" />
+              View Reviews & Ratings
+              <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
