@@ -817,66 +817,80 @@ export default function Start() {
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
       
-      {/* Editorial Hero Section with Background Image */}
-      <section className="relative pt-24 pb-8 md:pt-32 md:pb-12 overflow-hidden">
-        {/* Hero Background Image - Different per mode */}
-        <div className="absolute inset-0">
+      {/* EDITORIAL SPLIT LAYOUT - Magazine Style */}
+      <section className="relative min-h-[85vh] flex flex-col lg:flex-row">
+        {/* Left: Full-bleed Hero Image */}
+        <div className="relative w-full lg:w-1/2 h-[50vh] lg:h-auto lg:min-h-[85vh]">
           <img 
             src={itineraryOnlyMode ? heroItineraryImage : heroHotelImage}
             alt=""
-            className="w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover"
           />
-          {/* Clean gradient overlay - no blur */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-background" />
+          {/* Subtle vignette overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-transparent lg:bg-gradient-to-l" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
+          
+          {/* Editorial headline on image - visible on mobile, hidden on desktop */}
+          <div className="absolute inset-0 flex items-end lg:items-center p-8 lg:p-12">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+              className="lg:hidden"
+            >
+              <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-3 ${itineraryOnlyMode ? 'text-amber-300' : 'text-sky-300'}`}>
+                {itineraryOnlyMode ? 'Trip Booked' : 'Need Accommodation'}
+              </p>
+              <h1 className="font-serif text-4xl md:text-5xl font-light text-white leading-[1.05] drop-shadow-lg">
+                {itineraryOnlyMode ? (
+                  <>Build My<br /><em className="italic">Itinerary</em></>
+                ) : (
+                  <>Find My<br /><em className="italic">Hotel</em></>
+                )}
+              </h1>
+            </motion.div>
+          </div>
         </div>
-        
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            {/* Eyebrow - White text with shadow for contrast */}
-            <p className={`text-xs tracking-[0.25em] uppercase font-semibold mb-4 drop-shadow-md ${itineraryOnlyMode ? 'text-amber-300' : 'text-sky-300'}`}>
-              {itineraryOnlyMode ? 'Trip Booked' : 'Need Accommodation'}
-            </p>
-            
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-light text-white mb-5 leading-[1.1] drop-shadow-lg">
-              {itineraryOnlyMode ? (
-                <>Build My <br className="hidden md:block" /><em className="italic">Itinerary</em></>
-              ) : (
-                <>Find My <br className="hidden md:block" /><em className="italic">Hotel</em></>
-              )}
-            </h1>
-            
-            <p className="text-lg text-white/90 font-light leading-relaxed max-w-xl mx-auto drop-shadow-md">
-              {itineraryOnlyMode 
-                ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
-                : "Tell us where you're headed, and we'll find the ideal place to stay."
-              }
-            </p>
-          </motion.div>
-        </div>
-      </section>
 
-      {/* Planning Form - Different styling per mode */}
-      <section className="relative pb-16 pt-6">
-        <div className="max-w-xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.15 }}
-            className={`p-8 md:p-10 rounded-2xl shadow-sm ${itineraryOnlyMode 
-              ? 'bg-gradient-to-br from-card to-amber-50/20 border border-amber-200/40' 
-              : 'bg-card border border-border/60'
-            }`}
-          >
-            <div className="space-y-6">
+        {/* Right: Editorial Form Panel */}
+        <div className={`relative w-full lg:w-1/2 flex flex-col justify-center ${itineraryOnlyMode ? 'bg-gradient-to-br from-amber-50/80 via-background to-background' : 'bg-gradient-to-br from-sky-50/60 via-background to-background'}`}>
+          <div className="px-6 py-12 lg:px-12 lg:py-16 xl:px-20 max-w-xl mx-auto lg:mx-0 w-full">
+            {/* Desktop headline - hidden on mobile */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="hidden lg:block mb-10"
+            >
+              <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 ${itineraryOnlyMode ? 'text-amber-600' : 'text-sky-600'}`}>
+                {itineraryOnlyMode ? 'Trip Booked' : 'Need Accommodation'}
+              </p>
+              <h1 className="font-serif text-4xl xl:text-5xl font-light text-foreground leading-[1.1] mb-4">
+                {itineraryOnlyMode ? (
+                  <>Build My <em className="italic">Itinerary</em></>
+                ) : (
+                  <>Find My <em className="italic">Hotel</em></>
+                )}
+              </h1>
+              <p className="text-base text-muted-foreground font-light leading-relaxed">
+                {itineraryOnlyMode 
+                  ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
+                  : "Tell us where you're headed, and we'll find the ideal place to stay."
+                }
+              </p>
+            </motion.div>
+
+            {/* Form */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.15 }}
+              className="space-y-6"
+            >
               {/* Departure City - Now FIRST */}
               {!itineraryOnlyMode && (
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <Plane className="h-4 w-4 text-muted-foreground" />
+                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                     Departing from
                   </label>
                   <AirportAutocomplete
@@ -888,11 +902,10 @@ export default function Start() {
                 </div>
               )}
               
-              {/* Destination - Now SECOND */}
+              {/* Destination */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                     {itineraryOnlyMode ? 'Destination' : 'Flying to'}
                   </label>
                   {!itineraryOnlyMode && (
@@ -924,9 +937,8 @@ export default function Start() {
               {/* Hotel Input - Only for itinerary-only mode */}
               {itineraryOnlyMode && (
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    Staying at <span className="text-muted-foreground font-normal">(optional)</span>
+                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                    Staying at <span className="normal-case text-muted-foreground/70">(optional)</span>
                   </label>
                   <HotelAutocomplete
                     value={hotelSelection}
@@ -937,10 +949,10 @@ export default function Start() {
                 </div>
               )}
 
+              {/* Dates - Side by side */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                     {itineraryOnlyMode ? 'Arriving' : 'Depart'}
                   </label>
                   <Popover>
@@ -948,7 +960,7 @@ export default function Start() {
                       <Button
                         variant="outline"
                         className={cn(
-                          "w-full h-11 justify-between text-left font-normal",
+                          "w-full h-12 justify-between text-left font-normal bg-background/50",
                           !startDate && "text-muted-foreground"
                         )}
                       >
@@ -978,8 +990,7 @@ export default function Start() {
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                     {itineraryOnlyMode ? 'Leaving' : 'Return'}
                   </label>
                   <Popover>
@@ -987,7 +998,7 @@ export default function Start() {
                       <Button
                         variant="outline"
                         className={cn(
-                          "w-full h-11 justify-between text-left font-normal",
+                          "w-full h-12 justify-between text-left font-normal bg-background/50",
                           !endDate && "text-muted-foreground"
                         )}
                       >
@@ -1014,10 +1025,9 @@ export default function Start() {
                 </div>
               </div>
 
-              {/* Travelers */}
+              {/* Travelers - Refined */}
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Users className="h-4 w-4 text-muted-foreground" />
+                <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                   Travelers
                 </label>
                 <div className="flex items-center gap-3">
@@ -1028,10 +1038,12 @@ export default function Start() {
                         type="button"
                         onClick={() => setTravelers(num)}
                         className={cn(
-                          "w-11 h-11 rounded-lg border-2 transition-all text-sm font-medium",
+                          "w-12 h-12 rounded-lg border-2 transition-all text-sm font-medium",
                           travelers === num
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                            ? itineraryOnlyMode 
+                              ? "bg-amber-500 text-white border-amber-500"
+                              : "bg-sky-500 text-white border-sky-500"
+                            : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground bg-background/50"
                         )}
                       >
                         {num}
@@ -1052,30 +1064,28 @@ export default function Start() {
                 </div>
               </div>
 
-              {/* Trip Occasion Selection */}
+              {/* Trip Occasion - Compact */}
               <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                   What's the occasion?
                 </label>
-                <p className="text-xs text-muted-foreground -mt-1">
-                  Help us personalize your itinerary for this trip
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="flex flex-wrap gap-2">
                   {tripOccasions.slice(0, 6).map((occasion) => (
                     <button
                       key={occasion.id}
                       type="button"
                       onClick={() => setTripType(occasion.id)}
                       className={cn(
-                        "flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all text-sm",
+                        "flex items-center gap-1.5 px-3 py-2 rounded-full border transition-all text-sm",
                         tripType === occasion.id
-                          ? "bg-primary/10 border-primary text-primary font-medium"
-                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                          ? itineraryOnlyMode 
+                            ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
+                            : "bg-sky-500/10 border-sky-500 text-sky-700 font-medium"
+                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-background/50"
                       )}
                     >
-                      <span>{occasion.emoji}</span>
-                      <span className="truncate">{occasion.label}</span>
+                      <span className="text-xs">{occasion.emoji}</span>
+                      <span>{occasion.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1092,21 +1102,23 @@ export default function Start() {
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-2">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {tripOccasions.slice(6).map((occasion) => (
                         <button
                           key={occasion.id}
                           type="button"
                           onClick={() => setTripType(occasion.id)}
                           className={cn(
-                            "flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all text-sm",
+                            "flex items-center gap-1.5 px-3 py-2 rounded-full border transition-all text-sm",
                             tripType === occasion.id
-                              ? "bg-primary/10 border-primary text-primary font-medium"
-                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                              ? itineraryOnlyMode 
+                                ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
+                                : "bg-sky-500/10 border-sky-500 text-sky-700 font-medium"
+                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-background/50"
                           )}
                         >
-                          <span>{occasion.emoji}</span>
-                          <span className="truncate">{occasion.label}</span>
+                          <span className="text-xs">{occasion.emoji}</span>
+                          <span>{occasion.label}</span>
                         </button>
                       ))}
                     </div>
@@ -1137,13 +1149,10 @@ export default function Start() {
                         placeholder="e.g. 2000"
                         value={budgetAmount || ''}
                         onChange={(e) => setBudgetAmount(e.target.value ? Number(e.target.value) : undefined)}
-                        className="h-12 pl-9 text-base"
+                        className="h-12 pl-9 text-base bg-background/50"
                         min={0}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Your per-person budget for flights + hotel. We'll find options within this range for each traveler.
-                    </p>
                   </div>
                   
                   {/* Budget disclaimer for low amounts */}
@@ -1151,7 +1160,7 @@ export default function Start() {
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                       <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                       <p className="text-xs text-amber-700 dark:text-amber-400">
-                        For budget trips, we'll prioritize the cheapest options which may include layovers, alternative airports, and basic accommodations.
+                        For budget trips, we'll prioritize the cheapest options.
                       </p>
                     </div>
                   )}
@@ -1164,12 +1173,10 @@ export default function Start() {
                       { label: 'Premium', min: 1500, max: 3000, display: '$1,500–$3,000' },
                       { label: 'Luxury', min: 3000, max: 10000, display: '$3,000+' },
                     ].map((preset) => {
-                      // Check if current budget falls within this range
                       const isInRange = budgetAmount !== undefined && 
                         budgetAmount >= preset.min && 
                         (preset.max === 10000 ? true : budgetAmount <= preset.max);
                       
-                      // Set midpoint of range when clicked (or min for budget tier)
                       const targetAmount = preset.label === 'Budget' 
                         ? 500 
                         : preset.label === 'Luxury' 
@@ -1184,8 +1191,10 @@ export default function Start() {
                           className={cn(
                             "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
                             isInRange
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border text-muted-foreground hover:border-primary/50"
+                              ? itineraryOnlyMode 
+                                ? "bg-amber-500 text-white border-amber-500"
+                                : "bg-sky-500 text-white border-sky-500"
+                              : "border-border text-muted-foreground hover:border-primary/50 bg-background/50"
                           )}
                         >
                           {preset.label}
@@ -1196,47 +1205,37 @@ export default function Start() {
                 </CollapsibleContent>
               </Collapsible>
 
-              {/* CTA Buttons */}
-              <div className="space-y-3 mt-2">
+              {/* CTA Button - Primary */}
+              <div className="pt-4 space-y-4">
                 <Button
                   onClick={handleStart}
                   disabled={!isFormValid}
-                  className={`w-full h-14 text-base font-medium ${itineraryOnlyMode 
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white' 
-                    : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white'
-                  }`}
+                  className={cn(
+                    "w-full h-14 text-base font-medium rounded-xl shadow-lg transition-all",
+                    itineraryOnlyMode 
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-amber-500/25' 
+                      : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25'
+                  )}
                   size="lg"
                 >
                   {itineraryOnlyMode ? (
                     <>
-                      <Sparkles className="h-4 w-4 mr-2" />
+                      <Sparkles className="h-5 w-5 mr-2" />
                       Build My Itinerary
                     </>
                   ) : (
                     <>
-                      <Building2 className="h-4 w-4 mr-2" />
+                      <Building2 className="h-5 w-5 mr-2" />
                       Find My Hotel
                     </>
                   )}
                 </Button>
                 
-                {/* Skip to Itinerary Option - More prominent card style */}
-                {!itineraryOnlyMode && (
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-card px-3 text-xs text-muted-foreground">or</span>
-                    </div>
-                  </div>
-                )}
-                
+                {/* Cross-sell to other flow */}
                 {!itineraryOnlyMode && (
                   <button
                     type="button"
                     onClick={async () => {
-                      // Show validation feedback if form incomplete, but always allow click
                       if (!destinationSelection.cityName) {
                         toast.error('Please select a destination');
                         return;
@@ -1265,25 +1264,23 @@ export default function Start() {
                         toast.error('Please sign in to generate an itinerary');
                       }
                     }}
-                    className={cn(
-                      "w-full flex flex-col items-center justify-center gap-1 px-4 py-4 rounded-xl border-2 transition-all",
-                      "border-amber-400 bg-amber-50 hover:bg-amber-100"
-                    )}
+                    className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-amber-600" />
-                      <span className="text-base font-semibold text-amber-700">
-                        Build My Itinerary Instead
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      Already have your hotel? Skip straight to activities
-                    </span>
+                    Already have your hotel? <span className="text-amber-600 font-medium hover:underline">Build itinerary only →</span>
                   </button>
                 )}
+                
+                {itineraryOnlyMode && (
+                  <Link
+                    to="/start"
+                    className="block w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Need a hotel too? <span className="text-sky-600 font-medium hover:underline">Find accommodations →</span>
+                  </Link>
+                )}
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
