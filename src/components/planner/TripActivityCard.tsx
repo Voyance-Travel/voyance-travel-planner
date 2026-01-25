@@ -3,11 +3,13 @@ import { Clock, MapPin, DollarSign, Lock, LockOpen, ExternalLink } from 'lucide-
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getActivityIcon, getActivityColor, formatDuration } from '@/utils/plannerUtils';
+import { trackActivityClick } from '@/services/behaviorTrackingService';
 import type { TripActivity } from '@/types/trip';
 
 interface TripActivityCardProps {
   activity: TripActivity;
   currency?: string;
+  destination?: string;
   onToggleLock?: (activityId: string, locked: boolean) => void;
   onEdit?: (activity: TripActivity) => void;
   onDelete?: (activityId: string) => void;
@@ -17,6 +19,7 @@ interface TripActivityCardProps {
 const TripActivityCard: React.FC<TripActivityCardProps> = ({
   activity,
   currency = "USD",
+  destination = "",
   onToggleLock,
   onEdit,
   onDelete: _onDelete,
@@ -25,12 +28,23 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
   const categoryColor = getActivityColor(activity.category || activity.type);
   const icon = getActivityIcon(activity.type);
 
+  const handleCardClick = () => {
+    // Track activity interaction for personalization
+    trackActivityClick(
+      activity.id,
+      activity.name,
+      activity.category || activity.type,
+      destination
+    );
+  };
+
   return (
     <motion.div
       layout
-      className="bg-card border border-border rounded-xl p-4 hover:shadow-md transition-shadow"
+      className="bg-card border border-border rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer"
+      onClick={handleCardClick}
     >
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-4" onClick={(e) => e.stopPropagation()}>
         {/* Icon */}
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${categoryColor}`}>
           {icon}

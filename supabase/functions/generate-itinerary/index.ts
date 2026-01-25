@@ -1578,6 +1578,50 @@ async function getLearnedPreferences(supabase: any, userId: string) {
   }
 }
 
+// Fetch behavioral enrichment signals for richer personalization
+async function getBehavioralEnrichment(supabase: any, userId: string) {
+  try {
+    const { data: enrichments } = await supabase
+      .from('user_enrichment')
+      .select('enrichment_type, entity_id, entity_name, interaction_count, metadata')
+      .eq('user_id', userId)
+      .in('enrichment_type', ['category_preference', 'activity_remove', 'time_change'])
+      .order('interaction_count', { ascending: false })
+      .limit(50);
+    
+    if (!enrichments?.length) return null;
+    
+    // Aggregate category preferences
+    const categoryScores = new Map<string, number>();
+    const removedCategories: string[] = [];
+    const timePrefs: { category: string; slot: string }[] = [];
+    
+    for (const e of enrichments) {
+      if (e.enrichment_type === 'category_preference') {
+        const weight = e.metadata?.weight || 1;
+        const current = categoryScores.get(e.entity_id) || 0;
+        categoryScores.set(e.entity_id, current + weight * (e.interaction_count || 1));
+      } else if (e.enrichment_type === 'activity_remove' && e.metadata?.category) {
+        removedCategories.push(e.metadata.category);
+      } else if (e.enrichment_type === 'time_change' && e.metadata?.category && e.metadata?.new_slot) {
+        timePrefs.push({ category: e.metadata.category, slot: e.metadata.new_slot });
+      }
+    }
+    
+    const likedCategories = Array.from(categoryScores.entries())
+      .filter(([_, score]) => score > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([cat]) => cat.replace(/_/g, ' '));
+    
+    const avoidedCategories = [...new Set(removedCategories)].slice(0, 5);
+    
+    return { likedCategories, avoidedCategories, timePrefs };
+  } catch {
+    return null;
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getUserPreferences(supabase: any, userId: string) {
   try {

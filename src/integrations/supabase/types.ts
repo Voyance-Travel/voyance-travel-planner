@@ -4236,6 +4236,7 @@ export type Database = {
           feedback_reason: string | null
           feedback_tags: string[] | null
           id: string
+          interaction_count: number | null
           is_permanent_suppress: boolean | null
           metadata: Json | null
           suppress_until: string | null
@@ -4252,6 +4253,7 @@ export type Database = {
           feedback_reason?: string | null
           feedback_tags?: string[] | null
           id?: string
+          interaction_count?: number | null
           is_permanent_suppress?: boolean | null
           metadata?: Json | null
           suppress_until?: string | null
@@ -4268,6 +4270,7 @@ export type Database = {
           feedback_reason?: string | null
           feedback_tags?: string[] | null
           id?: string
+          interaction_count?: number | null
           is_permanent_suppress?: boolean | null
           metadata?: Json | null
           suppress_until?: string | null
