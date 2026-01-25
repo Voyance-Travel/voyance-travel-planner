@@ -5,7 +5,8 @@ import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, Doll
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
-import { getHeroImage } from '@/utils/heroImages';
+import heroItineraryImage from '@/assets/hero-itinerary.jpg';
+import heroHotelImage from '@/assets/hero-hotel.jpg';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
@@ -821,13 +822,13 @@ export default function Start() {
         {/* Hero Background Image - Different per mode */}
         <div className="absolute inset-0">
           <img 
-            src={getHeroImage(itineraryOnlyMode ? 'itinerary' : 'hotel')}
+            src={itineraryOnlyMode ? heroItineraryImage : heroHotelImage}
             alt=""
-            className={`w-full h-full object-cover ${itineraryOnlyMode ? 'brightness-95 contrast-105 saturate-120' : 'brightness-90 contrast-110 saturate-100'}`}
+            className={`w-full h-full object-cover ${itineraryOnlyMode ? 'brightness-100 contrast-105 saturate-110' : 'brightness-95 contrast-110 saturate-105'}`}
           />
           <div className={`absolute inset-0 backdrop-blur-[1px] ${itineraryOnlyMode 
-            ? 'bg-gradient-to-b from-amber-900/20 via-background/50 to-background' 
-            : 'bg-gradient-to-b from-sky-900/20 via-background/50 to-background'
+            ? 'bg-gradient-to-b from-amber-900/30 via-background/55 to-background' 
+            : 'bg-gradient-to-b from-sky-900/30 via-background/55 to-background'
           }`} />
         </div>
         
