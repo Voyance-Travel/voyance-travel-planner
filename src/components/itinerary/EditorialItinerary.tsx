@@ -21,7 +21,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse
+  Shield, FileText, HeartPulse, MoreHorizontal
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
@@ -32,7 +32,7 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -4124,56 +4124,7 @@ function ActivityRow({
             />
             {isEditable && (
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() => onMove(dayIndex, activity.id, 'up')}
-                  disabled={activityIndex === 0}
-                  className={cn(
-                    "p-1.5 rounded transition-colors",
-                    activityIndex === 0
-                      ? "opacity-30 cursor-not-allowed"
-                      : "hover:bg-secondary text-muted-foreground"
-                  )}
-                  title="Move up"
-                >
-                  <MoveUp className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => onMove(dayIndex, activity.id, 'down')}
-                  disabled={activityIndex === totalActivities - 1}
-                  className={cn(
-                    "p-1.5 rounded transition-colors",
-                    activityIndex === totalActivities - 1
-                      ? "opacity-30 cursor-not-allowed"
-                      : "hover:bg-secondary text-muted-foreground"
-                  )}
-                  title="Move down"
-                >
-                  <MoveDown className="h-3.5 w-3.5" />
-                </button>
-                {/* Move to Day dropdown */}
-                {totalDays > 1 && onMoveToDay && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
-                        title="Move to another day"
-                      >
-                        <Calendar className="h-3.5 w-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50">
-                      {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
-                        <DropdownMenuItem
-                          key={targetDay}
-                          onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
-                          className="cursor-pointer"
-                        >
-                          Move to Day {targetDay + 1}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                {/* Lock button - always visible */}
                 <button
                   onClick={() => onLock(dayIndex, activity.id)}
                   className={cn(
@@ -4182,24 +4133,80 @@ function ActivityRow({
                       ? "bg-primary/10 text-primary"
                       : "hover:bg-secondary text-muted-foreground"
                   )}
-                  title={activity.isLocked ? "Unlock" : "Lock"}
+                  title={activity.isLocked ? "Unlock to edit" : "Lock"}
                 >
                   {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                 </button>
-                <button
-                  onClick={() => onSwap?.(dayIndex, activity)}
-                  className="p-1.5 rounded transition-colors hover:bg-primary/10 text-muted-foreground hover:text-primary"
-                  title="Find alternative"
-                >
-                  <ArrowRightLeft className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => onRemove(dayIndex, activity.id)}
-                  className="p-1.5 rounded transition-colors hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                  title="Remove"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                
+                {/* More actions - only visible when unlocked */}
+                {!activity.isLocked && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                        title="More actions"
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                      <DropdownMenuItem
+                        onClick={() => onMove(dayIndex, activity.id, 'up')}
+                        disabled={activityIndex === 0}
+                        className={cn("cursor-pointer gap-2", activityIndex === 0 && "opacity-50")}
+                      >
+                        <MoveUp className="h-4 w-4" />
+                        Move up
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => onMove(dayIndex, activity.id, 'down')}
+                        disabled={activityIndex === totalActivities - 1}
+                        className={cn("cursor-pointer gap-2", activityIndex === totalActivities - 1 && "opacity-50")}
+                      >
+                        <MoveDown className="h-4 w-4" />
+                        Move down
+                      </DropdownMenuItem>
+                      {totalDays > 1 && onMoveToDay && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger className="gap-2">
+                              <Calendar className="h-4 w-4" />
+                              Move to day
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="bg-background border shadow-lg">
+                              {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
+                                <DropdownMenuItem
+                                  key={targetDay}
+                                  onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
+                                  className="cursor-pointer"
+                                >
+                                  Day {targetDay + 1}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        </>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onSwap?.(dayIndex, activity)}
+                        className="cursor-pointer gap-2"
+                      >
+                        <ArrowRightLeft className="h-4 w-4" />
+                        Find alternative
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onRemove(dayIndex, activity.id)}
+                        className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             )}
           </div>
