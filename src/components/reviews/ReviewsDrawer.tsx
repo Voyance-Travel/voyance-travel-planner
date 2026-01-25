@@ -45,6 +45,9 @@ interface ReviewsDrawerProps {
   destination: string;
   placeType?: 'restaurant' | 'attraction' | 'hotel' | 'activity';
   coordinates?: { lat: number; lng: number };
+  /** Rating from the activity card - used for display consistency */
+  activityRating?: number;
+  activityReviewCount?: number;
 }
 
 export default function ReviewsDrawer({
@@ -54,6 +57,8 @@ export default function ReviewsDrawer({
   destination,
   placeType = 'activity',
   coordinates,
+  activityRating,
+  activityReviewCount,
 }: ReviewsDrawerProps) {
   const [loading, setLoading] = useState(true);
   const [place, setPlace] = useState<PlaceDetails | null>(null);
@@ -158,7 +163,7 @@ export default function ReviewsDrawer({
                   </div>
                 )}
 
-                {/* Name & Rating */}
+                {/* Name & Rating - use activityRating for consistency with card */}
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="font-semibold text-lg">{place.name}</h3>
@@ -169,11 +174,11 @@ export default function ReviewsDrawer({
                     )}
                   </div>
                   <div className="text-right shrink-0">
-                    <div className={`text-2xl font-bold ${getRatingColor(place.rating)}`}>
-                      {place.rating.toFixed(1)}
+                    <div className={`text-2xl font-bold ${getRatingColor(activityRating ?? place.rating)}`}>
+                      {(activityRating ?? place.rating).toFixed(1)}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {reviews.length} reviews shown
+                      {activityReviewCount ? `${activityReviewCount.toLocaleString()} reviews` : `${reviews.length} reviews shown`}
                     </div>
                   </div>
                 </div>

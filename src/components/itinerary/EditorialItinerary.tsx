@@ -554,7 +554,12 @@ export function EditorialItinerary({
 
   // Reviews Drawer state
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
-  const [reviewsTarget, setReviewsTarget] = useState<{ placeName: string; placeType?: 'restaurant' | 'attraction' | 'hotel' | 'activity' } | null>(null);
+  const [reviewsTarget, setReviewsTarget] = useState<{ 
+    placeName: string; 
+    placeType?: 'restaurant' | 'attraction' | 'hotel' | 'activity';
+    activityRating?: number;
+    activityReviewCount?: number;
+  } | null>(null);
 
   // Open reviews drawer for an activity
   const openReviewsDrawer = useCallback((activity: EditorialActivity) => {
@@ -570,7 +575,11 @@ export function EditorialItinerary({
       placeType = 'hotel';
     }
 
-    setReviewsTarget({ placeName, placeType });
+    // Extract rating data for consistency between card and drawer
+    const activityRating = getActivityRating(activity) ?? undefined;
+    const activityReviewCount = getActivityReviewCount(activity) ?? undefined;
+
+    setReviewsTarget({ placeName, placeType, activityRating, activityReviewCount });
     setReviewsDrawerOpen(true);
   }, []);
 
@@ -2204,6 +2213,8 @@ export function EditorialItinerary({
         placeName={reviewsTarget?.placeName || ''}
         destination={destination}
         placeType={reviewsTarget?.placeType}
+        activityRating={reviewsTarget?.activityRating}
+        activityReviewCount={reviewsTarget?.activityReviewCount}
       />
 
       {/* Share Trip Modal */}
