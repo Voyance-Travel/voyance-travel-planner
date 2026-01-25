@@ -578,7 +578,11 @@ export function EditorialItinerary({
   const effectiveIsEditable = isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
 
   // Fetch 2 destination images for hero and mid-page sections
-  const { heroImage, midImage, isLoading: imagesLoading } = useDestinationImages(destination, destinationCountry);
+  const { heroImage, midImage, isLoading: imagesLoading } = useDestinationImages(
+    destination,
+    destinationCountry,
+    tripId
+  );
 
   // Scroll selected day button into view
   useEffect(() => {
