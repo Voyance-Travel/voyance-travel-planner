@@ -441,10 +441,7 @@ export default function ActivityAlternativesDrawer({
           <div className="p-4 space-y-6">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
-                <div className="relative">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <Sparkles className="w-4 h-4 text-primary absolute -top-1 -right-1" />
-                </div>
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground mt-3">
                   {loadingType === 'initial' 
                     ? 'Finding the best alternatives...' 
