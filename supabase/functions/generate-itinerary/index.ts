@@ -4452,6 +4452,158 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
     if (action === 'generate-day' || action === 'regenerate-day') {
       const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, userId, keepActivities, currentActivities } = params;
 
+      // =======================================================================
+      // STEP 1: LOAD LOCKED ACTIVITIES **BEFORE** AI CALL
+      // This is critical - we tell AI to skip these time slots entirely
+      // =======================================================================
+      interface LockedActivity {
+        id: string;
+        title: string;
+        name?: string;
+        description?: string;
+        category?: string;
+        startTime: string;
+        endTime: string;
+        durationMinutes?: number;
+        location?: { name?: string; address?: string };
+        cost?: { amount: number; currency: string };
+        isLocked: boolean;
+        tags?: string[];
+        bookingRequired?: boolean;
+        tips?: string;
+        photos?: unknown;
+        transportation?: unknown;
+        [key: string]: unknown;
+      }
+      
+      let lockedActivities: LockedActivity[] = [];
+      
+      // First, try to load locked activities from the normalized table
+      if (tripId) {
+        const { data: dayRow } = await supabase
+          .from('itinerary_days')
+          .select('id')
+          .eq('trip_id', tripId)
+          .eq('day_number', dayNumber)
+          .maybeSingle();
+        
+        if (dayRow) {
+          const { data: lockedFromDb } = await supabase
+            .from('itinerary_activities')
+            .select('*')
+            .eq('trip_id', tripId)
+            .eq('itinerary_day_id', dayRow.id)
+            .eq('is_locked', true);
+          
+          if (lockedFromDb && lockedFromDb.length > 0) {
+            lockedActivities = lockedFromDb.map(a => ({
+              id: a.id,
+              title: a.title,
+              name: a.name || a.title,
+              description: a.description || undefined,
+              category: a.category || 'activity',
+              startTime: a.start_time || '09:00',
+              endTime: a.end_time || '10:00',
+              durationMinutes: a.duration_minutes || 60,
+              location: a.location as { name?: string; address?: string } || { name: '', address: '' },
+              cost: a.cost as { amount: number; currency: string } || { amount: 0, currency: 'USD' },
+              isLocked: true,
+              tags: a.tags || [],
+              bookingRequired: a.booking_required || false,
+              tips: a.tips || undefined,
+              photos: a.photos,
+              transportation: a.transportation,
+            }));
+            console.log(`[generate-day] Found ${lockedActivities.length} locked activities from DB for day ${dayNumber}`);
+          }
+        }
+      }
+      
+      // Fallback: check itinerary_data JSON for locked activities
+      if (lockedActivities.length === 0 && tripId) {
+        const { data: tripData } = await supabase
+          .from('trips')
+          .select('itinerary_data')
+          .eq('id', tripId)
+          .single();
+        
+        if (tripData?.itinerary_data) {
+          const itineraryData = tripData.itinerary_data as { days?: Array<{ dayNumber: number; activities: Array<{ id: string; title?: string; name?: string; startTime?: string; endTime?: string; isLocked?: boolean; category?: string; location?: unknown; cost?: unknown; description?: string }> }> };
+          const dayData = itineraryData.days?.find(d => d.dayNumber === dayNumber);
+          if (dayData) {
+            const lockedFromJson = dayData.activities.filter(a => a.isLocked);
+            if (lockedFromJson.length > 0) {
+              lockedActivities = lockedFromJson.map(a => ({
+                id: a.id,
+                title: a.title || a.name || 'Activity',
+                name: a.name || a.title,
+                description: a.description,
+                category: a.category || 'activity',
+                startTime: a.startTime || '09:00',
+                endTime: a.endTime || '10:00',
+                location: a.location as { name?: string; address?: string },
+                cost: a.cost as { amount: number; currency: string },
+                isLocked: true,
+              }));
+              console.log(`[generate-day] Found ${lockedActivities.length} locked activities from JSON for day ${dayNumber}`);
+            }
+          }
+        }
+      }
+      
+      // Legacy fallback: check currentActivities from request
+      if (lockedActivities.length === 0 && keepActivities && keepActivities.length > 0 && currentActivities) {
+        for (const act of currentActivities) {
+          if (keepActivities.includes(act.id) && act.isLocked) {
+            lockedActivities.push({
+              id: act.id,
+              title: act.title || act.name || 'Activity',
+              name: act.name || act.title,
+              description: act.description,
+              category: act.category,
+              startTime: act.startTime || '09:00',
+              endTime: act.endTime || '10:00',
+              durationMinutes: act.durationMinutes,
+              location: act.location,
+              cost: act.cost || act.estimatedCost,
+              isLocked: true,
+              tags: act.tags,
+              bookingRequired: act.bookingRequired,
+              tips: act.tips,
+              photos: act.photos,
+              transportation: act.transportation,
+            });
+          }
+        }
+        if (lockedActivities.length > 0) {
+          console.log(`[generate-day] Preserving ${lockedActivities.length} locked activities from request (legacy)`);
+        }
+      }
+
+      // =======================================================================
+      // STEP 2: Build locked slots instruction for AI prompt
+      // =======================================================================
+      let lockedSlotsInstruction = '';
+      if (lockedActivities.length > 0) {
+        const lockedSlotsList = lockedActivities
+          .sort((a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0))
+          .map(a => `- "${a.title}" from ${a.startTime} to ${a.endTime} (category: ${a.category})`)
+          .join('\n');
+        
+        lockedSlotsInstruction = `
+LOCKED ACTIVITIES - DO NOT REGENERATE THESE TIME SLOTS:
+The user has locked the following activities. These are FIXED and CANNOT be changed.
+You must NOT generate any activities that overlap with these time slots.
+Plan activities ONLY for the available gaps between these locked blocks.
+
+${lockedSlotsList}
+
+Generate activities ONLY for the remaining unlocked time periods. 
+DO NOT create any activity that starts or ends within a locked time slot.`;
+        
+        console.log(`[generate-day] Added ${lockedActivities.length} locked slots to AI prompt`);
+      }
+
       // Get user preferences
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
       const userPrefs = userId ? await getUserPreferences(supabase, userId) : null;
@@ -4477,7 +4629,7 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
       
-      console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}`);
+      console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}, lockedCount=${lockedActivities.length}`);
       if (flightContext.arrivalTime) {
         console.log(`[generate-day] Flight arrival: ${flightContext.arrivalTime}, earliest activity: ${flightContext.earliestFirstActivityTime}`);
       }
@@ -4566,6 +4718,7 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
 
 ${timingInstructions}
+${lockedSlotsInstruction}
 
 General Requirements:
 - Include FULL street addresses for all locations
@@ -4573,7 +4726,8 @@ General Requirements:
 - Account for travel time between activities
 - Include meals (breakfast, lunch, dinner as appropriate for the time of day)
 - Every activity MUST have a "title" field (the display name)
-- All times MUST be in 24-hour HH:MM format`;
+- All times MUST be in 24-hour HH:MM format
+${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}`;
 
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
 
@@ -4680,100 +4834,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         const generatedDay = JSON.parse(toolCall.function.arguments);
 
-        // =======================================================================
-        // LOCKED ACTIVITY PRESERVATION: Read from itinerary_activities table
-        // =======================================================================
-        interface LockedActivity {
-          id: string;
-          title: string;
-          name?: string;
-          description?: string;
-          category?: string;
-          startTime: string;
-          endTime: string;
-          durationMinutes?: number;
-          location?: { name?: string; address?: string };
-          cost?: { amount: number; currency: string };
-          isLocked: boolean;
-          tags?: string[];
-          bookingRequired?: boolean;
-          tips?: string;
-          photos?: unknown;
-          transportation?: unknown;
-          [key: string]: unknown;
-        }
-        
-        let lockedActivities: LockedActivity[] = [];
-        
-        // First, try to load locked activities from the new normalized table
-        if (tripId) {
-          const { data: lockedFromDb } = await supabase
-            .from('itinerary_activities')
-            .select('*')
-            .eq('trip_id', tripId)
-            .eq('is_locked', true);
-          
-          if (lockedFromDb && lockedFromDb.length > 0) {
-            // Filter to only this day's locked activities
-            // We need to join with itinerary_days to get day_number
-            const { data: dayRow } = await supabase
-              .from('itinerary_days')
-              .select('id')
-              .eq('trip_id', tripId)
-              .eq('day_number', dayNumber)
-              .maybeSingle();
-            
-            if (dayRow) {
-              const dayLockedActivities = lockedFromDb.filter(a => a.itinerary_day_id === dayRow.id);
-              lockedActivities = dayLockedActivities.map(a => ({
-                id: a.id,
-                title: a.title,
-                name: a.name || a.title,
-                description: a.description || undefined,
-                category: a.category || 'activity',
-                startTime: a.start_time || '09:00',
-                endTime: a.end_time || '10:00',
-                durationMinutes: a.duration_minutes || 60,
-                location: a.location as { name?: string; address?: string } || { name: '', address: '' },
-                cost: a.cost as { amount: number; currency: string } || { amount: 0, currency: 'USD' },
-                isLocked: true,
-                tags: a.tags || [],
-                bookingRequired: a.booking_required || false,
-                tips: a.tips || undefined,
-                photos: a.photos,
-                transportation: a.transportation,
-              }));
-              console.log(`[generate-day] Found ${lockedActivities.length} locked activities from itinerary_activities table for day ${dayNumber}`);
-            }
-          }
-        }
-        
-        // Fallback: check currentActivities from request (legacy support during migration)
-        if (lockedActivities.length === 0 && keepActivities && keepActivities.length > 0 && currentActivities) {
-          for (const act of currentActivities) {
-            if (keepActivities.includes(act.id) && act.isLocked) {
-              lockedActivities.push({
-                id: act.id,
-                title: act.title || act.name || 'Activity',
-                name: act.name || act.title,
-                description: act.description,
-                category: act.category,
-                startTime: act.startTime || '09:00',
-                endTime: act.endTime || '10:00',
-                durationMinutes: act.durationMinutes,
-                location: act.location,
-                cost: act.cost || act.estimatedCost,
-                isLocked: true,
-                tags: act.tags,
-                bookingRequired: act.bookingRequired,
-                tips: act.tips,
-                photos: act.photos,
-                transportation: act.transportation,
-              });
-            }
-          }
-          console.log(`[generate-day] Preserving ${lockedActivities.length} locked activities from request (legacy)`);
-        }
+        // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
+        // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
 
         // Normalize activities: ensure title exists, add IDs and enhancements
         let normalizedActivities = generatedDay.activities.map((act: { 
