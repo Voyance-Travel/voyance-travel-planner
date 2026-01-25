@@ -1937,21 +1937,21 @@ function buildPerfectTripPromptV2(
 
 function getFallbackPerfectTrip(archetypeId: string): string {
   const fallbacks: Record<string, string> = {
-    cultural_anthropologist: 'You thrive when immersed in local life—morning markets, artisan workshops, and dinner invitations from people you just met. Your ideal trip transforms you from tourist to temporary local.',
-    urban_nomad: 'Your perfect trip pulses with city energy—rooftop bars, hidden speakeasies, and neighborhoods that reveal themselves only to those who wander. Every street corner tells a story.',
-    wilderness_pioneer: 'You belong where the trails end and adventure begins. Your ideal trip trades luxury for authenticity—sleeping under stars, earning your views, and finding yourself in the silence.',
-    zen_seeker: 'Your perfect escape is measured in breaths, not bucket list checkmarks. Imagine waking to birdsong, unhurried mornings, and the profound luxury of having nowhere to be.',
-    culinary_cartographer: 'For you, travel is tasted, not just seen. Your ideal journey follows your palate through night markets, family-run trattorias, and that hole-in-the-wall only locals know.',
-    luxury_luminary: 'Your travels are curated experiences where every detail whispers excellence. From private transfers to sunset champagne, your journey is a masterclass in the art of living well.',
-    adrenaline_architect: 'Your perfect trip is designed around peak experiences—the rush of a cliff dive, the thrill of a summit, the exhilaration of pushing your limits in spectacular settings.',
-    slow_traveler: 'You dream of trips where you stay long enough to have a regular café order. Your ideal journey is about depth over distance—one place, fully known.',
-    family_architect: 'Your perfect trip creates stories your family will retell for decades. Imagine multi-generational memories—grandparents and grandchildren sharing wonder at the same sunset.',
-    story_seeker: 'Your travels are measured in connections, not miles. Your ideal trip brings you into living rooms, local celebrations, and conversations that change how you see the world.',
-    escape_artist: 'You travel to leave everything behind and find yourself in the process. Your ideal trip offers sanctuary, space to breathe, and the freedom to simply be.',
-    social_butterfly: 'Your trips come alive through the people you meet. From hostel common rooms to local festivals, your journey is a collection of faces and shared laughter.',
+    cultural_anthropologist: 'A month exploring local life—morning markets, cooking classes, and dinner invitations from people you just met.',
+    urban_nomad: 'City-hopping between amazing neighborhoods—great coffee spots, rooftop bars, and hidden gems around every corner.',
+    wilderness_pioneer: 'Hiking through stunning landscapes—sleeping under stars, earning your views, and finding peace in nature.',
+    zen_seeker: 'A peaceful retreat—waking to birdsong, unhurried mornings, and the luxury of having nowhere to be.',
+    culinary_cartographer: 'Eating your way through a new place—night markets, family restaurants, and cooking classes with locals.',
+    luxury_luminary: 'A beautifully planned getaway—amazing hotels, great dining, and every detail taken care of.',
+    adrenaline_architect: 'An adventure-packed trip—thrilling activities, stunning settings, and experiences that get your heart racing.',
+    slow_traveler: 'Staying long enough to have a favorite café—one place, really getting to know it, feeling like a local.',
+    family_architect: 'A trip the whole family will remember—activities for everyone, shared meals, and stories you\'ll tell for years.',
+    story_seeker: 'Meeting fascinating people—local celebrations, meaningful conversations, and connections that last.',
+    escape_artist: 'A complete getaway—beautiful setting, no agenda, just space to breathe and recharge.',
+    social_butterfly: 'Making new friends everywhere—group adventures, shared meals, and a travel crew you\'ll stay in touch with.',
   };
   
-  return fallbacks[archetypeId] || 'Your ideal journey is one of discovery and personal meaning. Find experiences that resonate with who you are and who you want to become.';
+  return fallbacks[archetypeId] || 'A trip that matches your style—experiences that feel right for you and memories you\'ll treasure.';
 }
 
 // ============================================================================
