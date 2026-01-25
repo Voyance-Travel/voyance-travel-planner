@@ -126,6 +126,7 @@ export type Database = {
           feedback_tags: string[] | null
           feedback_text: string | null
           id: string
+          personalization_tags: string[] | null
           rating: string
           trip_id: string
           updated_at: string
@@ -140,6 +141,7 @@ export type Database = {
           feedback_tags?: string[] | null
           feedback_text?: string | null
           id?: string
+          personalization_tags?: string[] | null
           rating: string
           trip_id: string
           updated_at?: string
@@ -154,6 +156,7 @@ export type Database = {
           feedback_tags?: string[] | null
           feedback_text?: string | null
           id?: string
+          personalization_tags?: string[] | null
           rating?: string
           trip_id?: string
           updated_at?: string
@@ -2874,6 +2877,51 @@ export type Database = {
           },
         ]
       }
+      personalization_tag_stats: {
+        Row: {
+          completed_count: number | null
+          destination: string | null
+          first_seen_at: string | null
+          id: string
+          last_updated_at: string | null
+          rejection_rate: number | null
+          retention_rate: number | null
+          saved_count: number | null
+          shown_count: number | null
+          skipped_count: number | null
+          swapped_count: number | null
+          tag: string
+        }
+        Insert: {
+          completed_count?: number | null
+          destination?: string | null
+          first_seen_at?: string | null
+          id?: string
+          last_updated_at?: string | null
+          rejection_rate?: number | null
+          retention_rate?: number | null
+          saved_count?: number | null
+          shown_count?: number | null
+          skipped_count?: number | null
+          swapped_count?: number | null
+          tag: string
+        }
+        Update: {
+          completed_count?: number | null
+          destination?: string | null
+          first_seen_at?: string | null
+          id?: string
+          last_updated_at?: string | null
+          rejection_rate?: number | null
+          retention_rate?: number | null
+          saved_count?: number | null
+          shown_count?: number | null
+          skipped_count?: number | null
+          swapped_count?: number | null
+          tag?: string
+        }
+        Relationships: []
+      }
       plan_entitlements: {
         Row: {
           created_at: string | null
@@ -4283,6 +4331,7 @@ export type Database = {
       }
       user_enrichment: {
         Row: {
+          action_type: string | null
           created_at: string
           decline_count: number | null
           enrichment_type: string
@@ -4300,6 +4349,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          action_type?: string | null
           created_at?: string
           decline_count?: number | null
           enrichment_type: string
@@ -4317,6 +4367,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          action_type?: string | null
           created_at?: string
           decline_count?: number | null
           enrichment_type?: string
