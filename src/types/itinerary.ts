@@ -298,3 +298,60 @@ export function convertBackendDay(day: BackendDay): DayItinerary {
       : '2 miles',
   };
 }
+
+/**
+ * Convert frontend activity back to backend format (for saving/regenerating)
+ * CRITICAL: This preserves isLocked for lock persistence
+ */
+export function convertFrontendActivityToBackend(activity: ItineraryActivity): BackendActivity {
+  const categoryMap: Record<ActivityType, string> = {
+    activity: 'sightseeing',
+    dining: 'dining',
+    cultural: 'cultural',
+    relaxation: 'relaxation',
+    shopping: 'shopping',
+    transportation: 'transportation',
+    accommodation: 'accommodation',
+  };
+
+  return {
+    id: activity.id,
+    name: activity.title,
+    description: activity.description,
+    category: categoryMap[activity.type] || 'sightseeing',
+    startTime: activity.time, // Frontend uses 'time' for startTime
+    endTime: '', // Will be calculated or empty
+    duration: activity.duration,
+    location: activity.location?.address || activity.location?.name || '',
+    estimatedCost: { amount: activity.cost, currency: 'USD' },
+    bookingRequired: activity.bookingRequired || false,
+    tips: activity.tips,
+    coordinates: activity.location?.coordinates,
+    photos: activity.photos,
+    walkingDistance: activity.walkingDistance,
+    walkingTime: activity.walkingTime,
+    isLocked: activity.isLocked, // CRITICAL: Preserve lock state
+    venue: activity.location?.name ? { name: activity.location.name } : undefined,
+  };
+}
+
+/**
+ * Convert frontend day back to backend format (for saving)
+ * CRITICAL: This preserves isLocked for lock persistence
+ */
+export function convertFrontendDayToBackend(day: DayItinerary): BackendDay {
+  return {
+    dayNumber: day.dayNumber,
+    date: day.date,
+    theme: day.theme,
+    activities: day.activities.map(convertFrontendActivityToBackend),
+    weather: day.weather ? {
+      temperature: { high: day.weather.high, low: day.weather.low },
+      conditions: day.weather.description,
+      rainChance: day.weather.rainChance || 0,
+    } : undefined,
+    totalWalkingDistance: day.estimatedDistance 
+      ? parseFloat(day.estimatedDistance) * 1609 
+      : undefined,
+  };
+}

@@ -267,7 +267,22 @@ export default function ItineraryPreview({
     
     // Find current day's activities to pass as currentActivities for locked activity preservation
     const currentDay = localDays.find(d => d.dayNumber === dayNumber);
-    const currentActivities = currentDay?.activities || [];
+    
+    // Convert to backend format with proper field names (startTime, isLocked, etc.)
+    const backendActivities = (currentDay?.activities || []).map(a => ({
+      id: a.id,
+      name: a.title,
+      title: a.title,
+      description: a.description,
+      category: a.type,
+      startTime: a.time,
+      endTime: '',
+      location: a.location,
+      cost: a.cost,
+      estimatedCost: { amount: a.cost, currency: 'USD' },
+      isLocked: a.isLocked, // CRITICAL: Backend checks this field
+      tags: a.tags,
+    }));
     
     try {
       const { data, error } = await import('@/integrations/supabase/client').then(m => 
@@ -278,7 +293,7 @@ export default function ItineraryPreview({
             dayNumber,
             destination: tripDetails.destination,
             keepActivities,
-            currentActivities, // CRITICAL: Pass full activities so backend can preserve isLocked
+            currentActivities: backendActivities, // Backend format with isLocked
             preferences: {
               hotelLocation: itineraryContext.hotelLocation,
               arrivalTime: itineraryContext.arrivalTime,
@@ -319,16 +334,37 @@ export default function ItineraryPreview({
     setLocalDays(updatedDays);
     toast.success(locked ? 'Activity locked' : 'Activity unlocked');
     
-    // Persist to database
+    // Persist to database - convert to backend format to preserve isLocked
     if (tripId) {
       try {
+        // Convert to backend format with proper field names
+        const backendDays = updatedDays.map(day => ({
+          dayNumber: day.dayNumber,
+          date: day.date,
+          theme: day.theme,
+          activities: day.activities.map(a => ({
+            id: a.id,
+            name: a.title,
+            title: a.title,
+            description: a.description,
+            category: a.type,
+            startTime: a.time,
+            endTime: '',
+            location: a.location,
+            cost: a.cost,
+            estimatedCost: { amount: a.cost, currency: 'USD' },
+            isLocked: a.isLocked, // CRITICAL: Preserve lock state
+            tags: a.tags,
+          })),
+        }));
+        
         const { supabase } = await import('@/integrations/supabase/client');
         const { error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
             action: 'save-itinerary',
             tripId,
             itinerary: {
-              days: updatedDays,
+              days: backendDays,
               generatedAt: new Date().toISOString(),
               destination: tripDetails.destination,
             },

@@ -38,7 +38,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isToday } from 'date-fns';
-import type { ActivityType, ItineraryActivity, WeatherCondition } from '@/types/itinerary';
+import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
+import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { useDestinationImages } from '@/hooks/useDestinationImages';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
@@ -953,15 +954,37 @@ export function EditorialItinerary({
     });
     setHasChanges(true);
     
-    // Persist lock state to database immediately
+    // Persist lock state to database immediately - convert to backend format
     if (tripId && updatedDays.length > 0) {
       try {
+        // Convert to backend format to ensure isLocked is properly persisted
+        const backendDays = updatedDays.map(day => ({
+          dayNumber: day.dayNumber,
+          date: day.date,
+          theme: day.theme,
+          activities: day.activities.map(a => ({
+            id: a.id,
+            name: a.title,
+            title: a.title,
+            description: a.description,
+            category: a.category,
+            startTime: a.startTime || a.time,
+            endTime: a.endTime,
+            location: a.location,
+            cost: a.cost,
+            estimatedCost: a.cost,
+            isLocked: a.isLocked, // CRITICAL: Preserve lock state
+            durationMinutes: a.durationMinutes,
+            tags: a.tags,
+          })),
+        }));
+        
         const { error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
             action: 'save-itinerary',
             tripId,
             itinerary: {
-              days: updatedDays,
+              days: backendDays,
               generatedAt: new Date().toISOString(),
               destination,
             },
@@ -1072,11 +1095,28 @@ export function EditorialItinerary({
 
         // CRITICAL: Preserve locked activities by passing both:
         // - keepActivities: IDs of locked activities
-        // - currentActivities: full activity objects so backend can merge them back
+        // - currentActivities: full activity objects in BACKEND format so backend can merge them back
         const keepActivities = (day.activities || [])
           .filter(a => a.isLocked)
           .map(a => a.id)
           .filter(Boolean);
+        
+        // Convert to backend format with proper field names (startTime, isLocked, etc.)
+        const backendActivities = day.activities.map(a => ({
+          id: a.id,
+          name: a.title,
+          title: a.title,
+          description: a.description,
+          category: a.category,
+          startTime: a.startTime || a.time,
+          endTime: a.endTime,
+          location: a.location,
+          cost: a.cost,
+          estimatedCost: a.cost,
+          isLocked: a.isLocked, // CRITICAL: Backend checks this field
+          durationMinutes: a.durationMinutes,
+          tags: a.tags,
+        }));
         
         const { data, error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
@@ -1091,7 +1131,7 @@ export function EditorialItinerary({
             budgetTier,
             previousDayActivities: currentDayActivities, // Force different venues
             keepActivities,
-            currentActivities: day.activities,
+            currentActivities: backendActivities, // Backend format with isLocked
             variationNonce: Date.now(), // Force new randomness
           }
         });
