@@ -98,6 +98,170 @@ const DEMO_DNA_DATA: TravelDNAData = {
   summary: 'As a Cultural Anthropologist, you prefer immersive travel experiences with a focus on authentic local connections. Your travel personality reflects someone who values deep cultural understanding over surface-level tourism.',
 };
 
+// ============================================================================
+// SUB-COMPONENTS
+// ============================================================================
+
+/** Collapsible Identity Tab with sections */
+function IdentityTabContent({ 
+  narrative, 
+  dnaData 
+}: { 
+  narrative: ArchetypeNarrative; 
+  dnaData: TravelDNAData;
+}) {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    whyTravel: true,
+    traits: false,
+    growth: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="space-y-6"
+    >
+      {/* Core Description - Always visible */}
+      <p className="text-foreground/90 leading-relaxed text-lg max-w-2xl">
+        {narrative.coreDescription}
+      </p>
+
+      {/* What This Means - Collapsible */}
+      <Collapsible open={openSections.whyTravel} onOpenChange={() => toggleSection('whyTravel')}>
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left group">
+          <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+            This Is Why You Travel
+          </h4>
+          <ChevronDown className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform duration-200",
+            openSections.whyTravel && "rotate-180"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <ul className="space-y-3 pt-3">
+            {narrative.whatThisMeans.map((item, i) => (
+              <motion.li 
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="flex items-start gap-3 text-foreground/80"
+              >
+                <span className="w-1 h-1 rounded-full bg-foreground/40 mt-2.5 flex-shrink-0" />
+                {item}
+              </motion.li>
+            ))}
+          </ul>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Traits - Collapsible */}
+      {dnaData.tone_tags && dnaData.tone_tags.length > 0 && (
+        <Collapsible open={openSections.traits} onOpenChange={() => toggleSection('traits')}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left group">
+            <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+              Your Travel Traits
+            </h4>
+            <ChevronDown className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform duration-200",
+              openSections.traits && "rotate-180"
+            )} />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="flex flex-wrap gap-2 pt-3">
+              {dnaData.tone_tags.map((tag, i) => (
+                <span 
+                  key={i} 
+                  className="px-3 py-1 text-sm border border-border rounded-full text-foreground/70 capitalize"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Growth Edges - Collapsible */}
+      <Collapsible open={openSections.growth} onOpenChange={() => toggleSection('growth')}>
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left group">
+          <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+            Room to Grow
+          </h4>
+          <ChevronDown className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform duration-200",
+            openSections.growth && "rotate-180"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="grid gap-3 pt-3">
+            {narrative.growthEdges.slice(0, 2).map((edge, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-4 py-2 text-foreground/80"
+              >
+                <TrendingUp className="h-4 w-4 text-foreground/40" />
+                <span>{edge}</span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </motion.div>
+  );
+}
+
+/** Perfect Trip Preview with truncation */
+function PerfectTripPreview({ preview }: { preview: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const MAX_LENGTH = 100;
+  const shouldTruncate = preview.length > MAX_LENGTH;
+  
+  const displayText = shouldTruncate && !isExpanded 
+    ? preview.slice(0, MAX_LENGTH).trim() + '...'
+    : preview;
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.7 }}
+      className="pt-6 border-t border-border"
+    >
+      <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground mb-3">
+        Your Perfect Trip
+      </p>
+      <blockquote className="text-lg md:text-xl font-serif text-foreground/90 leading-relaxed italic">
+        "{displayText}"
+      </blockquote>
+      <div className="flex items-center gap-4 mt-4">
+        {shouldTruncate && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="px-0 text-muted-foreground hover:text-foreground"
+          >
+            {isExpanded ? 'Show less' : 'Read more'}
+          </Button>
+        )}
+        <Button variant="link" asChild className="px-0 gap-1 text-muted-foreground hover:text-foreground">
+          <Link to={ROUTES.START}>
+            Plan a trip like this
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function TravelDNAReveal({ userId, className }: TravelDNARevealProps) {
   const [dnaData, setDnaData] = useState<TravelDNAData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -492,75 +656,10 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
 
           <AnimatePresence mode="wait">
             <TabsContent value="identity" className="mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-8"
-              >
-                {/* Core Description */}
-                <p className="text-foreground/90 leading-relaxed text-lg max-w-2xl">
-                  {narrative.coreDescription}
-                </p>
-
-                {/* What This Means */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-                    This Is Why You Travel
-                  </h4>
-                  <ul className="space-y-3">
-                    {narrative.whatThisMeans.map((item, i) => (
-                      <motion.li 
-                        key={i}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        className="flex items-start gap-3 text-foreground/80"
-                      >
-                        <span className="w-1 h-1 rounded-full bg-foreground/40 mt-2.5 flex-shrink-0" />
-                        {item}
-                      </motion.li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Traits */}
-                {dnaData.tone_tags && dnaData.tone_tags.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-                      Your Travel Traits
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {dnaData.tone_tags.map((tag, i) => (
-                        <span 
-                          key={i} 
-                          className="px-3 py-1 text-sm border border-border rounded-full text-foreground/70 capitalize"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Growth Edges - moved here for better UX */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-                    Room to Grow
-                  </h4>
-                  <div className="grid gap-3">
-                    {narrative.growthEdges.slice(0, 2).map((edge, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-4 py-2 text-foreground/80"
-                      >
-                        <TrendingUp className="h-4 w-4 text-foreground/40" />
-                        <span>{edge}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
+              <IdentityTabContent 
+                narrative={narrative} 
+                dnaData={dnaData} 
+              />
             </TabsContent>
 
             {/* Evolution Tab - Traveler Maturity & Growth */}
@@ -706,26 +805,10 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         </Tabs>
       </div>
 
-      {/* Perfect Trip Preview - AI-Generated or Fallback */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.7 }}
-        className="pt-6 border-t border-border"
-      >
-        <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground mb-3">
-          Your Perfect Trip
-        </p>
-        <blockquote className="text-xl md:text-2xl font-serif text-foreground/90 leading-relaxed italic">
-          "{dnaData.perfect_trip_preview || narrative.perfectTripPreview}"
-        </blockquote>
-        <Button variant="link" asChild className="mt-4 px-0 gap-1 text-muted-foreground hover:text-foreground">
-          <Link to={ROUTES.START}>
-            Plan a trip like this
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </Button>
-      </motion.div>
+      {/* Perfect Trip Preview - Collapsible */}
+      <PerfectTripPreview 
+        preview={dnaData.perfect_trip_preview || narrative.perfectTripPreview} 
+      />
     </motion.div>
   );
 }
