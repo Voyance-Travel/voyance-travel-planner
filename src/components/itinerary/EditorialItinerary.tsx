@@ -32,6 +32,7 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -954,6 +955,34 @@ export function EditorialItinerary({
     setHasChanges(true);
   }, []);
 
+  // Move activity to a different day
+  const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
+    if (fromDayIndex === toDayIndex) return;
+    
+    setDays(prev => {
+      const fromDay = prev[fromDayIndex];
+      const toDay = prev[toDayIndex];
+      if (!fromDay || !toDay) return prev;
+      
+      const activity = fromDay.activities.find(a => a.id === activityId);
+      if (!activity) return prev;
+      
+      return prev.map((day, idx) => {
+        if (idx === fromDayIndex) {
+          // Remove from source day
+          return { ...day, activities: day.activities.filter(a => a.id !== activityId) };
+        }
+        if (idx === toDayIndex) {
+          // Add to destination day (at the end)
+          return { ...day, activities: [...day.activities, activity] };
+        }
+        return day;
+      });
+    });
+    setHasChanges(true);
+    toast.success(`Moved to Day ${toDayIndex + 1}`);
+  }, []);
+
   const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
     setDays(prev => prev.map((day, idx) => {
       if (idx !== dayIndex) return day;
@@ -1380,6 +1409,7 @@ export function EditorialItinerary({
                 key={days[selectedDayIndex].dayNumber}
                 day={days[selectedDayIndex]}
                 dayIndex={selectedDayIndex}
+                totalDays={days.length}
                 travelers={travelers}
                 budgetTier={budgetTier}
                 tripCurrency={tripCurrency}
@@ -1394,6 +1424,7 @@ export function EditorialItinerary({
                 onActivitySwap={openSwapDrawer}
                 onActivityLock={handleActivityLock}
                 onActivityMove={handleActivityMove}
+                onMoveToDay={handleMoveToDay}
                 onActivityRemove={handleActivityRemove}
                 onDayLock={handleDayLock}
                 onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
@@ -3423,6 +3454,7 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
 interface DayCardProps {
   day: EditorialDay;
   dayIndex: number;
+  totalDays: number; // Total number of days in itinerary
   travelers: number;
   budgetTier?: string;
   tripCurrency: string; // Currency for cost formatting
@@ -3438,6 +3470,7 @@ interface DayCardProps {
   onActivitySwap?: (dayIndex: number, activity: EditorialActivity) => void;
   onActivityLock: (dayIndex: number, activityId: string) => void;
   onActivityMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
+  onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onActivityRemove: (dayIndex: number, activityId: string) => void;
   onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
@@ -3452,6 +3485,7 @@ interface DayCardProps {
 function DayCard({
   day,
   dayIndex,
+  totalDays,
   travelers,
   budgetTier,
   tripCurrency,
@@ -3467,6 +3501,7 @@ function DayCard({
   onActivitySwap,
   onActivityLock,
   onActivityMove,
+  onMoveToDay,
   onActivityRemove,
   onActivityReorder,
   onDayLock,
@@ -3604,6 +3639,7 @@ function DayCard({
                       dayIndex={dayIndex}
                       activityIndex={activityIndex}
                       totalActivities={day.activities.length}
+                      totalDays={totalDays}
                       isLast={activityIndex === day.activities.length - 1}
                       isEditable={isEditable}
                       travelers={travelers}
@@ -3616,6 +3652,7 @@ function DayCard({
                       onLock={onActivityLock}
                       onSwap={onActivitySwap}
                       onMove={onActivityMove}
+                      onMoveToDay={onMoveToDay}
                       onRemove={onActivityRemove}
                       onTimeEdit={onTimeEdit}
                       onPaymentRequest={onPaymentRequest}
@@ -3676,6 +3713,7 @@ interface ActivityRowProps {
   dayIndex: number;
   activityIndex: number;
   totalActivities: number;
+  totalDays: number; // Total number of days in itinerary
   isLast: boolean;
   isEditable: boolean;
   travelers: number;
@@ -3688,6 +3726,7 @@ interface ActivityRowProps {
   onLock: (dayIndex: number, activityId: string) => void;
   onSwap?: (dayIndex: number, activity: EditorialActivity) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
+  onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onRemove: (dayIndex: number, activityId: string) => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onPaymentRequest?: (activityId: string) => void;
@@ -3701,6 +3740,7 @@ function ActivityRow({
   dayIndex,
   activityIndex,
   totalActivities,
+  totalDays,
   isLast,
   isEditable,
   travelers,
@@ -3713,6 +3753,7 @@ function ActivityRow({
   onLock,
   onSwap,
   onMove,
+  onMoveToDay,
   onRemove,
   onTimeEdit,
   onPaymentRequest,
@@ -4109,6 +4150,30 @@ function ActivityRow({
                 >
                   <MoveDown className="h-3.5 w-3.5" />
                 </button>
+                {/* Move to Day dropdown */}
+                {totalDays > 1 && onMoveToDay && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                        title="Move to another day"
+                      >
+                        <Calendar className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50">
+                      {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
+                        <DropdownMenuItem
+                          key={targetDay}
+                          onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
+                          className="cursor-pointer"
+                        >
+                          Move to Day {targetDay + 1}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 <button
                   onClick={() => onLock(dayIndex, activity.id)}
                   className={cn(
