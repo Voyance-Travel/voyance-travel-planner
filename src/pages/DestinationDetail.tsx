@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -26,6 +26,7 @@ import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ActivityModal } from '@/components/ActivityModal';
+import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
 import { getDestinationById, getActivitiesByDestination, type Activity, type Destination } from '@/lib/destinations';
 import { getDestinationByCity } from '@/services/supabase/destinations';
 import { getAttractionsByDestination } from '@/services/supabase/attractions';
@@ -42,6 +43,13 @@ export default function DestinationDetail() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  
+  // Reviews drawer state
+  const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
+  const [reviewsTarget, setReviewsTarget] = useState<{
+    placeName: string;
+    placeType: 'restaurant' | 'attraction' | 'hotel' | 'activity';
+  } | null>(null);
   
   // First try static destinations
   const staticDestination = getDestinationById(slug || '');
@@ -578,6 +586,30 @@ export default function DestinationDetail() {
         isOpen={!!selectedActivity}
         onClose={() => setSelectedActivity(null)}
         destinationImage={destination.imageUrl}
+        destinationName={`${destination.city}, ${destination.country}`}
+        onViewReviews={(activityName, category) => {
+          let placeType: 'restaurant' | 'attraction' | 'hotel' | 'activity' = 'activity';
+          if (['food', 'dining', 'restaurant'].includes(category.toLowerCase())) {
+            placeType = 'restaurant';
+          } else if (['culture', 'sightseeing', 'entertainment', 'nature'].includes(category.toLowerCase())) {
+            placeType = 'attraction';
+          }
+          setReviewsTarget({ placeName: activityName, placeType });
+          setReviewsDrawerOpen(true);
+          setSelectedActivity(null);
+        }}
+      />
+
+      {/* Reviews Drawer */}
+      <ReviewsDrawer
+        open={reviewsDrawerOpen}
+        onClose={() => {
+          setReviewsDrawerOpen(false);
+          setReviewsTarget(null);
+        }}
+        placeName={reviewsTarget?.placeName || ''}
+        destination={`${destination.city}, ${destination.country}`}
+        placeType={reviewsTarget?.placeType}
       />
 
       {/* Lightbox */}
