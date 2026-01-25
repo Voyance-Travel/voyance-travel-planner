@@ -51,18 +51,9 @@ export function OnboardingRedirect() {
     navigate(ROUTES.PROFILE.VIEW + '?tab=preferences');
   };
 
-  const handleTakeQuiz = () => {
-    setShowNudge(false);
-    navigate(ROUTES.QUIZ);
-  };
-
   const handleDismiss = () => {
     setShowNudge(false);
   };
-
-  // Determine what's missing for personalized messaging
-  const hasQuiz = preferenceStatus?.hasQuiz ?? false;
-  const completionPercent = preferenceStatus?.completionPercent ?? 0;
 
   return (
     <AnimatePresence>
@@ -106,90 +97,62 @@ export function OnboardingRedirect() {
                 </motion.div>
               </div>
 
-              {/* Content - Dynamic based on what's missing */}
+              {/* Content - Warm, encouraging tone */}
               <div className="text-center space-y-3">
                 <h2 className="text-2xl font-display font-bold text-foreground">
-                  {hasQuiz 
-                    ? 'Complete Your Preferences' 
-                    : `Welcome${user?.name ? `, ${user.name.split(' ')[0]}` : ''}! 🎉`
-                  }
+                  Let's personalize your trips! ✨
                 </h2>
                 <p className="text-muted-foreground">
-                  {hasQuiz 
-                    ? `You're ${completionPercent}% there! Add a few more details for perfectly tailored itineraries.`
-                    : 'Tell us about your travel style and we\'ll create personalized itineraries just for you.'
-                  }
+                  The more we know about you, the better your itineraries will be. Share a few preferences and watch the magic happen.
                 </p>
               </div>
 
-              {/* Benefits - show what preferences unlock */}
+              {/* What you'll unlock */}
               <div className="mt-6 space-y-2">
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Your trips will include</p>
+                <div className="flex items-center gap-3 text-sm text-foreground">
                   <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
                     <Plane className="h-4 w-4 text-blue-600" />
                   </div>
-                  <span>Flight preferences from your home airport</span>
+                  <span>Flights from your home airport</span>
                 </div>
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-3 text-sm text-foreground">
                   <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
                     <Utensils className="h-4 w-4 text-orange-600" />
                   </div>
-                  <span>Dining spots that match your diet</span>
+                  <span>Restaurants that fit your diet</span>
                 </div>
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-3 text-sm text-foreground">
                   <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
                     <Heart className="h-4 w-4 text-rose-600" />
                   </div>
-                  <span>Activities based on your interests & pace</span>
+                  <span>Activities you'll actually love</span>
                 </div>
               </div>
 
-              {/* Actions */}
+              {/* Actions - Simple and clear */}
               <div className="mt-8 space-y-3">
-                {!hasQuiz ? (
-                  <>
-                    <Button
-                      onClick={handleTakeQuiz}
-                      className="w-full h-12 gap-2"
-                      size="lg"
-                    >
-                      Take the 2-min Quiz
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      onClick={handleGoToPreferences}
-                      variant="outline"
-                      className="w-full h-12 gap-2"
-                      size="lg"
-                    >
-                      Go to Preferences
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    onClick={handleGoToPreferences}
-                    className="w-full h-12 gap-2"
-                    size="lg"
-                  >
-                    Complete Preferences
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                )}
+                <Button
+                  onClick={handleGoToPreferences}
+                  className="w-full h-12 gap-2"
+                  size="lg"
+                >
+                  Set My Preferences
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
                 <button
                   onClick={handleDismiss}
                   className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Maybe later
+                  I'll do this later
                 </button>
               </div>
 
-              {/* Time estimate */}
-              {!hasQuiz && (
-                <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Quiz takes about 2 minutes</span>
-                </div>
-              )}
+              {/* Reassurance */}
+              <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                <span>Takes just a couple minutes</span>
+              </div>
             </div>
           </motion.div>
         </motion.div>
