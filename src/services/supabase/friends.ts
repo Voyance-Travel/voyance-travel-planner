@@ -25,15 +25,43 @@ export interface Friendship {
   updated_at: string;
 }
 
+export interface FriendProfile {
+  id: string;
+  handle: string | null;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+}
+
 export interface FriendWithProfile extends Friendship {
-  friend: Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>;
+  friend: FriendProfile;
 }
 
 export interface PendingRequest {
   id: string;
   status: FriendshipStatus;
   created_at: string;
-  requester: Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>;
+  requester: FriendProfile;
+}
+
+/**
+ * Get the best display name for a user profile
+ * Priority: display_name > first_name + last_name > handle > email > "Unknown"
+ */
+export function getDisplayName(profile: Partial<FriendProfile> | null | undefined, email?: string | null): string {
+  if (!profile) return email || 'Unknown';
+  
+  if (profile.display_name) return profile.display_name;
+  
+  const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
+  if (fullName) return fullName;
+  
+  if (profile.handle) return `@${profile.handle}`;
+  
+  if (email) return email.split('@')[0]; // Show username part of email
+  
+  return 'Unknown';
 }
 
 // ============================================================================
@@ -209,7 +237,7 @@ export async function getFriends(): Promise<FriendWithProfile[]> {
       status,
       created_at,
       updated_at,
-      friend:profiles!friendships_addressee_id_fkey(id, handle, display_name, avatar_url)
+      friend:profiles!friendships_addressee_id_fkey(id, handle, display_name, first_name, last_name, avatar_url)
     `)
     .eq('requester_id', currentUserId)
     .eq('status', 'accepted');
@@ -226,7 +254,7 @@ export async function getFriends(): Promise<FriendWithProfile[]> {
       status,
       created_at,
       updated_at,
-      friend:profiles!friendships_requester_id_fkey(id, handle, display_name, avatar_url)
+      friend:profiles!friendships_requester_id_fkey(id, handle, display_name, first_name, last_name, avatar_url)
     `)
     .eq('addressee_id', currentUserId)
     .eq('status', 'accepted');
@@ -237,11 +265,11 @@ export async function getFriends(): Promise<FriendWithProfile[]> {
   const friends: FriendWithProfile[] = [
     ...(asRequester || []).map(f => ({
       ...f,
-      friend: f.friend as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
+      friend: f.friend as unknown as FriendProfile,
     })),
     ...(asAddressee || []).map(f => ({
       ...f,
-      friend: f.friend as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
+      friend: f.friend as unknown as FriendProfile,
     })),
   ];
 
@@ -260,7 +288,7 @@ export async function getPendingRequests(): Promise<PendingRequest[]> {
       id,
       status,
       created_at,
-      requester:profiles!friendships_requester_id_fkey(id, handle, display_name, avatar_url)
+      requester:profiles!friendships_requester_id_fkey(id, handle, display_name, first_name, last_name, avatar_url)
     `)
     .eq('addressee_id', currentUserId)
     .eq('status', 'pending');
@@ -271,14 +299,14 @@ export async function getPendingRequests(): Promise<PendingRequest[]> {
     id: r.id,
     status: r.status,
     created_at: r.created_at,
-    requester: r.requester as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
+    requester: r.requester as unknown as FriendProfile,
   }));
 }
 
 /**
  * Get outgoing friend requests
  */
-export async function getOutgoingRequests(): Promise<{ id: string; addressee: Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>; created_at: string }[]> {
+export async function getOutgoingRequests(): Promise<{ id: string; addressee: FriendProfile; created_at: string }[]> {
   const currentUserId = await getCurrentUserId();
 
   const { data, error } = await supabase
@@ -286,7 +314,7 @@ export async function getOutgoingRequests(): Promise<{ id: string; addressee: Pi
     .select(`
       id,
       created_at,
-      addressee:profiles!friendships_addressee_id_fkey(id, handle, display_name, avatar_url)
+      addressee:profiles!friendships_addressee_id_fkey(id, handle, display_name, first_name, last_name, avatar_url)
     `)
     .eq('requester_id', currentUserId)
     .eq('status', 'pending');
@@ -296,7 +324,7 @@ export async function getOutgoingRequests(): Promise<{ id: string; addressee: Pi
   return (data || []).map(r => ({
     id: r.id,
     created_at: r.created_at,
-    addressee: r.addressee as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
+    addressee: r.addressee as unknown as FriendProfile,
   }));
 }
 

@@ -5459,6 +5459,17 @@ export type Database = {
       get_trip_invite_info: { Args: { p_token: string }; Returns: Json }
       get_trip_permission: { Args: { p_trip_id: string }; Returns: Json }
       get_user_id_by_email: { Args: { lookup_email: string }; Returns: string }
+      get_user_info_by_email: {
+        Args: { lookup_email: string }
+        Returns: {
+          display_name: string
+          first_name: string
+          handle: string
+          last_name: string
+          user_email: string
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
