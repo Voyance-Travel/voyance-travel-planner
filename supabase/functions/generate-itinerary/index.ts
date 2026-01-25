@@ -62,6 +62,25 @@ import {
   type AggregatedLearning
 } from './feedback-instrumentation.ts';
 
+import {
+  getCuratedZones,
+  assignToZone,
+  determineDayAnchor,
+  deriveTravelTimeConstraints,
+  validateDayGeography,
+  reorderActivitiesOptimally,
+  buildGeographicPrompt,
+  buildDayZonePrompt,
+  logGeographicQAMetrics,
+  haversineDistance,
+  estimateTravelMinutes,
+  type ZoneDefinition,
+  type DayAnchor,
+  type TravelTimeConstraints,
+  type GeographicValidation,
+  type ActivityWithLocation
+} from './geographic-coherence.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -5103,10 +5122,45 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         console.log(`[Stage 1.97] Group: ${reconciliation.hardConstraints.length} hard constraints, ${reconciliation.sharedOverlaps.length} shared interests`);
       }
       
+      // =======================================================================
+      // STAGE 1.98: Geographic Coherence - Zone clustering & travel constraints
+      // =======================================================================
+      console.log("[Stage 1.98] Building geographic coherence rules...");
+      
+      // Get curated zones for destination
+      const cityZones = getCuratedZones(context.destination);
+      if (cityZones) {
+        console.log(`[Stage 1.98] Found ${cityZones.length} curated zones for ${context.destination}`);
+      } else {
+        console.log(`[Stage 1.98] No curated zones for ${context.destination}, will use geohash fallback`);
+      }
+      
+      // Derive pace level from trait scores
+      const paceScore = traitScores.pace || 0;
+      const geoGraphicPaceLevel: 'relaxed' | 'balanced' | 'fast-paced' = 
+        paceScore <= -2 ? 'relaxed' : paceScore >= 5 ? 'fast-paced' : 'balanced';
+      
+      // Get travel time constraints
+      const travelConstraints = deriveTravelTimeConstraints(geoGraphicPaceLevel);
+      console.log(`[Stage 1.98] Travel constraints (${geoGraphicPaceLevel}): max hop ${travelConstraints.maxHopMinutes}min, daily budget ${travelConstraints.maxDailyTransitMinutes}min`);
+      
+      // Get hotel neighborhood if available
+      const hotelNeighborhood = flightHotelResult.context?.includes('Hotel:') 
+        ? flightHotelResult.context.match(/Hotel:.*?in\s+([^,\n]+)/)?.[1]?.trim()
+        : undefined;
+      
+      // Build geographic prompt
+      const geographicPrompt = buildGeographicPrompt(
+        context.destination,
+        cityZones,
+        hotelNeighborhood,
+        travelConstraints
+      );
+      
       // Combine all context for maximum personalization
-      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES
+      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: unifiedDNAContext includes budget intent, archetypes, blended traits, and deduplicated preferences
-      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt;
+      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
@@ -5250,6 +5304,51 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
 
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
+
+      // =======================================================================
+      // STAGE 3.5: Geographic Validation & Reordering
+      // =======================================================================
+      console.log("[Stage 3.5] Validating geographic coherence...");
+      
+      const geoValidations: GeographicValidation[] = [];
+      
+      for (let dayIdx = 0; dayIdx < aiResult.days.length; dayIdx++) {
+        const day = aiResult.days[dayIdx];
+        
+        // Convert activities to ActivityWithLocation format
+        const activitiesWithLocation: ActivityWithLocation[] = day.activities.map((act: StrictActivity) => ({
+          id: act.id,
+          title: act.title,
+          coordinates: act.location?.coordinates,
+          neighborhood: act.location?.address?.split(',')[0],
+          isLocked: (act as any).isLocked || false,
+          category: act.category
+        }));
+        
+        // Determine day anchor
+        const dayAnchor = determineDayAnchor(activitiesWithLocation, undefined, hotelNeighborhood, cityZones);
+        
+        // Validate
+        const validation = validateDayGeography(activitiesWithLocation, dayAnchor, travelConstraints, cityZones);
+        geoValidations.push(validation);
+        
+        // If validation fails, try reordering
+        if (!validation.isValid && validation.violations.some(v => v.type === 'backtracking' || v.type === 'long_hop')) {
+          console.log(`[Stage 3.5] Day ${dayIdx + 1} failed validation (score: ${validation.score}), attempting reorder...`);
+          const reordered = reorderActivitiesOptimally(activitiesWithLocation, dayAnchor);
+          
+          // Apply reordering to actual activities (preserve all data, just change order)
+          const reorderedIds = reordered.map(a => a.id);
+          day.activities = day.activities.sort((a: StrictActivity, b: StrictActivity) => {
+            const aIdx = reorderedIds.indexOf(a.id);
+            const bIdx = reorderedIds.indexOf(b.id);
+            return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+          });
+        }
+      }
+      
+      // Log QA metrics
+      logGeographicQAMetrics(geoValidations, tripId);
 
       // STAGE 4: Enrichment (real photos + venue verification via Google Places API v1)
       let enrichedDays: StrictDay[];
