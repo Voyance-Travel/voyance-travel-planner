@@ -935,18 +935,46 @@ export function EditorialItinerary({
     }
   }, [days, tripId, destination]);
 
-  const handleActivityLock = useCallback((dayIndex: number, activityId: string) => {
-    setDays(prev => prev.map((day, idx) => {
-      if (idx !== dayIndex) return day;
-      return {
-        ...day,
-        activities: day.activities.map(act =>
-          act.id === activityId ? { ...act, isLocked: !act.isLocked } : act
-        )
-      };
-    }));
+  // Handle activity lock toggle - persists immediately to database
+  const handleActivityLock = useCallback(async (dayIndex: number, activityId: string) => {
+    // Update local state immediately for responsive UI
+    let updatedDays: typeof days = [];
+    setDays(prev => {
+      updatedDays = prev.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        return {
+          ...day,
+          activities: day.activities.map(act =>
+            act.id === activityId ? { ...act, isLocked: !act.isLocked } : act
+          )
+        };
+      });
+      return updatedDays;
+    });
     setHasChanges(true);
-  }, []);
+    
+    // Persist lock state to database immediately
+    if (tripId && updatedDays.length > 0) {
+      try {
+        const { error } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'save-itinerary',
+            tripId,
+            itinerary: {
+              days: updatedDays,
+              generatedAt: new Date().toISOString(),
+              destination,
+            },
+          },
+        });
+        if (error) {
+          console.error('[EditorialItinerary] Failed to persist lock state:', error);
+        }
+      } catch (err) {
+        console.error('[EditorialItinerary] Lock persist error:', err);
+      }
+    }
+  }, [tripId, destination, days]);
 
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
     setDays(prev => prev.map((day, idx) => {

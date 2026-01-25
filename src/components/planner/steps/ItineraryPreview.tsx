@@ -307,16 +307,41 @@ export default function ItineraryPreview({
     }
   }, [tripId, tripDetails.destination, itineraryContext, localDays]);
 
-  // Handle activity lock toggle
-  const handleActivityLock = useCallback((activityId: string, locked: boolean) => {
-    setLocalDays(prev => prev.map(day => ({
+  // Handle activity lock toggle - also persists to database
+  const handleActivityLock = useCallback(async (activityId: string, locked: boolean) => {
+    // Update local state immediately for responsive UI
+    const updatedDays = localDays.map(day => ({
       ...day,
       activities: day.activities.map(a => 
         a.id === activityId ? { ...a, isLocked: locked } : a
       )
-    })));
+    }));
+    setLocalDays(updatedDays);
     toast.success(locked ? 'Activity locked' : 'Activity unlocked');
-  }, []);
+    
+    // Persist to database
+    if (tripId) {
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { error } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'save-itinerary',
+            tripId,
+            itinerary: {
+              days: updatedDays,
+              generatedAt: new Date().toISOString(),
+              destination: tripDetails.destination,
+            },
+          },
+        });
+        if (error) {
+          console.error('[ItineraryPreview] Failed to persist lock state:', error);
+        }
+      } catch (err) {
+        console.error('[ItineraryPreview] Lock persist error:', err);
+      }
+    }
+  }, [localDays, tripId, tripDetails.destination]);
 
   // Handle activity swap
   const handleActivitySwap = useCallback((oldActivityId: string, newActivity: ItineraryActivity) => {
