@@ -140,6 +140,10 @@ export default function Explore() {
     e.preventDefault();
     if (searchQuery) {
       setSearchParams({ q: searchQuery });
+      // Track search behavior for personalization
+      import('@/services/behaviorTrackingService').then(({ trackDestinationSearch }) => {
+        trackDestinationSearch(searchQuery, hybridResults.length);
+      });
     }
   };
 
@@ -149,6 +153,11 @@ export default function Explore() {
   };
 
   const handleDestinationClick = (destination: HybridDestination) => {
+    // Track destination interest for personalization
+    import('@/services/behaviorTrackingService').then(({ trackDestinationInterest }) => {
+      trackDestinationInterest(destination.city, destination.country, 'card_click');
+    });
+    
     // For featured destinations, use slug-based routing
     // For database destinations, use ID-based routing
     if (destination.source === 'featured') {
