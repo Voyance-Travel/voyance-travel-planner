@@ -5296,7 +5296,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           );
         }
 
-        // First get the itinerary_day_id
+        // First try the normalized tables
         const { data: dayRow } = await supabase
           .from('itinerary_days')
           .select('id')
@@ -5305,13 +5305,54 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           .maybeSingle();
         
         if (!dayRow) {
+          // Day not in normalized table - fall back to JSON update
+          console.log(`[toggle-activity-lock] Day ${dayNumber} not in normalized table, falling back to JSON`);
+          
+          const { data: tripData, error: fetchErr } = await supabase
+            .from('trips')
+            .select('itinerary_data')
+            .eq('id', tripId)
+            .single();
+          
+          if (!fetchErr && tripData?.itinerary_data) {
+            const itineraryData = tripData.itinerary_data as { days?: Array<{ dayNumber: number; activities: Array<{ id: string; isLocked?: boolean }> }> };
+            if (itineraryData.days) {
+              let found = false;
+              const updatedDays = itineraryData.days.map(day => ({
+                ...day,
+                activities: day.activities.map(act => {
+                  if (act.id === activityId) {
+                    found = true;
+                    return { ...act, isLocked };
+                  }
+                  return act;
+                })
+              }));
+              
+              if (found) {
+                const { error: saveErr } = await supabase
+                  .from('trips')
+                  .update({ itinerary_data: { ...itineraryData, days: updatedDays } })
+                  .eq('id', tripId);
+                
+                if (!saveErr) {
+                  console.log(`[toggle-activity-lock] Updated lock in itinerary_data JSON for ${activityId}`);
+                  return new Response(
+                    JSON.stringify({ success: true, activityId, isLocked, method: 'json' }),
+                    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                  );
+                }
+              }
+            }
+          }
+          
           return new Response(
-            JSON.stringify({ error: `Day ${dayNumber} not found in database` }),
+            JSON.stringify({ error: `Activity not found for day ${dayNumber}` }),
             { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        // Match by day + title + optional start_time
+        // Match by day + title + optional start_time in normalized tables
         let query = supabase
           .from('itinerary_activities')
           .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
