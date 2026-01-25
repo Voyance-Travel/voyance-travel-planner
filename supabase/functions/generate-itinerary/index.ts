@@ -1,6 +1,67 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// =============================================================================
+// NEW PERSONALIZATION MODULES (Phase 8 - Make Itineraries Impossible to be Generic)
+// =============================================================================
+import {
+  deriveForcedSlots,
+  deriveScheduleConstraints,
+  reconcileGroupPreferences,
+  validateDayPersonalization,
+  buildForcedSlotsPrompt,
+  buildScheduleConstraintsPrompt,
+  buildGroupReconciliationPrompt,
+  type TraitScores,
+  type TravelerProfile,
+  type ForcedSlot,
+  type ScheduleConstraints,
+  type DayValidation,
+  type ReconciliationStrategy
+} from './personalization-enforcer.ts';
+
+import {
+  calculateConfidence as calculateTruthAnchorConfidence,
+  needsFallback,
+  verifyFromGooglePlaces,
+  verifyFromCache,
+  generateFallback,
+  buildTruthAnchorPrompt,
+  validateTruthAnchors,
+  type TruthAnchor
+} from './truth-anchors.ts';
+
+import {
+  generateExplanation,
+  validateExplanation,
+  buildExplainabilityPrompt,
+  type ExplainabilityContext,
+  type Explanation
+} from './explainability.ts';
+
+import {
+  assessDataCompleteness,
+  generateColdStartFallback,
+  buildColdStartPrompt,
+  applyNonNegotiables,
+  type DataCompleteness,
+  type ColdStartFallback
+} from './cold-start.ts';
+
+import {
+  extractReplacementSignal,
+  calculateEditingMetrics,
+  aggregateLearnings,
+  buildEnrichmentUpsert,
+  buildLearnedPreferencesPrompt,
+  createReplacementEvent,
+  createSaveEvent,
+  createNotMeEvent,
+  type FeedbackEvent,
+  type FeedbackEventType,
+  type AggregatedLearning
+} from './feedback-instrumentation.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -4919,10 +4980,133 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         console.warn("[Stage 1.9] Failed to fetch enrichment data:", eventsError);
       }
       
+      // =======================================================================
+      // STAGE 1.95: Cold Start Detection & Fallback
+      // =======================================================================
+      console.log("[Stage 1.95] Assessing data completeness...");
+      
+      const tripHistoryResult = await supabase.from('trips').select('id').eq('user_id', userId || '').limit(10);
+      const dataCompleteness = assessDataCompleteness(
+        travelDNA as unknown as Record<string, unknown> | null,
+        prefs as unknown as Record<string, unknown> | null,
+        traitOverrides,
+        tripHistoryResult.data
+      );
+      
+      let coldStartContext = '';
+      if (dataCompleteness.confidenceLevel === 'cold_start' || dataCompleteness.confidenceLevel === 'low') {
+        console.log(`[Stage 1.95] Low confidence (${dataCompleteness.confidenceLevel}): ${dataCompleteness.dataGaps.join(', ')}`);
+        
+        const coldStartFallback = generateColdStartFallback(dataCompleteness, {
+          tripType: context.tripType,
+          budgetTier: context.budgetTier,
+          travelers: context.travelers,
+          destination: context.destination
+        });
+        
+        coldStartContext = buildColdStartPrompt(coldStartFallback);
+        console.log(`[Stage 1.95] Using default persona: ${coldStartFallback.defaultPersona.name}`);
+      }
+      
+      // =======================================================================
+      // STAGE 1.96: Build Forced Differentiators & Schedule Constraints
+      // =======================================================================
+      console.log("[Stage 1.96] Building personalization enforcement rules...");
+      
+      // Get trait scores from normalized context or Travel DNA
+      const traitScores: Partial<TraitScores> = {
+        planning: normalizedContext?.traits?.planning ?? travelDNA?.trait_scores?.planning ?? 0,
+        social: normalizedContext?.traits?.social ?? travelDNA?.trait_scores?.social ?? 0,
+        comfort: normalizedContext?.traits?.comfort ?? travelDNA?.trait_scores?.comfort ?? 0,
+        pace: normalizedContext?.traits?.pace ?? travelDNA?.trait_scores?.pace ?? 0,
+        authenticity: normalizedContext?.traits?.authenticity ?? travelDNA?.trait_scores?.authenticity ?? 0,
+        adventure: normalizedContext?.traits?.adventure ?? travelDNA?.trait_scores?.adventure ?? 0,
+        budget: normalizedContext?.traits?.budget ?? travelDNA?.trait_scores?.budget ?? 0,
+        transformation: normalizedContext?.traits?.transformation ?? travelDNA?.trait_scores?.transformation ?? 0
+      };
+      
+      // Get interests from preferences
+      const userInterests = normalizedContext?.preferences?.interests || prefs?.interests || [];
+      
+      // Derive forced slots (trait-based required activities per day)
+      const forcedSlots = deriveForcedSlots(traitScores, userInterests, 1, context.totalDays);
+      const forcedSlotsPrompt = buildForcedSlotsPrompt(forcedSlots);
+      console.log(`[Stage 1.96] ${forcedSlots.length} forced differentiator slots required per day`);
+      
+      // Derive schedule constraints (pace, walking, buffer times)
+      const scheduleConstraints = deriveScheduleConstraints(
+        traitScores,
+        normalizedContext?.preferences?.mobilityNeeds || prefs?.mobility_needs
+      );
+      const scheduleConstraintsPrompt = buildScheduleConstraintsPrompt(scheduleConstraints);
+      console.log(`[Stage 1.96] Schedule constraints: ${scheduleConstraints.minActivitiesPerDay}-${scheduleConstraints.maxActivitiesPerDay} activities/day, ${scheduleConstraints.bufferMinutesBetweenActivities}min buffers`);
+      
+      // Build explainability prompt
+      const explainabilityContext: ExplainabilityContext = {
+        interests: userInterests,
+        foodLikes: prefs?.food_likes || [],
+        foodDislikes: prefs?.food_dislikes || [],
+        dietaryRestrictions: prefs?.dietary_restrictions || [],
+        travelCompanions: prefs?.travel_companions || [],
+        accommodationStyle: prefs?.accommodation_style,
+        traits: {
+          planning: traitScores.planning !== undefined ? { value: traitScores.planning, label: 'Planning' } : undefined,
+          social: traitScores.social !== undefined ? { value: traitScores.social, label: 'Social' } : undefined,
+          comfort: traitScores.comfort !== undefined ? { value: traitScores.comfort, label: 'Comfort' } : undefined,
+          pace: traitScores.pace !== undefined ? { value: traitScores.pace, label: 'Pace' } : undefined,
+          authenticity: traitScores.authenticity !== undefined ? { value: traitScores.authenticity, label: 'Authenticity' } : undefined,
+          adventure: traitScores.adventure !== undefined ? { value: traitScores.adventure, label: 'Adventure' } : undefined,
+          budget: traitScores.budget !== undefined ? { value: traitScores.budget, label: 'Budget' } : undefined,
+          transformation: traitScores.transformation !== undefined ? { value: traitScores.transformation, label: 'Transformation' } : undefined,
+        },
+        tripIntents: context.tripType ? [context.tripType] : [],
+        budgetTier: context.budgetTier,
+        archetype: normalizedContext?.archetypes?.[0]?.name
+      };
+      const explainabilityPrompt = buildExplainabilityPrompt(explainabilityContext);
+      
+      // Build truth anchor prompt
+      const truthAnchorPrompt = buildTruthAnchorPrompt();
+      
+      // =======================================================================
+      // STAGE 1.97: Group Reconciliation (for multi-traveler trips)
+      // =======================================================================
+      let groupReconciliationPrompt = '';
+      if (context.travelers > 1 && collaboratorPrefs.length > 0) {
+        console.log("[Stage 1.97] Building group reconciliation rules...");
+        
+        // Build traveler profiles for reconciliation
+        const travelerProfiles: TravelerProfile[] = [
+          {
+            id: userId || 'primary',
+            name: 'Primary Traveler',
+            traits: traitScores,
+            interests: userInterests,
+            dietaryRestrictions: prefs?.dietary_restrictions || [],
+            mobilityNeeds: prefs?.mobility_needs,
+            allergies: prefs?.allergies || [],
+            isPrimary: true
+          },
+          ...collaboratorPrefs.map((cp: any, idx: number) => ({
+            id: cp.user_id || `collab-${idx}`,
+            name: `Traveler ${idx + 2}`,
+            traits: cp.travel_dna?.trait_scores || {},
+            interests: cp.interests || [],
+            dietaryRestrictions: cp.dietary_restrictions || [],
+            allergies: (cp as any).allergies || [],
+            isPrimary: false
+          }))
+        ];
+        
+        const reconciliation = reconcileGroupPreferences(travelerProfiles);
+        groupReconciliationPrompt = buildGroupReconciliationPrompt(travelerProfiles, reconciliation, 1);
+        console.log(`[Stage 1.97] Group: ${reconciliation.hardConstraints.length} hard constraints, ${reconciliation.sharedOverlaps.length} shared interests`);
+      }
+      
       // Combine all context for maximum personalization
-      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS
+      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES
       // NOTE: unifiedDNAContext includes budget intent, archetypes, blended traits, and deduplicated preferences
-      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext;
+      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
