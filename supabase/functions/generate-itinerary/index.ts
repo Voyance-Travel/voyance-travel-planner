@@ -4450,7 +4450,7 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
     // ACTION: generate-day / regenerate-day - Single day generation with flight/hotel awareness
     // ==========================================================================
     if (action === 'generate-day' || action === 'regenerate-day') {
-      const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, userId } = params;
+      const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, userId, keepActivities, currentActivities } = params;
 
       // Get user preferences
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
@@ -4680,8 +4680,28 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         const generatedDay = JSON.parse(toolCall.function.arguments);
 
+        // Parse current activities and identify locked ones to preserve
+        const lockedActivities: Array<{
+          id: string;
+          title: string;
+          startTime: string;
+          endTime: string;
+          isLocked: boolean;
+          [key: string]: unknown;
+        }> = [];
+        
+        if (keepActivities && keepActivities.length > 0 && currentActivities) {
+          // Find the locked activities from currentActivities
+          for (const act of currentActivities) {
+            if (keepActivities.includes(act.id) && act.isLocked) {
+              lockedActivities.push(act);
+            }
+          }
+          console.log(`[generate-day] Preserving ${lockedActivities.length} locked activities`);
+        }
+
         // Normalize activities: ensure title exists, add IDs and enhancements
-        generatedDay.activities = generatedDay.activities.map((act: { 
+        let normalizedActivities = generatedDay.activities.map((act: { 
           id?: string; 
           title?: string; 
           name?: string; 
@@ -4712,12 +4732,74 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             cost: normalizedCost,
             location: normalizedLocation,
             durationMinutes: act.startTime && act.endTime ? calculateDuration(act.startTime, act.endTime) : 60,
-            categoryIcon: getCategoryIcon(act.category || 'activity')
+            categoryIcon: getCategoryIcon(act.category || 'activity'),
+            isLocked: false, // New activities are unlocked by default
           };
         });
 
+        // CRITICAL: Merge locked activities back into the timeline
+        if (lockedActivities.length > 0) {
+          // Remove any generated activities that conflict with locked activity times
+          for (const locked of lockedActivities) {
+            const lockedStart = parseTimeToMinutes(locked.startTime);
+            const lockedEnd = parseTimeToMinutes(locked.endTime);
+            
+            if (lockedStart !== null && lockedEnd !== null) {
+              // Filter out activities that overlap with locked ones
+              normalizedActivities = normalizedActivities.filter((act: { startTime?: string; endTime?: string }) => {
+                const actStart = parseTimeToMinutes(act.startTime || '00:00');
+                const actEnd = parseTimeToMinutes(act.endTime || '23:59');
+                if (actStart === null || actEnd === null) return true;
+                
+                // Check for overlap
+                const overlaps = !(actEnd <= lockedStart || actStart >= lockedEnd);
+                return !overlaps;
+              });
+            }
+          }
+          
+          // Insert locked activities back and sort by time
+          normalizedActivities = [...normalizedActivities, ...lockedActivities];
+          normalizedActivities.sort((a: { startTime?: string }, b: { startTime?: string }) => {
+            const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+            const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+            return aTime - bTime;
+          });
+          
+          console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
+        }
+
+        generatedDay.activities = normalizedActivities;
+
         // Ensure day has a title
         generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
+
+        // Save version to itinerary_versions table for undo functionality
+        if (tripId) {
+          try {
+            const { error: versionError } = await supabase
+              .from('itinerary_versions')
+              .insert({
+                trip_id: tripId,
+                day_number: dayNumber,
+                activities: generatedDay.activities,
+                day_metadata: {
+                  title: generatedDay.title,
+                  theme: generatedDay.theme,
+                  narrative: generatedDay.narrative,
+                },
+                created_by_action: action === 'regenerate-day' ? 'regenerate' : 'generate',
+              });
+            
+            if (versionError) {
+              console.error('[generate-day] Failed to save version:', versionError);
+            } else {
+              console.log('[generate-day] Saved version for day', dayNumber);
+            }
+          } catch (vErr) {
+            console.error('[generate-day] Version save error:', vErr);
+          }
+        }
 
         return new Response(
           JSON.stringify({
@@ -4726,7 +4808,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             dayNumber,
             totalDays,
             usedPersonalization: !!preferenceContext,
-            flightAware: !!(flightContext.arrivalTime || flightContext.returnDepartureTime)
+            flightAware: !!(flightContext.arrivalTime || flightContext.returnDepartureTime),
+            preservedLocked: lockedActivities.length,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
