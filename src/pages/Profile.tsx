@@ -20,7 +20,8 @@ import {
   Zap,
   Plane,
   CheckCircle,
-  Search
+  Search,
+  Building2
 } from 'lucide-react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
@@ -527,61 +528,62 @@ export default function Profile() {
             {/* Quick Actions with Images */}
             <div className="grid md:grid-cols-2 gap-6">
               {/* Full Trip Planning Card */}
-              <div className="group relative overflow-hidden rounded-2xl border-2 border-primary/20 bg-card">
+              {/* Find My Hotel Card - Cool blue tones */}
+              <div className="group relative overflow-hidden rounded-2xl border-2 border-sky-200/50 bg-gradient-to-br from-card to-sky-50/30">
                 <div className="absolute inset-0">
                   <img 
-                    src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800" 
-                    alt="Find flights and hotels"
+                    src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800" 
+                    alt="Find your hotel"
                     className="w-full h-full object-cover opacity-15 group-hover:opacity-25 group-hover:scale-105 transition-all duration-500"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-card/60" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-sky-50/40" />
                 </div>
                 <div className="relative p-6">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[10px] tracking-widest uppercase font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
-                      Full Service
+                    <span className="text-[10px] tracking-widest uppercase font-medium text-sky-600 bg-sky-100 px-2 py-0.5 rounded">
+                      Need a Hotel
                     </span>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center mb-4">
-                    <Plane className="h-6 w-6 text-white" />
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center mb-4">
+                    <Building2 className="h-6 w-6 text-white" />
                   </div>
-                  <h3 className="font-semibold text-foreground mb-1">Find Flights + Hotel</h3>
+                  <h3 className="font-semibold text-foreground mb-1">Find My Hotel</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    We'll search for flights, find the perfect hotel, then build your itinerary.
+                    We'll find the perfect accommodation and build your itinerary around it.
                   </p>
-                  <Button asChild>
+                  <Button asChild className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700">
                     <Link to="/start">
-                      <Search className="h-4 w-4 mr-2" />
-                      Search Flights
+                      <Building2 className="h-4 w-4 mr-2" />
+                      Search Hotels
                     </Link>
                   </Button>
                 </div>
               </div>
 
-              {/* Already Booked Card */}
-              <div className="group relative overflow-hidden rounded-2xl border border-border bg-card">
+              {/* Build My Itinerary Card - Warm amber tones */}
+              <div className="group relative overflow-hidden rounded-2xl border-2 border-amber-200/50 bg-gradient-to-br from-card to-amber-50/30">
                 <div className="absolute inset-0">
                   <img 
-                    src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800" 
-                    alt="Build itinerary"
+                    src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800" 
+                    alt="Build your itinerary"
                     className="w-full h-full object-cover opacity-15 group-hover:opacity-25 group-hover:scale-105 transition-all duration-500"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-card/60" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/90 to-amber-50/40" />
                 </div>
                 <div className="relative p-6">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[10px] tracking-widest uppercase font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                      Already Booked
+                    <span className="text-[10px] tracking-widest uppercase font-medium text-amber-600 bg-amber-100 px-2 py-0.5 rounded">
+                      Trip Booked
                     </span>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center mb-4">
                     <Sparkles className="h-6 w-6 text-white" />
                   </div>
-                  <h3 className="font-semibold text-foreground mb-1">I Have My Flights</h3>
+                  <h3 className="font-semibold text-foreground mb-1">Build My Itinerary</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Got your travel booked? We'll just build the perfect daily activities.
+                    Already have your hotel? We'll craft the perfect daily activities.
                   </p>
-                  <Button asChild variant="outline">
+                  <Button asChild className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600">
                     <Link to="/start?mode=itinerary">
                       <Sparkles className="h-4 w-4 mr-2" />
                       Build Itinerary

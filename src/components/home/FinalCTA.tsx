@@ -47,7 +47,7 @@ export default function FinalCTA() {
               className="text-base px-10 py-6 font-sans font-medium tracking-wide"
             >
               <Link to={ROUTES.START}>
-                Build My Itinerary
+                Start Planning
                 <ArrowRight className="ml-3 h-4 w-4" />
               </Link>
             </Button>

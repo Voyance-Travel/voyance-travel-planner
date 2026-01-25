@@ -817,15 +817,18 @@ export default function Start() {
       />
       
       {/* Editorial Hero Section with Background Image */}
-      <section className="relative pt-24 pb-8 md:pt-32 md:pb-12 overflow-hidden">
-        {/* Hero Background Image */}
+      <section className={`relative pt-24 pb-8 md:pt-32 md:pb-12 overflow-hidden ${itineraryOnlyMode ? 'bg-gradient-to-b from-amber-50/30 to-background' : 'bg-gradient-to-b from-sky-50/30 to-background'}`}>
+        {/* Hero Background Image - Different per mode */}
         <div className="absolute inset-0">
           <img 
-            src={getHeroImage(itineraryOnlyMode ? 'explore' : 'planning')}
+            src={getHeroImage(itineraryOnlyMode ? 'itinerary' : 'hotel')}
             alt=""
-            className="w-full h-full object-cover brightness-90 contrast-110 saturate-110"
+            className={`w-full h-full object-cover ${itineraryOnlyMode ? 'brightness-95 contrast-105 saturate-120' : 'brightness-90 contrast-110 saturate-100'}`}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/25 via-background/45 to-background backdrop-blur-[1px]" />
+          <div className={`absolute inset-0 backdrop-blur-[1px] ${itineraryOnlyMode 
+            ? 'bg-gradient-to-b from-amber-900/20 via-background/50 to-background' 
+            : 'bg-gradient-to-b from-sky-900/20 via-background/50 to-background'
+          }`} />
         </div>
         
         <div className="relative max-w-4xl mx-auto px-6 text-center">
@@ -834,37 +837,40 @@ export default function Start() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            {/* Eyebrow */}
-            <p className="text-xs tracking-[0.25em] uppercase text-primary font-medium mb-4">
-              {itineraryOnlyMode ? 'Already Booked' : 'Full Trip Planning'}
+            {/* Eyebrow - Distinct per mode */}
+            <p className={`text-xs tracking-[0.25em] uppercase font-medium mb-4 ${itineraryOnlyMode ? 'text-amber-600' : 'text-sky-600'}`}>
+              {itineraryOnlyMode ? 'Trip Booked' : 'Need Accommodation'}
             </p>
             
             <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-light text-foreground mb-5 leading-[1.1]">
               {itineraryOnlyMode ? (
-                <>Build your <br className="hidden md:block" /><em className="italic">day-by-day</em> itinerary</>
+                <>Build My <br className="hidden md:block" /><em className="italic">Itinerary</em></>
               ) : (
-                <>Find flights, hotels <br className="hidden md:block" />& <em className="italic">plan everything</em></>
+                <>Find My <br className="hidden md:block" /><em className="italic">Hotel</em></>
               )}
             </h1>
             
             <p className="text-lg text-muted-foreground font-light leading-relaxed max-w-xl mx-auto">
               {itineraryOnlyMode 
-                ? "You've got flights and a place to stay—let us handle the daily activities."
-                : "We'll search for the best flights and hotels, then build your perfect itinerary."
+                ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
+                : "Tell us where you're headed, and we'll find the ideal place to stay."
               }
             </p>
           </motion.div>
         </div>
       </section>
 
-      {/* Planning Form - Clean editorial card */}
+      {/* Planning Form - Different styling per mode */}
       <section className="relative pb-16 pt-6">
         <div className="max-w-xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15 }}
-            className="bg-card p-8 md:p-10 rounded-2xl border border-border/60 shadow-sm"
+            className={`p-8 md:p-10 rounded-2xl shadow-sm ${itineraryOnlyMode 
+              ? 'bg-gradient-to-br from-card to-amber-50/20 border border-amber-200/40' 
+              : 'bg-card border border-border/60'
+            }`}
           >
             <div className="space-y-6">
               {/* Departure City - Now FIRST */}
@@ -1196,16 +1202,22 @@ export default function Start() {
                 <Button
                   onClick={handleStart}
                   disabled={!isFormValid}
-                  className="w-full h-14 text-base font-medium"
+                  className={`w-full h-14 text-base font-medium ${itineraryOnlyMode 
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white' 
+                    : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white'
+                  }`}
                   size="lg"
                 >
                   {itineraryOnlyMode ? (
                     <>
                       <Sparkles className="h-4 w-4 mr-2" />
-                      Generate My Itinerary
+                      Build My Itinerary
                     </>
                   ) : (
-                    'Plan My Trip'
+                    <>
+                      <Building2 className="h-4 w-4 mr-2" />
+                      Find My Hotel
+                    </>
                   )}
                 </Button>
                 
@@ -1256,17 +1268,17 @@ export default function Start() {
                     }}
                     className={cn(
                       "w-full flex flex-col items-center justify-center gap-1 px-4 py-4 rounded-xl border-2 transition-all",
-                      "border-primary bg-primary/10 hover:bg-primary/20"
+                      "border-amber-400 bg-amber-50 hover:bg-amber-100"
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-primary" />
-                      <span className="text-base font-semibold text-primary">
-                        Just Build My Itinerary
+                      <Sparkles className="h-5 w-5 text-amber-600" />
+                      <span className="text-base font-semibold text-amber-700">
+                        Build My Itinerary Instead
                       </span>
                     </div>
                     <span className="text-xs text-muted-foreground">
-                      Already have flights & hotel? Skip straight to your personalized itinerary
+                      Already have your hotel? Skip straight to activities
                     </span>
                   </button>
                 )}
