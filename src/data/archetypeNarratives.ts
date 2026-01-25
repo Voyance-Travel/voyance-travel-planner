@@ -167,7 +167,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Small towns hold unexpected magic",
       "Sometimes silence is the destination"
     ],
-    perfectTripPreview: "Hopping between Tokyo, Seoul, and Singapore—cafés by day, night markets after dark.",
+    perfectTripPreview: "Hopping between Tokyo, Seoul, and Singapore: cafés by day, night markets after dark.",
     emoji: "🏙️"
   },
   wilderness_pioneer: {
@@ -242,7 +242,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Not every meal needs to be Instagram-worthy",
       "Sometimes the hotel breakfast is fine"
     ],
-    perfectTripPreview: "Eating your way through Japan—ramen, sushi, and that perfect hidden izakaya.",
+    perfectTripPreview: "Eating your way through Japan: ramen, sushi, and that perfect hidden izakaya.",
     emoji: "🍜"
   },
   luxury_luminary: {
@@ -292,7 +292,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Sometimes adults need adult-only time",
       "Imperfect trips make perfect memories"
     ],
-    perfectTripPreview: "A Tuscan villa with the whole family—cooking classes, pool days, and dinners under the stars.",
+    perfectTripPreview: "A Tuscan villa with the whole family: cooking classes, pool days, and dinners under the stars.",
     emoji: "👨‍👩‍👧‍👦"
   },
   adrenaline_architect: {
@@ -317,7 +317,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Sometimes the best views require no risk",
       "Recovery is part of the journey"
     ],
-    perfectTripPreview: "New Zealand—bungee jumping, glacier skydiving, and cliff diving into crystal water.",
+    perfectTripPreview: "New Zealand: bungee jumping, glacier skydiving, and cliff diving into crystal water.",
     emoji: "🪂"
   },
   slow_traveler: {
@@ -342,7 +342,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Quick trips can still be meaningful",
       "FOMO isn't always wrong"
     ],
-    perfectTripPreview: "Three months in Lisbon—your own flat, a regular café, and feeling like a local.",
+    perfectTripPreview: "Three months in Lisbon: your own flat, a regular café, and feeling like a local.",
     emoji: "🐌"
   },
   // Default/fallback archetypes based on simple mapping
@@ -368,14 +368,14 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Creature comforts can enhance, not diminish, adventures",
       "Sharing discoveries multiplies the joy"
     ],
-    perfectTripPreview: "Island-hopping the Philippines—hidden beaches, local friends, and the best parties.",
+    perfectTripPreview: "Island-hopping the Philippines: hidden beaches, local friends, and the best parties.",
     emoji: "🧭"
   },
   curated_luxe: {
     id: 'curated_luxe',
     name: 'Curated Luxe',
     category: 'CURATOR',
-    hookLine: "You don't travel—you orchestrate experiences.",
+    hookLine: "You don't travel, you orchestrate experiences.",
     coreDescription: "Excellence isn't negotiable. You've learned that the best things in life require curation, and your travels reflect that philosophy. Every detail is intentional.",
     whatThisMeans: [
       "You book months in advance for the perfect experience",
@@ -393,7 +393,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Some of the best meals cost nothing",
       "Imperfection tells better stories"
     ],
-    perfectTripPreview: "A perfect week in Provence—truffle hunting, amazing food, and a sunrise balloon ride.",
+    perfectTripPreview: "A perfect week in Provence: truffle hunting, amazing food, and a sunrise balloon ride.",
     emoji: "💎"
   },
   story_seeker: {
@@ -418,7 +418,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Nature speaks if you listen",
       "Solitude can be nourishing"
     ],
-    perfectTripPreview: "A Vietnam village stay—wedding invitations, family recipes, and friends for life.",
+    perfectTripPreview: "A Vietnam village stay: wedding invitations, family recipes, and friends for life.",
     emoji: "📖"
   },
   escape_artist: {
@@ -443,7 +443,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Home can hold healing too",
       "Sometimes the escape is internal"
     ],
-    perfectTripPreview: "A week in the Maldives—overwater bungalow, no schedule, total peace.",
+    perfectTripPreview: "A week in the Maldives: overwater bungalow, no schedule, total peace.",
     emoji: "🏝️"
   },
   sanctuary_seeker: {
@@ -468,7 +468,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Comfort zones expand when gently pushed",
       "Connection doesn't always have to be exhausting"
     ],
-    perfectTripPreview: "A private Tuscan villa—your own chef, peaceful mornings, sunset vineyard views.",
+    perfectTripPreview: "A private Tuscan villa: your own chef, peaceful mornings, sunset vineyard views.",
     emoji: "🏛️"
   },
   digital_explorer: {
@@ -493,7 +493,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Some experiences require your full attention",
       "Boundaries between work and travel matter"
     ],
-    perfectTripPreview: "Three months in Southeast Asia—cafés with ocean views and fellow nomads.",
+    perfectTripPreview: "Three months in Southeast Asia: cafés with ocean views and fellow nomads.",
     emoji: "💻"
   },
   social_butterfly: {
@@ -518,7 +518,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Quality over quantity in connections",
       "Not every encounter needs to be a friendship"
     ],
-    perfectTripPreview: "A group trip through the Balkans—20 new friends and a reunion already planned.",
+    perfectTripPreview: "A group trip through the Balkans: 20 new friends and a reunion already planned.",
     emoji: "🦋"
   },
   romantic_curator: {
@@ -568,7 +568,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Revisiting favorites has its own joy",
       "The journey matters as much as the destination"
     ],
-    perfectTripPreview: "Northern Lights, the Pyramids, the Galápagos—checking off the big ones.",
+    perfectTripPreview: "Northern Lights, the Pyramids, the Galápagos: checking off the big ones.",
     emoji: "✓"
   },
   collection_curator: {
@@ -593,7 +593,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Some countries deserve more than a flyby",
       "Quality of experience over quantity of stamps"
     ],
-    perfectTripPreview: "Central Asia—eight countries, ancient Silk Road cities, stories from places few visit.",
+    perfectTripPreview: "Central Asia: eight countries, ancient Silk Road cities, stories from places few visit.",
     emoji: "🗺️"
   },
   status_seeker: {
@@ -626,7 +626,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Retreat Regular',
     category: 'RESTORER',
     hookLine: "Wellness isn't a trend, it's a lifestyle.",
-    coreDescription: "You don't vacation, you retreat. Yoga camps, detox programs, silent retreats—travel is your commitment to becoming your best self. You return transformed, not just rested.",
+    coreDescription: "You don't vacation, you retreat. Yoga camps, detox programs, silent retreats: travel is your commitment to becoming your best self. You return transformed, not just rested.",
     whatThisMeans: [
       "You've done juice cleanses in exotic locations",
       "Meditation is part of your travel routine",
@@ -643,7 +643,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Not every trip needs a program",
       "Relaxation can be unstructured"
     ],
-    perfectTripPreview: "Ten days in Kerala—daily yoga, Ayurvedic spa, and healthy new habits.",
+    perfectTripPreview: "Ten days in Kerala: daily yoga, Ayurvedic spa, and healthy new habits.",
     emoji: "🧖"
   },
   beach_therapist: {
@@ -668,7 +668,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Cities offer unexpected restoration",
       "Adventure can coexist with beach time"
     ],
-    perfectTripPreview: "Two weeks island-hopping Greece—beautiful beaches, warm sun, pure relaxation.",
+    perfectTripPreview: "Two weeks island-hopping Greece: beautiful beaches, warm sun, pure relaxation.",
     emoji: "🏖️"
   },
   art_aficionado: {
@@ -693,7 +693,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Not every moment needs curation",
       "Sometimes the best art is lived, not viewed"
     ],
-    perfectTripPreview: "A week in Florence—world-famous art, hidden gems, and history everywhere.",
+    perfectTripPreview: "A week in Florence: world-famous art, hidden gems, and history everywhere.",
     emoji: "🎨"
   },
   eco_ethicist: {
@@ -851,7 +851,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Balanced Story Collector',
     category: 'EXPLORER',  // Changed from CONNECTOR - accepts introverts
     hookLine: "Every journey adds a chapter worth reading.",
-    coreDescription: "You don't fit into neat boxes, and that's your superpower. You balance adventure with rest, solo time with meaningful connection, and spontaneity with just enough planning. Every trip becomes a story worth telling—even if you're the only audience.",
+    coreDescription: "You don't fit into neat boxes, and that's your superpower. You balance adventure with rest, solo time with meaningful connection, and spontaneity with just enough planning. Every trip becomes a story worth telling, even if you're the only audience.",
     whatThisMeans: [
       "You adapt your travel style to each destination",
       "Some days you explore hard, others you rest completely",
@@ -868,14 +868,14 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Not every trip needs to be 'balanced'",
       "Extremes can be exhilarating"
     ],
-    perfectTripPreview: "Two weeks in Portugal—Lisbon nightlife, peaceful Sintra, cooking class, lazy beach days.",
+    perfectTripPreview: "Two weeks in Portugal: Lisbon nightlife, peaceful Sintra, cooking class, lazy beach days.",
     emoji: "📖"
   },
   flexible_wanderer: {
     id: 'flexible_wanderer',
     name: 'The Flexible Wanderer',
     category: 'EXPLORER',
-    hookLine: "Plans are just suggestions—the road decides.",
+    hookLine: "Plans are just suggestions. The road decides.",
     coreDescription: "You book one-way tickets and figure out the rest later. Itineraries feel like prisons, and the best experiences come from happy accidents. You trust the journey to unfold.",
     whatThisMeans: [
       "You rarely book more than 24 hours ahead",
@@ -893,7 +893,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Travel companions need some structure",
       "Peak season requires planning"
     ],
-    perfectTripPreview: "Landing in Bangkok with no plans—following tips, ending up in Vietnam, coming home when it feels right.",
+    perfectTripPreview: "Landing in Bangkok with no plans, following tips, ending up in Vietnam, coming home when it feels right.",
     emoji: "🌬️"
   },
 };

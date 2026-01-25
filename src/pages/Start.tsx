@@ -875,7 +875,7 @@ export default function Start() {
             </h1>
             <p className="mt-4 text-lg text-muted-foreground max-w-lg mx-auto">
               {itineraryOnlyMode
-                ? "You've got your flights and hotel sorted—we'll craft the perfect daily activities."
+                ? "You've got your flights and hotel sorted. We'll craft the perfect daily activities."
                 : "Tell us where you're headed, and we'll find the ideal place to stay."}
             </p>
           </motion.div>

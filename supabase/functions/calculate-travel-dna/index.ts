@@ -1015,7 +1015,7 @@ const TENSION_PATTERNS: TensionPattern[] = [
   {
     condition: (t) => t.pace <= -4 && t.adventure >= 4,
     label: 'selective intensity',
-    explanation: "You prefer a relaxed base pace punctuated by bold peak experiences—quality over quantity.",
+    explanation: "You prefer a relaxed base pace punctuated by bold peak experiences: quality over quantity.",
   },
   // 7. solo immersive = low social + high authenticity
   {
@@ -1033,7 +1033,7 @@ const TENSION_PATTERNS: TensionPattern[] = [
   {
     condition: (t) => t.comfort >= 4 && t.authenticity >= 5,
     label: 'curated authentic',
-    explanation: "You want genuine local experiences without sacrificing comfort—the best of both worlds.",
+    explanation: "You want genuine local experiences without sacrificing comfort: the best of both worlds.",
   },
   // 10. intense growth = high pace + high transformation
   {
@@ -1937,18 +1937,18 @@ function buildPerfectTripPromptV2(
 
 function getFallbackPerfectTrip(archetypeId: string): string {
   const fallbacks: Record<string, string> = {
-    cultural_anthropologist: 'A month exploring local life—morning markets, cooking classes, and dinner invitations from people you just met.',
-    urban_nomad: 'City-hopping between amazing neighborhoods—great coffee spots, rooftop bars, and hidden gems around every corner.',
-    wilderness_pioneer: 'Hiking through stunning landscapes—sleeping under stars, earning your views, and finding peace in nature.',
-    zen_seeker: 'A peaceful retreat—waking to birdsong, unhurried mornings, and the luxury of having nowhere to be.',
-    culinary_cartographer: 'Eating your way through a new place—night markets, family restaurants, and cooking classes with locals.',
-    luxury_luminary: 'A beautifully planned getaway—amazing hotels, great dining, and every detail taken care of.',
-    adrenaline_architect: 'An adventure-packed trip—thrilling activities, stunning settings, and experiences that get your heart racing.',
-    slow_traveler: 'Staying long enough to have a favorite café—one place, really getting to know it, feeling like a local.',
-    family_architect: 'A trip the whole family will remember—activities for everyone, shared meals, and stories you\'ll tell for years.',
-    story_seeker: 'Meeting fascinating people—local celebrations, meaningful conversations, and connections that last.',
-    escape_artist: 'A complete getaway—beautiful setting, no agenda, just space to breathe and recharge.',
-    social_butterfly: 'Making new friends everywhere—group adventures, shared meals, and a travel crew you\'ll stay in touch with.',
+    cultural_anthropologist: 'A month exploring local life: morning markets, cooking classes, and dinner invitations from people you just met.',
+    urban_nomad: 'City-hopping between amazing neighborhoods: great coffee spots, rooftop bars, and hidden gems around every corner.',
+    wilderness_pioneer: 'Hiking through stunning landscapes: sleeping under stars, earning your views, and finding peace in nature.',
+    zen_seeker: 'A peaceful retreat: waking to birdsong, unhurried mornings, and the luxury of having nowhere to be.',
+    culinary_cartographer: 'Eating your way through a new place: night markets, family restaurants, and cooking classes with locals.',
+    luxury_luminary: 'A beautifully planned getaway: amazing hotels, great dining, and every detail taken care of.',
+    adrenaline_architect: 'An adventure-packed trip: thrilling activities, stunning settings, and experiences that get your heart racing.',
+    slow_traveler: 'Staying long enough to have a favorite café: one place, really getting to know it, feeling like a local.',
+    family_architect: 'A trip the whole family will remember: activities for everyone, shared meals, and stories you\'ll tell for years.',
+    story_seeker: 'Meeting fascinating people: local celebrations, meaningful conversations, and connections that last.',
+    escape_artist: 'A complete getaway: beautiful setting, no agenda, just space to breathe and recharge.',
+    social_butterfly: 'Making new friends everywhere: group adventures, shared meals, and a travel crew you\'ll stay in touch with.',
   };
   
   return fallbacks[archetypeId] || 'A trip that matches your style—experiences that feel right for you and memories you\'ll treasure.';

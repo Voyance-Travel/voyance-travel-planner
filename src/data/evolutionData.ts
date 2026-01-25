@@ -65,7 +65,7 @@ export const TRAVELER_STAGES: Record<TravelerStage, StageDefinition> = {
     id: 'Expert',
     name: 'The Expert',
     tagline: 'Travel is an art you\'ve mastered',
-    description: 'You don\'t just travel—you curate experiences. Others seek your advice, and you\'ve learned that the best trips often come from the unexpected.',
+    description: 'You don\'t just travel, you curate experiences. Others seek your advice, and you\'ve learned that the best trips often come from the unexpected.',
     keyMilestones: [
       'Seeks transformative over transactional experiences',
       'Mentors other travelers naturally',

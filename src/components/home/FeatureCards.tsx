@@ -75,7 +75,7 @@ export default function FeatureCards() {
           viewport={{ once: true, margin: "-50px" }}
           transition={{ duration: 0.6, delay: 0.1 }}
         >
-          The only AI travel platform built to curate — not confuse.
+          The only AI travel platform built to curate, not confuse.
         </motion.p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">

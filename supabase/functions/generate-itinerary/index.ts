@@ -792,22 +792,22 @@ function buildNormalizedPromptContext(
     
     if (tripCtx.tripType) {
       const tripTypeLabels: Record<string, string> = {
-        'romantic': '💕 Romantic getaway — focus on intimate experiences, couples activities, and special moments',
-        'honeymoon': '💍 Honeymoon — luxury, romance, privacy, and once-in-a-lifetime experiences',
-        'adventure': '🏔️ Adventure trip — outdoor activities, adrenaline, exploration',
-        'family': '👨‍👩‍👧‍👦 Family vacation — kid-friendly, manageable pacing, group activities',
-        'solo': '🧘 Solo travel — self-discovery, flexibility, meeting locals',
-        'business': '💼 Business trip — efficient, professional, work-friendly venues',
-        'wellness': '🧘‍♀️ Wellness retreat — spa, yoga, healthy dining, relaxation',
-        'cultural': '🏛️ Cultural exploration — museums, history, local traditions',
-        'beach': '🏖️ Beach vacation — sun, sea, relaxation, water activities',
-        'city_break': '🏙️ City break — urban exploration, nightlife, landmarks',
+        'romantic': '💕 Romantic getaway: focus on intimate experiences, couples activities, and special moments',
+        'honeymoon': '💍 Honeymoon: luxury, romance, privacy, and once-in-a-lifetime experiences',
+        'adventure': '🏔️ Adventure trip: outdoor activities, adrenaline, exploration',
+        'family': '👨‍👩‍👧‍👦 Family vacation: kid-friendly, manageable pacing, group activities',
+        'solo': '🧘 Solo travel: self-discovery, flexibility, meeting locals',
+        'business': '💼 Business trip: efficient, professional, work-friendly venues',
+        'wellness': '🧘‍♀️ Wellness retreat: spa, yoga, healthy dining, relaxation',
+        'cultural': '🏛️ Cultural exploration: museums, history, local traditions',
+        'beach': '🏖️ Beach vacation: sun, sea, relaxation, water activities',
+        'city_break': '🏙️ City break: urban exploration, nightlife, landmarks',
       };
       tripSection += `\n${tripTypeLabels[tripCtx.tripType] || `Trip type: ${tripCtx.tripType}`}`;
     }
     
     if (tripCtx.travelers > 1) {
-      tripSection += `\n👥 ${tripCtx.travelers} travelers — ensure activities accommodate the group`;
+      tripSection += `\n👥 ${tripCtx.travelers} travelers: ensure activities accommodate the group`;
     }
     
     if (tripCtx.interests && tripCtx.interests.length > 0) {

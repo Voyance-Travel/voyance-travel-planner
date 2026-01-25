@@ -157,7 +157,7 @@ export default function ItineraryContextForm({
             disabled={isLoading}
             className="text-muted-foreground"
           >
-            Skip — I'll add these later
+            Skip for now, I'll add these later
           </Button>
         )}
       </div>

@@ -26,8 +26,8 @@ function TableCellContent({ value, highlight }: { value: string; highlight?: boo
   if (value === '✓') {
     return <Check className={`w-4 h-4 mx-auto ${highlight ? 'text-primary' : 'text-green-600'}`} />;
   }
-  if (value === '—') {
-    return <span className="text-muted-foreground/50">—</span>;
+  if (value === '-') {
+    return <span className="text-muted-foreground/50">-</span>;
   }
   return <span className={highlight ? 'text-foreground font-medium' : 'text-muted-foreground'}>{value}</span>;
 }
@@ -128,7 +128,7 @@ export default function Pricing() {
             transition={{ delay: 0.3 }}
             className="text-sm text-muted-foreground/80 max-w-lg mx-auto mt-4"
           >
-            Routes, budgets, versions, and one-tap refinements — everything stays organized as you explore your options.
+            Routes, budgets, versions, and one-tap refinements. Everything stays organized as you explore your options.
           </motion.p>
         </div>
       </section>
@@ -180,7 +180,7 @@ export default function Pricing() {
                   <ul className="space-y-2 mb-6">
                     {PLAN_FEATURES.FREE.notIncluded.map((f, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="w-4 text-center">—</span>
+                        <span className="w-4 text-center">-</span>
                         <span>{f}</span>
                       </li>
                     ))}
@@ -557,7 +557,7 @@ export default function Pricing() {
             className="flex items-center justify-center gap-2 mt-8 text-sm text-muted-foreground"
           >
             <Download className="w-4 h-4" />
-            <span><strong className="text-foreground">Export (PDF)</strong> — take it with you</span>
+            <span><strong className="text-foreground">Export (PDF)</strong> - take it with you</span>
           </motion.div>
         </div>
       </section>
