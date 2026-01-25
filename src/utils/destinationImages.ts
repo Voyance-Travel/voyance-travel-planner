@@ -41,10 +41,10 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1200',
   ],
   'lisbon': [
-    'https://images.unsplash.com/photo-1548707309-dcebeab9ea9b?w=1200', // Lisbon colorful buildings and castle
-    'https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=1200', // Lisbon historic streetcar
-    'https://images.unsplash.com/photo-1525230071382-92de4bfbc0cc?w=1200', // Lisbon aerial view
-    'https://images.unsplash.com/photo-1592838064575-70ed626d3a0e?w=1200', // Lisbon rooftops and architecture
+    'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=1200', // Belém Tower
+    'https://images.unsplash.com/photo-1555881400-69b4f7a5f3b1?w=1200', // Alfama rooftops
+    'https://images.unsplash.com/photo-1548707309-dcebeab9ea9b?w=1200', // Tram 28 in Alfama
+    'https://images.unsplash.com/photo-1575373647588-50fa8fc2d16f?w=1200', // Colorful tiles
   ],
   'amsterdam': [
     'https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=1200',
