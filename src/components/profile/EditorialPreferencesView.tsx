@@ -827,6 +827,16 @@ function PlanningSection({ preferences, onUpdate, isSaving }: SectionProps) {
 function BudgetSection({ preferences, onUpdate, isSaving }: SectionProps) {
   const budgetRange = preferences?.budget_range as { min?: number; max?: number } | null;
   
+  // Helper to determine which preset matches current range
+  const getDailyBudgetPreset = (range: { min?: number; max?: number } | null): string => {
+    if (!range?.max) return 'moderate';
+    if (range.max <= 150) return 'budget';
+    if (range.max <= 300) return 'moderate';
+    if (range.max <= 500) return 'comfort';
+    if (range.max <= 800) return 'premium';
+    return 'luxury';
+  };
+  
   return (
     <div className="space-y-8">
       <SectionHeader 
@@ -835,42 +845,30 @@ function BudgetSection({ preferences, onUpdate, isSaving }: SectionProps) {
       />
       
       {/* Daily Budget Range */}
-      <PreferenceGroup label="Daily Budget Range (per person)">
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <Label className="text-xs text-muted-foreground">Minimum</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input
-                type="number"
-                placeholder="100"
-                value={budgetRange?.min || ''}
-                onChange={(e) => onUpdate('budget_range', { 
-                  ...budgetRange, 
-                  min: parseInt(e.target.value) || undefined 
-                })}
-                className="pl-7"
-              />
-            </div>
-          </div>
-          <span className="text-muted-foreground mt-6">to</span>
-          <div className="flex-1">
-            <Label className="text-xs text-muted-foreground">Maximum</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input
-                type="number"
-                placeholder="500"
-                value={budgetRange?.max || ''}
-                onChange={(e) => onUpdate('budget_range', { 
-                  ...budgetRange, 
-                  max: parseInt(e.target.value) || undefined 
-                })}
-                className="pl-7"
-              />
-            </div>
-          </div>
-        </div>
+      <PreferenceGroup label="Daily Budget (per person)">
+        <RadioGroup
+          value={getDailyBudgetPreset(budgetRange)}
+          onValueChange={(value) => {
+            const ranges: Record<string, { min: number; max: number }> = {
+              'budget': { min: 50, max: 150 },
+              'moderate': { min: 150, max: 300 },
+              'comfort': { min: 300, max: 500 },
+              'premium': { min: 500, max: 800 },
+              'luxury': { min: 800, max: 2000 },
+            };
+            onUpdate('budget_range', ranges[value] || { min: 150, max: 300 });
+          }}
+          className="grid gap-3"
+        >
+          <RadioOption value="budget" label="Budget" description="$50–150/day" />
+          <RadioOption value="moderate" label="Moderate" description="$150–300/day" />
+          <RadioOption value="comfort" label="Comfort" description="$300–500/day" />
+          <RadioOption value="premium" label="Premium" description="$500–800/day" />
+          <RadioOption value="luxury" label="Luxury" description="$800+/day" />
+        </RadioGroup>
+        <p className="text-xs text-muted-foreground mt-3">
+          Includes meals, activities, and local transport (not flights/hotels)
+        </p>
       </PreferenceGroup>
 
       {/* When Do You Splurge */}
