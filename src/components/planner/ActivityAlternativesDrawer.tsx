@@ -296,15 +296,15 @@ export default function ActivityAlternativesDrawer({
           </div>
         </div>
 
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
           {selectedId === alt.id ? (
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
               <Check className="w-4 h-4 text-primary-foreground" />
             </div>
           ) : (
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <ArrowRightLeft className="w-4 h-4" />
-            </Button>
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80">
+              <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
+            </div>
           )}
         </div>
       </div>
