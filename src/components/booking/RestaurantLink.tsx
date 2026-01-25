@@ -2,7 +2,7 @@
  * RestaurantLink Component
  * 
  * Uses AI-powered search (Perplexity) to find the official restaurant website URL.
- * Falls back to Yelp search if no direct URL is found.
+ * Falls back to a general web search if no direct URL is found.
  */
 
 import { useState, useEffect } from 'react';
@@ -30,11 +30,10 @@ function cleanRestaurantName(name: string): string {
     .trim();
 }
 
-function generateYelpFallback(restaurantName: string, destination: string): string {
+function generateSearchFallback(restaurantName: string, destination: string): string {
   const cleanName = cleanRestaurantName(restaurantName);
-  const searchQuery = encodeURIComponent(cleanName);
-  const location = encodeURIComponent(destination);
-  return `https://www.yelp.com/search?find_desc=${searchQuery}&find_loc=${location}`;
+  const q = encodeURIComponent(`${cleanName} ${destination} official website`);
+  return `https://www.google.com/search?q=${q}`;
 }
 
 export function RestaurantLink({ restaurantName, destination, className }: RestaurantLinkProps) {
@@ -56,7 +55,7 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
             setUrl(cached.url);
             setUsedFallback(false);
           } else {
-            setUrl(generateYelpFallback(restaurantName, destination));
+            setUrl(generateSearchFallback(restaurantName, destination));
             setUsedFallback(true);
           }
           setIsLoading(false);
@@ -75,7 +74,7 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
           if (error || !data?.success || !data?.url) {
             // Cache the miss and use fallback
             urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
-            setUrl(generateYelpFallback(restaurantName, destination));
+            setUrl(generateSearchFallback(restaurantName, destination));
             setUsedFallback(true);
           } else {
             // Cache the hit
@@ -88,7 +87,7 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
       } catch (err) {
         console.error('Error looking up restaurant URL:', err);
         if (!cancelled) {
-          setUrl(generateYelpFallback(restaurantName, destination));
+          setUrl(generateSearchFallback(restaurantName, destination));
           setUsedFallback(true);
           setIsLoading(false);
         }
