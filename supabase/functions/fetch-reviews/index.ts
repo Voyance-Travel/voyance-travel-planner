@@ -81,7 +81,7 @@ interface ReviewRequest {
 
 interface Review {
   id: string;
-  source: 'google' | 'tripadvisor' | 'foursquare';
+  source: 'google' | 'tripadvisor' | 'foursquare' | 'opentripmap';
   authorName: string;
   authorPhoto?: string;
   rating: number; // 1-5
@@ -118,6 +118,7 @@ interface ReviewsResponse {
     google: boolean;
     tripadvisor: boolean;
     foursquare: boolean;
+    opentripmap: boolean;
   };
   totalFetched: number;
 }
@@ -526,6 +527,152 @@ async function fetchFoursquareReviews(
 }
 
 // =============================================================================
+// OPENTRIPMAP API
+// =============================================================================
+
+async function fetchOpenTripMapReviews(
+  placeName: string,
+  destination: string,
+  apiKey: string,
+  maxReviews: number
+): Promise<{ place: PlaceDetails | null; reviews: Review[] }> {
+  try {
+    // Use autosuggest API which is more forgiving with place names
+    const searchQuery = `${placeName}, ${destination}`;
+    const autosuggestResponse = await fetch(
+      `https://api.opentripmap.com/0.1/en/places/autosuggest?name=${encodeURIComponent(searchQuery)}&radius=50000&limit=5&apikey=${apiKey}&lon=0&lat=0`
+    );
+    
+    // If autosuggest fails, try a different approach with geoname for common city aliases
+    const cityAliases: Record<string, string> = {
+      'lisbon': 'Lisboa',
+      'rome': 'Roma',
+      'florence': 'Firenze',
+      'venice': 'Venezia',
+      'naples': 'Napoli',
+      'munich': 'München',
+      'vienna': 'Wien',
+      'prague': 'Praha',
+      'warsaw': 'Warszawa',
+      'athens': 'Athina',
+      'moscow': 'Moskva',
+    };
+    
+    const cityName = destination.split(',')[0].trim().toLowerCase();
+    const localizedCity = cityAliases[cityName] || destination;
+    
+    const geoResponse = await fetch(
+      `https://api.opentripmap.com/0.1/en/places/geoname?name=${encodeURIComponent(localizedCity)}&apikey=${apiKey}`
+    );
+    
+    if (!geoResponse.ok) {
+      const errorText = await geoResponse.text();
+      console.error('[OpenTripMap] Geocode error:', errorText);
+      return { place: null, reviews: [] };
+    }
+    
+    const geoData = await geoResponse.json();
+    
+    if (!geoData.lat || !geoData.lon) {
+      console.log(`[OpenTripMap] Could not geocode "${localizedCity}" - trying direct text search`);
+      return { place: null, reviews: [] };
+    }
+    
+    console.log(`[OpenTripMap] Geocoded ${localizedCity} to ${geoData.lat}, ${geoData.lon}`);
+    
+    // Step 2: Search for places near the geocoded location
+    const radius = 5000; // 5km radius
+    const searchResponse = await fetch(
+      `https://api.opentripmap.com/0.1/en/places/radius?radius=${radius}&lon=${geoData.lon}&lat=${geoData.lat}&name=${encodeURIComponent(placeName)}&rate=3&limit=5&apikey=${apiKey}`
+    );
+    
+    if (!searchResponse.ok) {
+      console.error('[OpenTripMap] Search error:', await searchResponse.text());
+      return { place: null, reviews: [] };
+    }
+    
+    const places = await searchResponse.json();
+    if (!Array.isArray(places) || places.length === 0) {
+      console.log('[OpenTripMap] No places found');
+      return { place: null, reviews: [] };
+    }
+    
+    // Find best match by comparing names
+    const normalizedSearchName = placeName.toLowerCase().trim();
+    const bestMatch = places.find((p: { name?: string }) => 
+      p.name?.toLowerCase().includes(normalizedSearchName) ||
+      normalizedSearchName.includes(p.name?.toLowerCase() || '')
+    ) || places[0];
+    
+    const xid = bestMatch.xid;
+    if (!xid) {
+      return { place: null, reviews: [] };
+    }
+    
+    // Step 3: Get detailed place info
+    const detailsResponse = await fetch(
+      `https://api.opentripmap.com/0.1/en/places/xid/${xid}?apikey=${apiKey}`
+    );
+    
+    if (!detailsResponse.ok) {
+      console.error('[OpenTripMap] Details error:', await detailsResponse.text());
+      return { place: null, reviews: [] };
+    }
+    
+    const details = await detailsResponse.json();
+    
+    // Build place details
+    const placeDetails: PlaceDetails = {
+      name: details.name || placeName,
+      address: details.address?.road 
+        ? `${details.address.road}${details.address.house_number ? ' ' + details.address.house_number : ''}, ${details.address.city || destination}`
+        : destination,
+      rating: details.rate ? Math.min(5, Math.ceil(details.rate / 2)) : 0,
+      totalReviews: 0,
+      categories: details.kinds?.split(',').slice(0, 5) || [],
+      photos: details.preview?.source ? [details.preview.source] : undefined,
+      website: details.url || details.wikipedia,
+      coordinates: details.point ? { lat: details.point.lat, lng: details.point.lon } : undefined,
+    };
+    
+    // OpenTripMap provides descriptions rather than individual reviews
+    // Create a curated "review" from Wikipedia extract if available
+    const reviews: Review[] = [];
+    
+    if (details.wikipedia_extracts?.text) {
+      reviews.push({
+        id: `opentripmap_wiki_${xid}`,
+        source: 'opentripmap' as const,
+        authorName: 'Wikipedia',
+        rating: 5,
+        text: details.wikipedia_extracts.text.substring(0, 500) + (details.wikipedia_extracts.text.length > 500 ? '...' : ''),
+        relativeTime: 'Encyclopedia',
+        publishedAt: new Date().toISOString(),
+      });
+    }
+    
+    // Add description as another "review" if different from Wikipedia
+    if (details.otm && details.otm !== details.wikipedia_extracts?.text) {
+      reviews.push({
+        id: `opentripmap_desc_${xid}`,
+        source: 'opentripmap' as const,
+        authorName: 'OpenTripMap',
+        rating: details.rate ? Math.min(5, Math.ceil(details.rate / 2)) : 4,
+        text: details.otm.substring(0, 400),
+        relativeTime: 'Curated Guide',
+      });
+    }
+    
+    console.log(`[OpenTripMap] Found ${reviews.length} descriptions/reviews for ${placeDetails.name}`);
+    return { place: placeDetails, reviews };
+    
+  } catch (error) {
+    console.error('[OpenTripMap] Fetch error:', error);
+    return { place: null, reviews: [] };
+  }
+}
+
+// =============================================================================
 // UTILITIES
 // =============================================================================
 
@@ -551,12 +698,12 @@ function mergeReviews(
   googleReviews: Review[],
   tripAdvisorReviews: Review[],
   foursquareReviews: Review[],
+  openTripMapReviews: Review[],
   maxTotal: number
 ): Review[] {
-  // Strategy: Google has a 5-review limit, so prioritize getting more from TripAdvisor/Foursquare
-  // First, interleave available reviews, then pad with remaining from any source
+  // Strategy: Interleave reviews from all sources for variety
   const merged: Review[] = [];
-  const sources = [googleReviews, tripAdvisorReviews, foursquareReviews];
+  const sources = [googleReviews, tripAdvisorReviews, foursquareReviews, openTripMapReviews];
   let i = 0;
 
   // First pass: interleave reviews round-robin style
@@ -586,17 +733,18 @@ function mergeReviews(
     }
   }
 
-  console.log(`[mergeReviews] Merged ${merged.length} total from G:${googleReviews.length} TA:${tripAdvisorReviews.length} FS:${foursquareReviews.length}`);
+  console.log(`[mergeReviews] Merged ${merged.length} total from G:${googleReviews.length} TA:${tripAdvisorReviews.length} FS:${foursquareReviews.length} OTM:${openTripMapReviews.length}`);
   return merged;
 }
 
 function mergePlaceDetails(
   google: PlaceDetails | null,
   tripAdvisor: PlaceDetails | null,
-  foursquare: PlaceDetails | null
+  foursquare: PlaceDetails | null,
+  openTripMap: PlaceDetails | null
 ): PlaceDetails | null {
-  // Prefer Google, then TripAdvisor, then Foursquare
-  const primary = google || tripAdvisor || foursquare;
+  // Prefer Google, then TripAdvisor, then Foursquare, then OpenTripMap
+  const primary = google || tripAdvisor || foursquare || openTripMap;
   if (!primary) return null;
 
   // Merge photos from all sources
@@ -604,13 +752,14 @@ function mergePlaceDetails(
   if (google?.photos) allPhotos.push(...google.photos);
   if (tripAdvisor?.photos) allPhotos.push(...tripAdvisor.photos);
   if (foursquare?.photos) allPhotos.push(...foursquare.photos);
+  if (openTripMap?.photos) allPhotos.push(...openTripMap.photos);
 
   // Calculate weighted average rating
   let totalWeight = 0;
   let weightedRating = 0;
   let totalReviews = 0;
 
-  for (const p of [google, tripAdvisor, foursquare]) {
+  for (const p of [google, tripAdvisor, foursquare, openTripMap]) {
     if (p && p.rating > 0 && p.totalReviews > 0) {
       const weight = Math.log10(p.totalReviews + 1);
       weightedRating += p.rating * weight;
@@ -666,6 +815,7 @@ serve(async (req) => {
     const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
     const TRIPADVISOR_API_KEY = Deno.env.get('TRIPADVISOR_API_KEY');
     const FOURSQUARE_API_KEY = Deno.env.get('FOURSQUARE_API_KEY');
+    const OPENTRIPMAP_API_KEY = Deno.env.get('OPENTRIPMAP_API_KEY');
 
     // Fetch from all available APIs in parallel
     const promises: Promise<{ place: PlaceDetails | null; reviews: Review[] }>[] = [];
@@ -688,20 +838,28 @@ serve(async (req) => {
       promises.push(Promise.resolve({ place: null, reviews: [] }));
     }
 
-    const [googleResult, tripAdvisorResult, foursquareResult] = await Promise.all(promises);
+    if (OPENTRIPMAP_API_KEY) {
+      promises.push(fetchOpenTripMapReviews(placeName, destination, OPENTRIPMAP_API_KEY, maxReviews));
+    } else {
+      promises.push(Promise.resolve({ place: null, reviews: [] }));
+    }
 
-    // Merge place details
+    const [googleResult, tripAdvisorResult, foursquareResult, openTripMapResult] = await Promise.all(promises);
+
+    // Merge place details (now includes OpenTripMap)
     const mergedPlace = mergePlaceDetails(
       googleResult.place,
       tripAdvisorResult.place,
-      foursquareResult.place
+      foursquareResult.place,
+      openTripMapResult.place
     );
 
-    // Merge and interleave reviews
+    // Merge and interleave reviews (now includes OpenTripMap)
     const mergedReviews = mergeReviews(
       googleResult.reviews,
       tripAdvisorResult.reviews,
       foursquareResult.reviews,
+      openTripMapResult.reviews,
       maxReviews
     );
 
@@ -713,6 +871,7 @@ serve(async (req) => {
         google: !!GOOGLE_MAPS_API_KEY && googleResult.reviews.length > 0,
         tripadvisor: !!TRIPADVISOR_API_KEY && tripAdvisorResult.reviews.length > 0,
         foursquare: !!FOURSQUARE_API_KEY && foursquareResult.reviews.length > 0,
+        opentripmap: !!OPENTRIPMAP_API_KEY && openTripMapResult.reviews.length > 0,
       },
       totalFetched: mergedReviews.length,
     };

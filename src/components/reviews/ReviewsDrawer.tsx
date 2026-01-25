@@ -250,6 +250,11 @@ export default function ReviewsDrawer({
                       {getSourceInfo('foursquare').icon} Foursquare
                     </Badge>
                   )}
+                  {(sources as any).opentripmap && (
+                    <Badge variant="secondary" className="text-xs">
+                      📍 OpenTripMap
+                    </Badge>
+                  )}
                 </div>
               </div>
             )}
