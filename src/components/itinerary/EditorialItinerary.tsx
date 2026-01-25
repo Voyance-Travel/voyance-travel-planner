@@ -44,6 +44,7 @@ import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityIma
 import { useDestinationImages } from '@/hooks/useDestinationImages';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
+import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
@@ -519,6 +520,12 @@ export function EditorialItinerary({
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [showCreditPrompt, setShowCreditPrompt] = useState(false);
   const [pendingRegenerateDay, setPendingRegenerateDay] = useState<number | null>(null);
+  
+  // Guided assist state - track regeneration attempts per day
+  const [dayRegenCounts, setDayRegenCounts] = useState<Record<number, number>>({});
+  const [showGuidedAssist, setShowGuidedAssist] = useState(false);
+  const [guidedAssistDayIndex, setGuidedAssistDayIndex] = useState<number | null>(null);
+  const [pendingGuidedPreferences, setPendingGuidedPreferences] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
@@ -1056,20 +1063,48 @@ export function EditorialItinerary({
     return freeBuildsRemaining > 0;
   }, [isPaid, entitlements?.limits?.freeBuildsRemaining]);
 
-  // Request regeneration - checks entitlements first
+  // Request regeneration - checks entitlements and regeneration count
   const requestDayRegenerate = useCallback((dayIndex: number) => {
-    if (canRegenerate()) {
-      // Has access - proceed with regeneration
-      handleDayRegenerateInternal(dayIndex);
-    } else {
+    if (!canRegenerate()) {
       // Show upgrade prompt
       setPendingRegenerateDay(dayIndex);
       setShowCreditPrompt(true);
+      return;
     }
-  }, [canRegenerate]);
+    
+    // Check regeneration count for this day - after 3 regenerations, show guided assist
+    const currentCount = dayRegenCounts[dayIndex] || 0;
+    const REGEN_THRESHOLD = 3;
+    
+    if (currentCount >= REGEN_THRESHOLD) {
+      // Show guided assist dialog
+      setGuidedAssistDayIndex(dayIndex);
+      setShowGuidedAssist(true);
+    } else {
+      // Increment count and proceed with regeneration
+      setDayRegenCounts(prev => ({ ...prev, [dayIndex]: currentCount + 1 }));
+      handleDayRegenerateInternal(dayIndex);
+    }
+  }, [canRegenerate, dayRegenCounts]);
+
+  // Handle guided assist submission
+  const handleGuidedAssistSubmit = useCallback((preferences: string) => {
+    if (guidedAssistDayIndex === null) return;
+    
+    // Reset count for this day after guided assist
+    setDayRegenCounts(prev => ({ ...prev, [guidedAssistDayIndex]: 0 }));
+    
+    // Store preferences and trigger regeneration with them
+    if (preferences) {
+      setPendingGuidedPreferences(preferences);
+    }
+    handleDayRegenerateInternal(guidedAssistDayIndex, preferences || undefined);
+    setShowGuidedAssist(false);
+    setGuidedAssistDayIndex(null);
+  }, [guidedAssistDayIndex]);
 
   // Internal regenerate handler (after credit check passed)
-  const handleDayRegenerateInternal = useCallback(async (dayIndex: number) => {
+  const handleDayRegenerateInternal = useCallback(async (dayIndex: number, guidedPreferences?: string) => {
     const day = days[dayIndex];
     if (!day) return;
 
@@ -1128,6 +1163,8 @@ export function EditorialItinerary({
             keepActivities,
             currentActivities: backendActivities, // Backend format with isLocked
             variationNonce: Date.now(), // Force new randomness
+            // Pass guided preferences if provided (from guided assist dialog)
+            ...(guidedPreferences && { userGuidance: guidedPreferences }),
           }
         });
 
@@ -1135,7 +1172,11 @@ export function EditorialItinerary({
         if (data?.day) {
           setDays(prev => prev.map((d, idx) => idx === dayIndex ? data.day : d));
           setHasChanges(true);
-          toast.success(`Day ${day.dayNumber} regenerated!`);
+          if (guidedPreferences) {
+            toast.success(`Day ${day.dayNumber} regenerated with your preferences!`);
+          } else {
+            toast.success(`Day ${day.dayNumber} regenerated!`);
+          }
         }
       }
     } catch (err) {
@@ -1143,6 +1184,7 @@ export function EditorialItinerary({
       toast.error('Failed to regenerate day');
     } finally {
       setRegeneratingDay(null);
+      setPendingGuidedPreferences(null);
     }
   }, [days, tripId, destination, destinationCountry, travelers, budgetTier, onRegenerateDay]);
 
@@ -2013,6 +2055,18 @@ export function EditorialItinerary({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Guided Assist Dialog - shows after 3 regenerations */}
+      <RegenerateGuidedAssistDialog
+        isOpen={showGuidedAssist}
+        onClose={() => {
+          setShowGuidedAssist(false);
+          setGuidedAssistDayIndex(null);
+        }}
+        onSubmit={handleGuidedAssistSubmit}
+        dayNumber={guidedAssistDayIndex !== null ? days[guidedAssistDayIndex]?.dayNumber || guidedAssistDayIndex + 1 : 1}
+        destination={destination}
+      />
 
       {/* Add Activity Modal */}
       <AddActivityModal
