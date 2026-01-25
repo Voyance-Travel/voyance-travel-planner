@@ -938,9 +938,12 @@ export function EditorialItinerary({
 
   // Handle activity lock toggle - persists immediately to normalized itinerary_activities table
   const handleActivityLock = useCallback(async (dayIndex: number, activityId: string) => {
-    // Find current lock state
-    const currentActivity = days[dayIndex]?.activities.find(a => a.id === activityId);
-    const newLockedState = !currentActivity?.isLocked;
+    // Find current lock state and activity details
+    const currentDay = days[dayIndex];
+    const currentActivity = currentDay?.activities.find(a => a.id === activityId);
+    if (!currentActivity) return;
+    
+    const newLockedState = !currentActivity.isLocked;
     
     // Update local state immediately for responsive UI
     setDays(prev => prev.map((day, idx) => {
@@ -964,6 +967,10 @@ export function EditorialItinerary({
             tripId,
             activityId,
             isLocked: newLockedState,
+            // Include fallback matching info for non-UUID IDs
+            dayNumber: currentDay.dayNumber,
+            activityTitle: currentActivity.title,
+            startTime: currentActivity.time,
           },
         });
         if (error) {

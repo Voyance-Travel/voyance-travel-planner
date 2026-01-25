@@ -5186,7 +5186,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // ACTION: toggle-activity-lock - Toggle lock on a single activity
     // ==========================================================================
     if (action === 'toggle-activity-lock') {
-      const { tripId, activityId, isLocked } = params;
+      const { tripId, activityId, isLocked, dayNumber, activityTitle, startTime } = params;
       
       if (!tripId || !activityId || typeof isLocked !== 'boolean') {
         return new Response(
@@ -5227,12 +5227,108 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
-      // Update the activity's is_locked in the normalized table
-      const { error: updateError } = await supabase
-        .from('itinerary_activities')
-        .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
-        .eq('id', activityId)
-        .eq('trip_id', tripId);
+      // Helper to check if a string is a valid UUID
+      const isValidUUID = (str: string): boolean => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(str);
+      };
+
+      let updateError: { message?: string; code?: string } | null = null;
+      let updatedCount = 0;
+
+      if (isValidUUID(activityId)) {
+        // Direct UUID update
+        const { error, count } = await supabase
+          .from('itinerary_activities')
+          .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+          .eq('id', activityId)
+          .eq('trip_id', tripId);
+        
+        updateError = error;
+        updatedCount = count ?? 0;
+      } else {
+        // Fallback: match by trip + day + title + time (for ephemeral frontend IDs)
+        console.log(`[toggle-activity-lock] Non-UUID activityId: ${activityId}, using fallback match`);
+        
+        if (!dayNumber || !activityTitle) {
+          // Try to update in itinerary_data JSON as fallback
+          const { data: tripData, error: fetchErr } = await supabase
+            .from('trips')
+            .select('itinerary_data')
+            .eq('id', tripId)
+            .single();
+          
+          if (!fetchErr && tripData?.itinerary_data) {
+            const itineraryData = tripData.itinerary_data as { days?: Array<{ dayNumber: number; activities: Array<{ id: string; isLocked?: boolean }> }> };
+            if (itineraryData.days) {
+              let found = false;
+              const updatedDays = itineraryData.days.map(day => ({
+                ...day,
+                activities: day.activities.map(act => {
+                  if (act.id === activityId) {
+                    found = true;
+                    return { ...act, isLocked };
+                  }
+                  return act;
+                })
+              }));
+              
+              if (found) {
+                const { error: saveErr } = await supabase
+                  .from('trips')
+                  .update({ itinerary_data: { ...itineraryData, days: updatedDays } })
+                  .eq('id', tripId);
+                
+                if (!saveErr) {
+                  console.log(`[toggle-activity-lock] Updated lock in itinerary_data JSON for ${activityId}`);
+                  return new Response(
+                    JSON.stringify({ success: true, activityId, isLocked, method: 'json' }),
+                    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                  );
+                }
+              }
+            }
+          }
+          
+          return new Response(
+            JSON.stringify({ error: "Cannot match activity without dayNumber and activityTitle for non-UUID IDs" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // First get the itinerary_day_id
+        const { data: dayRow } = await supabase
+          .from('itinerary_days')
+          .select('id')
+          .eq('trip_id', tripId)
+          .eq('day_number', dayNumber)
+          .maybeSingle();
+        
+        if (!dayRow) {
+          return new Response(
+            JSON.stringify({ error: `Day ${dayNumber} not found in database` }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Match by day + title + optional start_time
+        let query = supabase
+          .from('itinerary_activities')
+          .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+          .eq('itinerary_day_id', dayRow.id)
+          .eq('trip_id', tripId)
+          .eq('title', activityTitle);
+        
+        if (startTime) {
+          query = query.eq('start_time', startTime);
+        }
+
+        const { error, count } = await query;
+        updateError = error;
+        updatedCount = count ?? 0;
+        
+        console.log(`[toggle-activity-lock] Fallback match: day=${dayNumber}, title="${activityTitle}", time=${startTime}, updated=${updatedCount}`);
+      }
       
       if (updateError) {
         console.error('[toggle-activity-lock] Update error:', updateError);
@@ -5242,10 +5338,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
-      console.log(`[toggle-activity-lock] Activity ${activityId} is_locked=${isLocked}`);
+      console.log(`[toggle-activity-lock] Activity ${activityId} is_locked=${isLocked}, rows updated: ${updatedCount}`);
       
       return new Response(
-        JSON.stringify({ success: true, activityId, isLocked }),
+        JSON.stringify({ success: true, activityId, isLocked, updatedCount }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
