@@ -72,6 +72,11 @@ export interface BackendActivity {
   photos?: string[];
   walkingDistance?: number;
   walkingTime?: number;
+  /**
+   * Whether the activity is locked in the itinerary (should be preserved during regeneration).
+   * This is persisted in itinerary_data and returned by backend functions.
+   */
+  isLocked?: boolean;
   venue?: {
     name: string;
     type?: string;
@@ -245,7 +250,8 @@ export function convertBackendActivity(activity: BackendActivity): ItineraryActi
     },
     rating: activity.venue?.rating,
     tags: [],
-    isLocked: activity.savedByUser || false,
+    // Preserve explicit lock state from backend; fall back to legacy fields if present.
+    isLocked: activity.isLocked ?? activity.savedByUser ?? false,
     photos: activity.photos,
     bookingRequired: activity.bookingRequired,
     tips: activity.tips,
