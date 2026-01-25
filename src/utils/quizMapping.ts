@@ -57,6 +57,7 @@ export interface UserPreferencesPayload {
   seat_preference?: string;
   flight_time_preference?: string;
   direct_flights_only?: boolean;
+  preferred_cabin_class?: string;
   preferred_airlines?: string[];
   home_airport?: string;
   airport_radius_miles?: number;
@@ -121,6 +122,7 @@ const QUIZ_FIELD_MAP: Record<string, keyof UserPreferencesPayload> = {
   'dining_style': 'dining_style',
   'dietary_restrictions': 'dietary_restrictions',
   'weather_preference': 'climate_preferences', // CRITICAL: climate prefs
+  'cabin_class': 'preferred_cabin_class', // NEW: Flight cabin class
   // flight_preferences is multi-select, handled specially in mapQuizAnswersToPreferences
   
   // ==== LEGACY/ALTERNATE MAPPINGS (camelCase versions) ====

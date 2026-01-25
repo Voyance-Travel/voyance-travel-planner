@@ -251,6 +251,21 @@ const questions = [
       { value: 'flexible', label: 'Flexible on Connections', description: 'Open to layovers if it saves money or time' },
     ],
   },
+  {
+    id: 'cabin_class',
+    step: 10,
+    category: 'Logistics',
+    title: 'Preferred cabin class?',
+    subtitle: 'For longer flights',
+    icon: <Plane className="w-5 h-5" />,
+    optional: true,
+    options: [
+      { value: 'economy', label: 'Economy', description: 'Best value for the journey' },
+      { value: 'premium_economy', label: 'Premium Economy', description: 'Extra legroom and comfort' },
+      { value: 'business', label: 'Business Class', description: 'Lie-flat seats, premium service' },
+      { value: 'first', label: 'First Class', description: 'The ultimate in-flight experience' },
+    ],
+  },
 ];
 
 // Group questions by step for display
