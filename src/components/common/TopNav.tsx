@@ -8,7 +8,7 @@ import {
   Settings, 
   LogOut,
   ChevronDown,
-  Plane,
+  Building2,
   Calendar,
   Sparkles,
   Briefcase
@@ -141,25 +141,25 @@ export default function TopNav() {
                   <NotificationBell />
                 </div>
 
-                {/* Full Trip Planning - Find flights & hotel */}
+                {/* Find My Hotel - Need accommodation */}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => navigate(ROUTES.START)}
                   className={`gap-2 ${isTransparent ? 'border-white/30 text-white hover:bg-white/10 hover:text-white' : ''}`}
                 >
-                  <Plane className="h-3.5 w-3.5" />
-                  Find Flights + Hotel
+                  <Building2 className="h-3.5 w-3.5" />
+                  Find My Hotel
                 </Button>
 
-                {/* Already Booked - Just need itinerary */}
+                {/* Build My Itinerary - Already have accommodation */}
                 <Button
                   size="sm"
                   onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
                   <Sparkles className="h-4 w-4" />
-                  I Have My Flights
+                  Build My Itinerary
                 </Button>
 
                 {/* User Dropdown */}
@@ -396,15 +396,15 @@ export default function TopNav() {
                         className="w-full gap-2"
                         onClick={() => navigate(ROUTES.START)}
                       >
-                        <Plane className="h-4 w-4" />
-                        Find Flights + Hotel
+                        <Building2 className="h-4 w-4" />
+                        Find My Hotel
                       </Button>
                       <Button
                         className="w-full gap-2"
                         onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                       >
                         <Sparkles className="h-4 w-4" />
-                        I Have My Flights
+                        Build My Itinerary
                       </Button>
                     </div>
                     <button

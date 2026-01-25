@@ -9,7 +9,7 @@ export interface HeroImageSet {
   alt: string;
 }
 
-export type HeroPageType = 'home' | 'explore' | 'planning' | 'profile' | 'auth';
+export type HeroPageType = 'home' | 'explore' | 'planning' | 'profile' | 'auth' | 'itinerary' | 'hotel';
 
 /**
  * Main hero image library
@@ -19,6 +19,8 @@ export type HeroPageType = 'home' | 'explore' | 'planning' | 'profile' | 'auth';
  * - Planning: Focused, practical, anticipatory
  * - Profile: Reflective, journal-like, personal
  * - Auth: Inviting, aspirational
+ * - Itinerary: Editorial, adventure-focused, warm tones (for Build My Itinerary)
+ * - Hotel: Accommodation-focused, cool tones (for Find My Hotel)
  */
 const heroImages: Record<HeroPageType, HeroImageSet> = {
   home: {
@@ -60,6 +62,24 @@ const heroImages: Record<HeroPageType, HeroImageSet> = {
       'https://images.unsplash.com/photo-1545579133-99bb5ab189bd?w=1920&q=80',
     ],
     alt: 'Begin your journey to paradise with Voyance',
+  },
+  // Build My Itinerary - Warm, adventure-focused, editorial feel
+  itinerary: {
+    primary: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=80', // Beach sunset - warm tones
+    fallbacks: [
+      'https://images.unsplash.com/photo-1502003148287-a82ef80a6abc?w=1920&q=80', // Hot air balloons
+      'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80', // Adventure landscape
+    ],
+    alt: 'Build your perfect day-by-day adventure',
+  },
+  // Find My Hotel - Cool, accommodation-focused, modern feel  
+  hotel: {
+    primary: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1920&q=80', // Luxury hotel pool
+    fallbacks: [
+      'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1920&q=80', // Hotel terrace
+      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1920&q=80', // Grand hotel
+    ],
+    alt: 'Find your perfect accommodation',
   },
 };
 
