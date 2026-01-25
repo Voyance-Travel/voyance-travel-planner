@@ -2413,6 +2413,40 @@ interface NeedToKnowSectionProps {
 
 function NeedToKnowSection({ destination, destinationCountry, destinationInfo }: NeedToKnowSectionProps) {
   const [expandedCards, setExpandedCards] = useState<string[]>([]);
+  const [aiInsights, setAiInsights] = useState<any>(null);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
+
+  // Fetch real destination insights from Perplexity
+  useEffect(() => {
+    if (fetchedRef.current || !destination) return;
+    
+    const fetchInsights = async () => {
+      setIsLoadingInsights(true);
+      setInsightsError(null);
+      
+      try {
+        const { data, error } = await supabase.functions.invoke('lookup-destination-insights', {
+          body: { destination, country: destinationCountry }
+        });
+        
+        if (error) throw error;
+        
+        if (data?.success && data?.data) {
+          setAiInsights(data.data);
+          fetchedRef.current = true;
+        }
+      } catch (err) {
+        console.error('Failed to fetch destination insights:', err);
+        setInsightsError(err instanceof Error ? err.message : 'Failed to load insights');
+      } finally {
+        setIsLoadingInsights(false);
+      }
+    };
+    
+    fetchInsights();
+  }, [destination, destinationCountry]);
 
   const toggleCard = (cardId: string) => {
     setExpandedCards(prev => 
@@ -2422,8 +2456,33 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     );
   };
 
-  // Default information for common destinations
+  // Default information for common destinations - prioritize AI insights when available
   const getDefaultInfo = () => {
+    // If we have AI-generated insights, use those
+    if (aiInsights) {
+      return {
+        currency: aiInsights.currency?.name || 'Local currency',
+        currencyTips: aiInsights.currency?.tips || ['Check current exchange rates'],
+        language: aiInsights.language?.primary || 'Local language',
+        languageTips: aiInsights.language?.phrases?.map((p: any) => 
+          `"${p.phrase}" = "${p.translation}" (${p.pronunciation})`
+        ) || ['Learn basic greetings'],
+        languageEnglishFriendly: aiInsights.language?.englishFriendly,
+        timezone: aiInsights.timezone?.zone || 'Local time',
+        timezoneTips: aiInsights.timezone?.tips || ['Check local business hours'],
+        tipping: aiInsights.tipping?.custom || 'Varies by location',
+        tippingTips: aiInsights.tipping?.tips || ['Research local customs'],
+        transit: aiInsights.transit?.overview || 'Various public transport options',
+        transitTips: aiInsights.transit?.tips || ['Download local transit apps'],
+        water: aiInsights.water?.description || (aiInsights.water?.safe ? 'Tap water is safe' : 'Check local advisories'),
+        waterTips: aiInsights.water?.tips || ['When in doubt, use bottled water'],
+        voltage: `${aiInsights.voltage?.voltage || '230V'}, ${aiInsights.voltage?.plugType || 'Check adapter requirements'}`,
+        voltageTips: aiInsights.voltage?.tips || ['Universal adapters are convenient'],
+        emergency: aiInsights.emergency?.number || 'Contact local authorities',
+        emergencyTips: aiInsights.emergency?.tips || ['Save emergency numbers in your phone'],
+      };
+    }
+
     const country = destinationCountry?.toLowerCase() || '';
     const dest = destination.toLowerCase();
     
@@ -2991,14 +3050,28 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-full bg-primary/10">
-          <Globe className="h-6 w-6 text-primary" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-full bg-primary/10">
+            <Globe className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-serif">Need to Know</h2>
+            <p className="text-sm text-muted-foreground">Essential info for {destination}</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-serif">Need to Know</h2>
-          <p className="text-sm text-muted-foreground">Essential info for {destination}</p>
-        </div>
+        {isLoadingInsights && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <span>Loading local insights...</span>
+          </div>
+        )}
+        {aiInsights && !isLoadingInsights && (
+          <Badge variant="outline" className="text-xs">
+            <Sparkles className="h-3 w-3 mr-1" />
+            AI-powered insights
+          </Badge>
+        )}
       </div>
 
       {/* Interactive Info Cards */}
