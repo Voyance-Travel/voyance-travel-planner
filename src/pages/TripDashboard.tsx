@@ -43,6 +43,48 @@ function getBaseDestination(destination: string): string {
   return base;
 }
 
+// Map IATA airport codes to city names for display
+const AIRPORT_TO_CITY: Record<string, string> = {
+  // United States
+  'ATL': 'Atlanta', 'LAX': 'Los Angeles', 'ORD': 'Chicago', 'DFW': 'Dallas',
+  'DEN': 'Denver', 'JFK': 'New York', 'SFO': 'San Francisco', 'SEA': 'Seattle',
+  'LAS': 'Las Vegas', 'MCO': 'Orlando', 'EWR': 'Newark', 'MIA': 'Miami',
+  'PHX': 'Phoenix', 'IAH': 'Houston', 'BOS': 'Boston', 'MSP': 'Minneapolis',
+  'DTW': 'Detroit', 'FLL': 'Fort Lauderdale', 'PHL': 'Philadelphia', 'LGA': 'New York',
+  'BWI': 'Baltimore', 'SLC': 'Salt Lake City', 'DCA': 'Washington DC', 'IAD': 'Washington DC',
+  'SAN': 'San Diego', 'TPA': 'Tampa', 'AUS': 'Austin', 'BNA': 'Nashville',
+  // Europe
+  'LHR': 'London', 'CDG': 'Paris', 'FCO': 'Rome', 'AMS': 'Amsterdam',
+  'FRA': 'Frankfurt', 'MAD': 'Madrid', 'BCN': 'Barcelona', 'MUC': 'Munich',
+  'LGW': 'London', 'ORY': 'Paris', 'DUB': 'Dublin', 'ZRH': 'Zurich',
+  'VIE': 'Vienna', 'LIS': 'Lisbon', 'CPH': 'Copenhagen', 'OSL': 'Oslo',
+  'ARN': 'Stockholm', 'HEL': 'Helsinki', 'PRG': 'Prague', 'BRU': 'Brussels',
+  'ATH': 'Athens', 'IST': 'Istanbul', 'MXP': 'Milan', 'VCE': 'Venice',
+  'BER': 'Berlin', 'EDI': 'Edinburgh', 'MAN': 'Manchester',
+  // Asia Pacific
+  'HND': 'Tokyo', 'NRT': 'Tokyo', 'SIN': 'Singapore', 'HKG': 'Hong Kong',
+  'ICN': 'Seoul', 'BKK': 'Bangkok', 'KUL': 'Kuala Lumpur', 'SYD': 'Sydney',
+  'MEL': 'Melbourne', 'DEL': 'Delhi', 'BOM': 'Mumbai', 'PEK': 'Beijing',
+  'PVG': 'Shanghai', 'TPE': 'Taipei', 'MNL': 'Manila', 'CGK': 'Jakarta',
+  // Middle East
+  'DXB': 'Dubai', 'DOH': 'Doha', 'AUH': 'Abu Dhabi', 'TLV': 'Tel Aviv',
+  // Americas
+  'YYZ': 'Toronto', 'YVR': 'Vancouver', 'YUL': 'Montreal', 'MEX': 'Mexico City',
+  'CUN': 'Cancun', 'GRU': 'São Paulo', 'GIG': 'Rio de Janeiro', 'EZE': 'Buenos Aires',
+  'BOG': 'Bogotá', 'LIM': 'Lima', 'SCL': 'Santiago',
+};
+
+// Convert airport code or city name to displayable city name
+function getDisplayCity(departureCityOrCode: string): string {
+  const upper = departureCityOrCode.toUpperCase().trim();
+  // Check if it's a 3-letter IATA code
+  if (/^[A-Z]{3}$/.test(upper) && AIRPORT_TO_CITY[upper]) {
+    return AIRPORT_TO_CITY[upper];
+  }
+  // Otherwise return as-is (already a city name)
+  return departureCityOrCode;
+}
+
 // Region mapping for grouping
 const REGION_MAP: Record<string, string> = {
   // Europe
@@ -202,7 +244,7 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
           {trip.departureCity && (
             <div className="flex items-center gap-1.5">
               <MapPin className="h-4 w-4 text-primary/70" />
-              <span>From {trip.departureCity}</span>
+              <span>From {getDisplayCity(trip.departureCity)}</span>
             </div>
           )}
         </div>
