@@ -7,9 +7,10 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type Destination = Tables<"destinations">;
+export type CuratedImage = Tables<"curated_images">;
 
 export interface DestinationWithImages extends Destination {
-  images: Tables<"destination_images">[];
+  images: CuratedImage[];
 }
 
 export interface DestinationsFilterParams {
@@ -130,7 +131,7 @@ export async function getDestinationByCity(
 }
 
 /**
- * Fetch destination with images
+ * Fetch destination with images (uses curated_images table)
  */
 export async function getDestinationWithImages(
   id: string
@@ -148,10 +149,12 @@ export async function getDestinationWithImages(
 
   if (!destination) return null;
 
+  // Use curated_images table instead of deprecated destination_images
   const { data: images, error: imgError } = await supabase
-    .from("destination_images")
+    .from("curated_images")
     .select("*")
-    .eq("destination_id", id);
+    .eq("entity_type", "destination")
+    .eq("entity_key", destination.city.toLowerCase());
 
   if (imgError) {
     console.error("Error fetching destination images:", imgError);
