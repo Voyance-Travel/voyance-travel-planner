@@ -156,7 +156,6 @@ export default function PlannerSummary() {
         <div className="max-w-6xl mx-auto px-4">
           <EditorialTripSummary
             data={data}
-            priceLockExpiry={new Date(Date.now() + 30 * 60 * 1000)}
             isLoading={false}
             onBack={() => navigate(-1)}
             onActivitiesBudgetChange={handleActivitiesBudgetChange}

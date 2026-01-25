@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion';
-import { Check, Lock, Bookmark, Calendar, Plane, Hotel, DollarSign, Clock, AlertCircle } from 'lucide-react';
+import { Check, Bookmark, Calendar, Plane, Hotel, AlertCircle, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 
 interface BookingOptionsProps {
   tripSummary: {
@@ -12,7 +11,6 @@ interface BookingOptionsProps {
     hotelTotal: number;
     grandTotal: number;
   };
-  priceLockExpiry?: Date;
   onBook: () => void;
   onSave: () => void;
   onBuildItinerary: () => void;
@@ -22,17 +20,12 @@ interface BookingOptionsProps {
 
 export default function BookingOptions({
   tripSummary,
-  priceLockExpiry,
   onBook,
   onSave,
   onBuildItinerary,
   onBack,
   isLoading,
 }: BookingOptionsProps) {
-  const timeRemaining = priceLockExpiry 
-    ? Math.max(0, Math.floor((priceLockExpiry.getTime() - Date.now()) / 60000))
-    : 0;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -97,17 +90,6 @@ export default function BookingOptions({
             <span className="text-primary">${tripSummary.grandTotal.toLocaleString()}</span>
           </div>
         </div>
-
-        {/* Price Lock Warning */}
-        {priceLockExpiry && timeRemaining > 0 && (
-          <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-3">
-            <Clock className="w-5 h-5 text-amber-600 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">Price expires in {timeRemaining} minutes</p>
-              <p className="text-xs text-amber-600">Flight prices may change. Book now to lock in this rate.</p>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Action Options */}
@@ -123,12 +105,12 @@ export default function BookingOptions({
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
-                <Lock className="w-6 h-6" />
+                <Check className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold mb-1">Book & Lock Price</h3>
+                <h3 className="text-xl font-semibold mb-1">Book Now</h3>
                 <p className="text-primary-foreground/80 text-sm">
-                  Secure your flights and hotel now. Build your itinerary anytime.
+                  Secure your flights and hotel at today's prices.
                 </p>
               </div>
             </div>
@@ -151,8 +133,14 @@ export default function BookingOptions({
             <div className="flex-1">
               <h3 className="text-xl font-semibold text-slate-900 mb-1">Save Trip</h3>
               <p className="text-slate-600 text-sm">
-                Save your selections. Note: prices may change when you return.
+                Save your search criteria to continue later.
               </p>
+              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">
+                  Hotel and flight prices cannot be guaranteed when you return.
+                </p>
+              </div>
             </div>
             <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">Free</span>
           </div>

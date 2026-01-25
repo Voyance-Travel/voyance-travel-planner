@@ -1,9 +1,8 @@
 import { motion } from 'framer-motion';
-import { Lock, Save, Clock, AlertTriangle } from 'lucide-react';
+import { Save, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ItineraryDecisionPanelProps {
-  isExpired: boolean;
   totalPrice: number;
   onBook: () => void;
   onSave: () => void;
@@ -11,7 +10,6 @@ interface ItineraryDecisionPanelProps {
 }
 
 export default function ItineraryDecisionPanel({
-  isExpired = false,
   totalPrice = 0,
   onBook,
   onSave,
@@ -42,65 +40,36 @@ export default function ItineraryDecisionPanel({
           </div>
         </div>
 
-        {/* Price Lock Expired Warning */}
-        {isExpired && (
-          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-5 flex items-start">
-            <AlertTriangle size={20} className="text-destructive mr-2 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-medium text-destructive text-sm">
-                Price Lock Has Expired
-              </h3>
-              <p className="text-destructive/80 text-xs mt-1">
-                The guaranteed prices for this trip have expired. If you proceed, prices may have changed.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Book Now Button */}
         <motion.button
-          className={cn(
-            'w-full py-4 mb-3 rounded-xl font-medium flex items-center justify-center',
-            isExpired
-              ? 'bg-muted text-muted-foreground cursor-not-allowed'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md hover:shadow-lg'
-          )}
-          onClick={isExpired ? undefined : onBook}
-          disabled={isExpired}
-          whileHover={isExpired ? {} : { scale: 1.02 }}
-          whileTap={isExpired ? {} : { scale: 0.98 }}
+          className="w-full py-4 mb-3 rounded-xl font-medium flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 shadow-md hover:shadow-lg"
+          onClick={onBook}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           transition={{ duration: 0.2 }}
         >
-          <Lock size={18} className="mr-2" />
           Book This Trip Now
         </motion.button>
 
-        {/* Secondary Actions */}
-        {isExpired ? (
-          <button
-            className="w-full py-4 rounded-xl font-medium bg-accent text-accent-foreground hover:bg-accent/90 transition-colors"
-            onClick={() => window.location.reload()}
-          >
-            <Clock size={18} className="mr-2 inline-block" />
-            Refresh Pricing
-          </button>
-        ) : (
-          <>
-            <motion.button
-              className="w-full py-4 rounded-xl font-medium border border-border text-foreground hover:bg-muted transition-colors flex items-center justify-center"
-              onClick={onSave}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Save size={18} className="mr-2" />
-              Save & Return Later
-            </motion.button>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Prices may change when you return to this saved trip
-            </p>
-          </>
-        )}
+        {/* Save Button with Warning */}
+        <motion.button
+          className="w-full py-4 rounded-xl font-medium border border-border text-foreground hover:bg-muted transition-colors flex items-center justify-center"
+          onClick={onSave}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ duration: 0.2 }}
+        >
+          <Save size={18} className="mr-2" />
+          Save & Return Later
+        </motion.button>
+        
+        {/* Save Warning */}
+        <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-2">
+          <Info size={16} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            Saving preserves your search criteria only. Hotel and flight prices may change when you return.
+          </p>
+        </div>
       </div>
     </motion.div>
   );
