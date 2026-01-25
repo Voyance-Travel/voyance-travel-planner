@@ -707,20 +707,28 @@ export function EditorialItinerary({
 
   // Handle selecting an alternative from the drawer
   const handleSelectSwapAlternative = useCallback((newActivity: ItineraryActivity) => {
-    if (!swapTarget) return;
+    // Capture swapTarget at invocation time to avoid stale closure issues
+    const target = swapTarget;
+    if (!target) {
+      console.warn('[Swap] No swap target available');
+      return;
+    }
 
-    setDays(prev => prev.map((day, dIdx) => {
-      if (dIdx !== swapTarget.dayIndex) return day;
-      return {
-        ...day,
-        activities: day.activities.map(a => {
-          if (a.id !== swapTarget.activityId) return a;
+    console.log('[Swap] Replacing activity', target.activityId, 'with', newActivity.title);
+
+    setDays(prev => {
+      const updatedDays = prev.map((day, dIdx) => {
+        if (dIdx !== target.dayIndex) return day;
+        
+        const updatedActivities = day.activities.map(a => {
+          if (a.id !== target.activityId) return a;
 
           const preservedTime = a.time || a.startTime || newActivity.time;
           const preservedStartTime = a.startTime || preservedTime;
 
           return {
             ...a,
+            id: newActivity.id, // Use new activity ID
             title: newActivity.title,
             description: newActivity.description,
             category: newActivity.type,
@@ -736,16 +744,24 @@ export function EditorialItinerary({
             rating: newActivity.rating ?? a.rating,
             tags: newActivity.tags,
             isLocked: false,
+            // Clear old enrichment data so it can be re-fetched
+            photos: undefined,
+            website: undefined,
+            viatorProductCode: undefined,
           } satisfies EditorialActivity;
-        }),
-      };
-    }));
+        });
+        
+        return { ...day, activities: updatedActivities };
+      });
+      
+      console.log('[Swap] Updated days:', updatedDays[target.dayIndex]?.activities.map(a => a.title));
+      return updatedDays;
+    });
 
     setHasChanges(true);
     setSwapDrawerOpen(false);
     setSwapTarget(null);
     setSwapDrawerActivity(null);
-    toast.success(`Swapped to "${newActivity.title}"`);
   }, [swapTarget, tripCurrency]);
 
   // Supports both database trips and localStorage demo trips
