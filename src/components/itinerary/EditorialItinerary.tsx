@@ -49,6 +49,7 @@ import { WeatherForecast } from './WeatherForecast';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
+import { BudgetTab } from '@/components/planner/budget/BudgetTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
@@ -510,7 +511,7 @@ export function EditorialItinerary({
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'payments' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
     // Auto-select "Today" if trip is active
     const todayIndex = initialDays.findIndex(d => d.date && isToday(parseISO(d.date)));
@@ -1524,6 +1525,7 @@ export function EditorialItinerary({
         <div className="flex gap-1">
           {[
             { id: 'itinerary', label: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
+            { id: 'budget', label: 'Budget', icon: <Wallet className="h-4 w-4" /> },
             { id: 'payments', label: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
             { id: 'weather', label: 'Weather', icon: <CloudSun className="h-4 w-4" /> },
             { id: 'overview', label: 'Flight & Hotel', icon: <Plane className="h-4 w-4" /> },
@@ -1684,6 +1686,14 @@ export function EditorialItinerary({
               />
             )}
           </motion.div>
+        )}
+
+        {activeTab === 'budget' && (
+          <BudgetTab
+            tripId={tripId}
+            travelers={travelers}
+            totalDays={days.length}
+          />
         )}
 
         {activeTab === 'payments' && (
