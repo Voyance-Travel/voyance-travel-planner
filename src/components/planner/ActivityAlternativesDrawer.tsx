@@ -227,11 +227,12 @@ export default function ActivityAlternativesDrawer({
       isLocked: false,
     };
 
+    // Slight delay for visual feedback, then swap
     setTimeout(() => {
       onSelectAlternative(newActivity);
       toast.success(`Swapped to "${alt.name}"`);
       setSelectedId(null);
-    }, 300);
+    }, 150);
   };
 
   const renderAlternativeCard = (alt: AlternativeActivity, index: number) => (
