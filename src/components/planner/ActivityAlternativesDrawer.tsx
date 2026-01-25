@@ -358,7 +358,7 @@ export default function ActivityAlternativesDrawer({
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()} modal={true}>
-      <SheetContent side="right" className="w-full sm:max-w-lg p-0 z-[60]">
+      <SheetContent side="right" className="w-full sm:max-w-lg p-0">
         <SheetHeader className="p-6 border-b border-border">
           <SheetTitle className="flex items-center gap-2">
             <ArrowRightLeft className="w-5 h-5 text-primary" />
@@ -385,18 +385,18 @@ export default function ActivityAlternativesDrawer({
             className="flex gap-2"
           >
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
               <Input
                 placeholder="Search for something specific..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-10"
+                className="pl-9 h-10 bg-background"
                 disabled={isLoading}
                 maxLength={100}
               />
             </div>
             <Button 
-              type="submit" 
+              type="submit"
               size="sm" 
               className="h-10 px-4"
               disabled={isLoading || !searchQuery.trim()}
