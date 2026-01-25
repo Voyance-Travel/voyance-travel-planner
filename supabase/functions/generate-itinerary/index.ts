@@ -3522,6 +3522,263 @@ interface VenueVerification {
   openingHours?: string[];
   website?: string;
   googleMapsUrl?: string;
+  sourceProvider?: 'google_places' | 'foursquare' | 'viator' | 'internal_db' | 'ai_verified';
+}
+
+// Cached venue from verified_venues table
+interface CachedVenue {
+  id: string;
+  name: string;
+  google_place_id: string | null;
+  address: string | null;
+  coordinates: { lat: number; lng: number } | null;
+  rating: number | null;
+  total_reviews: number | null;
+  price_level: number | null;
+  website: string | null;
+  verification_confidence: number;
+  verification_source: string;
+}
+
+/**
+ * Normalize venue name for matching (lowercase, remove special chars)
+ */
+function normalizeVenueName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[''`´]/g, "'")
+    .replace(/[^\w\s'-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Check verified_venues cache for a known venue
+ * Returns cached data if found and not expired
+ */
+async function checkVenueCache(
+  venueName: string,
+  destination: string,
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<CachedVenue | null> {
+  try {
+    const normalizedName = normalizeVenueName(venueName);
+    const normalizedDest = destination.toLowerCase().trim();
+    
+    // Use service role client for cache access
+    const response = await fetch(`${supabaseUrl}/rest/v1/verified_venues?normalized_name=eq.${encodeURIComponent(normalizedName)}&destination=ilike.%25${encodeURIComponent(normalizedDest)}%25&expires_at=gt.${new Date().toISOString()}&select=*&limit=1`, {
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+      }
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (data && data.length > 0) {
+      console.log(`[Stage 4] ✅ Cache HIT for "${venueName}" in ${destination}`);
+      
+      // Update usage stats (fire and forget)
+      fetch(`${supabaseUrl}/rest/v1/verified_venues?id=eq.${data[0].id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          usage_count: (data[0].usage_count || 0) + 1,
+          last_used_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Refresh TTL
+        })
+      }).catch(() => {}); // Ignore errors
+      
+      return data[0];
+    }
+    
+    return null;
+  } catch (e) {
+    console.log(`[Stage 4] Cache check error for "${venueName}":`, e);
+    return null;
+  }
+}
+
+/**
+ * Cache a newly verified venue for future use
+ */
+async function cacheVerifiedVenue(
+  venueName: string,
+  destination: string,
+  category: string,
+  verification: VenueVerification,
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<void> {
+  try {
+    const normalizedName = normalizeVenueName(venueName);
+    
+    const venueData = {
+      name: venueName,
+      normalized_name: normalizedName,
+      destination: destination.toLowerCase().trim(),
+      category: category.toLowerCase(),
+      address: verification.formattedAddress || null,
+      coordinates: verification.coordinates || null,
+      google_place_id: verification.placeId || null,
+      rating: verification.rating?.value || null,
+      total_reviews: verification.rating?.totalReviews || null,
+      price_level: verification.priceLevel || null,
+      website: verification.website || null,
+      verification_source: verification.sourceProvider || 'google_places',
+      verification_confidence: verification.confidence,
+      last_verified_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    
+    // Upsert based on google_place_id or normalized_name + destination
+    const response = await fetch(`${supabaseUrl}/rest/v1/verified_venues`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify(venueData)
+    });
+    
+    if (response.ok) {
+      console.log(`[Stage 4] ✅ Cached venue: "${venueName}" in ${destination}`);
+    }
+  } catch (e) {
+    console.log(`[Stage 4] Cache write error for "${venueName}":`, e);
+  }
+}
+
+/**
+ * Dual-AI Venue Verification Pipeline
+ * 1. Check internal cache first
+ * 2. If miss: AI-1 (Gemini Flash) performs Google Places lookup
+ * 3. AI-2 (GPT-5-mini) verifies semantic match between AI-generated name and real venue
+ * 4. Cache verified venues for future use
+ */
+async function verifyVenueWithDualAI(
+  activity: StrictActivity,
+  destination: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+  GOOGLE_MAPS_API_KEY: string | undefined,
+  LOVABLE_API_KEY: string | undefined
+): Promise<VenueVerification | null> {
+  const venueName = activity.location?.name || activity.title;
+  const category = activity.category || 'sightseeing';
+  
+  // Step 1: Check cache first
+  const cached = await checkVenueCache(venueName, destination, supabaseUrl, supabaseKey);
+  if (cached) {
+    return {
+      isValid: true,
+      confidence: cached.verification_confidence,
+      placeId: cached.google_place_id || undefined,
+      formattedAddress: cached.address || undefined,
+      coordinates: cached.coordinates || undefined,
+      rating: cached.rating ? { value: cached.rating, totalReviews: cached.total_reviews || 0 } : undefined,
+      priceLevel: cached.price_level || undefined,
+      website: cached.website || undefined,
+      sourceProvider: 'internal_db'
+    };
+  }
+  
+  // Step 2: Google Places lookup (existing function)
+  const googleResult = await verifyVenueWithGooglePlaces(venueName, destination, GOOGLE_MAPS_API_KEY);
+  
+  if (!googleResult || !googleResult.isValid) {
+    // No Google match - mark as AI-generated only
+    return {
+      isValid: false,
+      confidence: 0.4,
+      sourceProvider: 'ai_verified' // Fallback when unverified
+    };
+  }
+  
+  // Step 3: Semantic verification with second AI (for high-value venues)
+  // Skip for transport/downtime categories
+  const skipSemanticCheck = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'].includes(category.toLowerCase());
+  
+  let semanticConfidence = googleResult.confidence;
+  
+  if (!skipSemanticCheck && LOVABLE_API_KEY && googleResult.formattedAddress) {
+    try {
+      // Use GPT-5-mini for fast semantic matching
+      const semanticResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-5-nano', // Fast + cheap for simple matching
+          messages: [
+            {
+              role: 'system',
+              content: `You are a venue verification assistant. Determine if two venue descriptions refer to the same place.
+Return ONLY a JSON object: { "match": true/false, "confidence": 0.0-1.0, "reason": "brief explanation" }
+Consider: name similarity, location match, category alignment. Be strict about name matching.`
+            },
+            {
+              role: 'user',
+              content: `AI-generated venue: "${venueName}" (category: ${category})
+Google Places result: "${googleResult.formattedAddress}"
+${googleResult.rating ? `Rating: ${googleResult.rating.value}/5 (${googleResult.rating.totalReviews} reviews)` : ''}
+
+Are these the same venue?`
+            }
+          ],
+          max_tokens: 100
+        })
+      });
+      
+      if (semanticResponse.ok) {
+        const semanticData = await semanticResponse.json();
+        const content = semanticData.choices?.[0]?.message?.content || '';
+        
+        try {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const result = JSON.parse(jsonMatch[0]);
+            if (result.match === false) {
+              console.log(`[Stage 4] ⚠️ Semantic mismatch for "${venueName}": ${result.reason}`);
+              semanticConfidence = result.confidence * 0.5; // Reduce confidence significantly
+            } else {
+              semanticConfidence = Math.max(googleResult.confidence, result.confidence);
+              console.log(`[Stage 4] ✅ Semantic match confirmed for "${venueName}" (${semanticConfidence.toFixed(2)})`);
+            }
+          }
+        } catch (parseErr) {
+          // JSON parse failed, use Google result as-is
+        }
+      }
+    } catch (semanticError) {
+      console.log(`[Stage 4] Semantic check skipped for "${venueName}":`, semanticError);
+    }
+  }
+  
+  // Step 4: Cache the verified venue
+  const finalResult: VenueVerification = {
+    ...googleResult,
+    confidence: semanticConfidence,
+    sourceProvider: 'google_places'
+  };
+  
+  if (semanticConfidence >= 0.7) {
+    // Only cache high-confidence matches
+    cacheVerifiedVenue(venueName, destination, category, finalResult, supabaseUrl, supabaseKey);
+  }
+  
+  return finalResult;
 }
 
 async function verifyVenueWithGooglePlaces(
@@ -3752,7 +4009,8 @@ async function enrichActivity(
   destination: string,
   supabaseUrl: string,
   supabaseKey: string,
-  GOOGLE_MAPS_API_KEY: string | undefined
+  GOOGLE_MAPS_API_KEY: string | undefined,
+  LOVABLE_API_KEY: string | undefined
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
@@ -3766,10 +4024,10 @@ async function enrichActivity(
   // Determine if this activity should get Viator matching
   const shouldSearchViator = isBookableActivity(activity) && !(enriched as any).viatorProductCode;
 
-  // Run venue verification, photo fetch, and Viator search in parallel
+  // Run venue verification (with dual-AI + caching), photo fetch, and Viator search in parallel
   const [venueData, photoResult, viatorMatch] = await Promise.all([
-    // Verify venue with Google Places API v1
-    verifyVenueWithGooglePlaces(activity.title, destination, GOOGLE_MAPS_API_KEY),
+    // Verify venue with Dual-AI pipeline (cache → Google Places → semantic match)
+    verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY),
     // Fetch real venue photo using tiered approach
     !enriched.photos?.length 
       ? fetchActivityImage(activity.title, activity.category || 'sightseeing', destination, supabaseUrl, supabaseKey)
@@ -3862,13 +4120,14 @@ async function enrichActivityWithRetry(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
+  LOVABLE_API_KEY: string | undefined,
   maxRetries: number = 1
 ): Promise<{ activity: StrictActivity; success: boolean; retried: boolean }> {
   let retried = false;
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const enriched = await enrichActivity(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY);
+      const enriched = await enrichActivity(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY);
       return { activity: enriched, success: true, retried };
     } catch (error) {
       console.warn(`[Stage 4] Enrichment error for "${activity.title}" (attempt ${attempt + 1}):`, error);
@@ -3897,9 +4156,10 @@ async function enrichItinerary(
   destination: string,
   supabaseUrl: string,
   supabaseKey: string,
-  GOOGLE_MAPS_API_KEY: string | undefined
+  GOOGLE_MAPS_API_KEY: string | undefined,
+  LOVABLE_API_KEY: string | undefined
 ): Promise<{ days: StrictDay[]; stats: EnrichmentStats }> {
-  console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos + venue verification`);
+  console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos + dual-AI venue verification`);
 
   const enrichedDays: StrictDay[] = [];
   const stats: EnrichmentStats = {
@@ -3920,7 +4180,7 @@ async function enrichItinerary(
       const batch = day.activities.slice(i, i + BATCH_SIZE);
       
       const enrichedBatch = await Promise.all(
-        batch.map(act => enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY))
+        batch.map(act => enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY))
       );
       
       for (const result of enrichedBatch) {
@@ -4811,7 +5071,7 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       let enrichedDays: StrictDay[];
       let enrichmentStats: EnrichmentStats | null = null;
       try {
-        const enrichmentResult = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY);
+        const enrichmentResult = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY);
         enrichedDays = enrichmentResult.days;
         enrichmentStats = enrichmentResult.stats;
       } catch (enrichError) {
@@ -5397,6 +5657,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                     supabaseUrl,
                     supabaseKey,
                     GOOGLE_MAPS_API_KEY,
+                    LOVABLE_API_KEY,
                     1 // maxRetries
                   );
                   return result.activity;

@@ -4724,6 +4724,90 @@ export type Database = {
         }
         Relationships: []
       }
+      verified_venues: {
+        Row: {
+          address: string | null
+          category: string | null
+          coordinates: Json | null
+          created_at: string
+          destination: string
+          expires_at: string
+          foursquare_id: string | null
+          google_place_id: string | null
+          id: string
+          last_used_at: string | null
+          last_verified_at: string
+          name: string
+          normalized_name: string
+          opening_hours: Json | null
+          phone_number: string | null
+          price_level: number | null
+          rating: number | null
+          total_reviews: number | null
+          updated_at: string
+          usage_count: number | null
+          verification_confidence: number | null
+          verification_count: number | null
+          verification_source: string
+          viator_product_code: string | null
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          category?: string | null
+          coordinates?: Json | null
+          created_at?: string
+          destination: string
+          expires_at?: string
+          foursquare_id?: string | null
+          google_place_id?: string | null
+          id?: string
+          last_used_at?: string | null
+          last_verified_at?: string
+          name: string
+          normalized_name: string
+          opening_hours?: Json | null
+          phone_number?: string | null
+          price_level?: number | null
+          rating?: number | null
+          total_reviews?: number | null
+          updated_at?: string
+          usage_count?: number | null
+          verification_confidence?: number | null
+          verification_count?: number | null
+          verification_source?: string
+          viator_product_code?: string | null
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          category?: string | null
+          coordinates?: Json | null
+          created_at?: string
+          destination?: string
+          expires_at?: string
+          foursquare_id?: string | null
+          google_place_id?: string | null
+          id?: string
+          last_used_at?: string | null
+          last_verified_at?: string
+          name?: string
+          normalized_name?: string
+          opening_hours?: Json | null
+          phone_number?: string | null
+          price_level?: number | null
+          rating?: number | null
+          total_reviews?: number | null
+          updated_at?: string
+          usage_count?: number | null
+          verification_confidence?: number | null
+          verification_count?: number | null
+          verification_source?: string
+          viator_product_code?: string | null
+          website?: string | null
+        }
+        Relationships: []
+      }
       voyance_events: {
         Row: {
           created_at: string | null
@@ -4987,6 +5071,7 @@ export type Database = {
     Functions: {
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
       cleanup_expired_search_cache: { Args: never; Returns: number }
+      cleanup_expired_venues: { Args: never; Returns: number }
       generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
