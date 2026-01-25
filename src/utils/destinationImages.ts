@@ -266,12 +266,12 @@ export function getDestinationImage(destination: string): string {
 }
 
 /**
- * Get multiple images for a destination gallery
+ * Get multiple images for a destination gallery with fallbacks
  */
-export function getDestinationImages(destination: string, count = 3): string[] {
+export function getDestinationImages(destination: string, count = 4): string[] {
   const normalized = destination.toLowerCase().trim();
-  // Also try extracting just the city name (before comma)
-  const cityOnly = normalized.split(',')[0].trim();
+  // Also try extracting just the city name (before comma or parenthetical)
+  const cityOnly = normalized.split(',')[0].replace(/\s*\([^)]*\)\s*$/, '').trim();
   
   // Check curated images first with multiple matching strategies
   const images = CURATED_DESTINATION_IMAGES[normalized] 
@@ -281,12 +281,23 @@ export function getDestinationImages(destination: string, count = 3): string[] {
     || CURATED_DESTINATION_IMAGES[cityOnly.replace(/\s+/g, '-')]
     || CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')];
   
-  if (images) {
-    return images.slice(0, count);
+  if (images && images.length > 0) {
+    // Return curated images plus some generic fallbacks
+    const result = [...images.slice(0, count)];
+    // Add generic fallbacks at the end
+    const hash = normalized.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+    result.push(GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length]);
+    result.push(GENERIC_TRAVEL_IMAGES[(hash + 1) % GENERIC_TRAVEL_IMAGES.length]);
+    return result;
   }
   
   // Generate dynamic Unsplash URLs for unknown destinations
-  return Array.from({ length: count }, (_, i) => generateUnsplashUrl(destination, i));
+  const dynamicUrls = Array.from({ length: count }, (_, i) => generateUnsplashUrl(destination, i));
+  // Add generic fallbacks
+  const hash = normalized.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+  dynamicUrls.push(GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length]);
+  dynamicUrls.push(GENERIC_TRAVEL_IMAGES[(hash + 1) % GENERIC_TRAVEL_IMAGES.length]);
+  return dynamicUrls;
 }
 
 /**

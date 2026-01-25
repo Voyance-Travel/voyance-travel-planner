@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -32,7 +32,8 @@ import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { getDestinationImage } from '@/utils/destinationImages';
+import { getDestinationImage, getDestinationImages } from '@/utils/destinationImages';
+import { handleImageError } from '@/hooks/useImageWithFallback';
 
 // Extract base destination name (e.g., "Rome (FCO)" -> "Rome", "Paris, France" -> "Paris")
 function getBaseDestination(destination: string): string {
@@ -176,8 +177,21 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
   const status = statusConfig[displayStatus];
   const StatusIcon = status.icon;
   
-  // Use curated destination images
-  const imageUrl = getDestinationImage(trip.destination);
+  // Use curated destination images with fallback chain
+  const allImages = getDestinationImages(trip.destination);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const imageUrl = allImages[currentImageIndex] || getDestinationImage(trip.destination);
+  
+  // Handle image load error - try next image in the list
+  const onImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    // Try next image in the fallback chain
+    if (currentImageIndex < allImages.length - 1) {
+      setCurrentImageIndex(prev => prev + 1);
+    } else {
+      // All destination images failed, use generic fallback handler
+      handleImageError(e, undefined, trip.destination);
+    }
+  }, [currentImageIndex, allImages.length, trip.destination]);
   
   // Check for booking status - use direct properties
   const hasItinerary = !!trip.hasItineraryData;
@@ -206,7 +220,8 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
         <img 
           src={imageUrl} 
           alt={trip.destination} 
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out" 
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+          onError={onImageError}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
         
