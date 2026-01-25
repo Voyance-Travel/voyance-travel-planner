@@ -45,9 +45,50 @@ function generateGradientDataUrl(label: string, variant: number = 0): string {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
+function hashString(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function pickTwoDistinct(
+  urls: string[],
+  fallbackLabel: string,
+  seed: string
+): { hero: string; mid: string } {
+  const unique = Array.from(new Set(urls.filter(Boolean)));
+
+  if (unique.length === 0) {
+    return {
+      hero: generateGradientDataUrl(fallbackLabel, 0),
+      mid: generateGradientDataUrl(fallbackLabel, 1),
+    };
+  }
+
+  if (unique.length === 1) {
+    return {
+      hero: unique[0],
+      mid: generateGradientDataUrl(fallbackLabel, 1),
+    };
+  }
+
+  const h = hashString(seed);
+  const heroIndex = h % unique.length;
+
+  // Choose a different index than heroIndex, but deterministically.
+  // Offset in range [1, unique.length - 1]
+  const offset = (h % (unique.length - 1)) + 1;
+  const midIndex = (heroIndex + offset) % unique.length;
+
+  return { hero: unique[heroIndex], mid: unique[midIndex] };
+}
+
 export function useDestinationImages(
   destination: string,
-  destinationCountry?: string
+  destinationCountry?: string,
+  seedKey?: string
 ): DestinationImagesResult {
   const [heroImage, setHeroImage] = useState<string | null>(null);
   const [midImage, setMidImage] = useState<string | null>(null);
@@ -72,47 +113,40 @@ export function useDestinationImages(
       try {
         // First, try to use curated images directly (faster and more reliable)
         if (hasCuratedImages(cleanDestination)) {
-          const curatedUrls = getCuratedImages(cleanDestination, 2);
-          console.log('[useDestinationImages] Using curated images:', curatedUrls);
-          
-          if (!cancelled && curatedUrls.length >= 2) {
-            // Ensure they're different
-            if (curatedUrls[0] !== curatedUrls[1]) {
-              setHeroImage(curatedUrls[0]);
-              setMidImage(curatedUrls[1]);
-            } else {
-              setHeroImage(curatedUrls[0]);
-              setMidImage(generateGradientDataUrl(cleanDestination, 1));
-            }
+          // Pull a larger set so we can avoid repeats deterministically.
+          const curatedUrls = getCuratedImages(cleanDestination, 8);
+          const chosen = pickTwoDistinct(
+            curatedUrls,
+            cleanDestination,
+            seedKey || `${cleanDestination}|curated`
+          );
+
+          if (!cancelled) {
+            setHeroImage(chosen.hero);
+            setMidImage(chosen.mid);
             setIsLoading(false);
-            return;
           }
+          return;
         }
 
         // Fallback to API for non-curated destinations
         const images = await getAPIImages({
           destination: queryDestination,
           imageType: 'gallery',
-          limit: 2,
+          // Fetch more so we can reliably pick a different mid image
+          limit: 6,
         });
-
-        console.log('[useDestinationImages] API returned:', images.map(i => i.url));
 
         if (cancelled) return;
 
-        if (images.length >= 2) {
-          // Ensure we have 2 DIFFERENT images
-          const url1 = images[0].url;
-          const url2 = images[1].url !== url1 ? images[1].url : generateGradientDataUrl(cleanDestination, 1);
-          setHeroImage(url1);
-          setMidImage(url2);
-        } else if (images.length === 1) {
-          setHeroImage(images[0].url);
-          setMidImage(generateGradientDataUrl(cleanDestination, 1));
-        } else {
-          setHeroImage(generateGradientDataUrl(cleanDestination, 0));
-          setMidImage(generateGradientDataUrl(cleanDestination, 1));
-        }
+        const chosen = pickTwoDistinct(
+          images.map(i => i.url),
+          cleanDestination,
+          seedKey || `${queryDestination}|api`
+        );
+
+        setHeroImage(chosen.hero);
+        setMidImage(chosen.mid);
       } catch (err) {
         console.error('[useDestinationImages] Failed to fetch images:', err);
         if (!cancelled) {
@@ -131,7 +165,7 @@ export function useDestinationImages(
     return () => {
       cancelled = true;
     };
-  }, [cleanDestination, queryDestination]);
+  }, [cleanDestination, queryDestination, seedKey]);
 
   return { heroImage, midImage, isLoading };
 }
