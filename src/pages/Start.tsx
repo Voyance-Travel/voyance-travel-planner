@@ -469,20 +469,20 @@ function HotelAutocomplete({
 
 // Trip occasion options - what's the purpose of this trip?
 const tripOccasions = [
-  { id: 'leisure', label: 'Leisure', emoji: '🌴' },
-  { id: 'romantic', label: 'Romantic Getaway', emoji: '💕' },
-  { id: 'anniversary', label: 'Anniversary', emoji: '🥂' },
-  { id: 'honeymoon', label: 'Honeymoon', emoji: '💒' },
-  { id: 'birthday', label: 'Birthday Trip', emoji: '🎂' },
-  { id: 'girls-trip', label: "Girls' Trip", emoji: '👯‍♀️' },
-  { id: 'guys-trip', label: "Guys' Trip", emoji: '🍻' },
-  { id: 'family', label: 'Family Vacation', emoji: '👨‍👩‍👧‍👦' },
-  { id: 'adult-family', label: 'Adult Family', emoji: '👨‍👩‍👧' },
-  { id: 'solo', label: 'Solo Adventure', emoji: '🎒' },
-  { id: 'friends', label: 'Friends Trip', emoji: '🤝' },
-  { id: 'business', label: 'Business + Leisure', emoji: '💼' },
-  { id: 'adventure', label: 'Adventure', emoji: '🏔️' },
-  { id: 'wellness', label: 'Wellness Retreat', emoji: '🧘' },
+  { id: 'leisure', label: 'Leisure' },
+  { id: 'romantic', label: 'Romantic' },
+  { id: 'anniversary', label: 'Anniversary' },
+  { id: 'honeymoon', label: 'Honeymoon' },
+  { id: 'birthday', label: 'Birthday' },
+  { id: 'girls-trip', label: "Girls' Trip" },
+  { id: 'guys-trip', label: "Guys' Trip" },
+  { id: 'family', label: 'Family' },
+  { id: 'adult-family', label: 'Adult Family' },
+  { id: 'solo', label: 'Solo' },
+  { id: 'friends', label: 'Friends' },
+  { id: 'business', label: 'Business' },
+  { id: 'adventure', label: 'Adventure' },
+  { id: 'wellness', label: 'Wellness' },
 ];
 
 // Featured destinations
@@ -1073,16 +1073,15 @@ export default function Start() {
                       type="button"
                       onClick={() => setTripType(occasion.id)}
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-2 rounded-full border transition-all text-sm",
+                        "px-3 py-1.5 rounded-full border transition-all text-sm",
                         tripType === occasion.id
                           ? itineraryOnlyMode 
                             ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
-                            : "bg-sky-500/10 border-sky-500 text-sky-700 font-medium"
+                            : "bg-primary/10 border-primary text-primary font-medium"
                           : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       )}
                     >
-                      <span className="text-xs">{occasion.emoji}</span>
-                      <span>{occasion.label}</span>
+                      {occasion.label}
                     </button>
                   ))}
                 </div>
@@ -1106,16 +1105,15 @@ export default function Start() {
                           type="button"
                           onClick={() => setTripType(occasion.id)}
                           className={cn(
-                            "flex items-center gap-1.5 px-3 py-2 rounded-full border transition-all text-sm",
+                            "px-3 py-1.5 rounded-full border transition-all text-sm",
                             tripType === occasion.id
                               ? itineraryOnlyMode 
                                 ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
-                                : "bg-sky-500/10 border-sky-500 text-sky-700 font-medium"
+                                : "bg-primary/10 border-primary text-primary font-medium"
                               : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                           )}
                         >
-                          <span className="text-xs">{occasion.emoji}</span>
-                          <span>{occasion.label}</span>
+                          {occasion.label}
                         </button>
                       ))}
                     </div>
