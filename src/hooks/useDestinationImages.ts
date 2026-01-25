@@ -54,6 +54,95 @@ function hashString(input: string): number {
   return Math.abs(hash);
 }
 
+function isBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof Image !== 'undefined';
+}
+
+async function isUrlLoadable(url: string, timeoutMs: number = 4500): Promise<boolean> {
+  if (!url) return false;
+  // data: URLs always "load" for our purposes
+  if (url.startsWith('data:')) return true;
+
+  // During SSR/tests without DOM, don't block the UI; assume loadable.
+  if (!isBrowser()) return true;
+
+  return await new Promise<boolean>((resolve) => {
+    const img = new Image();
+    let done = false;
+
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      resolve(ok);
+    };
+
+    const t = window.setTimeout(() => finish(false), timeoutMs);
+    img.onload = () => {
+      window.clearTimeout(t);
+      finish(true);
+    };
+    img.onerror = () => {
+      window.clearTimeout(t);
+      finish(false);
+    };
+    img.src = url;
+  });
+}
+
+function rotateDeterministic<T>(arr: T[], seed: string): T[] {
+  if (arr.length <= 1) return arr;
+  const start = hashString(seed) % arr.length;
+  return [...arr.slice(start), ...arr.slice(0, start)];
+}
+
+async function pickTwoLoadableDistinct(
+  urls: string[],
+  fallbackLabel: string,
+  seed: string
+): Promise<{ hero: string; mid: string }> {
+  const unique = Array.from(new Set(urls.filter(Boolean)));
+
+  if (unique.length === 0) {
+    return {
+      hero: generateGradientDataUrl(fallbackLabel, 0),
+      mid: generateGradientDataUrl(fallbackLabel, 1),
+    };
+  }
+
+  const ordered = rotateDeterministic(unique, seed);
+
+  let hero: string | null = null;
+  for (const u of ordered) {
+    // eslint-disable-next-line no-await-in-loop
+    if (await isUrlLoadable(u)) {
+      hero = u;
+      break;
+    }
+  }
+
+  if (!hero) {
+    return {
+      hero: generateGradientDataUrl(fallbackLabel, 0),
+      mid: generateGradientDataUrl(fallbackLabel, 1),
+    };
+  }
+
+  // Pick a different, loadable mid image.
+  for (const u of ordered) {
+    if (u === hero) continue;
+    // eslint-disable-next-line no-await-in-loop
+    if (await isUrlLoadable(u)) {
+      return { hero, mid: u };
+    }
+  }
+
+  // If we only have one working photo, use a distinct gradient for the second slot.
+  return {
+    hero,
+    mid: generateGradientDataUrl(fallbackLabel, 1),
+  };
+}
+
 function pickTwoDistinct(
   urls: string[],
   fallbackLabel: string,
@@ -112,14 +201,16 @@ export function useDestinationImages(
     async function fetchImages() {
       setIsLoading(true);
       try {
+        const seed = seedKey || `${queryDestination}|default`;
+
         // First, try to use curated images directly (faster and more reliable)
         if (hasCuratedImages(cleanDestination)) {
           // Pull a larger set so we can avoid repeats deterministically.
           const curatedUrls = getCuratedImages(cleanDestination, 8);
-          const chosen = pickTwoDistinct(
+          const chosen = await pickTwoLoadableDistinct(
             curatedUrls,
             cleanDestination,
-            seedKey || `${cleanDestination}|curated`
+            `${seed}|curated`
           );
 
           if (!cancelled) {
@@ -140,10 +231,10 @@ export function useDestinationImages(
 
         if (cancelled) return;
 
-        const chosen = pickTwoDistinct(
+        const chosen = await pickTwoLoadableDistinct(
           images.map(i => i.url),
           cleanDestination,
-          seedKey || `${queryDestination}|api`
+          `${seed}|api`
         );
 
         setHeroImage(chosen.hero);
