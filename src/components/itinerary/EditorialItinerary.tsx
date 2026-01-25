@@ -3873,6 +3873,14 @@ function ActivityRow({
     ? (activity.location?.name?.trim() || extractVenueFromText(activityTitle) || extractVenueFromText(activity.description) || null)
     : null;
 
+  // For link lookups we want the best venue name even if the activity type was misclassified.
+  // This prevents generic titles like "Traditional Fado Dinner Experience" being sent to the URL lookup.
+  const venueNameForLink =
+    activity.location?.name?.trim() ||
+    extractVenueFromText(activityTitle) ||
+    extractVenueFromText(activity.description) ||
+    null;
+
   // Determine the best search term for images:
   // 1. Dining venue (from location/title/description) if available
   // 2. location.name (actual venue) if available
@@ -4141,7 +4149,10 @@ function ActivityRow({
               activity={{
                 id: activity.id,
                 title: activity.title,
-                location: activity.location, // Pass venue name for restaurant lookup
+                // Ensure restaurant lookup gets the best venue name (not the generic meal title)
+                location: venueNameForLink
+                  ? { ...(activity.location || {}), name: venueNameForLink }
+                  : activity.location,
                 bookingState: activity.bookingState,
                 bookingRequired: activity.bookingRequired,
                 quotePriceCents: activity.quotePriceCents,
