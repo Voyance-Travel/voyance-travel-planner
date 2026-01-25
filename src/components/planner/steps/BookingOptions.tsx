@@ -178,10 +178,13 @@ export default function BookingOptions({
         </div>
       </div>
 
-      {/* Back Button */}
-      <div className="flex justify-start">
+      {/* Navigation */}
+      <div className="flex justify-between">
         <Button variant="outline" onClick={onBack} className="h-12 px-6">
           Back to Hotels
+        </Button>
+        <Button variant="ghost" onClick={onBuildItinerary} className="h-12 px-6 text-muted-foreground">
+          Skip to Itinerary →
         </Button>
       </div>
     </motion.div>
