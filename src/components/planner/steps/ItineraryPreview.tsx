@@ -695,7 +695,7 @@ export default function ItineraryPreview({
       {/* Navigation */}
       <div className="flex justify-between">
         <Button variant="outline" onClick={onBack} className="h-12 px-6">
-          Back
+          ← Back to Booking Options
         </Button>
         <Button
           onClick={onComplete}
