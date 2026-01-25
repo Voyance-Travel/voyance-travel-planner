@@ -1177,9 +1177,18 @@ export default function Start() {
                   <button
                     type="button"
                     onClick={async () => {
-                      if (!isFormValid) return;
-                      const start = format(startDate!, 'yyyy-MM-dd');
-                      const end = format(endDate!, 'yyyy-MM-dd');
+                      // Show validation feedback if form incomplete, but always allow click
+                      if (!destinationSelection.cityName) {
+                        toast.error('Please select a destination');
+                        return;
+                      }
+                      if (!startDate || !endDate) {
+                        toast.error('Please select your travel dates');
+                        return;
+                      }
+                      
+                      const start = format(startDate, 'yyyy-MM-dd');
+                      const end = format(endDate, 'yyyy-MM-dd');
                       
                       setBasics({
                         destination: destinationSelection.cityName,
@@ -1197,11 +1206,9 @@ export default function Start() {
                         toast.error('Please sign in to generate an itinerary');
                       }
                     }}
-                    disabled={!isFormValid}
                     className={cn(
                       "w-full flex flex-col items-center justify-center gap-1 px-4 py-4 rounded-xl border-2 transition-all",
-                      "border-primary bg-primary/10 hover:bg-primary/20",
-                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary/10"
+                      "border-primary bg-primary/10 hover:bg-primary/20"
                     )}
                   >
                     <div className="flex items-center gap-2">
