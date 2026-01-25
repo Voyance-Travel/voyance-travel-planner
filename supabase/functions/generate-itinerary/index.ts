@@ -4680,24 +4680,99 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         const generatedDay = JSON.parse(toolCall.function.arguments);
 
-        // Parse current activities and identify locked ones to preserve
-        const lockedActivities: Array<{
+        // =======================================================================
+        // LOCKED ACTIVITY PRESERVATION: Read from itinerary_activities table
+        // =======================================================================
+        interface LockedActivity {
           id: string;
           title: string;
+          name?: string;
+          description?: string;
+          category?: string;
           startTime: string;
           endTime: string;
+          durationMinutes?: number;
+          location?: { name?: string; address?: string };
+          cost?: { amount: number; currency: string };
           isLocked: boolean;
+          tags?: string[];
+          bookingRequired?: boolean;
+          tips?: string;
+          photos?: unknown;
+          transportation?: unknown;
           [key: string]: unknown;
-        }> = [];
+        }
         
-        if (keepActivities && keepActivities.length > 0 && currentActivities) {
-          // Find the locked activities from currentActivities
-          for (const act of currentActivities) {
-            if (keepActivities.includes(act.id) && act.isLocked) {
-              lockedActivities.push(act);
+        let lockedActivities: LockedActivity[] = [];
+        
+        // First, try to load locked activities from the new normalized table
+        if (tripId) {
+          const { data: lockedFromDb } = await supabase
+            .from('itinerary_activities')
+            .select('*')
+            .eq('trip_id', tripId)
+            .eq('is_locked', true);
+          
+          if (lockedFromDb && lockedFromDb.length > 0) {
+            // Filter to only this day's locked activities
+            // We need to join with itinerary_days to get day_number
+            const { data: dayRow } = await supabase
+              .from('itinerary_days')
+              .select('id')
+              .eq('trip_id', tripId)
+              .eq('day_number', dayNumber)
+              .maybeSingle();
+            
+            if (dayRow) {
+              const dayLockedActivities = lockedFromDb.filter(a => a.itinerary_day_id === dayRow.id);
+              lockedActivities = dayLockedActivities.map(a => ({
+                id: a.id,
+                title: a.title,
+                name: a.name || a.title,
+                description: a.description || undefined,
+                category: a.category || 'activity',
+                startTime: a.start_time || '09:00',
+                endTime: a.end_time || '10:00',
+                durationMinutes: a.duration_minutes || 60,
+                location: a.location as { name?: string; address?: string } || { name: '', address: '' },
+                cost: a.cost as { amount: number; currency: string } || { amount: 0, currency: 'USD' },
+                isLocked: true,
+                tags: a.tags || [],
+                bookingRequired: a.booking_required || false,
+                tips: a.tips || undefined,
+                photos: a.photos,
+                transportation: a.transportation,
+              }));
+              console.log(`[generate-day] Found ${lockedActivities.length} locked activities from itinerary_activities table for day ${dayNumber}`);
             }
           }
-          console.log(`[generate-day] Preserving ${lockedActivities.length} locked activities`);
+        }
+        
+        // Fallback: check currentActivities from request (legacy support during migration)
+        if (lockedActivities.length === 0 && keepActivities && keepActivities.length > 0 && currentActivities) {
+          for (const act of currentActivities) {
+            if (keepActivities.includes(act.id) && act.isLocked) {
+              lockedActivities.push({
+                id: act.id,
+                title: act.title || act.name || 'Activity',
+                name: act.name || act.title,
+                description: act.description,
+                category: act.category,
+                startTime: act.startTime || '09:00',
+                endTime: act.endTime || '10:00',
+                durationMinutes: act.durationMinutes,
+                location: act.location,
+                cost: act.cost || act.estimatedCost,
+                isLocked: true,
+                tags: act.tags,
+                bookingRequired: act.bookingRequired,
+                tips: act.tips,
+                photos: act.photos,
+                transportation: act.transportation,
+              });
+            }
+          }
+          console.log(`[generate-day] Preserving ${lockedActivities.length} locked activities from request (legacy)`);
         }
 
         // Normalize activities: ensure title exists, add IDs and enhancements
@@ -4737,7 +4812,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           };
         });
 
-        // CRITICAL: Merge locked activities back into the timeline
+        // CRITICAL: Merge locked activities back into the timeline (strict lock: keep exact time)
         if (lockedActivities.length > 0) {
           // Remove any generated activities that conflict with locked activity times
           for (const locked of lockedActivities) {
@@ -4773,6 +4848,102 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         // Ensure day has a title
         generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
+
+        // =======================================================================
+        // PERSIST TO NORMALIZED TABLES: itinerary_days + itinerary_activities
+        // =======================================================================
+        if (tripId) {
+          try {
+            // Upsert day row
+            const { data: dayRow, error: dayError } = await supabase
+              .from('itinerary_days')
+              .upsert({
+                trip_id: tripId,
+                day_number: dayNumber,
+                date: date,
+                title: generatedDay.title,
+                theme: generatedDay.theme,
+                narrative: generatedDay.narrative || null,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'trip_id,day_number' })
+              .select('id')
+              .single();
+            
+            if (dayError) {
+              console.error('[generate-day] Failed to upsert day:', dayError);
+            } else if (dayRow) {
+              // Delete old non-locked activities for this day, then insert new ones
+              await supabase
+                .from('itinerary_activities')
+                .delete()
+                .eq('itinerary_day_id', dayRow.id)
+                .eq('is_locked', false);
+              
+              // Insert all activities (locked ones are preserved; unlocked are new)
+              const activityRows = normalizedActivities.map((act: {
+                id?: string;
+                title?: string;
+                name?: string;
+                description?: string;
+                category?: string;
+                startTime?: string;
+                endTime?: string;
+                durationMinutes?: number;
+                location?: { name?: string; address?: string };
+                cost?: { amount: number; currency: string };
+                isLocked?: boolean;
+                tags?: string[];
+                bookingRequired?: boolean;
+                tips?: string;
+                photos?: unknown;
+                walkingDistance?: string;
+                walkingTime?: string;
+                transportation?: unknown;
+                rating?: unknown;
+                website?: string;
+                viatorProductCode?: string;
+              }, idx: number) => ({
+                id: act.id, // Keep stable IDs
+                itinerary_day_id: dayRow.id,
+                trip_id: tripId,
+                sort_order: idx,
+                title: act.title || act.name || 'Activity',
+                name: act.name || act.title,
+                description: act.description || null,
+                category: act.category || 'activity',
+                start_time: act.startTime || null,
+                end_time: act.endTime || null,
+                duration_minutes: act.durationMinutes || null,
+                location: act.location || null,
+                cost: act.cost || null,
+                tags: act.tags || null,
+                is_locked: act.isLocked || false,
+                booking_required: act.bookingRequired || false,
+                tips: act.tips || null,
+                photos: act.photos || null,
+                walking_distance: act.walkingDistance || null,
+                walking_time: act.walkingTime || null,
+                transportation: act.transportation || null,
+                rating: act.rating || null,
+                website: act.website || null,
+                viator_product_code: act.viatorProductCode || null,
+              }));
+              
+              // For locked activities, use upsert to preserve them
+              const { error: actError } = await supabase
+                .from('itinerary_activities')
+                .upsert(activityRows, { onConflict: 'id' });
+              
+              if (actError) {
+                console.error('[generate-day] Failed to insert activities:', actError);
+              } else {
+                console.log(`[generate-day] Persisted ${activityRows.length} activities to itinerary_activities`);
+              }
+            }
+          } catch (persistErr) {
+            console.error('[generate-day] Persist error:', persistErr);
+          }
+        }
 
         // Save version to itinerary_versions table for undo functionality
         if (tripId) {
@@ -5007,6 +5178,243 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           destination: trip.destination,
           ...trip.itinerary_data
         }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ==========================================================================
+    // ACTION: toggle-activity-lock - Toggle lock on a single activity
+    // ==========================================================================
+    if (action === 'toggle-activity-lock') {
+      const { tripId, activityId, isLocked } = params;
+      
+      if (!tripId || !activityId || typeof isLocked !== 'boolean') {
+        return new Response(
+          JSON.stringify({ error: "Missing tripId, activityId, or isLocked" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Verify ownership
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('user_id')
+        .eq('id', tripId)
+        .single();
+      
+      if (!trip) {
+        return new Response(
+          JSON.stringify({ error: "Trip not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      const isOwner = trip.user_id === authResult.userId;
+      const { data: collab } = await supabase
+        .from('trip_collaborators')
+        .select('permission')
+        .eq('trip_id', tripId)
+        .eq('user_id', authResult.userId)
+        .not('accepted_at', 'is', null)
+        .maybeSingle();
+      
+      const hasEditPermission = collab && (collab.permission === 'edit' || collab.permission === 'admin');
+      
+      if (!isOwner && !hasEditPermission) {
+        return new Response(
+          JSON.stringify({ error: "Access denied" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Update the activity's is_locked in the normalized table
+      const { error: updateError } = await supabase
+        .from('itinerary_activities')
+        .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+        .eq('id', activityId)
+        .eq('trip_id', tripId);
+      
+      if (updateError) {
+        console.error('[toggle-activity-lock] Update error:', updateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to update lock status" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[toggle-activity-lock] Activity ${activityId} is_locked=${isLocked}`);
+      
+      return new Response(
+        JSON.stringify({ success: true, activityId, isLocked }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ==========================================================================
+    // ACTION: sync-itinerary-tables - Migrate JSON itinerary_data to normalized tables
+    // ==========================================================================
+    if (action === 'sync-itinerary-tables') {
+      const { tripId } = params;
+      
+      if (!tripId) {
+        return new Response(
+          JSON.stringify({ error: "Missing tripId" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Verify ownership
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('user_id, itinerary_data')
+        .eq('id', tripId)
+        .single();
+      
+      if (!trip) {
+        return new Response(
+          JSON.stringify({ error: "Trip not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      const isOwner = trip.user_id === authResult.userId;
+      const { data: collab } = await supabase
+        .from('trip_collaborators')
+        .select('permission')
+        .eq('trip_id', tripId)
+        .eq('user_id', authResult.userId)
+        .not('accepted_at', 'is', null)
+        .maybeSingle();
+      
+      const hasEditPermission = collab && (collab.permission === 'edit' || collab.permission === 'admin');
+      
+      if (!isOwner && !hasEditPermission) {
+        return new Response(
+          JSON.stringify({ error: "Access denied" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const itineraryData = trip.itinerary_data as { days?: unknown[] } | null;
+      const days = itineraryData?.days || [];
+      
+      if (days.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, synced: 0, message: "No days to sync" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let syncedActivities = 0;
+      
+      for (const dayData of days) {
+        const d = dayData as {
+          dayNumber?: number;
+          date?: string;
+          title?: string;
+          theme?: string;
+          description?: string;
+          narrative?: unknown;
+          activities?: unknown[];
+        };
+        
+        const dayNumber = d.dayNumber || 1;
+        const date = d.date || new Date().toISOString().split('T')[0];
+        
+        // Upsert day
+        const { data: dayRow, error: dayError } = await supabase
+          .from('itinerary_days')
+          .upsert({
+            trip_id: tripId,
+            day_number: dayNumber,
+            date: date,
+            title: d.title || d.theme,
+            theme: d.theme,
+            description: d.description || null,
+            narrative: d.narrative || null,
+          }, { onConflict: 'trip_id,day_number' })
+          .select('id')
+          .single();
+        
+        if (dayError || !dayRow) {
+          console.error(`[sync-itinerary-tables] Failed to upsert day ${dayNumber}:`, dayError);
+          continue;
+        }
+        
+        const activities = d.activities || [];
+        const activityRows = activities.map((act: unknown, idx: number) => {
+          const a = act as {
+            id?: string;
+            title?: string;
+            name?: string;
+            description?: string;
+            category?: string;
+            startTime?: string;
+            endTime?: string;
+            start_time?: string;
+            end_time?: string;
+            durationMinutes?: number;
+            location?: { name?: string; address?: string };
+            cost?: { amount: number; currency: string };
+            isLocked?: boolean;
+            tags?: string[];
+            bookingRequired?: boolean;
+            booking_required?: boolean;
+            tips?: string;
+            photos?: unknown;
+            walking_distance?: string;
+            walking_time?: string;
+            transportation?: unknown;
+            rating?: unknown;
+            website?: string;
+            viatorProductCode?: string;
+          };
+          
+          return {
+            id: a.id || `sync-${tripId}-${dayNumber}-${idx}-${Date.now()}`,
+            itinerary_day_id: dayRow.id,
+            trip_id: tripId,
+            sort_order: idx,
+            title: a.title || a.name || 'Activity',
+            name: a.name || a.title,
+            description: a.description || null,
+            category: a.category || 'activity',
+            start_time: a.startTime || a.start_time || null,
+            end_time: a.endTime || a.end_time || null,
+            duration_minutes: a.durationMinutes || null,
+            location: a.location || null,
+            cost: a.cost || null,
+            tags: a.tags || null,
+            is_locked: a.isLocked || false, // Preserve existing lock state from JSON
+            booking_required: a.bookingRequired || a.booking_required || false,
+            tips: a.tips || null,
+            photos: a.photos || null,
+            walking_distance: a.walking_distance || null,
+            walking_time: a.walking_time || null,
+            transportation: a.transportation || null,
+            rating: a.rating || null,
+            website: a.website || null,
+            viator_product_code: a.viatorProductCode || null,
+          };
+        });
+        
+        if (activityRows.length > 0) {
+          const { error: actError } = await supabase
+            .from('itinerary_activities')
+            .upsert(activityRows, { onConflict: 'id' });
+          
+          if (actError) {
+            console.error(`[sync-itinerary-tables] Failed to insert activities for day ${dayNumber}:`, actError);
+          } else {
+            syncedActivities += activityRows.length;
+          }
+        }
+      }
+
+      console.log(`[sync-itinerary-tables] Synced ${days.length} days, ${syncedActivities} activities`);
+      
+      return new Response(
+        JSON.stringify({ success: true, syncedDays: days.length, syncedActivities }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

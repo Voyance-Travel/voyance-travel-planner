@@ -3082,6 +3082,111 @@ export type Database = {
         }
         Relationships: []
       }
+      itinerary_activities: {
+        Row: {
+          booking_required: boolean | null
+          category: string | null
+          cost: Json | null
+          created_at: string
+          description: string | null
+          duration_minutes: number | null
+          end_time: string | null
+          extra_data: Json | null
+          id: string
+          is_locked: boolean
+          itinerary_day_id: string
+          location: Json | null
+          name: string | null
+          photos: Json | null
+          rating: Json | null
+          sort_order: number
+          start_time: string | null
+          tags: string[] | null
+          tips: string | null
+          title: string
+          transportation: Json | null
+          trip_id: string
+          updated_at: string
+          viator_product_code: string | null
+          walking_distance: string | null
+          walking_time: string | null
+          website: string | null
+        }
+        Insert: {
+          booking_required?: boolean | null
+          category?: string | null
+          cost?: Json | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          end_time?: string | null
+          extra_data?: Json | null
+          id?: string
+          is_locked?: boolean
+          itinerary_day_id: string
+          location?: Json | null
+          name?: string | null
+          photos?: Json | null
+          rating?: Json | null
+          sort_order?: number
+          start_time?: string | null
+          tags?: string[] | null
+          tips?: string | null
+          title: string
+          transportation?: Json | null
+          trip_id: string
+          updated_at?: string
+          viator_product_code?: string | null
+          walking_distance?: string | null
+          walking_time?: string | null
+          website?: string | null
+        }
+        Update: {
+          booking_required?: boolean | null
+          category?: string | null
+          cost?: Json | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          end_time?: string | null
+          extra_data?: Json | null
+          id?: string
+          is_locked?: boolean
+          itinerary_day_id?: string
+          location?: Json | null
+          name?: string | null
+          photos?: Json | null
+          rating?: Json | null
+          sort_order?: number
+          start_time?: string | null
+          tags?: string[] | null
+          tips?: string | null
+          title?: string
+          transportation?: Json | null
+          trip_id?: string
+          updated_at?: string
+          viator_product_code?: string | null
+          walking_distance?: string | null
+          walking_time?: string | null
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_activities_itinerary_day_id_fkey"
+            columns: ["itinerary_day_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itinerary_activities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       itinerary_customization_requests: {
         Row: {
           action_taken: string | null
@@ -3122,6 +3227,62 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "itinerary_customization_requests_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itinerary_days: {
+        Row: {
+          created_at: string
+          date: string
+          day_number: number
+          description: string | null
+          estimated_distance: string | null
+          estimated_walking_time: string | null
+          id: string
+          narrative: Json | null
+          theme: string | null
+          title: string | null
+          trip_id: string
+          updated_at: string
+          weather: Json | null
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          day_number: number
+          description?: string | null
+          estimated_distance?: string | null
+          estimated_walking_time?: string | null
+          id?: string
+          narrative?: Json | null
+          theme?: string | null
+          title?: string | null
+          trip_id: string
+          updated_at?: string
+          weather?: Json | null
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          day_number?: number
+          description?: string | null
+          estimated_distance?: string | null
+          estimated_walking_time?: string | null
+          id?: string
+          narrative?: Json | null
+          theme?: string | null
+          title?: string | null
+          trip_id?: string
+          updated_at?: string
+          weather?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_days_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
