@@ -329,7 +329,8 @@ export default function ItineraryPreview({
     for (const day of localDays) {
       const activity = day.activities.find(a => a.id === activityId);
       if (activity) {
-        activityContext = { dayNumber: day.dayNumber, title: activity.title, time: activity.time };
+        const activityStartTime = (activity as any).startTime ?? activity.time;
+        activityContext = { dayNumber: day.dayNumber, title: activity.title, time: activityStartTime };
         break;
       }
     }

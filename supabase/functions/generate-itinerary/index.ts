@@ -5360,6 +5360,43 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       let updateError: { message?: string; code?: string } | null = null;
       let updatedCount = 0;
 
+      // Helper: best-effort fallback to set lock inside trips.itinerary_data JSON
+      const tryUpdateLockInJson = async (): Promise<boolean> => {
+        const { data: tripData, error: fetchErr } = await supabase
+          .from('trips')
+          .select('itinerary_data')
+          .eq('id', tripId)
+          .single();
+
+        if (fetchErr || !tripData?.itinerary_data) return false;
+
+        const itineraryData = tripData.itinerary_data as {
+          days?: Array<{ dayNumber: number; activities: Array<{ id: string; isLocked?: boolean }> }>;
+        };
+        if (!itineraryData.days) return false;
+
+        let found = false;
+        const updatedDays = itineraryData.days.map(day => ({
+          ...day,
+          activities: day.activities.map(act => {
+            if (act.id === activityId) {
+              found = true;
+              return { ...act, isLocked };
+            }
+            return act;
+          })
+        }));
+
+        if (!found) return false;
+
+        const { error: saveErr } = await supabase
+          .from('trips')
+          .update({ itinerary_data: { ...itineraryData, days: updatedDays } })
+          .eq('id', tripId);
+
+        return !saveErr;
+      };
+
       if (isValidUUID(activityId)) {
         // Direct UUID update
         const { error, count } = await supabase
@@ -5513,6 +5550,79 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           
           console.log(`[toggle-activity-lock] Fallback match: day=${dayNumber}, title="${activityTitle}", time=${startTime}, updated=${updatedCount}`);
         }
+
+        // If nothing was updated, the UI has an activity that isn't yet normalized.
+        // Create the per-activity row from itinerary_data and lock it (also update JSON so both stores stay consistent).
+        if (!updateError && updatedCount === 0) {
+          const { data: tripData, error: fetchErr } = await supabase
+            .from('trips')
+            .select('itinerary_data')
+            .eq('id', tripId)
+            .single();
+
+          if (!fetchErr && tripData?.itinerary_data) {
+            const itineraryData = tripData.itinerary_data as {
+              days?: Array<{ dayNumber: number; activities?: any[] }>;
+            };
+            const dayData = itineraryData.days?.find(d => d.dayNumber === dayNumber);
+            const activities = (dayData?.activities || []) as any[];
+            const idx = activities.findIndex(a => a?.id === activityId);
+            const act = idx >= 0 ? activities[idx] : null;
+
+            if (act) {
+              const payload = {
+                trip_id: tripId,
+                itinerary_day_id: dayRow.id,
+                external_id: activityId,
+                sort_order: idx,
+                title: act.title || act.name || activityTitle,
+                name: act.name || act.title || activityTitle,
+                description: act.description ?? null,
+                category: act.category ?? null,
+                start_time: act.startTime ?? startTime ?? null,
+                end_time: act.endTime ?? null,
+                duration_minutes: act.durationMinutes ?? null,
+                location: act.location ?? null,
+                cost: act.cost ?? act.estimatedCost ?? null,
+                tags: act.tags ?? [],
+                is_locked: isLocked,
+                booking_required: act.bookingRequired ?? false,
+                tips: act.tips ?? null,
+                photos: act.photos ?? null,
+                transportation: act.transportation ?? null,
+              };
+
+              const { error: insertErr } = await supabase
+                .from('itinerary_activities')
+                .insert(payload);
+
+              if (!insertErr) {
+                console.log(`[toggle-activity-lock] Inserted activity row from itinerary_data external_id=${activityId} locked=${isLocked}`);
+                // Best-effort keep JSON in sync
+                await tryUpdateLockInJson();
+                return new Response(
+                  JSON.stringify({ success: true, activityId, isLocked, method: 'insert_from_json' }),
+                  { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+            }
+          }
+
+          // Last resort: at least persist lock in JSON if we can.
+          const jsonOk = await tryUpdateLockInJson();
+          if (jsonOk) {
+            console.log(`[toggle-activity-lock] Updated lock in itinerary_data JSON for ${activityId} (no normalized match)`);
+            return new Response(
+              JSON.stringify({ success: true, activityId, isLocked, method: 'json_fallback' }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ error: 'Activity not found to lock (no normalized match and JSON update failed)' }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
       
       if (updateError) {
@@ -5524,6 +5634,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       }
 
       console.log(`[toggle-activity-lock] Activity ${activityId} is_locked=${isLocked}, rows updated: ${updatedCount}`);
+
+      // Keep itinerary_data JSON in sync when we successfully updated a normalized record.
+      if (!updateError && updatedCount > 0) {
+        await tryUpdateLockInJson();
+      }
       
       return new Response(
         JSON.stringify({ success: true, activityId, isLocked, updatedCount }),

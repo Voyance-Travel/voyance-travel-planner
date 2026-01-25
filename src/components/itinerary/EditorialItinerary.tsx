@@ -961,6 +961,7 @@ export function EditorialItinerary({
     // Persist lock state directly to itinerary_activities table
     if (tripId) {
       try {
+        const activityStartTime = (currentActivity as any).startTime ?? (currentActivity as any).time;
         const { error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
             action: 'toggle-activity-lock',
@@ -970,7 +971,7 @@ export function EditorialItinerary({
             // Include fallback matching info for non-UUID IDs
             dayNumber: currentDay.dayNumber,
             activityTitle: currentActivity.title,
-            startTime: currentActivity.time,
+            startTime: activityStartTime,
           },
         });
         if (error) {
