@@ -1045,14 +1045,41 @@ export function EditorialItinerary({
       const activity = fromDay.activities.find(a => a.id === activityId);
       if (!activity) return prev;
       
+      // Helper to parse time string to minutes for comparison
+      const parseTimeToMinutes = (timeStr?: string): number => {
+        if (!timeStr) return 9999; // No time = end of day
+        const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+        if (!match) return 9999;
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const period = match[3]?.toUpperCase();
+        if (period === 'PM' && hours !== 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+        return hours * 60 + minutes;
+      };
+      
+      const activityTime = parseTimeToMinutes(activity.startTime || activity.time);
+      
       return prev.map((day, idx) => {
         if (idx === fromDayIndex) {
           // Remove from source day
           return { ...day, activities: day.activities.filter(a => a.id !== activityId) };
         }
         if (idx === toDayIndex) {
-          // Add to destination day (at the end)
-          return { ...day, activities: [...day.activities, activity] };
+          // Insert at correct chronological position based on startTime
+          const newActivities = [...day.activities];
+          let insertIndex = newActivities.length; // Default to end
+          
+          for (let i = 0; i < newActivities.length; i++) {
+            const existingTime = parseTimeToMinutes(newActivities[i].startTime || newActivities[i].time);
+            if (activityTime < existingTime) {
+              insertIndex = i;
+              break;
+            }
+          }
+          
+          newActivities.splice(insertIndex, 0, activity);
+          return { ...day, activities: newActivities };
         }
         return day;
       });
