@@ -4536,8 +4536,14 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
               tips: a.tips || undefined,
               photos: a.photos,
               transportation: a.transportation,
+              // Preserve enriched data - DON'T re-fetch for locked activities
+              rating: a.rating,
+              website: a.website,
+              viatorProductCode: a.viator_product_code,
+              walkingDistance: a.walking_distance,
+              walkingTime: a.walking_time,
             }));
-            console.log(`[generate-day] Found ${lockedActivities.length} locked activities from DB for day ${dayNumber}`);
+            console.log(`[generate-day] Found ${lockedActivities.length} locked activities from DB for day ${dayNumber} (preserving existing enrichment)`);
           }
         }
       }
