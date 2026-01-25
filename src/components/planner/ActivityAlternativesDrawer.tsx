@@ -268,6 +268,7 @@ export default function ActivityAlternativesDrawer({
       rating: alt.rating,
       tags: [],
       isLocked: false,
+      tips: alt.whyRecommended || undefined, // Use the AI recommendation as the new tip
     };
 
     // Slight delay for visual feedback, then swap
