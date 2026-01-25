@@ -31,7 +31,6 @@ interface FriendProfileData {
     handle: string | null;
     avatar_url: string | null;
     bio: string | null;
-    travel_dna: any;
   };
   travelDNA: {
     primary_archetype_name: string | null;
@@ -53,14 +52,17 @@ interface FriendProfileData {
 }
 
 async function fetchFriendProfile(friendId: string): Promise<FriendProfileData> {
-  // Fetch profile
+  // Fetch profile using the friends-safe view that only exposes non-sensitive fields
+  // This excludes travel_dna, home_airport, first_name, last_name for privacy
+  // Note: Using 'as any' because profiles_friends view is not in generated types yet
   const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('id, display_name, handle, avatar_url, bio, travel_dna')
+    .from('profiles_friends' as any)
+    .select('id, display_name, handle, avatar_url, bio')
     .eq('id', friendId)
-    .single();
+    .single() as { data: FriendProfileData['profile'] | null; error: any };
 
   if (profileError) throw profileError;
+  if (!profile) throw new Error('Profile not found');
 
   // Fetch travel DNA
   const { data: travelDNA } = await supabase

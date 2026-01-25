@@ -2440,6 +2440,13 @@ export type Database = {
             foreignKeyName: "friendships_addressee_id_fkey"
             columns: ["addressee_id"]
             isOneToOne: false
+            referencedRelation: "profiles_friends"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
             referencedRelation: "profiles_public"
             referencedColumns: ["id"]
           },
@@ -2455,6 +2462,13 @@ export type Database = {
             columns: ["requester_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_friends"
             referencedColumns: ["id"]
           },
           {
@@ -4772,6 +4786,30 @@ export type Database = {
           trip_gross_profit_cents: number | null
           trip_id: string | null
           trip_name: string | null
+        }
+        Relationships: []
+      }
+      profiles_friends: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          display_name: string | null
+          handle: string | null
+          id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          display_name?: string | null
+          handle?: string | null
+          id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          display_name?: string | null
+          handle?: string | null
+          id?: string | null
         }
         Relationships: []
       }
