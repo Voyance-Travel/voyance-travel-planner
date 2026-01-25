@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -466,12 +466,22 @@ function HotelAutocomplete({
   );
 }
 
-// Trip type options
-const tripTypes = [
-  { id: 'romantic', label: 'Romantic', description: 'Couples getaway' },
-  { id: 'business', label: 'Business', description: 'Work travel' },
-  { id: 'adventure', label: 'Adventure', description: 'Explore & discover' },
-  { id: 'leisure', label: 'Leisure', description: 'Relax & unwind' },
+// Trip occasion options - what's the purpose of this trip?
+const tripOccasions = [
+  { id: 'leisure', label: 'Leisure', emoji: '🌴' },
+  { id: 'romantic', label: 'Romantic Getaway', emoji: '💕' },
+  { id: 'anniversary', label: 'Anniversary', emoji: '🥂' },
+  { id: 'honeymoon', label: 'Honeymoon', emoji: '💒' },
+  { id: 'birthday', label: 'Birthday Trip', emoji: '🎂' },
+  { id: 'girls-trip', label: "Girls' Trip", emoji: '👯‍♀️' },
+  { id: 'guys-trip', label: "Guys' Trip", emoji: '🍻' },
+  { id: 'family', label: 'Family Vacation', emoji: '👨‍👩‍👧‍👦' },
+  { id: 'adult-family', label: 'Adult Family', emoji: '👨‍👩‍👧' },
+  { id: 'solo', label: 'Solo Adventure', emoji: '🎒' },
+  { id: 'friends', label: 'Friends Trip', emoji: '🤝' },
+  { id: 'business', label: 'Business + Leisure', emoji: '💼' },
+  { id: 'adventure', label: 'Adventure', emoji: '🏔️' },
+  { id: 'wellness', label: 'Wellness Retreat', emoji: '🧘' },
 ];
 
 // Featured destinations
@@ -1037,28 +1047,66 @@ export default function Start() {
                 </div>
               </div>
 
-              {/* Trip Type Selection */}
-              <div className="space-y-2">
+              {/* Trip Occasion Selection */}
+              <div className="space-y-3">
                 <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  Trip Style
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  What's the occasion?
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {tripTypes.map((type) => (
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Help us personalize your itinerary for this trip
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {tripOccasions.slice(0, 6).map((occasion) => (
                     <button
-                      key={type.id}
+                      key={occasion.id}
                       type="button"
-                      onClick={() => setTripType(type.id)}
+                      onClick={() => setTripType(occasion.id)}
                       className={cn(
-                        "flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all text-sm font-medium",
-                        tripType === type.id
-                          ? "bg-primary/10 border-primary text-primary"
+                        "flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all text-sm",
+                        tripType === occasion.id
+                          ? "bg-primary/10 border-primary text-primary font-medium"
                           : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       )}
                     >
-                      {type.label}
+                      <span>{occasion.emoji}</span>
+                      <span className="truncate">{occasion.label}</span>
                     </button>
                   ))}
                 </div>
+                
+                {/* Show more occasions */}
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                      More options
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {tripOccasions.slice(6).map((occasion) => (
+                        <button
+                          key={occasion.id}
+                          type="button"
+                          onClick={() => setTripType(occasion.id)}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all text-sm",
+                            tripType === occasion.id
+                              ? "bg-primary/10 border-primary text-primary font-medium"
+                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                          )}
+                        >
+                          <span>{occasion.emoji}</span>
+                          <span className="truncate">{occasion.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
 
               {/* Optional Budget Section - Collapsible */}
