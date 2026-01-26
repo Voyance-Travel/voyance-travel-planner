@@ -838,6 +838,17 @@ export async function submitQuizComplete(
         completionPercentage: 100,
       });
     }
+    
+    // 7. Trigger achievement for quiz completion
+    try {
+      const { checkMilestoneAchievements } = await import('@/services/achievementsAPI');
+      await checkMilestoneAchievements('quiz_completed', { 
+        archetype: dna.primary_archetype_name,
+        sessionId 
+      });
+    } catch (achievementErr) {
+      console.warn('[Quiz] Achievement unlock failed (non-blocking):', achievementErr);
+    }
 
     // 7. Update profiles table with quiz_completed flag and travel_dna
     // IMPORTANT: Preserve existing overrides - do NOT clear them

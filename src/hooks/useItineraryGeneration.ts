@@ -202,6 +202,18 @@ export function useItineraryGeneration() {
       console.log('[useItineraryGeneration] Generation complete:', generatedDays.length, 'days');
       toast.success(`Itinerary generated! ${generatedDays.length} days of adventure await.`);
 
+      // Trigger achievement for first itinerary generation
+      try {
+        const { checkMilestoneAchievements } = await import('@/services/achievementsAPI');
+        await checkMilestoneAchievements('itinerary_generated', { 
+          tripId: trip.tripId, 
+          destination: trip.destination,
+          days: generatedDays.length 
+        });
+      } catch (achievementErr) {
+        console.warn('[Itinerary] Achievement unlock failed (non-blocking):', achievementErr);
+      }
+
       return generatedDays;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate itinerary';

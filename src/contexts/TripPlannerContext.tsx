@@ -366,6 +366,17 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         console.log('[TripPlanner] Trip occasion intent saved:', state.basics.tripType);
       }
 
+      // Trigger achievement for trip creation (only for new trips)
+      if (!state.tripId && tripId) {
+        try {
+          const { checkMilestoneAchievements, syncTripCountAchievements } = await import('@/services/achievementsAPI');
+          await checkMilestoneAchievements('trip_created', { tripId, destination: state.basics.destination });
+          await syncTripCountAchievements();
+        } catch (achievementErr) {
+          console.warn('[TripPlanner] Achievement unlock failed (non-blocking):', achievementErr);
+        }
+      }
+
       setState(prev => ({
         ...prev,
         tripId,
