@@ -62,6 +62,7 @@ import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
 import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDrawer';
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
+import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -634,6 +635,22 @@ export function EditorialItinerary({
     }
     fetchPayments();
   }, [tripId]);
+
+  // Preload airport codes for display (City + Code format)
+  const [airportCacheReady, setAirportCacheReady] = useState(false);
+  useEffect(() => {
+    const codes: string[] = [];
+    if (flightSelection?.outbound?.departure?.airport) codes.push(flightSelection.outbound.departure.airport);
+    if (flightSelection?.outbound?.arrival?.airport) codes.push(flightSelection.outbound.arrival.airport);
+    if (flightSelection?.return?.departure?.airport) codes.push(flightSelection.return.departure.airport);
+    if (flightSelection?.return?.arrival?.airport) codes.push(flightSelection.return.arrival.airport);
+    
+    if (codes.length > 0) {
+      preloadAirportCodes(codes).then(() => setAirportCacheReady(true));
+    } else {
+      setAirportCacheReady(true);
+    }
+  }, [flightSelection]);
 
   // Helper to find payment for an item
   const getPaymentForItem = useCallback((itemType: 'flight' | 'hotel' | 'activity', itemId: string): TripPayment | undefined => {
@@ -1807,7 +1824,7 @@ export function EditorialItinerary({
                         <div className="flex items-center gap-4">
                           <div className="text-center min-w-[60px]">
                             <p className="text-xl font-semibold tracking-tight">{flightSelection.outbound.departure?.time || '--:--'}</p>
-                            <p className="text-xs font-medium text-primary">{flightSelection.outbound.departure?.airport || 'DEP'}</p>
+                            <p className="text-xs font-medium text-primary">{getAirportDisplaySync(flightSelection.outbound.departure?.airport || '')}</p>
                           </div>
                           
                           <div className="flex-1 flex items-center gap-2">
@@ -1827,7 +1844,7 @@ export function EditorialItinerary({
                           
                           <div className="text-center min-w-[60px]">
                             <p className="text-xl font-semibold tracking-tight">{flightSelection.outbound.arrival?.time || '--:--'}</p>
-                            <p className="text-xs font-medium text-primary">{flightSelection.outbound.arrival?.airport || 'ARR'}</p>
+                            <p className="text-xs font-medium text-primary">{getAirportDisplaySync(flightSelection.outbound.arrival?.airport || '')}</p>
                           </div>
                         </div>
                         
@@ -1877,7 +1894,7 @@ export function EditorialItinerary({
                           <div className="flex items-center gap-4">
                             <div className="text-center min-w-[60px]">
                               <p className="text-xl font-semibold tracking-tight">{flightSelection.return.departure?.time || '--:--'}</p>
-                              <p className="text-xs font-medium text-accent">{flightSelection.return.departure?.airport || 'DEP'}</p>
+                              <p className="text-xs font-medium text-accent">{getAirportDisplaySync(flightSelection.return.departure?.airport || '')}</p>
                             </div>
                             
                             <div className="flex-1 flex items-center gap-2">
@@ -1897,7 +1914,7 @@ export function EditorialItinerary({
                             
                             <div className="text-center min-w-[60px]">
                               <p className="text-xl font-semibold tracking-tight">{flightSelection.return.arrival?.time || '--:--'}</p>
-                              <p className="text-xs font-medium text-accent">{flightSelection.return.arrival?.airport || 'ARR'}</p>
+                              <p className="text-xs font-medium text-accent">{getAirportDisplaySync(flightSelection.return.arrival?.airport || '')}</p>
                             </div>
                           </div>
                           

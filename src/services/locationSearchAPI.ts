@@ -276,3 +276,68 @@ export function formatAirportDisplay(airport: Airport): string {
 export function formatDestinationDisplay(destination: Destination): string {
   return `${destination.city}, ${destination.country}`;
 }
+
+/**
+ * Look up airport by IATA code and return formatted "City (CODE)" display
+ * Falls back to just the code if not found
+ */
+export async function getAirportDisplayByCode(code: string): Promise<string> {
+  if (!code || code.length !== 3) return code || '';
+  
+  const { data, error } = await supabase
+    .from('airports')
+    .select('code, city')
+    .eq('code', code.toUpperCase())
+    .maybeSingle();
+  
+  if (error || !data) {
+    return code.toUpperCase();
+  }
+  
+  return data.city ? `${data.city} (${data.code})` : data.code;
+}
+
+// Cache for airport lookups to avoid repeated DB calls
+const airportCache = new Map<string, { city: string; code: string }>();
+
+/**
+ * Synchronous lookup from cache, returns code if not cached
+ * Use preloadAirportCodes first to populate cache
+ */
+export function getAirportDisplaySync(code: string): string {
+  if (!code) return '';
+  const upper = code.toUpperCase();
+  const cached = airportCache.get(upper);
+  if (cached) {
+    return cached.city ? `${cached.city} (${cached.code})` : cached.code;
+  }
+  return upper;
+}
+
+/**
+ * Preload airport codes into cache for synchronous access
+ */
+export async function preloadAirportCodes(codes: string[]): Promise<void> {
+  const uniqueCodes = [...new Set(codes.filter(c => c && c.length === 3).map(c => c.toUpperCase()))];
+  const uncached = uniqueCodes.filter(c => !airportCache.has(c));
+  
+  if (uncached.length === 0) return;
+  
+  const { data } = await supabase
+    .from('airports')
+    .select('code, city')
+    .in('code', uncached);
+  
+  if (data) {
+    data.forEach(a => {
+      airportCache.set(a.code, { city: a.city || '', code: a.code });
+    });
+  }
+  
+  // Cache misses as code-only
+  uncached.forEach(c => {
+    if (!airportCache.has(c)) {
+      airportCache.set(c, { city: '', code: c });
+    }
+  });
+}
