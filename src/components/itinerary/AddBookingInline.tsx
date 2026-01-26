@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { cn } from '@/lib/utils';
+import { FlightImportModal } from './FlightImportModal';
 import { 
   type HotelBooking, 
   findOverlappingHotel, 
@@ -98,6 +99,7 @@ export function AddFlightInline({
 }: AddFlightInlineProps) {
   const navigate = useNavigate();
   const [showManualEntry, setShowManualEntry] = useState(editMode);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showMoreOutbound, setShowMoreOutbound] = useState(false);
   const [showReturnFlight, setShowReturnFlight] = useState(!!existingReturn?.airline);
@@ -191,6 +193,18 @@ export function AddFlightInline({
     }
   };
 
+  // Handle import from modal
+  const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
+    setOutboundFlight(outbound);
+    if (returnFlightData) {
+      setReturnFlight(returnFlightData);
+      setShowReturnFlight(true);
+    }
+    // Show the manual entry dialog so user can review/edit
+    setShowManualEntry(true);
+    setShowMoreOutbound(true); // Expand to show all imported fields
+  };
+
   return (
     <>
       <Button 
@@ -207,6 +221,15 @@ export function AddFlightInline({
         Add Flight Details
       </Button>
 
+      {/* Import Modal */}
+      <FlightImportModal
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        onImport={handleImportFlight}
+        tripStartDate={startDate}
+        tripEndDate={endDate}
+      />
+
       {/* Manual Entry Dialog - Simplified */}
       <Dialog open={showManualEntry} onOpenChange={setShowManualEntry}>
         <DialogContent className="sm:max-w-[420px]">
@@ -219,6 +242,22 @@ export function AddFlightInline({
               We'll use this to plan activities around your arrival
             </DialogDescription>
           </DialogHeader>
+
+          {/* Import option */}
+          <div className="flex items-center justify-center gap-3 py-2 border-b">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="text-xs"
+              onClick={() => {
+                setShowManualEntry(false);
+                setShowImportModal(true);
+              }}
+            >
+              <Upload className="h-3 w-3 mr-1.5" />
+              Paste from airline confirmation
+            </Button>
+          </div>
 
           <div className="space-y-5 py-4">
             {/* Outbound Flight - Essential fields only */}
