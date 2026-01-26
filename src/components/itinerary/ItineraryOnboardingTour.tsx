@@ -305,7 +305,8 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
             // On mobile, always position at bottom of screen for consistency
             // On desktop, position relative to highlighted element
             ...(typeof window !== 'undefined' && window.innerWidth < 640 
-              ? { bottom: 16 } 
+              // Leave room for the floating chat button on mobile
+              ? { bottom: 96 } 
               : step.position === 'bottom' && highlightRect 
                 ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 280) } 
                 : step.position === 'top' && highlightRect 
