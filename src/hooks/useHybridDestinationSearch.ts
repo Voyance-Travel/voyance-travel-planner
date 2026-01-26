@@ -55,23 +55,36 @@ export function useHybridDestinationSearch(query: string, enabled: boolean = tru
   
   // Merge and deduplicate results
   const combinedResults = useMemo(() => {
-    const staticCities = new Set(staticResults.map(d => d.city.toLowerCase()));
+    const seenCities = new Set<string>();
+    const results: HybridDestination[] = [];
     
-    // Convert database results, excluding those already in static
-    const dbMapped: HybridDestination[] = (dbResults || [])
-      .filter(d => !staticCities.has(d.city.toLowerCase()))
-      .map(d => ({
-        id: d.id,
-        city: d.city,
-        country: d.country || '',
-        region: d.region || '',
-        tagline: d.description || `Discover ${d.city}`,
-        imageUrl: d.stock_image_url || undefined,
-        source: 'database' as const
-      }));
+    // Add static results first (featured get priority)
+    for (const d of staticResults) {
+      const key = d.city.toLowerCase();
+      if (!seenCities.has(key)) {
+        seenCities.add(key);
+        results.push(d);
+      }
+    }
     
-    // Featured first, then database results
-    return [...staticResults, ...dbMapped];
+    // Add database results, deduplicating within db results as well
+    for (const d of dbResults || []) {
+      const key = d.city.toLowerCase();
+      if (!seenCities.has(key)) {
+        seenCities.add(key);
+        results.push({
+          id: d.id,
+          city: d.city,
+          country: d.country || '',
+          region: d.region || '',
+          tagline: d.description || `Discover ${d.city}`,
+          imageUrl: d.stock_image_url || undefined,
+          source: 'database' as const
+        });
+      }
+    }
+    
+    return results;
   }, [staticResults, dbResults]);
   
   return {
