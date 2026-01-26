@@ -86,7 +86,10 @@ export default function PlannerItinerary() {
         if (data && !error) {
           // Extract flight_selection and hotel data to avoid re-asking
           const flightSelection = data.flight_selection as any;
-          const hotelSelection = data.hotel_selection as any;
+          const hotelSelectionRaw = data.hotel_selection as any;
+          const primaryHotel = Array.isArray(hotelSelectionRaw)
+            ? hotelSelectionRaw[0]
+            : hotelSelectionRaw;
           
           setTripDetails({
             name: data.name,
@@ -96,7 +99,7 @@ export default function PlannerItinerary() {
             endDate: data.end_date,
             travelers: data.travelers || 1,
             flightSelection: flightSelection || undefined,
-            hotelLocation: hotelSelection?.name || hotelSelection?.neighborhood || undefined,
+            hotelLocation: primaryHotel?.name || primaryHotel?.neighborhood || undefined,
           });
         }
       };

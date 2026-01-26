@@ -25,6 +25,7 @@ import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
 import { getDestinationByCity, type Destination } from '@/services/supabase/destinations';
 import { initiateBooking } from '@/services/tripPaymentsAPI';
 import { toast } from 'sonner';
+import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelValidation';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -94,14 +95,18 @@ export default function TripDetail() {
   // =========================================================================
   const enrichHotelIfNeeded = useCallback(async () => {
     if (!trip || hotelEnrichmentAttempted.current) return;
-    
-    const hotelSel = trip.hotel_selection as Record<string, unknown> | null;
-    if (!hotelSel?.name) return; // No hotel selected
+
+    // hotel_selection supports array (multi-hotel) and legacy single-object.
+    // For enrichment we enrich the primary hotel (first in array).
+    const hotelRaw = trip.hotel_selection as unknown;
+    const hotels = normalizeLegacyHotelSelection(hotelRaw, trip.start_date, trip.end_date);
+    const primaryHotel: HotelBooking | undefined = hotels[0];
+    if (!primaryHotel?.name) return; // No hotel selected
     
     // Check if enrichment is needed
-    const hasAddress = !!hotelSel.address;
-    const hasWebsite = !!hotelSel.website || !!hotelSel.googleMapsUrl;
-    const hasPhotos = Array.isArray(hotelSel.images) && hotelSel.images.length > 0;
+    const hasAddress = !!primaryHotel.address;
+    const hasWebsite = !!primaryHotel.website || !!primaryHotel.googleMapsUrl;
+    const hasPhotos = Array.isArray(primaryHotel.images) && primaryHotel.images.length > 0;
     
     if (hasAddress && hasWebsite && hasPhotos) {
       console.log('[TripDetail] Hotel already enriched, skipping');
@@ -109,14 +114,14 @@ export default function TripDetail() {
     }
     
     hotelEnrichmentAttempted.current = true;
-    console.log('[TripDetail] Enriching hotel:', hotelSel.name);
+    console.log('[TripDetail] Enriching hotel:', primaryHotel.name);
     
     // Normalize destination (strip IATA codes)
     const cleanDestination = (trip.destination || '')
       .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
       .trim();
     
-    const enrichment = await enrichHotel(hotelSel.name as string, cleanDestination);
+    const enrichment = await enrichHotel(primaryHotel.name as string, cleanDestination);
     
     if (!enrichment) {
       console.log('[TripDetail] Hotel enrichment returned no data');
@@ -125,27 +130,28 @@ export default function TripDetail() {
     
     // Merge enrichment data into hotel selection
     const enrichedHotel = {
-      ...hotelSel,
-      address: enrichment.address || hotelSel.address,
-      website: enrichment.website || hotelSel.website,
-      googleMapsUrl: enrichment.googleMapsUrl || hotelSel.googleMapsUrl,
+      ...primaryHotel,
+      address: enrichment.address || primaryHotel.address,
+      website: enrichment.website || primaryHotel.website,
+      googleMapsUrl: enrichment.googleMapsUrl || primaryHotel.googleMapsUrl,
       images: (enrichment.photos && enrichment.photos.length > 0) 
         ? enrichment.photos 
-        : hotelSel.images,
-      placeId: enrichment.placeId || hotelSel.placeId,
+        : primaryHotel.images,
+      placeId: enrichment.placeId || primaryHotel.placeId,
     };
     
     console.log('[TripDetail] Enriched hotel data:', enrichedHotel);
     
-    // Update local state
-    setTrip(prev => prev ? { ...prev, hotel_selection: enrichedHotel as any } : prev);
+    // Rebuild array (preserve other hotels) and update local state
+    const updatedHotels = hotels.map((h, idx) => (idx === 0 ? enrichedHotel : h));
+    setTrip(prev => (prev ? { ...prev, hotel_selection: updatedHotels as any } : prev));
     
     // Persist to backend
     if (tripId) {
       try {
         const { error } = await supabase
           .from('trips')
-          .update({ hotel_selection: enrichedHotel as any, updated_at: new Date().toISOString() })
+          .update({ hotel_selection: updatedHotels as any, updated_at: new Date().toISOString() })
           .eq('id', tripId);
         
         if (error) {
@@ -934,6 +940,14 @@ export default function TripDetail() {
                 };
               })() : null;
 
+              // hotel_selection can be an array (multi-hotel) or a legacy single object.
+              // The editorial itinerary expects a single primary hotel object.
+              const primaryHotelSelection = normalizeLegacyHotelSelection(
+                trip.hotel_selection as unknown,
+                trip.start_date,
+                trip.end_date
+              )[0] || null;
+
               return (
                 <EditorialItinerary
                   tripId={trip.id}
@@ -949,7 +963,7 @@ export default function TripDetail() {
                   budgetTier={trip.budget_tier || undefined}
                   days={editorDays}
                   flightSelection={normalizedFlight}
-                  hotelSelection={trip.hotel_selection as Record<string, unknown> | null}
+                  hotelSelection={primaryHotelSelection as any}
                   destinationInfo={
                     destinationMeta
                       ? {
