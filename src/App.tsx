@@ -22,6 +22,7 @@ import DestinationDetail from "./pages/DestinationDetail";
 import Guides from "./pages/Guides";
 import GuideDetail from "./pages/GuideDetail";
 import About from "./pages/About";
+import Archetypes from "./pages/Archetypes";
 import HowItWorks from "./pages/HowItWorks";
 import Careers from "./pages/Careers";
 import Press from "./pages/Press";
@@ -122,6 +123,7 @@ const App = () => (
               <Route path="/guides" element={<Guides />} />
               <Route path="/guides/:slug" element={<GuideDetail />} />
               <Route path="/about" element={<About />} />
+              <Route path="/archetypes" element={<Archetypes />} />
               <Route path="/how-it-works" element={<HowItWorks />} />
               <Route path="/careers" element={<Careers />} />
               <Route path="/press" element={<Press />} />

@@ -8,6 +8,7 @@ export const ROUTES = {
   DESTINATION_DETAIL: '/destination/:slug',
   GUIDES: '/guides',
   ABOUT: '/about',
+  ARCHETYPES: '/archetypes',
   HOW_IT_WORKS: '/how-it-works',
   CAREERS: '/careers',
   PRESS: '/press',
