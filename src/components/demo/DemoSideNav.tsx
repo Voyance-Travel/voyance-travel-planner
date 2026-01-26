@@ -131,10 +131,10 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
 
       {/* Desktop - Side rail with vertical progress */}
       <motion.nav
-        initial={{ opacity: 0, x: -20 }}
+        initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.5 }}
-        className="fixed left-6 top-1/2 -translate-y-1/2 z-40 hidden lg:flex items-center gap-4"
+        className="fixed right-6 top-1/2 -translate-y-1/2 z-40 hidden lg:flex flex-row-reverse items-center gap-4"
       >
         {/* Progress bar */}
         <div className="relative h-64 w-1 bg-muted rounded-full overflow-hidden">
@@ -157,7 +157,7 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
                 key={section.id}
                 onClick={() => scrollToSection(section.id)}
                 className="group relative flex items-center"
-                whileHover={{ x: 4 }}
+                whileHover={{ x: -4 }}
                 transition={{ duration: 0.2 }}
               >
                 {/* Icon circle */}
@@ -184,8 +184,8 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
 
                 {/* Label tooltip */}
                 <div className={cn(
-                  "absolute left-14 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200",
-                  "opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0",
+                  "absolute right-14 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200",
+                  "opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0",
                   isActive 
                     ? "bg-primary text-primary-foreground" 
                     : "bg-card border text-foreground shadow-sm"
@@ -193,8 +193,8 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
                   {section.label}
                   {/* Arrow */}
                   <div className={cn(
-                    "absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-2 rotate-45",
-                    isActive ? "bg-primary" : "bg-card border-l border-b"
+                    "absolute right-0 top-1/2 translate-x-1 -translate-y-1/2 w-2 h-2 rotate-45",
+                    isActive ? "bg-primary" : "bg-card border-r border-t"
                   )} />
                 </div>
               </motion.button>
