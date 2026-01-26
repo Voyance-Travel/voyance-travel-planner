@@ -24,6 +24,7 @@ import {
 
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
+import { DraftLimitBanner } from '@/components/common/DraftLimitBanner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -31,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDraftLimitCheck } from '@/hooks/useDraftLimitCheck';
 import { supabase } from '@/integrations/supabase/client';
 import { getDestinationImage, getDestinationImages } from '@/utils/destinationImages';
 import { handleImageError } from '@/hooks/useImageWithFallback';
@@ -591,6 +593,7 @@ export default function TripDashboard() {
                   ? `${trips.length} adventure${trips.length > 1 ? 's' : ''} in your collection`
                   : 'Your travel adventures start here'}
               </p>
+              <DraftLimitBanner compact className="mt-2" />
             </div>
             <Button 
               onClick={() => navigate('/start')} 
@@ -601,6 +604,9 @@ export default function TripDashboard() {
               New Trip
             </Button>
           </motion.div>
+
+          {/* Free tier limit banner */}
+          <DraftLimitBanner className="mb-6" />
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="space-y-8">

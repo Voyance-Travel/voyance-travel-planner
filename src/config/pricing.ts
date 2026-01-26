@@ -61,12 +61,14 @@ export const CREDIT_COSTS = {
   SWAP_ACTIVITY: 1,        // 1 credit to swap an activity
 } as const;
 
-// Free tier limits
+// Free tier limits - 5 itineraries/month, Day 1 only, 3 regenerates
 export const FREE_TIER_LIMITS = {
   maxVisibleDays: 1,           // Can only see Day 1 of itinerary
+  maxItinerariesPerMonth: 5,   // 5 itineraries per month
   maxActivitySwaps: 3,         // Can only swap 3 activities total
-  canRegenerateDay: false,     // Cannot regenerate days
-  canBuildFullTrip: true,      // Can build one trip (to see Day 1)
+  maxRegenerates: 3,           // 3 regenerates per trip
+  canRegenerateDay: true,      // Can regenerate (up to limit)
+  canBuildFullTrip: true,      // Can build trips (to see Day 1)
   canExport: false,
   canShare: false,
 } as const;

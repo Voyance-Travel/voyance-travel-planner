@@ -5,7 +5,7 @@
  * Displays remaining monthly limits for free users.
  */
 
-import { AlertCircle, Info } from 'lucide-react';
+import { AlertCircle, Info, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface UsageLimitNoticeProps {
@@ -15,6 +15,8 @@ interface UsageLimitNoticeProps {
   isPaid?: boolean;
   className?: string;
   variant?: 'info' | 'warning' | 'last';
+  /** Show as subtle inline text instead of a banner */
+  inline?: boolean;
 }
 
 export function UsageLimitNotice({
@@ -24,14 +26,18 @@ export function UsageLimitNotice({
   isPaid = false,
   className,
   variant: propVariant,
+  inline = false,
 }: UsageLimitNoticeProps) {
   // Don't show for paid users (unlimited)
-  if (isPaid) return null;
+  if (isPaid || remaining === -1) return null;
   
   // Determine variant based on remaining count
   const variant = propVariant ?? (remaining === 1 ? 'last' : remaining <= Math.ceil(limit / 3) ? 'warning' : 'info');
   
   const getMessage = () => {
+    if (remaining === 0) {
+      return `No ${featureName}s remaining this month.`;
+    }
     if (remaining === 1) {
       return `This is your last free ${featureName} this month.`;
     }
@@ -40,6 +46,20 @@ export function UsageLimitNotice({
     }
     return `You have ${remaining} ${featureName}${remaining > 1 ? 's' : ''} remaining this month.`;
   };
+
+  if (inline) {
+    return (
+      <span className={cn(
+        'text-sm',
+        variant === 'last' ? 'text-orange-600 dark:text-orange-400' :
+        variant === 'warning' ? 'text-amber-600 dark:text-amber-400' :
+        'text-muted-foreground',
+        className
+      )}>
+        {remaining}/{limit} {featureName}s
+      </span>
+    );
+  }
 
   const styles = {
     info: 'bg-muted/50 border-border text-muted-foreground',
@@ -68,11 +88,34 @@ interface UsageBadgeProps {
   remaining: number;
   isPaid?: boolean;
   className?: string;
+  showUnlimited?: boolean;
 }
 
-export function UsageBadge({ remaining, isPaid, className }: UsageBadgeProps) {
-  if (isPaid) return null;
-  if (remaining <= 0) return null;
+export function UsageBadge({ remaining, isPaid, className, showUnlimited = false }: UsageBadgeProps) {
+  if (isPaid || remaining === -1) {
+    if (showUnlimited) {
+      return (
+        <span className={cn(
+          'text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary',
+          className
+        )}>
+          <Sparkles className="h-3 w-3 inline mr-0.5" />
+          Unlimited
+        </span>
+      );
+    }
+    return null;
+  }
+  if (remaining <= 0) {
+    return (
+      <span className={cn(
+        'text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive',
+        className
+      )}>
+        Limit reached
+      </span>
+    );
+  }
   
   return (
     <span className={cn(
@@ -84,5 +127,37 @@ export function UsageBadge({ remaining, isPaid, className }: UsageBadgeProps) {
     )}>
       {remaining} left
     </span>
+  );
+}
+
+/**
+ * Regenerate limit notice - specific to day regeneration
+ */
+interface RegenerateLimitNoticeProps {
+  remaining: number;
+  max: number;
+  isPaid?: boolean;
+  className?: string;
+}
+
+export function RegenerateLimitNotice({ remaining, max, isPaid, className }: RegenerateLimitNoticeProps) {
+  if (isPaid || remaining === -1) return null;
+  
+  const isAtLimit = remaining === 0;
+  const isLast = remaining === 1;
+  
+  return (
+    <div className={cn(
+      'text-xs flex items-center gap-1',
+      isAtLimit ? 'text-destructive' : isLast ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground',
+      className
+    )}>
+      <Sparkles className="h-3 w-3" />
+      {isAtLimit ? (
+        'No regenerates left'
+      ) : (
+        `${remaining}/${max} regenerates`
+      )}
+    </div>
   );
 }
