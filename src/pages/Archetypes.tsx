@@ -10,14 +10,14 @@ import React from 'react';
 
 const CATEGORY_ORDER = ['EXPLORER', 'CONNECTOR', 'ACHIEVER', 'RESTORER', 'CURATOR', 'TRANSFORMER'] as const;
 
-// All archetypes grouped by category for organized display
+// All 27 archetypes grouped by category for organized display
 const ARCHETYPES_BY_CATEGORY: Record<string, string[]> = {
   EXPLORER: ['cultural_anthropologist', 'urban_nomad', 'wilderness_pioneer', 'digital_explorer'],
   CONNECTOR: ['social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker'],
-  ACHIEVER: ['bucket_list_conqueror', 'adrenaline_architect', 'collection_curator'],
-  RESTORER: ['zen_seeker', 'slow_traveler', 'beach_therapist', 'sanctuary_seeker'],
+  ACHIEVER: ['bucket_list_conqueror', 'adrenaline_architect', 'collection_curator', 'status_seeker'],
+  RESTORER: ['zen_seeker', 'slow_traveler', 'beach_therapist', 'sanctuary_seeker', 'escape_artist', 'retreat_regular'],
   CURATOR: ['culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist'],
-  TRANSFORMER: ['gap_year_graduate', 'midlife_explorer', 'healing_journeyer'],
+  TRANSFORMER: ['gap_year_graduate', 'midlife_explorer', 'healing_journeyer', 'sabbatical_scholar', 'retirement_ranger'],
 };
 
 // Featured archetypes for the hero spotlight
