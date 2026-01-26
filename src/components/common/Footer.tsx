@@ -128,7 +128,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="mt-12 pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">
-            © {currentYear} Voyance. All rights reserved.
+            © 2025 Voyance LLC · Trademark Pending · Patents Pending
           </p>
           <div className="flex gap-6">
             <Link to={ROUTES.PRIVACY} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
