@@ -246,55 +246,32 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] pointer-events-none">
-        {/* Backdrop with spotlight cutout */}
+        {/* Dark overlay - uses box-shadow from spotlight element for cutout effect */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 pointer-events-auto"
+          className="absolute inset-0 bg-black/70 pointer-events-auto"
           onClick={handleSkip}
-        >
-          <svg className="w-full h-full">
-            <defs>
-              <mask id="spotlight-mask">
-                <rect x="0" y="0" width="100%" height="100%" fill="white" />
-                {highlightRect && (
-                  <rect
-                    x={highlightRect.left - 8}
-                    y={highlightRect.top - 8}
-                    width={highlightRect.width + 16}
-                    height={highlightRect.height + 16}
-                    rx="8"
-                    fill="black"
-                  />
-                )}
-              </mask>
-            </defs>
-            <rect
-              x="0"
-              y="0"
-              width="100%"
-              height="100%"
-              fill="rgba(0, 0, 0, 0.75)"
-              mask="url(#spotlight-mask)"
-            />
-          </svg>
-        </motion.div>
+        />
 
-        {/* Highlight ring around target element */}
+        {/* Spotlight cutout - positioned over target element */}
         {highlightRect && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="absolute pointer-events-none"
+            key={`spotlight-${currentStep}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed pointer-events-none rounded-lg"
             style={{
               top: highlightRect.top - 8,
               left: highlightRect.left - 8,
               width: highlightRect.width + 16,
               height: highlightRect.height + 16,
+              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.75)',
+              zIndex: 101,
             }}
           >
-            <div className="w-full h-full rounded-lg ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse" />
+            <div className="w-full h-full rounded-lg ring-2 ring-primary ring-offset-2 ring-offset-transparent animate-pulse bg-transparent" />
           </motion.div>
         )}
 
@@ -302,8 +279,8 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
         <div 
           className="pointer-events-auto fixed inset-x-0 flex justify-center p-4"
           style={{ 
-            zIndex: 101,
-            ...(step.position === 'bottom' && highlightRect ? { top: highlightRect.bottom + 20 } : {}),
+            zIndex: 102,
+            ...(step.position === 'bottom' && highlightRect ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 280) } : {}),
             ...(step.position === 'top' && highlightRect ? { bottom: window.innerHeight - highlightRect.top + 20 } : {}),
             ...(step.position === 'left' && highlightRect ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } : {}),
             ...(step.position === 'right' && highlightRect ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } : {}),
