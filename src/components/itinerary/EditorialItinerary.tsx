@@ -1630,14 +1630,12 @@ export function EditorialItinerary({
               />
             )}
 
-            {/* Airport Game Plan - Show before Day 1 */}
-            {flightSelection?.outbound && (
-              <AirportGamePlan 
-                flightSelection={flightSelection} 
-                hotelSelection={hotelSelection}
-                destination={destination}
-              />
-            )}
+            {/* Airport Game Plan - Show before Day 1 (or prompt to add details) */}
+            <AirportGamePlan 
+              flightSelection={flightSelection} 
+              hotelSelection={hotelSelection}
+              destination={destination}
+            />
 
             {/* Day Navigation Bar */}
             <div className="flex items-center gap-2">
@@ -3560,13 +3558,15 @@ interface TransferData {
 }
 
 interface AirportGamePlanProps {
-  flightSelection: FlightSelection;
+  flightSelection?: FlightSelection | null;
   hotelSelection?: HotelSelection | null;
   destination: string;
 }
 
 function AirportGamePlan({ flightSelection, hotelSelection, destination }: AirportGamePlanProps) {
-  const outbound = flightSelection.outbound;
+  const outbound = flightSelection?.outbound;
+  const hasFlight = !!outbound;
+  const hasHotel = !!hotelSelection?.name;
   const [transferData, setTransferData] = useState<TransferData | null>(null);
   const [isLoadingTransfer, setIsLoadingTransfer] = useState(false);
   
@@ -3635,7 +3635,73 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
     fetchTransferData();
   }, [outbound?.arrival?.airport, hotelSelection?.name, destination]);
   
-  if (!outbound) return null;
+  // Show prompt when both flight and hotel are missing
+  if (!hasFlight && !hasHotel) {
+    return (
+      <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500/20 rounded-full">
+              <Plane className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Complete Your Trip Details</h3>
+              <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Add flight and hotel for personalized arrival planning</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border">
+            <Plane className="h-4 w-4 text-muted-foreground" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Add your flight details</p>
+              <p className="text-xs text-muted-foreground">We'll plan your arrival day activities around your landing time</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border">
+            <Hotel className="h-4 w-4 text-muted-foreground" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Add your hotel</p>
+              <p className="text-xs text-muted-foreground">Get transfer times, costs, and check-in recommendations</p>
+            </div>
+          </div>
+          <p className="text-xs text-center text-muted-foreground pt-2">
+            Use the <span className="font-medium">Flight & Hotel</span> tab above to add your bookings
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show partial prompt when only flight is missing
+  if (!hasFlight) {
+    return (
+      <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500/20 rounded-full">
+              <Plane className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Add Your Flight Details</h3>
+              <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Get personalized arrival day planning</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+              <Hotel className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">Staying at {hotelSelection?.name}</p>
+              <p className="text-xs text-muted-foreground">Add flight details to see transfer times and arrival recommendations</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Parse arrival time and calculate recommendations
   const arrivalTime = outbound.arrival?.time || '';
