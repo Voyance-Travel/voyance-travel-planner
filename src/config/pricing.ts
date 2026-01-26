@@ -1,23 +1,40 @@
 // Pricing configuration - Single source of truth for all pricing data
-// Aligned with Stripe products
+// Updated: Trip Pass $24.99, 5 Credits $79, 10 Credits $149
 
 export const STRIPE_PRODUCTS = {
   // One-time purchases
   TRIP_PASS: {
-    productId: 'prod_ToywVnpso9UJJy',
-    priceId: 'price_1SrKykFYxIg9jcJUblEmckuq',
+    productId: 'prod_TrNlzMhbWMadTG',
+    priceId: 'price_1StezbFYxIg9jcJUpN3X01Ox',
     name: 'Trip Pass',
-    price: 12.99,
+    price: 24.99,
+    mode: 'payment' as const,
+  },
+  CREDITS_5: {
+    productId: 'prod_TrNllJjO44rfTT',
+    priceId: 'price_1StezcFYxIg9jcJUJMy5waSO',
+    name: '5 Credits',
+    price: 79,
+    credits: 5,
+    mode: 'payment' as const,
+  },
+  CREDITS_10: {
+    productId: 'prod_TrNlRyHAG5CPaL',
+    priceId: 'price_1StezdFYxIg9jcJUeoYoMEEI',
+    name: '10 Credits',
+    price: 149,
+    credits: 10,
     mode: 'payment' as const,
   },
   
-  // Subscriptions
+  // Legacy - keeping for existing customers but not shown in UI
   MONTHLY: {
     productId: 'prod_Toyw6Gw8394rU4',
     priceId: 'price_1SrKz2FYxIg9jcJUVbrbOfFl',
     name: 'Monthly',
     price: 15.99,
     mode: 'subscription' as const,
+    deprecated: true,
   },
   YEARLY: {
     productId: 'prod_ToywY2JIGIaU7e',
@@ -25,187 +42,125 @@ export const STRIPE_PRODUCTS = {
     name: 'Yearly',
     price: 129,
     mode: 'subscription' as const,
+    deprecated: true,
   },
   // Travel Agent subscription
   TRAVEL_AGENT: {
-    productId: 'prod_TravelAgent', // TODO: Create in Stripe
-    priceId: 'price_TravelAgent', // TODO: Create in Stripe
+    productId: 'prod_TravelAgent',
+    priceId: 'price_TravelAgent',
     name: 'Travel Agent',
     price: 79,
     mode: 'subscription' as const,
   },
 } as const;
 
-// Top-up products (pay-per-action)
-export const TOPUP_PRODUCTS = {
-  ROUTE_OPTIMIZATION: {
-    name: 'Route optimization',
-    price: 1.99,
-    description: 'Reorder your day for less walking and waiting',
-  },
-  BUILD_ONE_DAY: {
-    name: 'Build one day',
-    price: 3.99,
-    description: 'Generate a single day of activities',
-  },
-  GROUP_BUDGET_SETUP: {
-    name: 'Group budget setup',
-    price: 2.99,
-    description: 'Split expenses and track payments with companions',
-  },
-  BUILD_ENTIRE_TRIP: {
-    name: 'Build full trip',
-    price: 9.99,
-    description: 'Generate a complete multi-day itinerary',
-  },
+// Credit costs - what each action costs in credits
+export const CREDIT_COSTS = {
+  BUILD_FULL_TRIP: 1,      // 1 credit to build a full trip
+  REGENERATE_DAY: 1,       // 1 credit to regenerate a day
+  SWAP_ACTIVITY: 1,        // 1 credit to swap an activity
 } as const;
 
-export const TOPUP_MINIMUM = 5;
+// Free tier limits
+export const FREE_TIER_LIMITS = {
+  maxVisibleDays: 1,           // Can only see Day 1 of itinerary
+  maxActivitySwaps: 3,         // Can only swap 3 activities total
+  canRegenerateDay: false,     // Cannot regenerate days
+  canBuildFullTrip: true,      // Can build one trip (to see Day 1)
+  canExport: false,
+  canShare: false,
+} as const;
 
-// Plan feature definitions - outcome-focused copy
-// "Finish, polish, perfect, compare, keep, take it with you"
+// Plan feature definitions
 export const PLAN_FEATURES = {
   FREE: {
     id: 'free',
     name: 'Free',
-    headline: 'A full itinerary each month, on us.',
-    subheadline: 'Perfect for trying Voyance and building a great first draft.',
-    bestFor: 'Testing Voyance + drafting one trip.',
+    headline: 'Preview your perfect trip.',
+    subheadline: 'Build any itinerary and see Day 1 for free. Upgrade to unlock the full experience.',
+    bestFor: 'Trying Voyance before you commit.',
     price: 0,
     priceDetail: 'forever',
     features: [
-      '1 Premium Itinerary Build / month',
-      'Smart Refinements (up to 10 per trip)',
-      'Route Preview (up to 3/month)',
+      'Build unlimited itineraries',
+      'See Day 1 of any trip',
+      'Swap up to 3 activities',
       'Manual editing always free',
-      'Save 1 draft trip at a time',
     ],
     notIncluded: [
-      'No trip versioning',
-      'No budget tracking',
-      'No collaboration',
-      'No export / print',
+      'View Days 2+ (requires upgrade)',
+      'Regenerate days',
+      'Export / print',
+      'Collaboration',
     ],
-    limits: {
-      fullBuildsPerMonth: 1,
-      refinementsPerMonth: 10,
-      routeOptimizationsPerMonth: 3,
-      groupBudgetSetupsPerMonth: 0,
-      draftTrips: 1,
-      tripVersions: 0,
-      flightHotelOptimization: false,
-      coEditCollaboration: false,
-      viewOnlySharing: true,
-      budgetTracking: false,
-      canPrint: false,
-      canExport: false,
-      canDownload: false,
-      canCollaborate: false,
-    },
+    limits: FREE_TIER_LIMITS,
     cta: 'Start Free',
   },
   TRIP_PASS: {
     id: 'trip_pass',
     name: 'Trip Pass',
-    headline: 'Everything unlocked for one trip.',
-    subheadline: 'All features, one purchase. Ideal when you\'re ready to go deeper on a single journey.',
-    bestFor: 'A single upcoming trip you want to perfect.',
-    price: 12.99,
+    headline: 'Unlock your entire trip.',
+    subheadline: 'Full access to one complete itinerary — all days, unlimited swaps, and export.',
+    bestFor: 'Planning a single upcoming trip.',
+    price: 24.99,
     priceDetail: 'one-time',
     features: [
-      'Unlimited Refinements (keep polishing)',
-      'Budget Tracking (see costs as you tweak)',
-      'Route + Map Layer (efficient plans)',
-      'Trip Versions (compare without losing)',
-      'Group Budget + Collaboration',
-      'Export (PDF)',
+      'See all days of your itinerary',
+      'Unlimited activity swaps',
+      'Regenerate any day',
+      'Export to PDF',
+      'Share with travel companions',
+      'Route optimization',
     ],
     limits: {
-      // Unlimited for purchased trip
-      refinementsPerTrip: -1,
-      budgetTracking: true,
-      routeOptimization: true,
-      tripVersions: -1,
-      canPrint: true,
+      maxVisibleDays: -1, // Unlimited
+      maxActivitySwaps: -1,
+      canRegenerateDay: true,
       canExport: true,
-      canDownload: true,
-      canCollaborate: true,
+      canShare: true,
     },
-    cta: 'Unlock This Trip',
+    cta: 'Unlock Trip — $24.99',
   },
-  MONTHLY: {
-    id: 'monthly',
-    name: 'Monthly',
-    headline: 'Your travel planning rhythm.',
-    subheadline: 'Plan multiple trips, iterate faster, and keep everything organized.',
-    bestFor: 'People planning more than one trip, or refining over time.',
-    price: 15.99,
-    priceDetail: 'per month',
+  CREDITS_5: {
+    id: 'credits_5',
+    name: '5 Credits',
+    headline: 'Credits for the road.',
+    subheadline: 'Use credits to build trips, regenerate days, or swap activities across any itinerary.',
+    bestFor: 'Flexible planning across multiple trips.',
+    price: 79,
+    priceDetail: 'one-time',
+    credits: 5,
     features: [
-      'Unlimited Refinements',
-      'Route + Map Layer for every trip',
-      'Budget Tracking for every trip',
-      'Trip Versions (up to 4 per trip)',
-      'Save up to 5 draft trips',
-      'Collaboration + Group Budgeting',
-      'Voyance Picks (smarter flight/hotel)',
-      'Export (PDF)',
+      '5 credits to use anytime',
+      '1 credit = build a trip, regenerate a day, or swap an activity',
+      'Credits never expire',
+      'Use across multiple trips',
     ],
     limits: {
-      fullBuildsPerMonth: -1,
-      refinementsPerMonth: -1,
-      routeOptimizationsPerMonth: -1,
-      groupBudgetSetupsPerMonth: -1,
-      draftTrips: 5,
-      mysteryTripDrafts: 5,
-      tripVersions: 4,
-      flightHotelOptimization: true,
-      groupBudgeting: true,
-      coEditCollaboration: true,
-      budgetTracking: true,
-      mysteryTrips: true,
-      canPrint: true,
-      canExport: true,
-      canDownload: true,
-      canCollaborate: true,
+      credits: 5,
     },
-    cta: 'Go Monthly',
+    cta: 'Buy 5 Credits — $79',
   },
-  YEARLY: {
-    id: 'yearly',
-    name: 'Yearly',
-    headline: 'Your planning home base.',
-    subheadline: 'Best value for travelers who plan often — and want a trip archive over time.',
-    bestFor: 'Frequent travelers and serious planners.',
-    price: 129,
-    priceDetail: 'per year',
+  CREDITS_10: {
+    id: 'credits_10',
+    name: '10 Credits',
+    headline: 'Best value for frequent planners.',
+    subheadline: 'More credits, more trips, more flexibility.',
+    bestFor: 'Travelers who plan multiple trips.',
+    price: 149,
+    priceDetail: 'one-time',
+    credits: 10,
     features: [
-      'Everything in Monthly, plus:',
-      'Unlimited draft trips (Trip Vault)',
-      'Unlimited trip versions',
-      'Preference learning over time',
-      'Trip history archive',
+      '10 credits to use anytime',
+      '1 credit = build a trip, regenerate a day, or swap an activity',
+      'Credits never expire',
+      'Use across multiple trips',
+      'Save ~15% vs 5 credits',
     ],
     limits: {
-      fullBuildsPerMonth: -1,
-      refinementsPerMonth: -1,
-      routeOptimizationsPerMonth: -1,
-      groupBudgetSetupsPerMonth: -1,
-      draftTrips: -1,
-      mysteryTripDrafts: -1,
-      tripVersions: -1,
-      flightHotelOptimization: true,
-      groupBudgeting: true,
-      coEditCollaboration: true,
-      budgetTracking: true,
-      preferenceLearning: true,
-      mysteryTrips: true,
-      canPrint: true,
-      canExport: true,
-      canDownload: true,
-      canCollaborate: true,
+      credits: 10,
     },
-    cta: 'Go Yearly',
+    cta: 'Buy 10 Credits — $149',
   },
   // ============================================
   // TRAVEL AGENT TIERS - Trip Operating System
@@ -376,22 +331,14 @@ export const PLAN_FEATURES = {
 
 // Comparison table data for visual display
 export const COMPARISON_TABLE = {
-  headers: ['Feature', 'Free', 'Trip Pass', 'Monthly', 'Yearly', 'Agent'],
+  headers: ['Feature', 'Free', 'Trip Pass', '5 Credits', '10 Credits'],
   rows: [
-    { feature: 'Premium Itinerary Build', free: '1/month', tripPass: 'Unlimited (trip)', monthly: 'Unlimited', yearly: 'Unlimited', agent: 'Unlimited' },
-    { feature: 'Smart Refinements', free: 'Limited', tripPass: 'Unlimited (trip)', monthly: 'Unlimited', yearly: 'Unlimited', agent: 'Unlimited' },
-    { feature: 'Route + Map Layer', free: 'Preview', tripPass: 'Full', monthly: 'Full', yearly: 'Full', agent: 'Full' },
-    { feature: 'Budget Tracking', free: '-', tripPass: '✓', monthly: '✓', yearly: '✓', agent: '✓' },
-    { feature: 'Trip Versions', free: '-', tripPass: '✓', monthly: 'Up to 4', yearly: 'Unlimited', agent: 'Unlimited' },
-    { feature: 'Draft Trips', free: '1', tripPass: '1', monthly: '5', yearly: 'Unlimited', agent: 'Unlimited' },
-    { feature: 'Export (PDF)', free: '-', tripPass: '✓', monthly: '✓', yearly: '✓', agent: '✓' },
-    { feature: 'Collaboration', free: '-', tripPass: '✓ (trip)', monthly: '✓', yearly: '✓', agent: '✓' },
-    { feature: 'Client Management', free: '-', tripPass: '-', monthly: '-', yearly: '-', agent: '✓' },
-    { feature: 'Traveler Profiles', free: '-', tripPass: '-', monthly: '-', yearly: '-', agent: '✓' },
-    { feature: 'Quote Builder', free: '-', tripPass: '-', monthly: '-', yearly: '-', agent: '✓' },
-    { feature: 'Invoicing & Payments', free: '-', tripPass: '-', monthly: '-', yearly: '-', agent: '✓' },
-    { feature: 'Deadline Engine', free: '-', tripPass: '-', monthly: '-', yearly: '-', agent: '✓' },
-    { feature: 'Document Portal', free: '-', tripPass: '-', monthly: '-', yearly: '-', agent: '✓' },
+    { feature: 'Build Itineraries', free: '✓', tripPass: '✓', credits5: '✓', credits10: '✓' },
+    { feature: 'View All Days', free: 'Day 1 only', tripPass: 'All days', credits5: 'All days', credits10: 'All days' },
+    { feature: 'Activity Swaps', free: '3 total', tripPass: 'Unlimited', credits5: '1 credit each', credits10: '1 credit each' },
+    { feature: 'Regenerate Days', free: '-', tripPass: 'Unlimited', credits5: '1 credit each', credits10: '1 credit each' },
+    { feature: 'Export (PDF)', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
+    { feature: 'Route Optimization', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
   ],
 } as const;
 
