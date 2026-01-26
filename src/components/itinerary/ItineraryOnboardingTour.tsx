@@ -246,12 +246,9 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] pointer-events-none">
-        {/* Dark overlay - uses box-shadow from spotlight element for cutout effect */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/70 pointer-events-auto"
+        {/* Click-to-dismiss layer - transparent, only for capturing clicks outside spotlight */}
+        <div 
+          className="absolute inset-0 pointer-events-auto"
           onClick={handleSkip}
         />
 
