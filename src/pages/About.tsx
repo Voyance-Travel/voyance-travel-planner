@@ -319,7 +319,7 @@ export default function About() {
             </h1>
             <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
               Voyance started because travel planning online isn't planning—it's being marketed to. 
-              Affiliate lists. Influencer hype. 40 tabs of noise.
+              Endless lists. Sponsored content. 40 tabs of noise.
             </p>
             <p className="text-xl text-foreground font-medium mt-6 max-w-2xl">
               We built the opposite: research-backed itineraries designed around you, not trends.
