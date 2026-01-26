@@ -14,8 +14,12 @@ import {
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
-import { DemoArchetypeComparison } from '@/components/demo/DemoArchetypeComparison';
-import { DemoGroupBlend } from '@/components/demo/DemoGroupBlend';
+import { DemoPlayground } from '@/components/demo/DemoPlayground';
+
+// Import generated images
+import quizImage from '@/assets/howitworks-quiz.jpg';
+import planImage from '@/assets/howitworks-plan.jpg';
+import itineraryImage from '@/assets/howitworks-itinerary.jpg';
 
 const promises = [
   { text: 'No credit card to explore', icon: Shield },
@@ -127,10 +131,18 @@ export default function HowItWorks() {
                 Not what you want to see—who you are. Our quiz measures 8 core traits: 
                 how you plan, how you recharge, what thrills you, what bores you.
               </p>
-              <p className="text-lg text-muted-foreground leading-relaxed">
+              <p className="text-lg text-muted-foreground leading-relaxed mb-6">
                 In 2 minutes, we identify your archetype from 27 distinct traveler personalities. 
                 Not a horoscope. A blueprint.
               </p>
+              <Link 
+                to={ROUTES.ARCHETYPES}
+                className="inline-flex items-center gap-2 text-primary font-medium hover:underline"
+              >
+                <Sparkles className="h-4 w-4" />
+                Explore all 27 Travel DNA archetypes
+                <ArrowRight className="h-4 w-4" />
+              </Link>
               <div className="mt-8 flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="px-3 py-1 bg-muted rounded-full">10 questions</span>
                 <span className="px-3 py-1 bg-muted rounded-full">2 minutes</span>
@@ -140,7 +152,7 @@ export default function HowItWorks() {
             <div className="relative">
               <div className="absolute -inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl blur-2xl" />
               <img 
-                src="https://images.unsplash.com/photo-1522199755839-a2bacb67c546?w=800&q=80"
+                src={quizImage}
                 alt="Taking the travel quiz"
                 className="relative rounded-2xl shadow-2xl w-full aspect-[4/3] object-cover"
               />
@@ -172,7 +184,7 @@ export default function HowItWorks() {
             <div className="relative lg:order-1">
               <div className="absolute -inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-3xl blur-2xl" />
               <img 
-                src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=800&q=80"
+                src={planImage}
                 alt="Planning your destination"
                 className="relative rounded-2xl shadow-2xl w-full aspect-[4/3] object-cover"
               />
@@ -219,7 +231,7 @@ export default function HowItWorks() {
             <div className="relative">
               <div className="absolute -inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl blur-2xl" />
               <img 
-                src="https://images.unsplash.com/photo-1527631746610-bca00a040d60?w=800&q=80"
+                src={itineraryImage}
                 alt="Your personalized itinerary"
                 className="relative rounded-2xl shadow-2xl w-full aspect-[4/3] object-cover"
               />
@@ -251,9 +263,8 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* Interactive Demo Sections - Pulled from Demo page */}
-      <DemoArchetypeComparison />
-      <DemoGroupBlend />
+      {/* Interactive Playground - "See It in Action" */}
+      <DemoPlayground />
 
       {/* Our Promise - Simplified */}
       <section className="py-24 relative overflow-hidden">
