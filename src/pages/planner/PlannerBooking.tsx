@@ -588,7 +588,10 @@ export default function PlannerBooking() {
                         <div className="flex items-center gap-3 text-sm text-muted-foreground mb-2">
                           <span className="flex items-center gap-1">
                             <MapPin className="h-3.5 w-3.5" />
-                            {state.hotel.location}
+                            {typeof state.hotel.location === 'string' 
+                              ? state.hotel.location 
+                              : (state.hotel.location as { name?: string; address?: string })?.name || 
+                                (state.hotel.location as { name?: string; address?: string })?.address || ''}
                           </span>
                           <span className="flex items-center gap-0.5">
                             {[...Array(Math.round(state.hotel.rating / 2) || 4)].map((_, i) => (

@@ -846,10 +846,12 @@ function ActivityRow({
           )}
         </div>
         <h5 className="text-sm font-medium text-foreground leading-tight line-clamp-1">{activity.title}</h5>
-        {activity.location?.name && (
+        {activity.location && (
           <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1 line-clamp-1">
             <MapPin className="h-2.5 w-2.5 shrink-0" />
-            {activity.location.name}
+            {typeof activity.location === 'string' 
+              ? activity.location 
+              : activity.location?.name || activity.location?.address || ''}
           </p>
         )}
       </div>
