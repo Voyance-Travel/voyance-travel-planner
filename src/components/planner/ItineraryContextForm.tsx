@@ -38,8 +38,9 @@ export default function ItineraryContextForm({
   initialDepartureTime,
 }: ItineraryContextFormProps) {
   const [hotelLocation, setHotelLocation] = useState(initialHotelLocation || '');
-  const [arrivalTime, setArrivalTime] = useState(initialArrivalTime || '');
-  const [departureTime, setDepartureTime] = useState(initialDepartureTime || '');
+  // Don't auto-fill flight times - let user explicitly enter them
+  const [arrivalTime, setArrivalTime] = useState('');
+  const [departureTime, setDepartureTime] = useState('');
 
   const hasAnyData = hotelLocation || arrivalTime || departureTime;
 
@@ -103,44 +104,51 @@ export default function ItineraryContextForm({
           </p>
         </div>
 
-        {/* Flight Times */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-sm font-medium">
-              <Plane className="w-4 h-4 text-muted-foreground rotate-[-45deg]" />
-              Arrival time
-              <span className="text-xs text-muted-foreground font-normal">(opt.)</span>
-            </Label>
-            <div className="relative">
+        {/* Flight Times - Optional Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Plane className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Flight Times</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Optional</span>
+          </div>
+          <p className="text-xs text-muted-foreground -mt-1">
+            Skip this if you don't have flights booked yet — we'll plan a full day for arrival and departure.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Plane className="w-3.5 h-3.5 rotate-[-45deg]" />
+                Arrival
+              </Label>
               <Input
                 type="time"
                 value={arrivalTime}
                 onChange={(e) => setArrivalTime(e.target.value)}
                 className="h-11"
+                placeholder="--:--"
               />
+              <p className="text-xs text-muted-foreground">
+                {new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              When you land on {new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </p>
-          </div>
 
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-sm font-medium">
-              <Plane className="w-4 h-4 text-muted-foreground rotate-45" />
-              Departure time
-              <span className="text-xs text-muted-foreground font-normal">(opt.)</span>
-            </Label>
-            <div className="relative">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Plane className="w-3.5 h-3.5 rotate-45" />
+                Departure
+              </Label>
               <Input
                 type="time"
                 value={departureTime}
                 onChange={(e) => setDepartureTime(e.target.value)}
                 className="h-11"
+                placeholder="--:--"
               />
+              <p className="text-xs text-muted-foreground">
+                {new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              When you leave on {new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </p>
           </div>
         </div>
       </div>
