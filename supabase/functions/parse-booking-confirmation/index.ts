@@ -23,6 +23,8 @@ interface ParsedBooking {
   room_count?: number;
   notes?: string;
   net_cost_cents?: number;
+  is_multi_segment?: boolean;
+  segment_count?: number;
 }
 
 Deno.serve(async (req) => {
@@ -48,23 +50,24 @@ Deno.serve(async (req) => {
 
     const prompt = `You are a travel booking parser. Extract booking details from the following confirmation email or text.
 
+IMPORTANT: If this confirmation contains MULTIPLE flights (multi-city, connections, or round-trip with multiple segments), set is_multi_segment to true and segment_count to the number of flights. For multi-segment bookings, extract ONLY the FIRST outbound flight segment details.
+
 Return a JSON object with these fields (only include fields you can extract with confidence):
 - segment_type: one of "flight", "hotel", "car_rental", "rail", "tour", "cruise", "transfer", "insurance", "other"
 - vendor_name: airline name, hotel name, or company name
 - confirmation_number: booking reference or confirmation code
-- start_date: in YYYY-MM-DD format
-- start_time: in HH:MM format (24-hour)
-- end_date: in YYYY-MM-DD format
-- end_time: in HH:MM format (24-hour)
-- origin: departure city/airport for flights, pickup location for cars
-- origin_code: airport code like "JFK" or "LAX"
-- destination: arrival city/airport for flights, hotel city
-- destination_code: airport code
-- flight_number: like "UA 123" or "DL456"
+- start_date: in YYYY-MM-DD format (for the FIRST flight segment only)
+- start_time: in HH:MM format (24-hour, for the FIRST flight segment only)
+- end_date: in YYYY-MM-DD format (arrival date of FIRST flight segment)
+- end_time: in HH:MM format (24-hour, arrival time of FIRST flight segment)
+- origin: departure city/airport for first flight
+- origin_code: airport code like "JFK" or "LAX" for first flight
+- destination: arrival city/airport for first flight
+- destination_code: airport code for first flight arrival
+- flight_number: like "UA 123" or "DL456" for the first flight
 - cabin_class: "economy", "premium_economy", "business", or "first"
-- room_type: hotel room type like "Deluxe King"
-- room_count: number of rooms (integer)
-- net_cost_cents: total price in cents (e.g., $150.00 = 15000)
+- is_multi_segment: true if there are multiple flights in this booking
+- segment_count: total number of flight segments in this booking
 - notes: any other relevant details like special requests, seat assignments, etc.
 
 Only return valid JSON, no markdown or explanations.
@@ -72,14 +75,14 @@ Only return valid JSON, no markdown or explanations.
 Confirmation text:
 ${confirmationText}`;
 
-    const response = await fetch('https://api.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${lovableApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-3-flash-preview',
         messages: [
           { role: 'user', content: prompt }
         ],
