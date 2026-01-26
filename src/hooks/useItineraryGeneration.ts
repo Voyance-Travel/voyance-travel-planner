@@ -354,18 +354,19 @@ export function useItineraryGeneration() {
    * Falls back to progressive if full fails
    */
   const generateItinerary = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
+    // UX-first: progressive generation streams days into the UI as they're produced.
+    // If it fails for a non-quota reason, fall back to the full pipeline.
     try {
-      return await generateFullItinerary(trip);
+      return await generateItineraryProgressive(trip);
     } catch (error) {
-      console.warn('[useItineraryGeneration] Full generation failed, trying progressive:', error);
-      // Only fall back for non-rate-limit/credit errors
+      console.warn('[useItineraryGeneration] Progressive generation failed, trying full:', error);
       const message = error instanceof Error ? error.message : '';
       if (message.includes('Rate limit') || message.includes('credits') || message.includes('Credits')) {
         throw error;
       }
-      return await generateItineraryProgressive(trip);
+      return await generateFullItinerary(trip);
     }
-  }, [generateFullItinerary, generateItineraryProgressive]);
+  }, [generateItineraryProgressive, generateFullItinerary]);
 
   const saveItinerary = useCallback(async (tripId: string, days: GeneratedDay[]): Promise<boolean> => {
     try {
