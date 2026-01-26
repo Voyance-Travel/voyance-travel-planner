@@ -7,6 +7,7 @@ import { DemoPlayground } from '@/components/demo/DemoPlayground';
 import { DemoArchetypeComparison } from '@/components/demo/DemoArchetypeComparison';
 import { DemoGroupBlend } from '@/components/demo/DemoGroupBlend';
 import { DemoCTA } from '@/components/demo/DemoCTA';
+import { DemoSideNav } from '@/components/demo/DemoSideNav';
 
 export default function Demo() {
   const [showTour, setShowTour] = useState(false);
@@ -34,34 +35,43 @@ export default function Demo() {
         description="Experience Voyance's AI-powered trip planning. See how we build personalized itineraries in minutes. Free interactive demo."
       />
 
-      {/* Hero - Clear entry point */}
-      {!showTour && (
-        <DemoHero 
-          onStartTour={handleStartTour} 
-          onSkipToPlayground={handleSkipToPlayground}
-        />
-      )}
+      {/* Side Navigation */}
+      <DemoSideNav showTour={showTour} />
 
-      {/* Feature showcase - Step by step tour */}
-      {showTour && (
-        <DemoFeatureShowcase onComplete={handleTourComplete} />
-      )}
+      {/* Hero - Clear entry point */}
+      <div id="hero">
+        {!showTour && (
+          <DemoHero 
+            onStartTour={handleStartTour} 
+            onSkipToPlayground={handleSkipToPlayground}
+          />
+        )}
+
+        {/* Feature showcase - Step by step tour */}
+        {showTour && (
+          <DemoFeatureShowcase onComplete={handleTourComplete} />
+        )}
+      </div>
 
       {/* Archetype Comparison - Prove personalization works */}
-      <div ref={comparisonRef}>
+      <div id="archetype-comparison" ref={comparisonRef}>
         <DemoArchetypeComparison />
       </div>
 
       {/* Group Travel Blending Demo */}
-      <DemoGroupBlend />
+      <div id="group-blend">
+        <DemoGroupBlend />
+      </div>
 
       {/* Interactive playground */}
-      <div ref={playgroundRef}>
+      <div id="playground" ref={playgroundRef}>
         <DemoPlayground />
       </div>
 
       {/* Final CTA */}
-      <DemoCTA />
+      <div id="cta">
+        <DemoCTA />
+      </div>
     </MainLayout>
   );
 }
