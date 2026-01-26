@@ -7,6 +7,7 @@ export const ROUTES = {
   DESTINATIONS: '/destinations',
   DESTINATION_DETAIL: '/destination/:slug',
   GUIDES: '/guides',
+  TRAVEL_TIPS: '/travel-tips',
   ABOUT: '/about',
   ARCHETYPES: '/archetypes',
   HOW_IT_WORKS: '/how-it-works',
