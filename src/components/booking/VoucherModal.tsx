@@ -129,7 +129,12 @@ export function VoucherModal({
               {activity.location && (
                 <div className="flex items-center gap-2 col-span-2">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span>{activity.location}</span>
+                  <span>
+                    {typeof activity.location === 'string' 
+                      ? activity.location 
+                      : (activity.location as { name?: string; address?: string }).name || 
+                        (activity.location as { name?: string; address?: string }).address}
+                  </span>
                 </div>
               )}
               
