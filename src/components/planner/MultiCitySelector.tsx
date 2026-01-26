@@ -4,16 +4,27 @@
  * Polished component for adding multiple cities with nights allocation
  */
 
-import { useState, useCallback } from 'react';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
-import { Plus, Trash2, GripVertical, MapPin, Train, Plane, ArrowDown, Sparkles, Globe, Clock } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { motion, Reorder, AnimatePresence } from 'framer-motion';
+import { MapPin, Plus, GripVertical, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import { TripDestination, InterCityTransport, POPULAR_ROUTES, PopularRoute, calculateTotalNights } from '@/types/multiCity';
+import { searchDestinations, Destination } from '@/services/locationSearchAPI';
+
+// Local debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 interface MultiCitySelectorProps {
   destinations: TripDestination[];
@@ -33,23 +44,43 @@ export default function MultiCitySelector({
   className,
 }: MultiCitySelectorProps) {
   const [newCity, setNewCity] = useState('');
+  const [searchResults, setSearchResults] = useState<Destination[]>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [showAllTemplates, setShowAllTemplates] = useState(false);
 
   const totalNights = calculateTotalNights(destinations);
   const displayedRoutes = showAllTemplates ? POPULAR_ROUTES : POPULAR_ROUTES.slice(0, 3);
+  
+  const debouncedQuery = useDebounce(newCity, 300);
 
-  const handleAddCity = useCallback(() => {
-    if (!newCity.trim()) return;
+  // Search destinations when input changes
+  useEffect(() => {
+    if (debouncedQuery.length >= 2) {
+      setIsSearching(true);
+      searchDestinations(debouncedQuery, 8)
+        .then(setSearchResults)
+        .finally(() => setIsSearching(false));
+    } else {
+      setSearchResults([]);
+    }
+  }, [debouncedQuery]);
+
+  const addDestination = useCallback((city: string, country?: string) => {
+    if (!city.trim()) return;
 
     const newDestination: TripDestination = {
       id: crypto.randomUUID(),
-      city: newCity.trim(),
+      city: city.trim(),
+      country,
       nights: 3,
       order: destinations.length + 1,
     };
 
     onDestinationsChange([...destinations, newDestination]);
     setNewCity('');
+    setSearchResults([]);
+    setIsSearchOpen(false);
 
     // Add transport between previous city and new city
     if (destinations.length > 0) {
@@ -57,13 +88,17 @@ export default function MultiCitySelector({
       const newTransport: InterCityTransport = {
         id: crypto.randomUUID(),
         fromCity: prevCity.city,
-        toCity: newCity.trim(),
+        toCity: city.trim(),
         type: 'train',
         departureDate: '',
       };
       onTransportsChange([...transports, newTransport]);
     }
-  }, [newCity, destinations, transports, onDestinationsChange, onTransportsChange]);
+  }, [destinations, transports, onDestinationsChange, onTransportsChange]);
+
+  const handleAddCity = useCallback(() => {
+    addDestination(newCity);
+  }, [newCity, addDestination]);
 
   const handleRemoveCity = useCallback((id: string) => {
     const index = destinations.findIndex(d => d.id === id);
@@ -152,8 +187,19 @@ export default function MultiCitySelector({
           <Input
             placeholder="Search cities (e.g., Paris, Tokyo, Barcelona...)"
             value={newCity}
-            onChange={(e) => setNewCity(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddCity()}
+            onChange={(e) => {
+              setNewCity(e.target.value);
+              setIsSearchOpen(true);
+            }}
+            onFocus={() => newCity.length >= 2 && setIsSearchOpen(true)}
+            onBlur={() => setTimeout(() => setIsSearchOpen(false), 200)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchResults.length > 0) {
+                addDestination(searchResults[0].city, searchResults[0].country);
+              } else if (e.key === 'Enter') {
+                handleAddCity();
+              }
+            }}
             className="h-14 pl-12 pr-24 text-base border-2 border-dashed border-primary/30 bg-primary/5 focus:border-primary focus:bg-background rounded-xl"
           />
           <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-primary/60" />
@@ -166,6 +212,35 @@ export default function MultiCitySelector({
             <Plus className="h-4 w-4 mr-1" />
             Add
           </Button>
+          
+          {/* Search Results Dropdown */}
+          {isSearchOpen && searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 rounded-xl max-h-64 overflow-y-auto">
+              {searchResults.map((dest) => (
+                <button
+                  key={dest.id}
+                  type="button"
+                  onClick={() => addDestination(dest.city, dest.country)}
+                  className="w-full px-4 py-3 text-left hover:bg-muted transition-colors flex items-center gap-3"
+                >
+                  <MapPin className="h-4 w-4 text-primary/60" />
+                  <div>
+                    <span className="font-medium">{dest.city}</span>
+                    <span className="text-muted-foreground ml-1">{dest.country}</span>
+                    {dest.region && (
+                      <span className="text-xs text-muted-foreground ml-2">• {dest.region}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {isSearchOpen && isSearching && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 rounded-xl p-4 text-center text-muted-foreground text-sm">
+              Searching...
+            </div>
+          )}
         </div>
       </div>
 
@@ -287,7 +362,7 @@ export default function MultiCitySelector({
                               </SelectItem>
                               <SelectItem value="flight">
                                 <span className="flex items-center gap-2">
-                                  <Plane className="h-3 w-3" /> Flight
+                                  <PlaneIcon className="h-3 w-3" /> Flight
                                 </span>
                               </SelectItem>
                               <SelectItem value="bus">🚌 Bus</SelectItem>
