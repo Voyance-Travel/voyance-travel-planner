@@ -284,7 +284,12 @@ export function BookableItemCard({
             {activity.location && (
               <div className="flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5" />
-                <span className="truncate max-w-[180px]">{activity.location}</span>
+                <span className="truncate max-w-[180px]">
+                  {typeof activity.location === 'string' 
+                    ? activity.location 
+                    : (activity.location as { name?: string; address?: string }).name || 
+                      (activity.location as { name?: string; address?: string }).address}
+                </span>
               </div>
             )}
           </div>

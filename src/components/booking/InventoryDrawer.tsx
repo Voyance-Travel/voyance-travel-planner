@@ -337,7 +337,10 @@ function InventoryCard({ item, isSelected, onToggleCompare, onSelect }: Inventor
               {item.location && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                   <MapPin className="h-3 w-3" />
-                  {item.location}
+                  {typeof item.location === 'string' 
+                    ? item.location 
+                    : (item.location as { name?: string; address?: string }).name || 
+                      (item.location as { name?: string; address?: string }).address}
                 </p>
               )}
             </div>
