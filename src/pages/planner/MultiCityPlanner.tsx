@@ -235,15 +235,20 @@ export default function MultiCityPlanner() {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="bg-card p-6 md:p-8 shadow-elevated rounded-2xl border border-border space-y-8"
           >
-            {/* Origin & Date */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
-                  Departing from
-                </label>
-                <OriginInput value={originCity} onChange={handleOriginChange} />
-              </div>
+            {/* Destinations First - This is what users care about */}
+            <MultiCitySelector
+              destinations={destinations}
+              transports={transports}
+              onDestinationsChange={setDestinations}
+              onTransportsChange={setTransports}
+              startDate={startDate ? format(startDate, 'yyyy-MM-dd') : undefined}
+            />
 
+            {/* Separator */}
+            <div className="border-t border-border" />
+
+            {/* Trip Details - Secondary */}
+            <div className="grid md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
                   Trip starts
@@ -272,44 +277,39 @@ export default function MultiCityPlanner() {
                   </PopoverContent>
                 </Popover>
               </div>
-            </div>
 
-            {/* Travelers */}
-            <div>
-              <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
-                Travelers
-              </label>
-              <div className="flex items-center gap-3">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 4].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setTravelers(num)}
-                      className={cn(
-                        "w-10 h-10 rounded-full border transition-all text-sm",
-                        travelers === num
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border text-muted-foreground hover:border-primary/50"
-                      )}
-                    >
-                      {num}
-                    </button>
-                  ))}
+              <div>
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
+                  Departing from
+                </label>
+                <OriginInput value={originCity} onChange={handleOriginChange} />
+              </div>
+
+              <div>
+                <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
+                  Travelers
+                </label>
+                <div className="flex items-center gap-3">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setTravelers(num)}
+                        className={cn(
+                          "w-10 h-10 rounded-full border transition-all text-sm",
+                          travelers === num
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
+                        )}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* Multi-City Selector */}
-            <div className="pt-4 border-t border-border">
-              <MultiCitySelector
-                destinations={destinations}
-                transports={transports}
-                onDestinationsChange={setDestinations}
-                onTransportsChange={setTransports}
-                startDate={startDate ? format(startDate, 'yyyy-MM-dd') : undefined}
-              />
             </div>
 
             {/* Trip Summary & CTA */}
