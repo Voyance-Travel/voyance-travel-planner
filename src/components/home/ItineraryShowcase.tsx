@@ -46,7 +46,13 @@ export default function ItineraryShowcase() {
   const activeItinerary = itineraries[activeIndex];
 
   return (
-    <section className="py-32 bg-background relative overflow-hidden">
+    <section className="py-32 md:py-40 bg-muted/30 relative overflow-hidden">
+      {/* Top curved divider */}
+      <div className="absolute top-0 left-0 right-0 h-24 -translate-y-full">
+        <svg viewBox="0 0 1440 96" fill="none" className="absolute bottom-0 w-full h-24" preserveAspectRatio="none">
+          <path d="M0 96L1440 96L1440 0C1440 0 1080 96 720 96C360 96 0 0 0 0L0 96Z" className="fill-muted/30" />
+        </svg>
+      </div>
       {/* Editorial Section Header */}
       <div className="max-w-7xl mx-auto px-8 md:px-16">
         <div className="flex items-start justify-between mb-16">
