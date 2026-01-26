@@ -8,7 +8,8 @@ import {
   Star,
   Loader2,
   X,
-  ThumbsDown
+  ThumbsDown,
+  Heart
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -60,6 +61,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
   const [additionalFeedback, setAdditionalFeedback] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [savingFavorite, setSavingFavorite] = useState(false);
 
   const fetchSuggestions = async () => {
     setLoading(true);
@@ -196,6 +198,64 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
     onOpenChange(false);
     navigate('/planner');
     toast.success(`Let's plan your trip to ${selected.city}!`);
+  };
+
+  const handleSaveForLater = async () => {
+    if (selectedIndex === null || !user?.id) return;
+    const selected = suggestions[selectedIndex];
+    
+    setSavingFavorite(true);
+    try {
+      // Check if already saved
+      const entityId = `${selected.city.toLowerCase()}_${selected.country.toLowerCase()}`;
+      const { data: existing } = await supabase
+        .from('user_enrichment')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('enrichment_type', 'mystery_trip_favorite')
+        .eq('entity_id', entityId)
+        .maybeSingle();
+
+      if (existing) {
+        toast.info(`${selected.city} is already in your favorites!`);
+        return;
+      }
+
+      // Save as favorite
+      const { error } = await supabase
+        .from('user_enrichment')
+        .insert({
+          user_id: user.id,
+          enrichment_type: 'mystery_trip_favorite',
+          entity_type: 'destination',
+          entity_id: entityId,
+          entity_name: `${selected.city}, ${selected.country}`,
+          metadata: {
+            city: selected.city,
+            country: selected.country,
+            region: selected.region || null,
+            reason: selected.reason,
+            matchScore: selected.matchScore,
+            highlights: selected.highlights,
+            image: selected.image,
+            savedAt: new Date().toISOString(),
+          },
+        });
+
+      if (error) throw error;
+
+      toast.success(`${selected.city} saved to your favorites!`, {
+        description: 'Find it in your profile to build the trip later.',
+      });
+      
+      // Optionally close modal or go back to reveal
+      setStep('reveal');
+    } catch (error) {
+      console.error('Save favorite error:', error);
+      toast.error('Failed to save. Please try again.');
+    } finally {
+      setSavingFavorite(false);
+    }
   };
 
   const resetModal = () => {
@@ -510,6 +570,19 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                     onClick={() => setStep('reveal')}
                   >
                     Choose Another
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2"
+                    onClick={handleSaveForLater}
+                    disabled={savingFavorite}
+                  >
+                    {savingFavorite ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Heart className="h-4 w-4" />
+                    )}
+                    Save
                   </Button>
                   <Button 
                     className="flex-1 gap-2"
