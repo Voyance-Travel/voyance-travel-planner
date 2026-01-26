@@ -136,7 +136,7 @@ export default function RestaurantSearchDrawer({
         destination,
         mealType: mealType !== 'any' ? mealType : undefined,
         budgetLevel: budgetLevel || undefined,
-        maxResults: 15,
+        maxResults: 25, // Increased from 15 to get more options
         minRating: minRating, // Send minimum rating to API
       };
 

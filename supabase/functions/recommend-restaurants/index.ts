@@ -78,7 +78,54 @@ interface LearnedInsights {
 // =============================================================================
 
 /**
- * Fetch restaurants from Google Places API (New)
+ * Execute a single Google Places search
+ */
+async function executeGoogleSearch(
+  query: string,
+  coordinates: { lat: number; lng: number } | undefined,
+  apiKey: string,
+  maxResults: number = 20
+): Promise<Record<string, unknown>[]> {
+  const requestBody: Record<string, unknown> = {
+    textQuery: query,
+    includedType: 'restaurant',
+    maxResultCount: maxResults,
+    languageCode: 'en',
+  };
+
+  if (coordinates) {
+    requestBody.locationBias = {
+      circle: {
+        center: { latitude: coordinates.lat, longitude: coordinates.lng },
+        radius: 8000, // Increased radius to 8km
+      },
+    };
+  }
+
+  const response = await fetch(
+    'https://places.googleapis.com/v1/places:searchText',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.photos,places.websiteUri,places.nationalPhoneNumber,places.currentOpeningHours,places.types,places.reviews',
+      },
+      body: JSON.stringify(requestBody),
+    }
+  );
+
+  if (!response.ok) {
+    console.error('[Google Places] Search error for query:', query, await response.text());
+    return [];
+  }
+
+  const data = await response.json();
+  return data.places || [];
+}
+
+/**
+ * Fetch restaurants from Google Places API (New) - Multi-strategy search
  */
 async function fetchGooglePlaces(
   destination: string,
@@ -87,46 +134,40 @@ async function fetchGooglePlaces(
   apiKey: string
 ): Promise<Restaurant[]> {
   try {
-    const textQuery = `${mealType !== 'any' ? mealType + ' ' : ''}restaurants in ${destination}`;
-    
-    const requestBody: Record<string, unknown> = {
-      textQuery,
-      includedType: 'restaurant',
-      maxResultCount: 20,
-      languageCode: 'en',
-    };
+    // Multiple search strategies to find more restaurants
+    const searchQueries = [
+      // Primary: meal-specific or general restaurants
+      `${mealType !== 'any' ? mealType + ' ' : ''}restaurants in ${destination}`,
+      // Best/top rated restaurants
+      `best restaurants in ${destination}`,
+      // Popular restaurants
+      `popular restaurants ${destination}`,
+      // Fine dining if looking for quality
+      `fine dining ${destination}`,
+    ];
 
-    if (coordinates) {
-      requestBody.locationBias = {
-        circle: {
-          center: { latitude: coordinates.lat, longitude: coordinates.lng },
-          radius: 5000,
-        },
-      };
-    }
-
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.photos,places.websiteUri,places.nationalPhoneNumber,places.currentOpeningHours,places.types,places.reviews',
-        },
-        body: JSON.stringify(requestBody),
-      }
+    // Execute searches in parallel (limit to 3 to avoid rate limits)
+    const searchPromises = searchQueries.slice(0, 3).map(query => 
+      executeGoogleSearch(query, coordinates, apiKey, 20)
     );
 
-    if (!response.ok) {
-      console.error('[Google Places] Error:', await response.text());
-      return [];
+    const results = await Promise.all(searchPromises);
+    const allPlaces = results.flat();
+    
+    // Deduplicate by place ID
+    const seenIds = new Set<string>();
+    const uniquePlaces: Record<string, unknown>[] = [];
+    for (const place of allPlaces) {
+      const id = place.id as string;
+      if (id && !seenIds.has(id)) {
+        seenIds.add(id);
+        uniquePlaces.push(place);
+      }
     }
 
-    const data = await response.json();
-    const places = data.places || [];
+    console.log(`[Google Places] Found ${uniquePlaces.length} unique restaurants from ${searchQueries.length} queries`);
 
-    return places.map((place: Record<string, unknown>): Restaurant => {
+    return uniquePlaces.map((place: Record<string, unknown>): Restaurant => {
       const displayName = place.displayName as { text: string } | undefined;
       const location = place.location as { latitude: number; longitude: number } | undefined;
       const photos = place.photos as Array<{ name: string }> | undefined;
@@ -185,7 +226,7 @@ function parsePriceLevel(priceLevel: string | undefined): number {
 }
 
 /**
- * Fetch restaurants from TripAdvisor API
+ * Fetch restaurants from TripAdvisor API - Enhanced with multiple searches
  */
 async function fetchTripAdvisor(
   destination: string,
@@ -193,34 +234,56 @@ async function fetchTripAdvisor(
   apiKey: string
 ): Promise<Restaurant[]> {
   try {
-    // First, search for location
-    const searchParams = new URLSearchParams({
-      searchQuery: destination,
-      category: 'restaurants',
-      language: 'en',
-    });
+    // Multiple search queries to find more restaurants
+    const searchQueries = [
+      destination,
+      `best restaurants ${destination}`,
+      `top rated ${destination}`,
+    ];
 
-    if (coordinates) {
-      searchParams.set('latLong', `${coordinates.lat},${coordinates.lng}`);
+    const allLocations: Array<{ location_id: string }> = [];
+    const seenIds = new Set<string>();
+
+    // Execute multiple searches
+    for (const query of searchQueries) {
+      const searchParams = new URLSearchParams({
+        searchQuery: query,
+        category: 'restaurants',
+        language: 'en',
+      });
+
+      if (coordinates) {
+        searchParams.set('latLong', `${coordinates.lat},${coordinates.lng}`);
+      }
+
+      try {
+        const searchResponse = await fetch(
+          `https://api.content.tripadvisor.com/api/v1/location/search?${searchParams.toString()}&key=${apiKey}`,
+          { headers: { accept: 'application/json' } }
+        );
+
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          const locations = searchData.data || [];
+          
+          for (const loc of locations) {
+            if (loc.location_id && !seenIds.has(loc.location_id)) {
+              seenIds.add(loc.location_id);
+              allLocations.push(loc);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[TripAdvisor] Search error for "${query}":`, err);
+      }
     }
 
-    const searchResponse = await fetch(
-      `https://api.content.tripadvisor.com/api/v1/location/search?${searchParams.toString()}&key=${apiKey}`,
-      { headers: { accept: 'application/json' } }
-    );
+    console.log(`[TripAdvisor] Found ${allLocations.length} unique locations from ${searchQueries.length} queries`);
 
-    if (!searchResponse.ok) {
-      console.error('[TripAdvisor] Search error:', await searchResponse.text());
-      return [];
-    }
-
-    const searchData = await searchResponse.json();
-    const locations = searchData.data || [];
-
-    // Fetch details for each restaurant
+    // Fetch details for each restaurant (increased limit to 25)
     const restaurants: Restaurant[] = [];
 
-    for (const loc of locations.slice(0, 15)) {
+    for (const loc of allLocations.slice(0, 25)) {
       if (loc.location_id) {
         try {
           const detailsResponse = await fetch(
@@ -272,7 +335,7 @@ async function fetchTripAdvisor(
 }
 
 /**
- * Fetch restaurants from Foursquare API
+ * Fetch restaurants from Foursquare API - Enhanced with multiple queries
  */
 async function fetchFoursquare(
   destination: string,
@@ -280,38 +343,57 @@ async function fetchFoursquare(
   apiKey: string
 ): Promise<Restaurant[]> {
   try {
-    const params = new URLSearchParams({
-      query: 'restaurant',
-      near: destination,
-      categories: '13065', // Restaurants category
-      limit: '20',
-      fields: 'fsq_id,name,categories,rating,stats,price,location,photos,website,tel,hours,features,tastes,tips',
-    });
+    // Multiple search queries for better coverage
+    const searchQueries = ['restaurant', 'best restaurant'];
+    const allResults: Array<Record<string, unknown>> = [];
+    const seenIds = new Set<string>();
 
-    if (coordinates) {
-      params.set('ll', `${coordinates.lat},${coordinates.lng}`);
-      params.delete('near');
-    }
+    for (const query of searchQueries) {
+      const params = new URLSearchParams({
+        query,
+        near: destination,
+        categories: '13065', // Restaurants category
+        limit: '30', // Increased from 20 to 30
+        sort: 'RATING', // Sort by rating to get better results first
+        fields: 'fsq_id,name,categories,rating,stats,price,location,photos,website,tel,hours,features,tastes,tips',
+      });
 
-    const response = await fetch(
-      `https://api.foursquare.com/v3/places/search?${params.toString()}`,
-      {
-        headers: {
-          Authorization: apiKey,
-          accept: 'application/json',
-        },
+      if (coordinates) {
+        params.set('ll', `${coordinates.lat},${coordinates.lng}`);
+        params.delete('near');
       }
-    );
 
-    if (!response.ok) {
-      console.error('[Foursquare] Error:', await response.text());
-      return [];
+      try {
+        const response = await fetch(
+          `https://api.foursquare.com/v3/places/search?${params.toString()}`,
+          {
+            headers: {
+              Authorization: apiKey,
+              accept: 'application/json',
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const results = data.results || [];
+          
+          for (const place of results) {
+            const id = place.fsq_id as string;
+            if (id && !seenIds.has(id)) {
+              seenIds.add(id);
+              allResults.push(place);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[Foursquare] Search error for "${query}":`, err);
+      }
     }
 
-    const data = await response.json();
-    const results = data.results || [];
+    console.log(`[Foursquare] Found ${allResults.length} unique restaurants from ${searchQueries.length} queries`);
 
-    return results.map((place: Record<string, unknown>): Restaurant => {
+    return allResults.map((place: Record<string, unknown>): Restaurant => {
       const categories = (place.categories as Array<{ name: string; short_name: string }>) || [];
       const location = place.location as { address?: string; formatted_address?: string; latitude?: number; longitude?: number } | undefined;
       const photos = place.photos as Array<{ prefix: string; suffix: string }> | undefined;
