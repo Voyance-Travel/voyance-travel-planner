@@ -81,12 +81,12 @@ export function DemoCTA() {
             <div className="inline-flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm">
               <div className="text-center">
                 <p className="font-medium text-foreground">Free</p>
-                <p className="text-xs text-muted-foreground">1 itinerary/month</p>
+                <p className="text-xs text-muted-foreground">Day 1 preview</p>
               </div>
               <div className="hidden sm:block w-px h-8 bg-border" />
               <div className="text-center">
                 <p className="font-medium text-foreground">Trip Pass</p>
-                <p className="text-xs text-muted-foreground">$19.99 per trip</p>
+                <p className="text-xs text-muted-foreground">$24.99 per trip</p>
               </div>
               <div className="hidden sm:block w-px h-8 bg-border" />
               <div className="text-center">

@@ -300,6 +300,12 @@ export function DemoPlayground() {
                 <img src={selectedDest.image} alt={itinerary.destination} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/30" />
                 <div className="absolute inset-0 p-4 flex flex-col justify-end">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/20 text-white border-0">
+                      <Sparkles className="h-2.5 w-2.5 mr-1" />
+                      Built for The Slow Traveler
+                    </Badge>
+                  </div>
                   <h3 className="text-lg font-serif font-bold text-white">{itinerary.destination}</h3>
                   <p className="text-white/80 text-sm">{itinerary.days.length} days • {itinerary.pace} pace</p>
                 </div>
@@ -590,8 +596,13 @@ export function DemoPlayground() {
           </p>
           
           {/* AI explanation */}
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            <span className="font-medium text-foreground">How it works:</span> Real-time data from Google, TripAdvisor, Foursquare & Viator—combined with smart scheduling for itineraries that actually flow.
+          <p className="text-xs text-muted-foreground max-w-lg mx-auto">
+            <span className="font-medium text-foreground">Powered by AI:</span> We blend real-time data from Google, TripAdvisor, Foursquare & Viator with your Travel DNA to build itineraries that flow naturally.
+          </p>
+          
+          {/* Review sources */}
+          <p className="text-[10px] text-muted-foreground/70">
+            Reviews aggregated from Google, TripAdvisor & Foursquare
           </p>
         </div>
       </div>
@@ -784,8 +795,8 @@ function ActivityRow({
                 Book <ExternalLink className="h-2.5 w-2.5" />
               </button>
               {/* Tooltip */}
-              <div className="absolute right-0 top-full mt-1 w-48 p-2 rounded-md bg-popover border shadow-lg text-[10px] text-muted-foreground opacity-0 group-hover/book:opacity-100 transition-opacity pointer-events-none z-50">
-                Opens official site to book directly. Voyance connects to Viator for activities.
+              <div className="absolute right-0 top-full mt-1 w-44 p-2 rounded-md bg-popover border shadow-lg text-[10px] text-muted-foreground opacity-0 group-hover/book:opacity-100 transition-opacity pointer-events-none z-50">
+                Opens Viator or restaurant site directly
               </div>
             </div>
           )}
