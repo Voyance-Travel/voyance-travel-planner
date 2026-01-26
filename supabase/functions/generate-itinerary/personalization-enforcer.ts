@@ -58,15 +58,28 @@ export type ForcedSlotType =
   | 'wellness_moment'     // Transformation trait
   | 'authentic_encounter' // Authenticity trait
   | 'social_experience'   // Social trait (positive)
-  | 'solo_retreat';       // Social trait (negative/introvert)
+  | 'solo_retreat'        // Social trait (negative/introvert)
+  | 'vip_experience'      // Status Seeker: high comfort + budget
+  | 'couples_moment'      // Romantic Curator: romantic trip or archetype
+  | 'connectivity_spot'   // Digital Explorer: wifi-guaranteed venue
+  | 'family_activity';    // Family Architect: kid-friendly activity
 
 export interface ForcedSlot {
   type: ForcedSlotType;
-  traitSource: keyof TraitScores;
+  traitSource: keyof TraitScores | 'context'; // 'context' for non-trait-based slots
   traitValue: number;
   description: string;
   validationTags: string[]; // Tags the activity MUST have
   forTraveler?: string; // Which traveler this serves (for group trips)
+}
+
+// Additional context for deriving slots beyond just traits
+export interface SlotDerivationContext {
+  tripType?: string; // 'romantic', 'family', 'solo', etc.
+  travelCompanions?: string[]; // ['family', 'partner', 'solo', etc.]
+  hasChildren?: boolean;
+  primaryArchetype?: string;
+  secondaryArchetype?: string;
 }
 
 export interface ScheduleConstraints {
@@ -111,7 +124,8 @@ export function deriveForcedSlots(
   traits: Partial<TraitScores>,
   interests: string[],
   dayNumber: number,
-  totalDays: number
+  totalDays: number,
+  context?: SlotDerivationContext
 ): ForcedSlot[] {
   const slots: ForcedSlot[] = [];
   
@@ -209,6 +223,79 @@ export function deriveForcedSlots(
       traitValue: traits.social || 0,
       description: 'One peaceful solo moment',
       validationTags: ['quiet', 'solo', 'peaceful', 'intimate', 'private', 'secluded', 'serene']
+    });
+  }
+  
+  // ==========================================================================
+  // NEW ARCHETYPE-SPECIFIC SLOTS (4 additions)
+  // ==========================================================================
+  
+  // 1. STATUS SEEKER: VIP Experience (comfort >= 5 AND budget >= 3)
+  const isStatusSeeker = (traits.comfort ?? 0) >= 5 && (traits.budget ?? 0) >= 3;
+  if (isStatusSeeker) {
+    // Only require every other day to avoid over-saturation
+    if (dayNumber % 2 === 0 || dayNumber === 1) {
+      slots.push({
+        type: 'vip_experience',
+        traitSource: 'comfort',
+        traitValue: traits.comfort || 0,
+        description: 'One VIP/exclusive access experience (priority entry, private tour, luxury venue)',
+        validationTags: ['vip', 'exclusive', 'luxury', 'private', 'premium', 'priority', 'upscale', 'high-end']
+      });
+    }
+  }
+  
+  // 2. ROMANTIC CURATOR: Couples Moment (trip_type romantic OR archetype match)
+  const isRomantic = context?.tripType === 'romantic' || 
+    context?.tripType === 'honeymoon' ||
+    context?.primaryArchetype === 'romantic_curator' ||
+    context?.secondaryArchetype === 'romantic_curator' ||
+    context?.travelCompanions?.includes('partner');
+  if (isRomantic) {
+    slots.push({
+      type: 'couples_moment',
+      traitSource: 'context',
+      traitValue: 0,
+      description: 'One romantic/intimate experience (sunset spot, couples activity, special dinner)',
+      validationTags: ['romantic', 'couples', 'intimate', 'sunset', 'scenic', 'candlelit', 'private', 'date-night']
+    });
+  }
+  
+  // 3. DIGITAL EXPLORER: Connectivity Spot (interests or archetype)
+  const isDigitalExplorer = interests.some(i =>
+    ['digital', 'remote work', 'coworking', 'technology', 'wifi', 'laptop', 'work-friendly'].includes(i.toLowerCase())
+  ) || context?.primaryArchetype === 'digital_explorer' || context?.secondaryArchetype === 'digital_explorer';
+  if (isDigitalExplorer) {
+    // Only once per trip, not every day
+    if (dayNumber === Math.ceil(totalDays / 2)) {
+      slots.push({
+        type: 'connectivity_spot',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'One wifi-guaranteed venue (café with reliable internet, coworking space, hotel lounge)',
+        validationTags: ['wifi', 'work-friendly', 'coworking', 'café', 'laptop-friendly', 'digital-nomad', 'connected']
+      });
+    }
+  }
+  
+  // 4. FAMILY ARCHITECT: Kid-Friendly Activity (companions or children flag)
+  const isFamily = context?.hasChildren || 
+    context?.travelCompanions?.some(c => 
+      c.toLowerCase().includes('family') || 
+      c.toLowerCase().includes('kid') || 
+      c.toLowerCase().includes('child')
+    ) ||
+    context?.tripType === 'family' ||
+    context?.primaryArchetype === 'family_architect' ||
+    context?.secondaryArchetype === 'family_architect' ||
+    interests.some(i => ['family', 'kids', 'children', 'family-friendly'].includes(i.toLowerCase()));
+  if (isFamily) {
+    slots.push({
+      type: 'family_activity',
+      traitSource: 'context',
+      traitValue: 0,
+      description: 'One family-friendly activity (engaging for all ages, stroller-accessible if needed)',
+      validationTags: ['family-friendly', 'kids', 'children', 'all-ages', 'stroller', 'interactive', 'educational', 'playground']
     });
   }
   
