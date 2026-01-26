@@ -65,6 +65,7 @@ export interface TripBasics {
   startDate?: string;
   endDate?: string;
   travelers?: number;
+  childrenCount?: number; // Number of children in the travel party
   tripType?: 'solo' | 'couple' | 'family' | 'group';
   originCity?: string;
   budgetTier?: string;
