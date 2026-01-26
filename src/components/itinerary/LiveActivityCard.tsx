@@ -162,10 +162,14 @@ export function LiveActivityCard({
               </p>
             )}
 
-            {activity.location?.name && (
+            {activity.location && (
               <div className="flex items-center gap-1 mt-2 text-sm text-muted-foreground">
                 <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">{activity.location.name}</span>
+                <span className="truncate">
+                  {typeof activity.location === 'string' 
+                    ? activity.location 
+                    : activity.location?.name || activity.location?.address || ''}
+                </span>
               </div>
             )}
           </div>

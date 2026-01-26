@@ -242,7 +242,11 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
                 <div className="font-medium truncate">{sanitizeActivityName(activity.title)}</div>
                 <div className="text-sm text-muted-foreground flex items-center gap-1">
                   <MapPin className="w-3 h-3" />
-                  <span className="truncate">{activity.location.name}</span>
+                  <span className="truncate">
+                    {typeof activity.location === 'string' 
+                      ? activity.location 
+                      : activity.location?.name || activity.location?.address || ''}
+                  </span>
                 </div>
               </div>
               <div className="text-sm font-medium text-primary">

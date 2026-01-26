@@ -680,7 +680,9 @@ function ActivityRow({ activity, dayIndex, activityIndex, totalActivities, isLas
             <p className="text-sm text-muted-foreground mt-1">{activity.description}</p>
             <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />
-              {activity.location.name}
+              {typeof activity.location === 'string' 
+                ? activity.location 
+                : activity.location?.name || activity.location?.address || ''}
             </div>
           </div>
 
