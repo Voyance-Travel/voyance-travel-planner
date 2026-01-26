@@ -125,15 +125,18 @@ function AirportAutocomplete({
 
   const handleInputChange = (val: string) => {
     setInputValue(val);
-    setHasValidSelection(false);
-    // Clear the selection when user types - forces them to pick from dropdown
+    // Only clear selection if user is actively typing something different
     if (val.length === 0) {
+      setHasValidSelection(false);
       onChange({
         display: '',
         cityName: '',
         airportCodes: undefined,
         isMetroArea: false,
       });
+    } else if (hasValidSelection) {
+      // User is modifying a previously selected value - clear the valid selection
+      setHasValidSelection(false);
     }
     setIsOpen(true);
   };
@@ -153,7 +156,7 @@ function AirportAutocomplete({
         onFocus={() => {
           if (inputValue.length >= 2) setIsOpen(true);
         }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+        onBlur={() => setTimeout(() => setIsOpen(false), 300)}
         className={cn(
           "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
           showValidationHint ? "border-amber-500" : "border-border focus:border-primary"
@@ -181,7 +184,7 @@ function AirportAutocomplete({
                   <button
                     type="button"
                     className="w-full px-4 py-3 text-left hover:bg-primary/10 flex items-center gap-3 transition-colors bg-primary/5 border-b border-primary/20"
-                    onMouseDown={handleSelectMetro}
+                    onPointerDown={(e) => { e.preventDefault(); handleSelectMetro(); }}
                   >
                     <span className="text-xs font-bold text-primary tracking-wide w-10">ALL</span>
                     <div className="min-w-0 flex-1">
@@ -202,7 +205,7 @@ function AirportAutocomplete({
                     "w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3 transition-colors",
                     idx < airports.length - 1 && "border-b border-border/50"
                   )}
-                  onMouseDown={() => handleSelect(airport)}
+                  onPointerDown={(e) => { e.preventDefault(); handleSelect(airport); }}
                 >
                   <span className="text-xs font-semibold text-primary tracking-wide w-10">{airport.code}</span>
                   <div className="min-w-0 flex-1">
@@ -275,14 +278,18 @@ function DestinationAutocomplete({
 
   const handleInputChange = (val: string) => {
     setInputValue(val);
-    setHasValidSelection(false);
+    // Only clear selection if user is actively typing something different
     if (val.length === 0) {
+      setHasValidSelection(false);
       onChange({
         display: '',
         cityName: '',
         airportCodes: undefined,
         isMetroArea: false,
       });
+    } else if (hasValidSelection) {
+      // User is modifying a previously selected value - clear the valid selection
+      setHasValidSelection(false);
     }
     setIsOpen(true);
   };
@@ -302,7 +309,7 @@ function DestinationAutocomplete({
         onFocus={() => {
           if (inputValue.length >= 2) setIsOpen(true);
         }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+        onBlur={() => setTimeout(() => setIsOpen(false), 300)}
         className={cn(
           "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
           showValidationHint ? "border-amber-500" : "border-border focus:border-primary"
@@ -331,7 +338,7 @@ function DestinationAutocomplete({
                   "w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3 transition-colors",
                   idx < destinations.length - 1 && "border-b border-border/50"
                 )}
-                onMouseDown={() => handleSelect(dest)}
+                onPointerDown={(e) => { e.preventDefault(); handleSelect(dest); }}
               >
                 <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
                 <div className="min-w-0 flex-1">
