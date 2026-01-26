@@ -20,10 +20,11 @@ interface TravelerProfile {
   archetype: string;
   icon: typeof Zap;
   color: string;
+  dailyBudget: number;
   traits: {
     pace: number; // 1-10, 1=slow, 10=fast
     adventure: number;
-    budget: number; // 1-10, 1=budget, 10=luxury
+    comfort: number;
     social: number;
   };
 }
@@ -44,14 +45,16 @@ const TRAVELERS: [TravelerProfile, TravelerProfile] = [
     archetype: 'Adrenaline Architect',
     icon: Zap,
     color: 'text-orange-600',
-    traits: { pace: 9, adventure: 10, budget: 7, social: 6 },
+    dailyBudget: 450,
+    traits: { pace: 9, adventure: 10, comfort: 6, social: 6 },
   },
   {
     name: 'Jordan',
     archetype: 'Slow Traveler',
     icon: Leaf,
     color: 'text-emerald-600',
-    traits: { pace: 3, adventure: 4, budget: 5, social: 8 },
+    dailyBudget: 280,
+    traits: { pace: 3, adventure: 4, comfort: 8, social: 8 },
   },
 ];
 
@@ -150,16 +153,22 @@ export function DemoGroupBlend() {
                 transition={{ delay: idx * 0.1 }}
                 className="bg-card rounded-xl border p-5"
               >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center",
-                    idx === 0 ? "bg-orange-100" : "bg-emerald-100"
-                  )}>
-                    <Icon className={cn("h-5 w-5", traveler.color)} />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center",
+                      idx === 0 ? "bg-orange-100" : "bg-emerald-100"
+                    )}>
+                      <Icon className={cn("h-5 w-5", traveler.color)} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{traveler.name}</h3>
+                      <p className="text-sm text-muted-foreground">{traveler.archetype}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold">{traveler.name}</h3>
-                    <p className="text-sm text-muted-foreground">{traveler.archetype}</p>
+                  <div className="text-right">
+                    <p className="text-lg font-semibold">${traveler.dailyBudget}</p>
+                    <p className="text-xs text-muted-foreground">per day</p>
                   </div>
                 </div>
 
@@ -216,10 +225,17 @@ export function DemoGroupBlend() {
             animate={{ opacity: 1, height: 'auto' }}
             className="bg-card rounded-2xl border-2 border-primary/30 p-6 shadow-lg"
           >
-            <div className="flex items-center gap-2 mb-6">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold text-lg">Blended Day in Iceland</h3>
-              <Badge variant="secondary" className="ml-auto">Golden Circle</Badge>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold text-lg">Blended Day in Iceland</h3>
+                <Badge variant="secondary">Golden Circle</Badge>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-full">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">$365</span>
+                <span className="text-xs text-muted-foreground">blended budget</span>
+              </div>
             </div>
 
             <div className="space-y-4">
