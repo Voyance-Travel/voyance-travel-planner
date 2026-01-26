@@ -4733,6 +4733,7 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
   const [endTime, setEndTime] = useState('13:00');
   const [cost, setCost] = useState('0');
   const [locationName, setLocationName] = useState('');
+  const [locationAddress, setLocationAddress] = useState('');
 
   const handleSubmit = () => {
     onAdd({
@@ -4742,7 +4743,7 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
       startTime,
       endTime,
       cost: { amount: parseFloat(cost) || 0, currency: 'USD' },
-      location: { name: locationName, address: '' },
+      location: { name: locationName, address: locationAddress },
     });
     setTitle('');
     setDescription('');
@@ -4751,6 +4752,7 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
     setEndTime('13:00');
     setCost('0');
     setLocationName('');
+    setLocationAddress('');
   };
 
   return (
@@ -4789,8 +4791,12 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium mb-1 block">Location</label>
-            <Input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="Venue name" />
+            <label className="text-sm font-medium mb-1 block">Venue Name</label>
+            <Input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="e.g. Eiffel Tower" />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Address</label>
+            <Input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="e.g. Champ de Mars, 75007 Paris" />
           </div>
           <div>
             <label className="text-sm font-medium mb-1 block">Cost ($)</label>
