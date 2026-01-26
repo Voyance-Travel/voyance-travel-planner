@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, ArrowRight, X, Clock, Utensils, Plane, Heart } from 'lucide-react';
+import { Settings, ArrowRight, X, Clock, Utensils, MapPin, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreferenceCompletion } from '@/hooks/usePreferenceCompletion';
@@ -111,10 +111,10 @@ export function OnboardingRedirect() {
               <div className="mt-6 space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Your trips will include</p>
                 <div className="flex items-center gap-3 text-sm text-foreground">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                    <Plane className="h-4 w-4 text-blue-600" />
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <MapPin className="h-4 w-4 text-primary" />
                   </div>
-                  <span>Flights from your home airport</span>
+                  <span>Hotels that match your style</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-foreground">
                   <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
