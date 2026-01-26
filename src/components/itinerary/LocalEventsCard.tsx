@@ -145,7 +145,10 @@ export function LocalEventsCard({
               </span>
               <span className="flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
-                {event.location}
+                {typeof event.location === 'string' 
+                  ? event.location 
+                  : (event.location as { name?: string; address?: string })?.name || 
+                    (event.location as { name?: string; address?: string })?.address || ''}
               </span>
               {event.isFree ? (
                 <Badge variant="outline" className="text-xs text-green-600 border-green-600/30">

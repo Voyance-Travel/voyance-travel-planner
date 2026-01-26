@@ -474,7 +474,11 @@ function ActivityCard({
           <p className="text-xs mt-1 opacity-80">{activity.description}</p>
           <div className="flex items-center gap-2 mt-2">
             <MapPin className="h-3 w-3 opacity-60" />
-            <span className="text-xs opacity-60">{activity.location.name}</span>
+            <span className="text-xs opacity-60">
+              {typeof activity.location === 'string' 
+                ? activity.location 
+                : activity.location?.name || activity.location?.address || ''}
+            </span>
           </div>
           <div className="flex flex-wrap gap-1 mt-2">
             {activity.tags.slice(0, 3).map((tag, i) => (
