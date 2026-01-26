@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Sparkles, Wand2, RefreshCw, MapPin, Lock, Star,
-  ChevronLeft, ChevronRight, Check, Clock, ArrowRight
+  Sparkles, RefreshCw, MapPin, Lock, Star,
+  ChevronLeft, ChevronRight, Check, Clock, ArrowRight,
+  TrendingUp, Zap, Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,35 +13,31 @@ import { cn } from '@/lib/utils';
 const FEATURES = [
   {
     id: 'quiz',
-    title: 'Travel DNA Quiz',
-    subtitle: '2 minutes to understand you',
-    description: 'Answer fun questions about your travel style. Early bird or night owl? Adventure seeker or culture lover? We build your unique traveler profile.',
-    icon: Sparkles,
-    color: 'from-violet-500 to-purple-600',
+    title: 'Your Travel Profile',
+    subtitle: '2 minutes to unlock personalized trips',
+    description: 'Answer a few questions about how you like to travel. We learn your pace, interests, and style to build trips that actually fit you.',
+    valuePoint: 'No more generic itineraries that don\'t match your style.',
   },
   {
     id: 'generate',
-    title: 'AI Builds Your Trip',
-    subtitle: 'Personalized in seconds',
-    description: 'Watch our AI craft a day-by-day itinerary tailored to your preferences. Every restaurant, activity, and timing optimized just for you.',
-    icon: Wand2,
-    color: 'from-blue-500 to-cyan-500',
+    title: 'Curated in Seconds',
+    subtitle: 'What takes hours, we do instantly',
+    description: 'Our system analyzes thousands of options—restaurants, activities, routes—and builds a day-by-day plan tailored to your preferences.',
+    valuePoint: 'Save 8+ hours of research per trip.',
   },
   {
     id: 'customize',
     title: 'Lock & Swap',
-    subtitle: 'Make it yours',
-    description: "Love something? Lock it in. Not feeling an activity? Swap it with one click. The AI adapts around your choices instantly.",
-    icon: RefreshCw,
-    color: 'from-emerald-500 to-teal-500',
+    subtitle: 'Your trip, your control',
+    description: 'Love something? Lock it in. Not feeling an activity? Swap it instantly. We adapt around your choices while keeping your day optimized.',
+    valuePoint: 'The flexibility of DIY with the polish of a travel agent.',
   },
   {
     id: 'optimize',
     title: 'Smart Routing',
-    subtitle: 'Less walking, more exploring',
-    description: 'AI optimizes your daily routes so you spend less time commuting and more time experiencing. Perfect timing for every stop.',
-    icon: MapPin,
-    color: 'from-orange-500 to-amber-500',
+    subtitle: 'More time exploring, less commuting',
+    description: 'We optimize your daily routes so activities flow naturally. No backtracking, no wasted time between stops.',
+    valuePoint: 'Average 45 minutes saved per day.',
   },
 ];
 
@@ -52,20 +49,6 @@ export function DemoFeatureShowcase({ onComplete }: DemoFeatureShowcaseProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const currentFeature = FEATURES[currentIndex];
   const isLast = currentIndex === FEATURES.length - 1;
-
-  // Auto-advance option
-  const [autoPlay, setAutoPlay] = useState(false);
-  useEffect(() => {
-    if (!autoPlay) return;
-    const timer = setTimeout(() => {
-      if (isLast) {
-        onComplete();
-      } else {
-        setCurrentIndex(prev => prev + 1);
-      }
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [currentIndex, autoPlay, isLast, onComplete]);
 
   const goNext = () => {
     if (isLast) {
@@ -82,63 +65,64 @@ export function DemoFeatureShowcase({ onComplete }: DemoFeatureShowcaseProps) {
   };
 
   return (
-    <section className="py-16 min-h-screen flex items-center bg-gradient-to-b from-background to-secondary/20">
-      <div className="max-w-6xl mx-auto px-4 w-full">
-        {/* Progress bar */}
-        <div className="flex items-center justify-center gap-3 mb-12">
-          {FEATURES.map((feature, idx) => (
+    <section className="min-h-screen flex items-center py-16 bg-gradient-to-b from-secondary/20 via-background to-background">
+      <div className="max-w-5xl mx-auto px-4 w-full">
+        {/* Progress */}
+        <div className="flex items-center justify-center gap-2 mb-12">
+          {FEATURES.map((_, idx) => (
             <button
-              key={feature.id}
+              key={idx}
               onClick={() => setCurrentIndex(idx)}
-              className="group flex items-center gap-2"
+              className="group"
             >
               <div className={cn(
-                "h-1.5 rounded-full transition-all duration-500",
+                "h-1 rounded-full transition-all duration-400",
                 idx === currentIndex 
-                  ? "w-16 bg-primary" 
+                  ? "w-12 bg-primary" 
                   : idx < currentIndex 
-                    ? "w-8 bg-primary/60" 
-                    : "w-8 bg-muted"
+                    ? "w-6 bg-primary/50" 
+                    : "w-6 bg-border"
               )} />
             </button>
           ))}
         </div>
 
-        {/* Feature content */}
+        {/* Content */}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentFeature.id}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-            className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center"
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.35 }}
+            className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center"
           >
             {/* Left: Content */}
             <div className="order-2 lg:order-1">
-              <Badge variant="outline" className="mb-6 text-sm">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
                 Step {currentIndex + 1} of {FEATURES.length}
-              </Badge>
-              
-              <div className={cn(
-                "w-16 h-16 rounded-2xl bg-gradient-to-br flex items-center justify-center mb-6 shadow-lg",
-                currentFeature.color
-              )}>
-                <currentFeature.icon className="h-8 w-8 text-white" />
-              </div>
+              </p>
 
-              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3">
+              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3 text-foreground">
                 {currentFeature.title}
               </h2>
               <p className="text-lg text-primary font-medium mb-4">
                 {currentFeature.subtitle}
               </p>
-              <p className="text-muted-foreground text-lg leading-relaxed mb-8">
+              <p className="text-muted-foreground leading-relaxed mb-6">
                 {currentFeature.description}
               </p>
 
+              {/* Value proposition */}
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/30 border border-border/50 mb-8">
+                <TrendingUp className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <p className="text-sm text-foreground font-medium">
+                  {currentFeature.valuePoint}
+                </p>
+              </div>
+
               {/* Navigation */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
                   onClick={goPrev}
@@ -165,23 +149,23 @@ export function DemoFeatureShowcase({ onComplete }: DemoFeatureShowcaseProps) {
               </div>
             </div>
 
-            {/* Right: Interactive Preview */}
+            {/* Right: Visual */}
             <div className="order-1 lg:order-2">
-              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 shadow-2xl">
-                <FeaturePreview feature={currentFeature} />
+              <Card className="p-6 bg-card border-border/50 shadow-lg">
+                <FeatureVisual feature={currentFeature} />
               </Card>
             </div>
           </motion.div>
         </AnimatePresence>
 
-        {/* Skip option */}
+        {/* Skip */}
         <div className="text-center mt-12">
           <Button
             variant="link"
             onClick={onComplete}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground text-sm"
           >
-            Skip tour and try playground →
+            Skip to playground →
           </Button>
         </div>
       </div>
@@ -189,237 +173,250 @@ export function DemoFeatureShowcase({ onComplete }: DemoFeatureShowcaseProps) {
   );
 }
 
-function FeaturePreview({ feature }: { feature: typeof FEATURES[0] }) {
+function FeatureVisual({ feature }: { feature: typeof FEATURES[0] }) {
   if (feature.id === 'quiz') {
-    return <QuizPreview />;
+    return <QuizVisual />;
   }
   if (feature.id === 'generate') {
-    return <GenerationPreview />;
+    return <GenerationVisual />;
   }
   if (feature.id === 'customize') {
-    return <CustomizePreview />;
+    return <CustomizeVisual />;
   }
   if (feature.id === 'optimize') {
-    return <RoutePreview />;
+    return <RouteVisual />;
   }
   return null;
 }
 
-function QuizPreview() {
+function QuizVisual() {
   const [selected, setSelected] = useState<number | null>(null);
-  const options = ['Relaxed Explorer', 'Adventure Seeker', 'Culture Enthusiast', 'Foodie Traveler'];
+  const options = [
+    { label: 'Relaxed Explorer', desc: 'Take it slow, savor each moment' },
+    { label: 'Culture Enthusiast', desc: 'Museums, history, local traditions' },
+    { label: 'Adventure Seeker', desc: 'Active experiences, off the beaten path' },
+    { label: 'Foodie Traveler', desc: 'Culinary experiences are the priority' },
+  ];
 
   return (
     <div className="space-y-4">
       <div className="text-center mb-6">
-        <p className="text-sm text-muted-foreground mb-2">Question 3 of 8</p>
-        <h3 className="text-lg font-medium">What's your travel style?</h3>
+        <p className="text-xs text-muted-foreground mb-1">Question 3 of 8</p>
+        <h3 className="text-base font-medium">What describes you best?</h3>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         {options.map((option, idx) => (
           <motion.button
-            key={option}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: idx * 0.1 }}
+            key={option.label}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.08 }}
             onClick={() => setSelected(idx)}
             className={cn(
-              "p-4 rounded-xl border-2 text-left transition-all",
+              "p-3 rounded-lg border text-left transition-all",
               selected === idx 
-                ? "border-primary bg-primary/10" 
+                ? "border-primary bg-primary/5" 
                 : "border-border hover:border-primary/50"
             )}
           >
-            <span className="text-sm font-medium">{option}</span>
+            <span className="text-sm font-medium block">{option.label}</span>
+            <span className="text-xs text-muted-foreground">{option.desc}</span>
           </motion.button>
         ))}
       </div>
+      <p className="text-xs text-center text-muted-foreground mt-4">
+        <Users className="h-3 w-3 inline mr-1" />
+        12,000+ travelers profiled
+      </p>
     </div>
   );
 }
 
-function GenerationPreview() {
+function GenerationVisual() {
   const [step, setStep] = useState(0);
   const steps = [
-    { label: 'Analyzing preferences', icon: Sparkles },
-    { label: 'Finding local gems', icon: MapPin },
-    { label: 'Optimizing schedule', icon: Clock },
-    { label: 'Itinerary ready!', icon: Check },
+    { label: 'Analyzing your preferences', done: false },
+    { label: 'Finding verified venues', done: false },
+    { label: 'Optimizing daily routes', done: false },
+    { label: 'Itinerary ready', done: false },
   ];
 
   useEffect(() => {
     const timer = setInterval(() => {
       setStep(prev => (prev < steps.length - 1 ? prev + 1 : prev));
-    }, 800);
+    }, 700);
     return () => clearInterval(timer);
   }, []);
 
   return (
     <div className="space-y-4">
       <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-sm">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
           >
-            <Wand2 className="h-4 w-4" />
+            <Zap className="h-3.5 w-3.5 text-primary" />
           </motion.div>
-          Building "Bali Wellness Retreat"
+          Building "Bali, Indonesia"
         </div>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {steps.map((s, idx) => (
           <motion.div
             key={s.label}
-            initial={{ opacity: 0.3, x: -10 }}
-            animate={{ 
-              opacity: idx <= step ? 1 : 0.3, 
-              x: idx <= step ? 0 : -10 
-            }}
+            initial={{ opacity: 0.4 }}
+            animate={{ opacity: idx <= step ? 1 : 0.4 }}
             className={cn(
               "flex items-center gap-3 p-3 rounded-lg transition-colors",
-              idx <= step ? "bg-primary/10" : "bg-muted/30"
+              idx <= step ? "bg-muted/50" : ""
             )}
           >
             <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+              "w-6 h-6 rounded-full flex items-center justify-center text-xs transition-colors",
               idx < step ? "bg-primary text-primary-foreground" : 
               idx === step ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
             )}>
-              {idx < step ? <Check className="h-4 w-4" /> : <s.icon className="h-4 w-4" />}
+              {idx < step ? <Check className="h-3.5 w-3.5" /> : idx + 1}
             </div>
             <span className={cn(
-              "text-sm font-medium",
+              "text-sm",
               idx <= step ? "text-foreground" : "text-muted-foreground"
             )}>{s.label}</span>
           </motion.div>
         ))}
       </div>
+      <p className="text-xs text-center text-muted-foreground mt-4">
+        <Clock className="h-3 w-3 inline mr-1" />
+        Average generation: 12 seconds
+      </p>
     </div>
   );
 }
 
-function CustomizePreview() {
+function CustomizeVisual() {
   const [locked, setLocked] = useState(false);
   const [swapped, setSwapped] = useState(false);
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground text-center mb-4">
-        Click to interact with activities
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground text-center mb-4">
+        Click to interact
       </p>
       
-      {/* Activity cards that look like real ones */}
-      <motion.div
-        className={cn(
-          "flex items-stretch rounded-lg border overflow-hidden transition-all",
-          locked ? "border-primary bg-primary/5" : "border-border hover:bg-secondary/30"
-        )}
-      >
-        <div className="w-16 shrink-0 p-3 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5">
-          <span className="text-xs font-medium">09:00</span>
-          <p className="text-[10px] text-muted-foreground">2h</p>
-        </div>
-        <div className="w-16 h-16 shrink-0 border-r border-border overflow-hidden">
+      {/* Activity card 1 */}
+      <div className={cn(
+        "flex items-center gap-3 p-3 rounded-lg border transition-all",
+        locked ? "border-primary bg-primary/5" : "border-border"
+      )}>
+        <div className="w-12 h-12 rounded-md bg-muted overflow-hidden shrink-0">
           <img 
             src="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=200" 
-            alt="Temple"
+            alt="" 
             className="w-full h-full object-cover"
           />
         </div>
-        <div className="flex-1 p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Cultural</Badge>
-            <Badge variant="secondary" className="text-[10px] gap-0.5 bg-amber-500/10 text-amber-600 border-none">
-              <Star className="h-2.5 w-2.5 fill-amber-500" /> 4.9
-            </Badge>
-          </div>
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">Tanah Lot Temple</p>
+          <p className="text-xs text-muted-foreground">09:00 • 2 hours</p>
         </div>
         <button 
           onClick={() => setLocked(!locked)}
-          className="px-3 border-l border-border hover:bg-secondary/50 transition-colors"
+          className={cn(
+            "w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+            locked ? "bg-primary/10" : "bg-muted hover:bg-muted/80"
+          )}
         >
-          <Lock className={cn(
-            "h-4 w-4 transition-colors",
-            locked ? "text-primary fill-primary/20" : "text-muted-foreground"
-          )} />
+          <Lock className={cn("h-4 w-4", locked ? "text-primary" : "text-muted-foreground")} />
         </button>
-      </motion.div>
+      </div>
 
+      {/* Activity card 2 */}
       <motion.div
-        animate={swapped ? { scale: [1, 0.95, 1] } : {}}
-        className="flex items-stretch rounded-lg border border-border overflow-hidden hover:bg-secondary/30 transition-colors"
+        animate={swapped ? { scale: [1, 0.98, 1] } : {}}
+        className="flex items-center gap-3 p-3 rounded-lg border border-border"
       >
-        <div className="w-16 shrink-0 p-3 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5">
-          <span className="text-xs font-medium">12:00</span>
-          <p className="text-[10px] text-muted-foreground">1.5h</p>
-        </div>
-        <div className="w-16 h-16 shrink-0 border-r border-border overflow-hidden">
+        <div className="w-12 h-12 rounded-md bg-muted overflow-hidden shrink-0">
           <img 
             src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=200" 
-            alt="Food"
+            alt="" 
             className="w-full h-full object-cover"
           />
         </div>
-        <div className="flex-1 p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Dining</Badge>
-          </div>
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">
-            {swapped ? 'Warung Local Cuisine' : 'Bebek Bengil Restaurant'}
+            {swapped ? 'Local Warung Experience' : 'Bebek Bengil Restaurant'}
           </p>
+          <p className="text-xs text-muted-foreground">12:00 • 1.5 hours</p>
         </div>
         <button 
           onClick={() => setSwapped(!swapped)}
-          className="px-3 border-l border-border hover:bg-secondary/50 transition-colors"
+          className="w-8 h-8 rounded-md bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
         >
           <RefreshCw className="h-4 w-4 text-muted-foreground" />
         </button>
       </motion.div>
 
-      <p className="text-xs text-center text-muted-foreground mt-4">
-        💡 Click lock or swap icons to see the interaction
-      </p>
+      <div className="flex items-center justify-center gap-4 pt-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <Lock className="h-3 w-3" /> Lock to keep
+        </span>
+        <span className="flex items-center gap-1">
+          <RefreshCw className="h-3 w-3" /> Swap to replace
+        </span>
+      </div>
     </div>
   );
 }
 
-function RoutePreview() {
+function RouteVisual() {
   return (
     <div className="space-y-4">
       <div className="text-center mb-4">
-        <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-          45 min saved today
+        <Badge variant="secondary" className="text-xs">
+          47 min saved today
         </Badge>
       </div>
       
-      {/* Visual route timeline */}
+      {/* Route timeline */}
       <div className="relative pl-6">
-        <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-primary/20" />
+        <div className="absolute left-2 top-3 bottom-3 w-px bg-gradient-to-b from-primary via-primary/50 to-primary/20" />
         
         {[
-          { time: '09:00', place: 'Villa Amrita', type: 'Start' },
-          { time: '09:15', place: 'Tanah Lot Temple', type: '15 min drive' },
-          { time: '11:30', place: 'Tirta Empul', type: '25 min drive' },
-          { time: '14:00', place: 'Ubud Market', type: '10 min walk' },
+          { time: '09:00', place: 'Hotel Pickup', duration: null },
+          { time: '09:15', place: 'Tanah Lot Temple', duration: '15 min drive' },
+          { time: '11:30', place: 'Tirta Empul', duration: '20 min drive' },
+          { time: '14:00', place: 'Ubud Market', duration: '12 min drive' },
+          { time: '16:00', place: 'Rice Terraces', duration: '8 min walk' },
         ].map((stop, idx) => (
           <motion.div
             key={stop.place}
-            initial={{ opacity: 0, x: -10 }}
+            initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: idx * 0.2 }}
+            transition={{ delay: idx * 0.12 }}
             className="relative mb-4 last:mb-0"
           >
-            <div className="absolute -left-4 w-4 h-4 rounded-full bg-primary border-2 border-background" />
-            <div className="pl-4">
-              <p className="text-xs text-muted-foreground">{stop.time}</p>
-              <p className="text-sm font-medium">{stop.place}</p>
-              <p className="text-xs text-primary">{stop.type}</p>
+            <div className={cn(
+              "absolute -left-4 w-3 h-3 rounded-full border-2 border-background",
+              idx === 0 ? "bg-primary" : "bg-primary/60"
+            )} />
+            <div className="pl-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground w-10">{stop.time}</span>
+                <span className="text-sm font-medium">{stop.place}</span>
+              </div>
+              {stop.duration && (
+                <p className="text-xs text-primary/80 ml-12">{stop.duration}</p>
+              )}
             </div>
           </motion.div>
         ))}
       </div>
+
+      <p className="text-xs text-center text-muted-foreground pt-2">
+        <MapPin className="h-3 w-3 inline mr-1" />
+        Routes optimized for minimal travel time
+      </p>
     </div>
   );
 }
