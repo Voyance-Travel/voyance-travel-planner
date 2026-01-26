@@ -624,7 +624,7 @@ export function DemoPlayground() {
                       <span className="text-xs font-medium ml-1">4.8</span>
                     </div>
                     <p className="text-xs text-muted-foreground italic">"Absolutely magical experience..."</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">— From 2,847 reviews</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">- From 2,847 reviews</p>
                   </div>
                 </div>
               </CardContent>

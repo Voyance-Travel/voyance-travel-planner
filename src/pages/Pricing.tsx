@@ -168,7 +168,7 @@ export default function Pricing() {
                 <Lock className="w-5 h-5 text-muted-foreground" />
                 <p className="text-foreground">
                   <span className="font-medium">Free users see Day 1 only.</span>{' '}
-                  <span className="text-muted-foreground">Upgrade to see your full itinerary — every day matched to </span>
+                  <span className="text-muted-foreground">Upgrade to see your full itinerary - every day matched to </span>
                   <span className="text-primary font-medium italic">your</span>
                   <span className="text-muted-foreground"> Travel DNA.</span>
                 </p>
@@ -617,7 +617,7 @@ export default function Pricing() {
             {[
               { 
                 q: 'What is Travel DNA?', 
-                a: 'Travel DNA is your personalization profile. A 2-minute quiz identifies your travel personality from 27 archetypes — things like your pace, energy levels, food preferences, and crowd tolerance. Every itinerary we build uses your DNA to select activities, restaurants, and timing that actually fit how you travel.' 
+                a: 'Travel DNA is your personalization profile. A 2-minute quiz identifies your travel personality from 27 archetypes - things like your pace, energy levels, food preferences, and crowd tolerance. Every itinerary we build uses your DNA to select activities, restaurants, and timing that actually fit how you travel.' 
               },
               { 
                 q: 'What can I do for free?', 
