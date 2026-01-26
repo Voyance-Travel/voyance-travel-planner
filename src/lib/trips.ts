@@ -74,41 +74,8 @@ export interface ItineraryItem {
   rationale?: string[];
 }
 
-// Mock flight options generator
-export function generateFlightOptions(departureCity: string, destination: string, date: string): FlightOption[] {
-  const airlines = ['United', 'Delta', 'American', 'British Airways', 'Lufthansa', 'Air France', 'KLM', 'Emirates'];
-  const times = ['06:30', '08:45', '10:15', '13:30', '15:00', '18:45', '21:00'];
-  
-  return Array.from({ length: 6 }, (_, i) => {
-    const stops = i < 2 ? 0 : i < 4 ? 1 : 2;
-    const basePrice = 450 + Math.random() * 800;
-    const cabins: Array<'economy' | 'premium_economy' | 'business' | 'first'> = ['economy', 'premium_economy', 'business', 'first'];
-    const cabin = cabins[Math.floor(i / 2)];
-    const priceMultiplier = cabin === 'economy' ? 1 : cabin === 'premium_economy' ? 1.5 : cabin === 'business' ? 3 : 5;
-    
-    const departHour = parseInt(times[i % times.length].split(':')[0]);
-    const flightHours = 8 + Math.random() * 6 + stops * 2;
-    const arriveHour = (departHour + Math.floor(flightHours)) % 24;
-    
-    const rationales = [
-      stops === 0 ? 'Direct flight minimizes travel fatigue' : `${stops} stop(s) for better pricing`,
-      departHour < 10 ? 'Morning departure maximizes first day' : departHour > 18 ? 'Evening flight allows full work day' : 'Midday departure balances rest and arrival time',
-      `${cabin.replace('_', ' ')} cabin selected for comfort preference`,
-    ];
-
-    return {
-      id: `flight-${i}`,
-      airline: airlines[Math.floor(Math.random() * airlines.length)],
-      departureTime: times[i % times.length],
-      arrivalTime: `${String(arriveHour).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
-      duration: `${Math.floor(flightHours)}h ${Math.floor((flightHours % 1) * 60)}m`,
-      stops,
-      price: Math.round(basePrice * priceMultiplier),
-      cabin,
-      rationale: rationales,
-    };
-  });
-}
+// NOTE: Flight search removed - platform uses manual flight entry only
+// See AddBookingInline.tsx for the manual entry flow
 
 // Mock hotel options generator
 export function generateHotelOptions(destination: string, nights: number): HotelOption[] {
