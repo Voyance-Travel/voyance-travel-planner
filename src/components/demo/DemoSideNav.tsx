@@ -7,7 +7,8 @@ import {
   UsersRound, 
   Map, 
   Rocket,
-  ChevronDown
+  ChevronDown,
+  MousePointer
 } from 'lucide-react';
 
 interface NavSection {
@@ -24,6 +25,8 @@ const SECTIONS: NavSection[] = [
   { id: 'cta', label: 'Get Started', icon: Rocket },
 ];
 
+const HINT_STORAGE_KEY = 'voyance_demo_nav_hint_seen';
+
 interface DemoSideNavProps {
   showTour: boolean;
 }
@@ -32,6 +35,23 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
   const [activeSection, setActiveSection] = useState('hero');
   const [isExpanded, setIsExpanded] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showHint, setShowHint] = useState(false);
+
+  // Show hint on first visit only
+  useEffect(() => {
+    const hasSeenHint = localStorage.getItem(HINT_STORAGE_KEY);
+    if (!hasSeenHint && !showTour) {
+      const timer = setTimeout(() => {
+        setShowHint(true);
+      }, 2000); // Show after 2 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [showTour]);
+
+  const dismissHint = () => {
+    setShowHint(false);
+    localStorage.setItem(HINT_STORAGE_KEY, 'true');
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,6 +59,11 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
       const docHeight = document.documentElement.scrollHeight - window.innerHeight;
       const scrollProgress = Math.min((window.scrollY / docHeight) * 100, 100);
       setProgress(scrollProgress);
+
+      // Dismiss hint on scroll
+      if (showHint && window.scrollY > 100) {
+        dismissHint();
+      }
 
       for (let i = SECTIONS.length - 1; i >= 0; i--) {
         const section = document.getElementById(SECTIONS[i].id);
@@ -52,9 +77,10 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
     window.addEventListener('scroll', handleScroll);
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [showHint]);
 
   const scrollToSection = (id: string) => {
+    dismissHint();
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
@@ -136,6 +162,38 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
         transition={{ delay: 0.5 }}
         className="fixed right-6 top-1/2 -translate-y-1/2 z-40 hidden lg:flex flex-row-reverse items-center gap-4"
       >
+        {/* One-time hint tooltip */}
+        <AnimatePresence>
+          {showHint && (
+            <motion.div
+              initial={{ opacity: 0, x: 20, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 10, scale: 0.95 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="absolute right-full mr-4 top-1/2 -translate-y-1/2"
+            >
+              <button
+                onClick={dismissHint}
+                className="relative flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl shadow-lg shadow-primary/25 whitespace-nowrap"
+              >
+                <MousePointer className="h-4 w-4" />
+                <span className="text-sm font-medium">Jump to sections</span>
+                
+                {/* Arrow pointing right */}
+                <div className="absolute right-0 top-1/2 translate-x-1.5 -translate-y-1/2 w-3 h-3 rotate-45 bg-primary" />
+                
+                {/* Subtle pulse effect */}
+                <motion.div
+                  className="absolute inset-0 rounded-xl bg-primary"
+                  initial={{ scale: 1, opacity: 0.5 }}
+                  animate={{ scale: 1.1, opacity: 0 }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Progress bar */}
         <div className="relative h-64 w-1 bg-muted rounded-full overflow-hidden">
           <motion.div 
