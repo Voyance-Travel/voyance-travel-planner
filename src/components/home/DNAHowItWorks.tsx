@@ -37,7 +37,13 @@ const STEPS = [
 
 export default function DNAHowItWorks() {
   return (
-    <section className="py-24 md:py-32 bg-muted/30 relative overflow-hidden">
+    <section className="py-32 md:py-40 bg-muted/50 relative overflow-hidden">
+      {/* Top curved divider */}
+      <div className="absolute top-0 left-0 right-0 h-24 -translate-y-full">
+        <svg viewBox="0 0 1440 96" fill="none" className="absolute bottom-0 w-full h-24" preserveAspectRatio="none">
+          <path d="M0 96L1440 96L1440 0C1440 0 1080 96 720 96C360 96 0 0 0 0L0 96Z" className="fill-muted/50" />
+        </svg>
+      </div>
       <div className="max-w-6xl mx-auto px-8 md:px-16">
         {/* Section Header */}
         <motion.div
@@ -104,7 +110,7 @@ export default function DNAHowItWorks() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mt-12"
+          className="text-center mt-16"
         >
           <Button asChild size="lg" variant="outline" className="font-sans">
             <Link to={ROUTES.START}>
@@ -113,6 +119,11 @@ export default function DNAHowItWorks() {
             </Link>
           </Button>
         </motion.div>
+
+        {/* Bottom connector */}
+        <div className="flex justify-center mt-20">
+          <div className="w-px h-20 bg-gradient-to-b from-border to-transparent" />
+        </div>
       </div>
     </section>
   );

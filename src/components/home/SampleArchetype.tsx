@@ -28,11 +28,17 @@ const SAMPLE_ARCHETYPE = {
 
 export default function SampleArchetype() {
   return (
-    <section id="sample-archetype" className="py-24 md:py-32 bg-background relative overflow-hidden">
+    <section id="sample-archetype" className="py-32 md:py-40 bg-background relative overflow-hidden">
+      {/* Top fade transition from hero */}
+      <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/5 to-transparent pointer-events-none" />
+      
       {/* Subtle background pattern */}
-      <div className="absolute inset-0 opacity-[0.02]">
-        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)', backgroundSize: '40px 40px' }} />
+      <div className="absolute inset-0 opacity-[0.015]">
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)', backgroundSize: '48px 48px' }} />
       </div>
+      
+      {/* Decorative side accent */}
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-48 bg-gradient-to-b from-transparent via-primary/20 to-transparent hidden lg:block" />
 
       <div className="max-w-6xl mx-auto px-8 md:px-16">
         {/* Section Header */}
@@ -175,6 +181,18 @@ export default function SampleArchetype() {
                 </Link>
               </Button>
             </div>
+          </div>
+        </motion.div>
+
+        {/* Bottom connector arrow */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="flex justify-center mt-16"
+        >
+          <div className="flex flex-col items-center text-muted-foreground/40">
+            <div className="w-px h-16 bg-gradient-to-b from-border to-transparent" />
           </div>
         </motion.div>
       </div>

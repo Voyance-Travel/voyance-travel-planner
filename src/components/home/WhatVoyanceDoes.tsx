@@ -32,7 +32,16 @@ const YOU_HANDLE = {
 
 export default function WhatVoyanceDoes() {
   return (
-    <section className="py-24 md:py-32 bg-background relative overflow-hidden">
+    <section className="py-32 md:py-40 bg-background relative overflow-hidden">
+      {/* Top curved divider */}
+      <div className="absolute top-0 left-0 right-0 h-24 -translate-y-full">
+        <svg viewBox="0 0 1440 96" fill="none" className="absolute bottom-0 w-full h-24" preserveAspectRatio="none">
+          <path d="M0 96L1440 96L1440 0C1440 0 1080 96 720 96C360 96 0 0 0 0L0 96Z" className="fill-background" />
+        </svg>
+      </div>
+      
+      {/* Decorative vertical line */}
+      <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent hidden lg:block" />
       <div className="max-w-5xl mx-auto px-8 md:px-16">
         {/* Section Header */}
         <motion.div

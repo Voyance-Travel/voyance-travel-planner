@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 
 export default function TravelQuote() {
   return (
-    <section className="relative py-40 overflow-hidden">
+    <section className="relative py-48 md:py-56 overflow-hidden">
       {/* Full-width background image */}
       <div className="absolute inset-0">
         <img
