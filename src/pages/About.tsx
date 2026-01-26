@@ -373,7 +373,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* The Full Story Section */}
+      {/* Why Voyance Exists */}
       <section className="py-24 bg-background relative overflow-hidden">
         <div className="absolute top-20 left-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl" />
         
@@ -384,30 +384,94 @@ export default function About() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Full Story</span>
+              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Why Voyance Exists</span>
               <div className="mt-8 space-y-6 text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-xl">
-                  We're not going to tell you we're "revolutionizing travel" or that we have "millions of happy users."
+                  Voyance started because I kept having the same experience.
                 </p>
                 <p className="text-muted-foreground">
-                  The truth? We're a small team building something we actually want to use. We got tired of 
-                  planning trips with 40 browser tabs, conflicting reviews, and recommendations that felt 
-                  like they were written for someone else.
-                </p>
-                <p className="text-muted-foreground">
-                  So we built Voyance: AI that understands how <em>you</em> travel—your pace, your interests, 
-                  your definition of a good day—and creates itineraries that actually fit.
+                  I'd spend hours planning a trip, make thoughtful choices, and still end up wasting time and 
+                  money in ways that didn't feel obvious until I was already there. The day gets eaten by long 
+                  waits, awkward logistics, and "this is fine, I guess" moments that don't match what you hoped 
+                  the trip would feel like.
                 </p>
                 <p className="text-foreground font-medium">
-                  We're early. Some features are still being polished. But what's here works, and we're 
-                  shipping improvements every week.
+                  I wanted a better way to plan—one that protects your vacation time, respects your budget, 
+                  and actually reflects you.
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* What We're Building */}
+      <section className="py-24 bg-muted/20 relative overflow-hidden">
+        <div className="absolute bottom-10 right-10 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
+        
+        <div className="container mx-auto px-6 relative z-10">
+          <div className="max-w-3xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">What We're Building</span>
+              <div className="mt-8 space-y-6 text-lg leading-relaxed">
+                <p className="text-foreground font-medium text-xl">
+                  Voyance is a travel design platform.
                 </p>
                 <p className="text-muted-foreground">
-                  If you try it and something's off, tell us. We read every message. This isn't a faceless 
-                  corporation—it's a real team that cares about getting this right.
+                  It helps you turn preferences into a trip that makes sense in real life:
                 </p>
-                <p className="text-foreground font-medium italic">
-                  No hype. Just honest tools for better trips.
+                <ul className="space-y-3 text-muted-foreground">
+                  <li className="flex items-start gap-3">
+                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                    <span><strong className="text-foreground">Smart timing</strong> so you're not accidentally choosing the busiest, most expensive windows</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                    <span><strong className="text-foreground">Geographically coherent plans</strong> so you're not zig-zagging across a city</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                    <span><strong className="text-foreground">Budget applied across the whole trip</strong>, with day-by-day balance</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                    <span><strong className="text-foreground">Clear reasoning</strong> behind recommendations, so you can trust the plan—not just follow it</span>
+                  </li>
+                </ul>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Who's Behind It */}
+      <section className="py-24 bg-background relative overflow-hidden">
+        <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-primary/3 rounded-full blur-3xl" />
+        
+        <div className="container mx-auto px-6 relative z-10">
+          <div className="max-w-3xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Who's Behind It</span>
+              <div className="mt-8 space-y-6 text-lg leading-relaxed">
+                <p className="text-muted-foreground">
+                  Voyance is being built by a small team across engineering, AI, and design—focused on accuracy, 
+                  performance, and a premium experience that feels calm and intentional.
+                </p>
+                <p className="text-muted-foreground">
+                  We're also early. We won't pretend we're bigger than we are. We're building this carefully, 
+                  and we want early users who care about doing travel smarter—not louder.
+                </p>
+                <p className="text-foreground font-medium">
+                  If you're joining now, you're joining at the ground floor—and your feedback will shape 
+                  what Voyance becomes.
                 </p>
               </div>
               
