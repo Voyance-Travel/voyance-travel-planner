@@ -10,7 +10,11 @@ import {
   Star,
   DollarSign,
   Lock,
-  Dna
+  Dna,
+  Leaf,
+  Zap,
+  Palette,
+  type LucideIcon
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -266,20 +270,22 @@ export default function HowItWorks() {
             transition={{ delay: 0.1 }}
             className="grid md:grid-cols-3 gap-6 mb-12"
           >
-            {[
-              { name: 'The Slow Traveler', desc: 'Savors every moment, never rushes', emoji: '🌿' },
-              { name: 'The Adrenaline Architect', desc: 'Plans adventures others dream about', emoji: '⚡' },
-              { name: 'The Cultural Curator', desc: 'Seeks authentic, local experiences', emoji: '🎭' },
-            ].map((archetype, idx) => (
+            {([
+              { name: 'The Slow Traveler', desc: 'Savors every moment, never rushes', Icon: Leaf },
+              { name: 'The Adrenaline Architect', desc: 'Plans adventures others dream about', Icon: Zap },
+              { name: 'The Cultural Curator', desc: 'Seeks authentic, local experiences', Icon: Palette },
+            ] as { name: string; desc: string; Icon: LucideIcon }[]).map((archetype, idx) => (
               <motion.div
                 key={archetype.name}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.1 }}
-                className="bg-card border border-border rounded-2xl p-6 text-center"
+                className="bg-card border border-border/50 rounded-xl p-8 text-center hover:border-primary/30 hover:shadow-md transition-all"
               >
-                <div className="text-4xl mb-4">{archetype.emoji}</div>
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-5">
+                  <archetype.Icon className="h-5 w-5 text-primary" />
+                </div>
                 <h3 className="font-semibold text-foreground mb-2">{archetype.name}</h3>
                 <p className="text-sm text-muted-foreground">{archetype.desc}</p>
               </motion.div>
