@@ -524,43 +524,11 @@ function FlightsSection({ preferences, onUpdate, isSaving }: SectionProps) {
         </p>
       </PreferenceGroup>
 
-      {/* Cabin Class */}
-      <PreferenceGroup label="Preferred Cabin Class">
-        <RadioGroup
-          value={(preferences?.flight_preferences as Record<string, string>)?.cabin_class || 'economy'}
-          onValueChange={(value) => onUpdate('flight_preferences', { 
-            ...preferences?.flight_preferences as Record<string, unknown>, 
-            cabin_class: value 
-          })}
-          className="grid sm:grid-cols-2 gap-3"
-        >
-          <RadioOption value="economy" label="Economy" />
-          <RadioOption value="premium_economy" label="Premium Economy" />
-          <RadioOption value="business" label="Business" />
-          <RadioOption value="first" label="First Class" />
-        </RadioGroup>
-      </PreferenceGroup>
-
-      {/* Direct Flights */}
-      <PreferenceGroup label="">
-        <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-          <div>
-            <span className="text-sm font-medium">Prefer direct flights only</span>
-            <p className="text-xs text-muted-foreground">We'll search for non-stop flights when available</p>
-          </div>
-          <Switch
-            checked={preferences?.direct_flights_only || false}
-            onCheckedChange={(checked) => onUpdate('direct_flights_only', checked)}
-          />
-        </div>
-      </PreferenceGroup>
-
       {/* Note about what we can't enforce */}
       <div className="bg-muted/20 border border-border rounded-lg p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground mb-1">💡 Good to know</p>
         <p>
-          Seat selection and departure times depend on airline availability during booking. 
-          We focus on preferences we can actually deliver: cabin class and direct flight routing.
+          Seat selection and departure times depend on airline availability during booking.
         </p>
       </div>
     </div>
