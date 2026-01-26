@@ -63,7 +63,7 @@ export default function GuestLinkModal({
       name: friend.friend.display_name || friend.friend.handle || 'Friend',
       email: '', // Email not exposed for privacy
       avatar: friend.friend.avatar_url || undefined,
-      preferencesMatch: Math.floor(Math.random() * 30) + 70, // TODO: Calculate from actual preferences
+      // preferencesMatch calculated when Travel DNA is available for both users
       isVoyanceUser: true,
     };
 
