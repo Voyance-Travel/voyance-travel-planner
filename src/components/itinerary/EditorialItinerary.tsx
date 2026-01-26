@@ -1635,6 +1635,7 @@ export function EditorialItinerary({
               flightSelection={flightSelection} 
               hotelSelection={hotelSelection}
               destination={destination}
+              onNavigateToBookings={() => setActiveTab('overview')}
             />
 
             {/* Day Navigation Bar */}
@@ -3561,9 +3562,10 @@ interface AirportGamePlanProps {
   flightSelection?: FlightSelection | null;
   hotelSelection?: HotelSelection | null;
   destination: string;
+  onNavigateToBookings?: () => void;
 }
 
-function AirportGamePlan({ flightSelection, hotelSelection, destination }: AirportGamePlanProps) {
+function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavigateToBookings }: AirportGamePlanProps) {
   const outbound = flightSelection?.outbound;
   const hasFlight = !!outbound;
   const hasHotel = !!hotelSelection?.name;
@@ -3640,34 +3642,51 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
     return (
       <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
         <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/20 rounded-full">
-              <Plane className="h-5 w-5 text-amber-600" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/20 rounded-full">
+                <Plane className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Complete Your Trip Details</h3>
+                <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Add flight and hotel for personalized arrival planning</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Complete Your Trip Details</h3>
-              <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Add flight and hotel for personalized arrival planning</p>
-            </div>
+            {onNavigateToBookings && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onNavigateToBookings}
+                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+              >
+                Add Details
+              </Button>
+            )}
           </div>
         </div>
         <div className="p-4 space-y-3">
-          <div className="flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border">
+          <button 
+            onClick={onNavigateToBookings}
+            className="w-full flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border hover:bg-secondary/50 transition-colors text-left"
+          >
             <Plane className="h-4 w-4 text-muted-foreground" />
             <div className="flex-1">
               <p className="text-sm font-medium">Add your flight details</p>
               <p className="text-xs text-muted-foreground">We'll plan your arrival day activities around your landing time</p>
             </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border">
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+          <button 
+            onClick={onNavigateToBookings}
+            className="w-full flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border hover:bg-secondary/50 transition-colors text-left"
+          >
             <Hotel className="h-4 w-4 text-muted-foreground" />
             <div className="flex-1">
               <p className="text-sm font-medium">Add your hotel</p>
               <p className="text-xs text-muted-foreground">Get transfer times, costs, and check-in recommendations</p>
             </div>
-          </div>
-          <p className="text-xs text-center text-muted-foreground pt-2">
-            Use the <span className="font-medium">Flight & Hotel</span> tab above to add your bookings
-          </p>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       </div>
     );
@@ -3678,14 +3697,26 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
     return (
       <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
         <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/20 rounded-full">
-              <Plane className="h-5 w-5 text-amber-600" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/20 rounded-full">
+                <Plane className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Add Your Flight Details</h3>
+                <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Get personalized arrival day planning</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Add Your Flight Details</h3>
-              <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Get personalized arrival day planning</p>
-            </div>
+            {onNavigateToBookings && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onNavigateToBookings}
+                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+              >
+                Add Flight
+              </Button>
+            )}
           </div>
         </div>
         <div className="p-4">
@@ -3696,6 +3727,50 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
             <div>
               <p className="font-medium text-sm">Staying at {hotelSelection?.name}</p>
               <p className="text-xs text-muted-foreground">Add flight details to see transfer times and arrival recommendations</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show partial prompt when only hotel is missing (has flight)
+  if (!hasHotel) {
+    return (
+      <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/20 rounded-full">
+                <Hotel className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Add Your Hotel</h3>
+                <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Get transfer times and check-in recommendations</p>
+              </div>
+            </div>
+            {onNavigateToBookings && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onNavigateToBookings}
+                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+              >
+                Add Hotel
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <Plane className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">
+                Landing at {outbound.arrival?.time}{outbound.arrival?.airport ? ` (${outbound.arrival.airport})` : ''}
+              </p>
+              <p className="text-xs text-muted-foreground">Add your hotel to see transfer options and personalized arrival tips</p>
             </div>
           </div>
         </div>
