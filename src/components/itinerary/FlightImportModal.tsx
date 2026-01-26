@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { Plane, Clipboard, Sparkles, Loader2, AlertCircle, Check } from 'lucide-react';
+import { Plane, Clipboard, Sparkles, Loader2, AlertCircle, Check, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -33,6 +33,8 @@ interface ParsedFlightData {
   arrivalTime?: string;
   departureDate?: string;
   price?: number;
+  isMultiSegment?: boolean;
+  segmentCount?: number;
 }
 
 interface FlightImportModalProps {
@@ -100,15 +102,11 @@ export function FlightImportModal({
         arrivalTime: booking.end_time,
         departureDate: booking.start_date || tripStartDate,
         price: booking.net_cost_cents ? booking.net_cost_cents / 100 : undefined,
+        isMultiSegment: booking.is_multi_segment,
+        segmentCount: booking.segment_count,
       };
 
       setParsedOutbound(outbound);
-      
-      // Check if there's return flight info (some confirmations include both)
-      if (booking.notes?.toLowerCase().includes('return') || booking.end_date) {
-        // For now, we'll let users add return separately
-      }
-      
       setStep('review');
     } catch (err) {
       console.error('Parse error:', err);
@@ -221,9 +219,22 @@ Arriving: Lisbon (LIS) at 10:15 AM +1"
 
         {step === 'review' && parsedOutbound && (
           <div className="space-y-4 py-2">
+            {parsedOutbound.isMultiSegment && (
+              <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg p-3">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <span className="font-medium">Multi-city itinerary detected</span>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    This booking has {parsedOutbound.segmentCount} flight segments. We've extracted the first outbound flight. 
+                    You may need to manually enter additional flights or use multi-city planning.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg p-2">
               <Check className="h-4 w-4" />
-              <span>Successfully extracted flight details!</span>
+              <span>Successfully extracted {parsedOutbound.isMultiSegment ? 'first ' : ''}flight details!</span>
             </div>
 
             <div className="space-y-3">
