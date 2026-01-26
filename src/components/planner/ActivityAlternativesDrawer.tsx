@@ -384,7 +384,10 @@ export default function ActivityAlternativesDrawer({
             </span>
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3" />
-              {alt.location}
+              {typeof alt.location === 'string' 
+                ? alt.location 
+                : (alt.location as { name?: string; address?: string })?.name || 
+                  (alt.location as { name?: string; address?: string })?.address || ''}
             </span>
           </div>
         </div>

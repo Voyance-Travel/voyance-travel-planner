@@ -108,7 +108,12 @@ function HotelCard({
               <h3 className="font-semibold text-slate-900 text-lg">{hotel.name}</h3>
               <div className="flex items-center gap-1 mt-1">
                 <MapPin className="w-4 h-4 text-slate-400" />
-                <span className="text-sm text-slate-500">{hotel.location}</span>
+                <span className="text-sm text-slate-500">
+                  {typeof hotel.location === 'string' 
+                    ? hotel.location 
+                    : (hotel.location as { name?: string; address?: string })?.name || 
+                      (hotel.location as { name?: string; address?: string })?.address || ''}
+                </span>
               </div>
 
               {/* Rating */}

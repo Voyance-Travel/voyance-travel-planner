@@ -82,7 +82,12 @@ export default function SelectedHotelCard({
                   
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
                     <MapPin className="w-4 h-4" />
-                    <span>{hotel.location}</span>
+                    <span>
+                      {typeof hotel.location === 'string' 
+                        ? hotel.location 
+                        : (hotel.location as { name?: string; address?: string })?.name || 
+                          (hotel.location as { name?: string; address?: string })?.address || ''}
+                    </span>
                   </div>
                 </div>
 

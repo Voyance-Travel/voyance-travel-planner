@@ -98,10 +98,14 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
               </Badge>
             )}
 
-            {activity.location?.name && (
+            {activity.location && (
               <div className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5" />
-                <span className="truncate max-w-[150px]">{activity.location.name}</span>
+                <span className="truncate max-w-[150px]">
+                  {typeof activity.location === 'string' 
+                    ? activity.location 
+                    : activity.location?.name || activity.location?.address || ''}
+                </span>
               </div>
             )}
 
