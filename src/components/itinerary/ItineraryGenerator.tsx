@@ -6,9 +6,11 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useItineraryGeneration, GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
+import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UsageLimitNotice } from '@/components/common/UsageLimitNotice';
 import { PreferenceNudge, usePreferenceCompletion } from '@/components/common/PreferenceNudge';
+import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
@@ -85,11 +87,22 @@ export function ItineraryGenerator({
   const [hasStarted, setHasStarted] = useState(false);
   const [showNudgeCard, setShowNudgeCard] = useState(true);
   const [showGenericWarning, setShowGenericWarning] = useState(false);
+  const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
 
   const handleGenerate = async () => {
     setHasStarted(true);
     setShowGenericWarning(false);
+
+    // Pre-generation phases (matches the newer streaming UX)
+    setPrePhase('gathering-dna');
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setPrePhase('personalizing');
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setPrePhase('preparing');
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setPrePhase(null);
+
     try {
       const generatedDays = await generateItinerary({
         tripId,
@@ -103,6 +116,8 @@ export function ItineraryGenerator({
         userId,
       });
 
+      // Let the user see the completed formation state briefly before switching views.
+      await new Promise(resolve => setTimeout(resolve, 900));
       onComplete(generatedDays, overview);
     } catch (err) {
       console.error('Generation failed:', err);
@@ -443,6 +458,33 @@ export function ItineraryGenerator({
               Try Again
             </Button>
           </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Pre-generation phases
+  if (prePhase) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="py-10"
+      >
+        <GenerationPhases currentStep={prePhase} />
+        <div className="flex justify-center mt-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              reset();
+              setPrePhase(null);
+              setHasStarted(false);
+              onCancel?.();
+            }}
+          >
+            Cancel
+          </Button>
         </div>
       </motion.div>
     );
