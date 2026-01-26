@@ -442,7 +442,8 @@ export default function Planner() {
 
       localStorage.removeItem('voyance-current-trip');
       toast.success('Trip booked successfully!');
-      navigate(`/trip/${formData.tripId}`);
+      // Always include generate=true to skip intermediate CTA screen
+      navigate(`/trip/${formData.tripId}?generate=true`);
     } catch (error) {
       console.error('Failed to book trip:', error);
       toast.error('Failed to book trip');
