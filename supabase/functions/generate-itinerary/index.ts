@@ -3387,13 +3387,33 @@ Generate 4-6 activities for this day following ALL quality rules above. Focus on
       }
 
       const data = await response.json();
-      const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+      const message = data.choices?.[0]?.message;
+      const toolCall = message?.tool_calls?.[0];
 
-      if (!toolCall?.function?.arguments) {
+      let generatedDay: StrictDay;
+      if (toolCall?.function?.arguments) {
+        // Standard tool call response
+        generatedDay = JSON.parse(toolCall.function.arguments) as StrictDay;
+      } else if (message?.content) {
+        // Fallback: AI returned content instead of tool call
+        console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
+        try {
+          const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+          const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            generatedDay = JSON.parse(jsonMatch[0]) as StrictDay;
+          } else {
+            console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
+            throw new Error("Invalid AI response format - no JSON in content");
+          }
+        } catch (parseErr) {
+          console.error("[Stage 2] Failed to parse content as JSON:", parseErr);
+          throw new Error("Invalid AI response format - content not parseable");
+        }
+      } else {
+        console.error("[Stage 2] Invalid AI response - no tool_calls or content:", JSON.stringify(data).substring(0, 1000));
         throw new Error("Invalid AI response format");
       }
-
-      const generatedDay = JSON.parse(toolCall.function.arguments) as StrictDay;
 
       // Normalize the day data
       generatedDay.dayNumber = dayNumber;
@@ -5896,13 +5916,34 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         const data = await response.json();
-        const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+        const message = data.choices?.[0]?.message;
+        const toolCall = message?.tool_calls?.[0];
 
-        if (!toolCall?.function?.arguments) {
+        let generatedDay;
+        if (toolCall?.function?.arguments) {
+          // Standard tool call response
+          generatedDay = JSON.parse(toolCall.function.arguments);
+        } else if (message?.content) {
+          // Fallback: AI returned content instead of tool call
+          console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
+          try {
+            // Try to extract JSON from the content
+            const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+            const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              generatedDay = JSON.parse(jsonMatch[0]);
+            } else {
+              console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
+              throw new Error("Invalid AI response format - no JSON in content");
+            }
+          } catch (parseErr) {
+            console.error("[generate-day] Failed to parse content as JSON:", parseErr);
+            throw new Error("Invalid AI response format - content not parseable");
+          }
+        } else {
+          console.error("[generate-day] Invalid AI response - no tool_calls or content:", JSON.stringify(data).substring(0, 1000));
           throw new Error("Invalid AI response format");
         }
-
-        const generatedDay = JSON.parse(toolCall.function.arguments);
 
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
         // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
