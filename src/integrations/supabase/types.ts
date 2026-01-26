@@ -2868,6 +2868,75 @@ export type Database = {
           },
         ]
       }
+      itinerary_templates: {
+        Row: {
+          created_at: string
+          day_count: number
+          description: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          pace: string | null
+          source_destination: string | null
+          source_trip_id: string | null
+          tags: string[] | null
+          template_data: Json
+          trip_type: string | null
+          updated_at: string
+          use_count: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_count?: number
+          description?: string | null
+          id?: string
+          last_used_at?: string | null
+          name: string
+          pace?: string | null
+          source_destination?: string | null
+          source_trip_id?: string | null
+          tags?: string[] | null
+          template_data: Json
+          trip_type?: string | null
+          updated_at?: string
+          use_count?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day_count?: number
+          description?: string | null
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          pace?: string | null
+          source_destination?: string | null
+          source_trip_id?: string | null
+          tags?: string[] | null
+          template_data?: Json
+          trip_type?: string | null
+          updated_at?: string
+          use_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_templates_source_trip_id_fkey"
+            columns: ["source_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "itinerary_templates_source_trip_id_fkey"
+            columns: ["source_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       itinerary_versions: {
         Row: {
           activities: Json

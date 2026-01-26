@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Plane, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, Users, Hotel, DollarSign } from 'lucide-react';
+import { Plane, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, Users, Hotel, DollarSign, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
@@ -20,6 +20,7 @@ import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import CustomerDayCard from '@/components/planner/CustomerDayCard';
 import { toast } from 'sonner';
 import ItineraryContextForm, { ItineraryContextData } from '@/components/planner/ItineraryContextForm';
+import SaveAsTemplateDialog from '@/components/itinerary/SaveAsTemplateDialog';
 
 interface ItineraryPreviewProps {
   tripId?: string;
@@ -579,12 +580,22 @@ export default function ItineraryPreview({
                   {generationDuration && ` • Generated in ${(generationDuration / 1000).toFixed(1)}s`}
                 </p>
               </div>
-              {canRegenerate && (
-                <Button variant="outline" size="sm" onClick={handleRetry}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Regenerate
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {/* Save as Template */}
+                {localDays.length > 0 && (
+                  <SaveAsTemplateDialog
+                    days={localDays}
+                    destination={tripDetails.destination}
+                    tripId={tripId}
+                  />
+                )}
+                {canRegenerate && (
+                  <Button variant="outline" size="sm" onClick={handleRetry}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Regenerate
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
