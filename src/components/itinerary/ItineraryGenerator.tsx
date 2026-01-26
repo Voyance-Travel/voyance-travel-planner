@@ -277,8 +277,64 @@ export function ItineraryGenerator({
     );
   }
 
-  // Error state
+  // Error state - check if it's an auth error
   if (error) {
+    const isAuthError = error.toLowerCase().includes('unauthorized') || 
+                        error.toLowerCase().includes('sign in') ||
+                        error.toLowerCase().includes('authentication');
+
+    if (isAuthError || !user) {
+      return (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-16"
+        >
+          <div className="max-w-md mx-auto">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mx-auto mb-6">
+              <LogIn className="h-10 w-10 text-primary" />
+            </div>
+            
+            <h2 className="text-2xl font-serif font-bold mb-3">
+              Create Your Free Account
+            </h2>
+            
+            <p className="text-muted-foreground mb-2">
+              Sign up in seconds to generate personalized itineraries tailored to your travel style.
+            </p>
+            
+            <p className="text-sm text-muted-foreground mb-6">
+              Your first itinerary build is <span className="font-medium text-foreground">completely free</span> - no credit card required.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <Button 
+                size="lg" 
+                onClick={() => navigate(`/signup?redirect=/trip/${tripId}?generate=true`)}
+                className="gap-2"
+              >
+                <Sparkles className="h-5 w-5" />
+                Create Free Account
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                onClick={() => navigate(`/login?redirect=/trip/${tripId}?generate=true`)}
+                className="gap-2"
+              >
+                <LogIn className="h-5 w-5" />
+                Already have an account? Sign In
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground mt-6">
+              Join thousands of travelers planning smarter trips
+            </p>
+          </div>
+        </motion.div>
+      );
+    }
+
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -287,10 +343,10 @@ export function ItineraryGenerator({
       >
         <div className="max-w-md mx-auto">
           <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-            <span className="text-3xl">⚠️</span>
+            <AlertCircle className="h-8 w-8 text-destructive" />
           </div>
           
-          <h2 className="text-xl font-semibold mb-2">Generation Failed</h2>
+          <h2 className="text-xl font-semibold mb-2">Something Went Wrong</h2>
           <p className="text-muted-foreground mb-6">{error}</p>
           
           <div className="flex gap-3 justify-center">
