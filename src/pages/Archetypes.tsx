@@ -279,21 +279,60 @@ export default function Archetypes() {
             ))}
           </div>
 
-          {/* Evolution callout */}
+          {/* Beyond 27 - Deeper personalization */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="bg-card border border-border rounded-xl p-6 max-w-2xl mx-auto text-center"
+            className="bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/20 rounded-2xl p-8 max-w-3xl mx-auto"
           >
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <RefreshCw className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold text-foreground">Your DNA Evolves</h3>
+            <div className="text-center mb-6">
+              <Badge className="mb-3 bg-primary/10 text-primary border-primary/20">
+                Beyond the 27
+              </Badge>
+              <h3 className="text-xl font-serif font-bold text-foreground mb-2">
+                Your Archetype Is Just the Beginning
+              </h3>
+              <p className="text-muted-foreground max-w-xl mx-auto">
+                Once we place you in one of 27 archetypes, we don't stop there. Your preferences, 
+                adjustments, and feedback shape every itinerary to fit <em>you</em> specifically.
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Rate activities, save favorites, adjust preferences—your profile refines over time. 
-              The more you use Voyance, the smarter your recommendations become.
-            </p>
+            
+            <div className="grid md:grid-cols-2 gap-4 mb-6">
+              <div className="bg-card/50 rounded-xl p-4 border border-border">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <RefreshCw className="w-4 h-4 text-primary" />
+                  </div>
+                  <h4 className="font-semibold text-foreground">Continuous Learning</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Rate activities, save favorites, adjust preferences—the more you use Voyance, 
+                  the better we know you.
+                </p>
+              </div>
+              
+              <div className="bg-card/50 rounded-xl p-4 border border-border">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <h4 className="font-semibold text-foreground">Your Travel Agent</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Eventually, you have a travel agent in your pocket—one that knows you and plans 
+                  trips for you, and only you...
+                </p>
+              </div>
+            </div>
+            
+            <div className="text-center pt-4 border-t border-border/50">
+              <p className="text-sm text-foreground/80 italic">
+                ...unless you bring a friend. Invite someone, and we'll blend both profiles 
+                to plan trips that work for everyone.
+              </p>
+            </div>
           </motion.div>
         </div>
       </section>
