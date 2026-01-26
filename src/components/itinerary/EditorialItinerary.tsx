@@ -1458,8 +1458,8 @@ export function EditorialItinerary({
     <div className="space-y-6">
       {/* Onboarding Tour for first-time visitors */}
       <ItineraryOnboardingTour tripId={tripId} />
-      {/* Trip Summary Bar - Editorial Style */}
-      <div className="py-4 px-4 -mx-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl">
+      {/* Trip Summary Bar - Editorial Style - Sticky for visibility */}
+      <div className="py-4 px-4 -mx-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl sticky top-16 z-30 backdrop-blur-sm border-b border-border/50 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           {/* Left: Trip info pills */}
           <div className="flex items-center gap-2">
