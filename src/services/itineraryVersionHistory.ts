@@ -16,7 +16,7 @@ interface VersionMetadata {
   };
 }
 
-interface ItineraryVersion {
+export interface ItineraryVersion {
   id: string;
   trip_id: string;
   day_number: number;
