@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -1514,23 +1515,30 @@ export function EditorialItinerary({
             
             {effectiveIsEditable && (
               <>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => {
-                    if (entitlements?.can_optimize_routes) {
-                      openOptimizeDialog();
-                    } else {
-                      setShowRouteUpgrade(true);
-                    }
-                  }} 
-                  disabled={isOptimizing || days.length === 0} 
-                  className="gap-1.5 h-8 text-xs"
-                >
-                  {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
-                  {isOptimizing ? 'Optimizing...' : 'Optimize'}
-                  {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        if (entitlements?.can_optimize_routes) {
+                          openOptimizeDialog();
+                        } else {
+                          setShowRouteUpgrade(true);
+                        }
+                      }} 
+                      disabled={isOptimizing || days.length === 0} 
+                      className="gap-1.5 h-8 text-xs"
+                    >
+                      {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
+                      {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                      {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Reorders activities to minimize transit time (saves ~30 mins)</p>
+                  </TooltipContent>
+                </Tooltip>
                 <Button 
                   size="sm"
                   onClick={handleSave} 
