@@ -3671,16 +3671,29 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
     return `${finalHours}:${String(finalMins).padStart(2, '0')} ${finalPeriod}`;
   };
 
-  // Post-landing advice based on arrival time
-  const getPostLandingAdvice = () => {
-    if (!arrivalTime) return { action: 'Head to hotel', reason: 'Check in and freshen up' };
+  // Post-landing advice based on arrival time - aware of hotel availability
+  const getPostLandingAdvice = (): { action: string; reason: string; isMissing?: boolean } => {
+    const hasHotel = !!hotelSelection?.name;
+    
+    if (!arrivalTime) {
+      return hasHotel 
+        ? { action: 'Head to your hotel', reason: 'Check in and settle before exploring' }
+        : { action: 'Add your hotel for personalized tips', reason: 'We\'ll help plan your arrival day perfectly', isMissing: true };
+    }
+    
     const match = arrivalTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-    if (!match) return { action: 'Head to hotel', reason: 'Check in and freshen up' };
+    if (!match) return hasHotel 
+      ? { action: 'Head to your hotel', reason: 'Check in and settle before exploring' }
+      : { action: 'Add your hotel for personalized tips', reason: 'We\'ll help plan your arrival day perfectly', isMissing: true };
     
     let hours = parseInt(match[1], 10);
     const period = match[3]?.toUpperCase();
     if (period === 'PM' && hours !== 12) hours += 12;
     if (period === 'AM' && hours === 12) hours = 0;
+    
+    if (!hasHotel) {
+      return { action: 'Add your hotel for personalized tips', reason: 'We\'ll calculate transfer times and plan your arrival', isMissing: true };
+    }
     
     if (hours >= 21 || hours < 6) {
       return { action: 'Head to hotel & rest', reason: 'Late arrival - get a good night\'s sleep for tomorrow\'s adventures' };
@@ -3793,12 +3806,27 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination }: Airpo
         )}
 
         {/* Post-Landing Action */}
-        <div className="flex items-start gap-3 pt-3 border-t border-border">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <Sparkles className="h-4 w-4 text-primary" />
+        <div className={cn(
+          "flex items-start gap-3 pt-3 border-t border-border",
+          postLanding.isMissing && "bg-amber-500/5 -mx-4 px-4 pb-4 pt-4 mt-4 border-t-0 border border-amber-500/20 rounded-lg mx-0"
+        )}>
+          <div className={cn(
+            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+            postLanding.isMissing ? "bg-amber-500/10" : "bg-primary/10"
+          )}>
+            {postLanding.isMissing ? (
+              <Hotel className="h-4 w-4 text-amber-600" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-primary" />
+            )}
           </div>
           <div>
-            <p className="font-medium text-sm">Recommended: {postLanding.action}</p>
+            <p className={cn(
+              "font-medium text-sm",
+              postLanding.isMissing && "text-amber-700 dark:text-amber-400"
+            )}>
+              {postLanding.isMissing ? postLanding.action : `Recommended: ${postLanding.action}`}
+            </p>
             <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
           </div>
         </div>
