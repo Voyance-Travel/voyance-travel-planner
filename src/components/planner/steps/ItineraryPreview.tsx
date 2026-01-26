@@ -145,10 +145,12 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
               <div className="flex-1">
                 <p className="font-medium text-foreground">{sanitizeActivityName(activity.title)}</p>
                 <p className="text-sm text-muted-foreground">{activity.description}</p>
-                {activity.location?.name && (
+                {activity.location && (
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
-                    {activity.location.name}
+                    {typeof activity.location === 'string' 
+                      ? activity.location 
+                      : activity.location.name || activity.location.address}
                   </p>
                 )}
                 {activity.cost > 0 && (
