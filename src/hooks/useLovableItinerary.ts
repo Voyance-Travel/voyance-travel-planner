@@ -163,6 +163,7 @@ export function useLovableItinerary(tripId: string | null) {
   const abortController = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    isMounted.current = true; // Reset on mount (critical for React 18 StrictMode)
     return () => {
       isMounted.current = false;
       abortController.current?.abort();
