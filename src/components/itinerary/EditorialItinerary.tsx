@@ -1485,6 +1485,7 @@ export function EditorialItinerary({
             <div className="flex items-center gap-0 shrink-0">
               <button
                 onClick={() => setShowLocalCurrency((v) => !v)}
+                data-tour="currency-toggle"
                 className="flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
                 title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
               >
@@ -1507,6 +1508,7 @@ export function EditorialItinerary({
               variant="outline" 
               size="sm"
               onClick={() => setShowShareModal(true)}
+              data-tour="share-button"
               className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
             >
               <Share2 className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
@@ -1528,6 +1530,7 @@ export function EditorialItinerary({
                         }
                       }} 
                       disabled={isOptimizing || days.length === 0} 
+                      data-tour="optimize-button"
                       className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
                     >
                       {isOptimizing ? <RefreshCw className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
