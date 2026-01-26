@@ -12,7 +12,7 @@ const destinations = [
 
 export default function FinalCTA() {
   return (
-    <section className="relative py-32 md:py-40 bg-background overflow-hidden">
+    <section className="relative py-20 md:py-24 bg-background overflow-hidden">
       {/* Top gradient fade from quote */}
       <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-black/5 to-transparent pointer-events-none" />
       
