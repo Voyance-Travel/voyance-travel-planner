@@ -272,15 +272,15 @@ export default function TopNav() {
               </>
             ) : (
               <>
-                {/* Book Travel Link */}
+                {/* Hotel Link */}
                 <Link
                   to={ROUTES.START}
                   className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${
                     isTransparent ? 'text-white/80 hover:text-white' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Calendar className="h-3.5 w-3.5" />
-                  Book Travel
+                  <Building2 className="h-3.5 w-3.5" />
+                  Hotel
                 </Link>
 
                 {/* Build Itinerary Button */}
@@ -429,8 +429,8 @@ export default function TopNav() {
                         to={ROUTES.START}
                         className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
                       >
-                        <Calendar className="h-4 w-4" />
-                        Book Travel
+                        <Building2 className="h-4 w-4" />
+                        Hotel
                       </Link>
                       <Button
                         className="w-full gap-2"
