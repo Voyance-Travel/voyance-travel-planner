@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown, Clipboard } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -27,6 +27,8 @@ import {
 } from '@/services/locationSearchAPI';
 import { searchHotelsByName, type HotelSearchByNameResult } from '@/services/hotelAPI';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
+import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
+import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -553,6 +555,7 @@ export default function Start() {
   // Flight times for itinerary-only mode
   const [arrivalTime, setArrivalTime] = useState('');
   const [departureTime, setDepartureTime] = useState('');
+  const [showFlightImport, setShowFlightImport] = useState(false);
   const today = startOfToday();
 
   // Prefill origin city from user preferences (home_airport or flight_preferences)
@@ -1079,42 +1082,59 @@ export default function Start() {
 
               {/* Flight Times - Only for itinerary-only mode */}
               {itineraryOnlyMode && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
-                      <Plane className="h-3.5 w-3.5 rotate-[-45deg]" />
-                      Arrival time
-                    </label>
-                    <Input
-                      type="time"
-                      value={arrivalTime}
-                      onChange={(e) => setArrivalTime(e.target.value)}
-                      className="h-12"
-                      placeholder="When you land"
-                    />
-                    {startDate && (
-                      <p className="text-[10px] text-muted-foreground">
-                        When you land on {format(startDate, 'MMM d')}
-                      </p>
-                    )}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                      Flight times
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-primary hover:text-primary/80"
+                      onClick={() => setShowFlightImport(true)}
+                    >
+                      <Clipboard className="h-3 w-3 mr-1.5" />
+                      Paste from confirmation
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
-                      <Plane className="h-3.5 w-3.5 rotate-45" />
-                      Departure time
-                    </label>
-                    <Input
-                      type="time"
-                      value={departureTime}
-                      onChange={(e) => setDepartureTime(e.target.value)}
-                      className="h-12"
-                      placeholder="When you leave"
-                    />
-                    {endDate && (
-                      <p className="text-[10px] text-muted-foreground">
-                        When you leave on {format(endDate, 'MMM d')}
-                      </p>
-                    )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Plane className="h-3.5 w-3.5 rotate-[-45deg]" />
+                        Arrival time
+                      </label>
+                      <Input
+                        type="time"
+                        value={arrivalTime}
+                        onChange={(e) => setArrivalTime(e.target.value)}
+                        className="h-12"
+                        placeholder="When you land"
+                      />
+                      {startDate && (
+                        <p className="text-[10px] text-muted-foreground">
+                          When you land on {format(startDate, 'MMM d')}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Plane className="h-3.5 w-3.5 rotate-45" />
+                        Departure time
+                      </label>
+                      <Input
+                        type="time"
+                        value={departureTime}
+                        onChange={(e) => setDepartureTime(e.target.value)}
+                        className="h-12"
+                        placeholder="When you leave"
+                      />
+                      {endDate && (
+                        <p className="text-[10px] text-muted-foreground">
+                          When you leave on {format(endDate, 'MMM d')}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1518,6 +1538,20 @@ export default function Start() {
         maxGuests={travelers}
         currentTravelers={travelers}
         onGuestsConfirmed={handleGuestsConfirmed}
+      />
+
+      {/* Flight Import Modal */}
+      <FlightImportModal
+        open={showFlightImport}
+        onOpenChange={setShowFlightImport}
+        onImport={(outbound) => {
+          // Set times from imported flight
+          if (outbound.arrivalTime) setArrivalTime(outbound.arrivalTime);
+          if (outbound.departureTime) setDepartureTime(outbound.departureTime);
+          toast.success('Flight times imported!');
+        }}
+        tripStartDate={startDate ? format(startDate, 'yyyy-MM-dd') : undefined}
+        tripEndDate={endDate ? format(endDate, 'yyyy-MM-dd') : undefined}
       />
     </MainLayout>
   );
