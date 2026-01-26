@@ -79,8 +79,8 @@ export default function CinematicHero() {
               size="lg" 
               className="text-base px-10 py-6 bg-white text-foreground hover:bg-white/90 font-sans font-medium tracking-wide"
             >
-              <Link to={ROUTES.START}>
-                Start Planning
+              <Link to={ROUTES.DEMO}>
+                See How It Works
                 <ArrowRight className="ml-3 h-4 w-4" />
               </Link>
             </Button>
@@ -90,8 +90,8 @@ export default function CinematicHero() {
               className="text-base px-10 py-6 border-white/30 text-white bg-transparent hover:bg-white/10 font-sans"
               asChild
             >
-              <Link to={ROUTES.HOW_IT_WORKS}>
-                See How It Works
+              <Link to={ROUTES.START}>
+                Start Planning
               </Link>
             </Button>
           </motion.div>
