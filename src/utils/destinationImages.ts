@@ -62,7 +62,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1551516594-56cb78394645?w=1200',
   ],
   'florence': [
-    'https://images.unsplash.com/photo-1543429258-c5ca3c2c5c2e?w=1200',
+    'https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?w=1200',
     'https://images.unsplash.com/photo-1504019347908-b45f9b0b8dd5?w=1200',
     'https://images.unsplash.com/photo-1534359265607-b39e67e08544?w=1200',
   ],
@@ -146,12 +146,12 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1536086845234-586b4f845fa8?w=1200',
   ],
   'vancouver': [
-    'https://images.unsplash.com/photo-1559511260-66a68e7e7a4c?w=1200',
+    'https://images.unsplash.com/photo-1609825488888-3a766db05542?w=1200',
     'https://images.unsplash.com/photo-1578469550956-0e16b69c6a3d?w=1200',
     'https://images.unsplash.com/photo-1560814304-4f05976ef22e?w=1200',
   ],
   'cartagena': [
-    'https://images.unsplash.com/photo-1583531172005-0c193c8d7a98?w=1200',
+    'https://images.unsplash.com/photo-1533690519961-46e5a84f1c17?w=1200',
     'https://images.unsplash.com/photo-1569012871812-f38ee64cd54c?w=1200',
     'https://images.unsplash.com/photo-1547149600-a6cdf8fce60c?w=1200',
   ],
@@ -171,7 +171,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1531065208531-4036c0dba3ca?w=1200',
   ],
   'oaxaca': [
-    'https://images.unsplash.com/photo-1578323851363-cf6c1a0f5c61?w=1200',
+    'https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?w=1200',
     'https://images.unsplash.com/photo-1547558840-8ad6c4dc309c?w=1200',
     'https://images.unsplash.com/photo-1518638150340-f706e86654de?w=1200',
   ],
@@ -193,7 +193,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=1200',
   ],
   'petra': [
-    'https://images.unsplash.com/photo-1579606032821-4e6161c81571?w=1200',
+    'https://images.unsplash.com/photo-1563177978-4c5fb3c0e3c9?w=1200',
     'https://images.unsplash.com/photo-1548786811-dd6e453ccca7?w=1200',
     'https://images.unsplash.com/photo-1553856622-d1b352e9a211?w=1200',
   ],
