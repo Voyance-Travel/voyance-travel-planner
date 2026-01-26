@@ -293,24 +293,194 @@ export default function Pricing() {
             </motion.div>
           </div>
 
+          {/* Credits never expire callout */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center mt-8"
+          >
+            <div className="inline-flex items-center gap-3 px-6 py-4 bg-primary/10 border border-primary/20 rounded-xl">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <span className="text-lg font-medium text-foreground">Credits never expire.</span>
+              <span className="text-muted-foreground">Use them whenever you're ready.</span>
+            </div>
+          </motion.div>
+
           {/* Credit explanation */}
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="text-center mt-8 p-6 bg-muted/30 rounded-xl"
+            className="text-center mt-6 p-6 bg-muted/30 rounded-xl"
           >
             <h3 className="font-medium text-foreground mb-2">How Credits Work</h3>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto">
               1 credit = Build a full trip, regenerate a day, or swap an activity. 
-              Credits unlock all days and never expire. Use them across any trip.
+              Use them across any trip, anytime.
             </p>
           </motion.div>
         </div>
       </section>
 
-      {/* What You Get Section */}
+      {/* What's Included Breakdown */}
       <section className="py-16 bg-muted/30">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">
+              What's Included
+            </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              A complete breakdown of what you get with each option.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-4 gap-6">
+            {/* Free breakdown */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-card rounded-xl border border-border p-5"
+            >
+              <h3 className="font-bold text-foreground mb-1">Free</h3>
+              <p className="text-2xl font-bold text-foreground mb-4">$0</p>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Build any itinerary</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>View Day 1 only</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>3 activity swaps</span>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Lock className="w-4 h-4 flex-shrink-0" />
+                  <span>No export</span>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Lock className="w-4 h-4 flex-shrink-0" />
+                  <span>No sharing</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Trip Pass breakdown */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.05 }}
+              className="bg-card rounded-xl border-2 border-primary p-5"
+            >
+              <h3 className="font-bold text-foreground mb-1">Trip Pass</h3>
+              <p className="text-2xl font-bold text-foreground mb-4">$24.99 <span className="text-sm font-normal text-muted-foreground">one-time</span></p>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>All days visible</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Unlimited swaps</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Regenerate any day</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Export to PDF</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Share with companions</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* 5 Credits breakdown */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="bg-card rounded-xl border border-border p-5"
+            >
+              <h3 className="font-bold text-foreground mb-1">5 Credits</h3>
+              <p className="text-2xl font-bold text-foreground mb-4">$79 <span className="text-sm font-normal text-muted-foreground">one-time</span></p>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>5 flexible credits</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Use across any trip</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Build, swap, or regenerate</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Export & share included</span>
+                </div>
+                <div className="flex items-center gap-2 font-medium text-primary">
+                  <Sparkles className="w-4 h-4 flex-shrink-0" />
+                  <span>Never expire</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* 10 Credits breakdown */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.15 }}
+              className="bg-card rounded-xl border border-border p-5"
+            >
+              <h3 className="font-bold text-foreground mb-1">10 Credits</h3>
+              <p className="text-2xl font-bold text-foreground mb-4">$149 <span className="text-sm font-normal text-muted-foreground">one-time</span></p>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>10 flexible credits</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>~15% savings</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Build, swap, or regenerate</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Export & share included</span>
+                </div>
+                <div className="flex items-center gap-2 font-medium text-primary">
+                  <Sparkles className="w-4 h-4 flex-shrink-0" />
+                  <span>Never expire</span>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* What You Get Section */}
+      <section className="py-16">
         <div className="max-w-4xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -404,16 +574,24 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* Travel Agent Section */}
-      <section className="py-16 border-t border-border">
-        <div className="max-w-5xl mx-auto px-4">
+      {/* Travel Agent Section - Visually Separated */}
+      <section className="py-20 bg-gradient-to-b from-muted/50 via-muted/30 to-background relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-border" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="px-6 py-2 bg-background border border-border rounded-full">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Professional Plans</span>
+          </div>
+        </div>
+        
+        <div className="max-w-5xl mx-auto px-4 pt-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <div className="text-center mb-8">
-              <Badge variant="secondary" className="mb-4">
+            <div className="text-center mb-10">
+              <Badge className="mb-4 bg-foreground text-background">
                 <Briefcase className="w-3 h-3 mr-1" />
                 For Travel Professionals
               </Badge>
@@ -423,17 +601,20 @@ export default function Pricing() {
               <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
                 Build and revise trips in minutes. Keep confirmations, payments, and commissions attached.
               </p>
+              <p className="text-sm text-primary font-medium mt-3">
+                $49 – $499/mo depending on your needs
+              </p>
             </div>
 
             {/* Agent value props */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
               {[
                 { icon: Clock, title: 'Fewer Dropped Balls', desc: 'Deadline reminders that work' },
                 { icon: Zap, title: 'Faster Proposals', desc: 'Beautiful itineraries in 10 min' },
                 { icon: FileText, title: 'Everything Attached', desc: 'Confirmations live with trip' },
                 { icon: Wallet, title: 'Commission Visibility', desc: 'Track what you earned' },
               ].map((item) => (
-                <div key={item.title} className="bg-muted/50 rounded-lg p-4 text-center">
+                <div key={item.title} className="bg-card rounded-lg p-4 text-center border border-border/50">
                   <item.icon className="h-6 w-6 text-primary mx-auto mb-2" />
                   <h4 className="font-medium text-sm text-foreground">{item.title}</h4>
                   <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
@@ -444,7 +625,7 @@ export default function Pricing() {
             {/* Agent Tiers */}
             <div className="grid md:grid-cols-3 gap-6">
               {/* Starter */}
-              <div className="bg-card rounded-2xl border p-6">
+              <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
                 <div className="mb-4">
                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {PLAN_FEATURES.AGENT_STARTER.badge}
@@ -470,7 +651,7 @@ export default function Pricing() {
               </div>
 
               {/* Pro */}
-              <div className="bg-gradient-to-br from-card via-card to-primary/5 rounded-2xl border-2 border-primary p-6 relative">
+              <div className="bg-gradient-to-br from-card via-card to-primary/5 rounded-2xl border-2 border-primary p-6 relative shadow-lg shadow-primary/10">
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
                 </div>
@@ -499,7 +680,7 @@ export default function Pricing() {
               </div>
 
               {/* Agency */}
-              <div className="bg-card rounded-2xl border p-6">
+              <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
                 <div className="mb-4">
                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {PLAN_FEATURES.AGENT_AGENCY.badge}
