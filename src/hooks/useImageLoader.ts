@@ -3,12 +3,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 /**
  * Image load states for tracking
  */
-export enum ImageLoadState {
-  IDLE = 'idle',
-  LOADING = 'loading',
-  LOADED = 'loaded',
-  ERROR = 'error',
-}
+export const ImageLoadState = {
+  IDLE: 'idle',
+  LOADING: 'loading',
+  LOADED: 'loaded',
+  ERROR: 'error',
+} as const;
+
+export type ImageLoadState = typeof ImageLoadState[keyof typeof ImageLoadState];
 
 /**
  * Singleton for managing concurrent image loads
