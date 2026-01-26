@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Leaf, Check, Sparkles } from 'lucide-react';
+import { Leaf, Check, Sparkles, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -174,12 +174,20 @@ export default function SampleArchetype() {
               <p className="text-muted-foreground mb-4 font-sans">
                 Ready to discover your Travel DNA?
               </p>
-              <Button asChild size="lg" className="font-sans">
-                <Link to={ROUTES.START}>
-                  Take the 2-Minute Quiz
-                  <Sparkles className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button asChild size="lg" className="font-sans">
+                  <Link to={ROUTES.ARCHETYPES}>
+                    Explore All 27 Archetypes
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="font-sans">
+                  <Link to={ROUTES.QUIZ}>
+                    Take the Quiz
+                    <Sparkles className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </motion.div>
