@@ -83,27 +83,6 @@ const PURCHASE_OPTIONS = {
   },
 };
 
-// Legacy - for backwards compatibility with existing subscribers
-const LEGACY_SUBSCRIPTION_TIERS = {
-  monthly: {
-    name: 'Monthly (Legacy)',
-    description: 'Monthly subscription - no longer available for new signups',
-    price: 15.99,
-    interval: 'month',
-    priceId: STRIPE_PRODUCTS.MONTHLY.priceId,
-    productId: STRIPE_PRODUCTS.MONTHLY.productId,
-    features: ['Unlimited refinements', 'All features included'],
-  },
-  yearly: {
-    name: 'Yearly (Legacy)',
-    description: 'Yearly subscription - no longer available for new signups',
-    price: 129,
-    interval: 'year',
-    priceId: STRIPE_PRODUCTS.YEARLY.priceId,
-    productId: STRIPE_PRODUCTS.YEARLY.productId,
-    features: ['Unlimited everything', 'Best value'],
-  },
-};
 
 interface SubscriptionStatus {
   subscribed: boolean;
@@ -384,10 +363,11 @@ export default function Profile() {
     }
   };
 
-  // Get current tier (check legacy subscriptions)
+  // Get current tier (check products)
   const getCurrentTier = () => {
     if (!subscription?.product_id) return null;
-    return Object.values(LEGACY_SUBSCRIPTION_TIERS).find(t => t.productId === subscription.product_id);
+    const products = [STRIPE_PRODUCTS.MONTHLY, STRIPE_PRODUCTS.YEARLY, STRIPE_PRODUCTS.TRIP_PASS, STRIPE_PRODUCTS.CREDITS_5, STRIPE_PRODUCTS.CREDITS_10];
+    return products.find(p => p.productId === subscription.product_id);
   };
 
   if (!isAuthenticated) {
@@ -1100,94 +1080,71 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="flex items-center gap-4">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">or subscribe</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            {/* Subscription Plans - Editorial Grid */}
+            {/* Credit Packages */}
             <div>
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium block mb-1">
-                    Membership Options
+                    Credit Packages
                   </span>
-                  <h3 className="text-xl font-serif text-foreground">Unlimited AI Access</h3>
+                  <h3 className="text-xl font-serif text-foreground">Need More Credits?</h3>
                 </div>
               </div>
               
               <div className="grid md:grid-cols-2 gap-6">
-                {Object.entries(LEGACY_SUBSCRIPTION_TIERS).map(([key, tier]) => {
-                  const isCurrentPlan = subscription?.product_id === tier.productId;
-                  const isPremium = key === 'yearly';
+                {[PURCHASE_OPTIONS.credits5, PURCHASE_OPTIONS.credits10].map((pack, idx) => {
+                  const isBestValue = idx === 1;
                   
                   return (
                     <motion.div
-                      key={key}
+                      key={pack.name}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: isPremium ? 0.1 : 0 }}
+                      transition={{ delay: isBestValue ? 0.1 : 0 }}
                       className={cn(
                         "group relative bg-card rounded-lg overflow-hidden transition-all duration-300",
-                        isCurrentPlan 
-                          ? "ring-2 ring-foreground shadow-elevated" 
-                          : "border border-border hover:shadow-medium hover:border-muted-foreground/30"
+                        "border border-border hover:shadow-medium hover:border-muted-foreground/30"
                       )}
                     >
-                      {/* Plan Badge */}
-                      {isCurrentPlan && (
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-foreground via-foreground to-foreground/60" />
-                      )}
-                      
-                      {isPremium && !isCurrentPlan && (
+                      {isBestValue && (
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-accent to-primary/60" />
                       )}
                       
                       <div className="p-6 md:p-8">
-                        {/* Header */}
                         <div className="flex items-start justify-between mb-6">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              {isCurrentPlan && (
-                                <span className="text-[9px] uppercase tracking-wider text-foreground font-semibold px-2 py-0.5 bg-foreground/10 rounded">
-                                  Active
-                                </span>
-                              )}
-                              {isPremium && !isCurrentPlan && (
+                              {isBestValue && (
                                 <span className="text-[9px] uppercase tracking-wider text-primary font-semibold px-2 py-0.5 bg-primary/10 rounded">
                                   Best Value
                                 </span>
                               )}
                             </div>
                             <h4 className="text-2xl font-serif font-medium text-foreground mt-1">
-                              {tier.name}
+                              {pack.name}
                             </h4>
-                            <p className="text-sm text-muted-foreground mt-1">{tier.description}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{pack.description}</p>
                           </div>
                         </div>
                         
-                        {/* Price - Editorial Display */}
                         <div className="mb-8 pb-6 border-b border-border">
                           <div className="flex items-baseline gap-1">
                             <span className="text-4xl font-serif font-medium text-foreground tracking-tight">
-                              ${tier.price}
+                              ${pack.price}
                             </span>
                             <span className="text-sm text-muted-foreground">
-                              /{tier.interval}
+                              one-time
                             </span>
                           </div>
-                          {isPremium && (
+                          {isBestValue && (
                             <p className="text-xs text-primary mt-2 font-medium">
-                              Unlimited access for power travelers
+                              Save ~15% vs 5 credits
                             </p>
                           )}
                         </div>
                         
-                        {/* Features - Clean List */}
                         <ul className="space-y-3 mb-8">
-                          {tier.features.map((feature) => (
+                          {pack.features.map((feature) => (
                             <li key={feature} className="flex items-start gap-3 text-sm">
                               <div className="w-4 h-4 rounded-full border border-muted-foreground/30 flex items-center justify-center flex-shrink-0 mt-0.5">
                                 <Check className="h-2.5 w-2.5 text-foreground" />
@@ -1197,33 +1154,22 @@ export default function Profile() {
                           ))}
                         </ul>
                         
-                        {/* CTA */}
-                        {isCurrentPlan ? (
-                          <Button 
-                            variant="outline" 
-                            className="w-full h-11 text-sm font-medium"
-                            onClick={handleManageSubscription}
-                          >
-                            Manage Subscription
-                          </Button>
-                        ) : (
-                          <Button 
-                            className={cn(
-                              "w-full h-11 text-sm font-medium transition-all",
-                              isPremium 
-                                ? "bg-gradient-to-r from-slate to-slate/90 hover:from-slate/90 hover:to-slate text-slate-foreground" 
-                                : ""
-                            )}
-                            onClick={() => handleCheckout(tier.priceId, 'subscription')}
-                            disabled={isCheckingOut === tier.priceId}
-                          >
-                            {isCheckingOut === tier.priceId ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>Get {tier.name}</>
-                            )}
-                          </Button>
-                        )}
+                        <Button 
+                          className={cn(
+                            "w-full h-11 text-sm font-medium transition-all",
+                            isBestValue 
+                              ? "bg-gradient-to-r from-slate to-slate/90 hover:from-slate/90 hover:to-slate text-slate-foreground" 
+                              : ""
+                          )}
+                          onClick={() => handleCheckout(pack.priceId, 'payment')}
+                          disabled={isCheckingOut === pack.priceId}
+                        >
+                          {isCheckingOut === pack.priceId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>Buy {pack.name} - ${pack.price}</>
+                          )}
+                        </Button>
                       </div>
                     </motion.div>
                   );
