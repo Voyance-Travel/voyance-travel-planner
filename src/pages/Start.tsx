@@ -774,10 +774,32 @@ export default function Start() {
 
     // If in itinerary-only mode, skip to itinerary generation
     if (itineraryOnlyMode) {
+      // First update basics so saveTrip has correct context
+      setBasics({
+        destination: destinationSelection.cityName,
+        startDate: start,
+        endDate: end,
+        travelers,
+        originCity: originSelection.cityName,
+        budgetTier: getBudgetTier(budgetAmount),
+        budgetAmount,
+      });
+      
       const tripId = await saveTrip();
       if (tripId) {
-        // Build update payload with all booking details
-        const updatePayload: Record<string, unknown> = {};
+        // Build comprehensive update payload with ALL trip data
+        // This ensures destination persists even if context hadn't fully updated
+        const updatePayload: Record<string, unknown> = {
+          // Core trip fields - ensure destination is saved
+          name: `Trip to ${destinationSelection.cityName}`,
+          destination: destinationSelection.cityName,
+          start_date: start,
+          end_date: end,
+          travelers,
+          origin_city: originSelection.cityName,
+          budget_tier: getBudgetTier(budgetAmount),
+          trip_type: tripType || 'vacation',
+        };
         
         // Save hotel selection if provided (as array for multi-hotel support)
         if (hotelSelection) {
