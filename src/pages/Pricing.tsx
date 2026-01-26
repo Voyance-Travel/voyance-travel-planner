@@ -479,48 +479,6 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* What You Get Section */}
-      <section className="py-16">
-        <div className="max-w-4xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-10"
-          >
-            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">
-              Unlock the Full Experience
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              Paid users get access to all days, unlimited swaps, and powerful planning tools.
-            </p>
-          </motion.div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { icon: Layers, title: 'All Days Visible', desc: 'See your complete itinerary' },
-              { icon: Zap, title: 'Unlimited Swaps', desc: 'Refine until it\'s perfect' },
-              { icon: Route, title: 'Route Optimization', desc: 'Efficient days, less walking' },
-              { icon: Download, title: 'Export to PDF', desc: 'Take it offline' },
-            ].map((item, i) => (
-              <motion.div
-                key={item.title}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
-                className="bg-card rounded-xl border border-border p-5 text-center"
-              >
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-                  <item.icon className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="font-medium text-foreground mb-1">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* Comparison Table */}
       <section className="py-16">
