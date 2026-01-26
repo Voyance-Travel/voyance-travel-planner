@@ -5805,17 +5805,22 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
 
       // Build day-specific constraints
        let dayConstraints = '';
-       if (isFirstDay && (flightContext.arrivalTime24 || flightContext.arrivalTime)) {
-         const arrival24 = flightContext.arrivalTime24 || (flightContext.arrivalTime ? normalizeTo24h(flightContext.arrivalTime) : null) || '18:00';
-         const arrivalMins = parseTimeToMinutes(arrival24) ?? (18 * 60);
-         const transferStart = addMinutesToHHMM(arrival24, 45);
-         const transferEnd = addMinutesToHHMM(transferStart, 60);
-         const checkInStart = transferEnd;
-         const checkInEnd = addMinutesToHHMM(checkInStart, 30);
-         const earliestAfterArrival = flightContext.earliestFirstActivityTime || addMinutesToHHMM(arrival24, 240);
-         const isLateArrival = arrivalMins >= (18 * 60);
+       if (isFirstDay) {
+         // Check if we have flight data
+         const hasFlightData = flightContext.arrivalTime24 || flightContext.arrivalTime;
+         
+         if (hasFlightData) {
+           // User provided flight times - use their arrival
+           const arrival24 = flightContext.arrivalTime24 || (flightContext.arrivalTime ? normalizeTo24h(flightContext.arrivalTime) : null) || '18:00';
+           const arrivalMins = parseTimeToMinutes(arrival24) ?? (18 * 60);
+           const transferStart = addMinutesToHHMM(arrival24, 45);
+           const transferEnd = addMinutesToHHMM(transferStart, 60);
+           const checkInStart = transferEnd;
+           const checkInEnd = addMinutesToHHMM(checkInStart, 30);
+           const earliestAfterArrival = flightContext.earliestFirstActivityTime || addMinutesToHHMM(arrival24, 240);
+           const isLateArrival = arrivalMins >= (18 * 60);
 
-        dayConstraints = `
+          dayConstraints = `
 THE FLIGHT LANDS AT ${arrival24} (that's ${flightContext.arrivalTime || arrival24}).
 The traveler is NOT in the destination before this time. They are on a plane.
 
@@ -5845,6 +5850,39 @@ After check-in, the earliest any sightseeing/dining can start is ${earliestAfter
 
 DO NOT include any activities that happen BEFORE ${arrival24} - no breakfast, no morning sightseeing.
 The day starts when the plane lands, not at 9 AM.`;
+         } else {
+           // NO flight data - apply safe defaults (assume 3 PM check-in)
+           // User hasn't told us when they arrive, so we can't plan morning activities
+           const defaultCheckIn = '15:00';
+           const checkInEnd = addMinutesToHHMM(defaultCheckIn, 30);
+           const earliestActivity = addMinutesToHHMM(checkInEnd, 30); // 4 PM earliest
+           
+           console.log(`[generate-day] No flight data provided - applying default Day 1 constraints (check-in at ${defaultCheckIn})`);
+
+          dayConstraints = `
+IMPORTANT: The traveler has NOT provided flight arrival times.
+We don't know when they will arrive at the destination.
+
+SAFE DAY 1 ASSUMPTIONS:
+- Standard hotel check-in is 3:00 PM (15:00)
+- The traveler may be arriving, clearing customs, and getting to their hotel in the morning/afternoon
+- DO NOT schedule any morning or early afternoon activities (no breakfast spots, no 9 AM tours)
+
+REQUIRED FIRST ACTIVITY:
+1. Activity 1: "Hotel Check-in & Settle In"
+   - startTime: "${defaultCheckIn}", endTime: "${checkInEnd}"
+   - category: "accommodation"
+   - location: { name: "${flightContext.hotelName || 'Hotel'}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
+
+After check-in, you may plan activities starting from ${earliestActivity}.
+Focus Day 1 on:
+- A light afternoon walk or nearby exploration (after 4 PM)
+- An early dinner near the hotel
+- Getting oriented to the neighborhood
+
+DO NOT plan activities before ${defaultCheckIn}.
+The traveler may still be traveling to the destination during the morning.`;
+         }
        } else if (isLastDay && flightContext.returnDepartureTime) {
          const departure24 = flightContext.returnDepartureTime24 || normalizeTo24h(flightContext.returnDepartureTime) || '12:00';
          const latestActivity = flightContext.latestLastActivityTime || addMinutesToHHMM(departure24, -180);
