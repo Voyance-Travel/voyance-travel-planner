@@ -3637,151 +3637,10 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
     fetchTransferData();
   }, [outbound?.arrival?.airport, hotelSelection?.name, destination]);
   
-  // Show prompt when both flight and hotel are missing
-  if (!hasFlight && !hasHotel) {
-    return (
-      <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500/20 rounded-full">
-                <Plane className="h-5 w-5 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Complete Your Trip Details</h3>
-                <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Add flight and hotel for personalized arrival planning</p>
-              </div>
-            </div>
-            {onNavigateToBookings && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={onNavigateToBookings}
-                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
-              >
-                Add Details
-              </Button>
-            )}
-          </div>
-        </div>
-        <div className="p-4 space-y-3">
-          <button 
-            onClick={onNavigateToBookings}
-            className="w-full flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border hover:bg-secondary/50 transition-colors text-left"
-          >
-            <Plane className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">Add your flight details</p>
-              <p className="text-xs text-muted-foreground">We'll plan your arrival day activities around your landing time</p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <button 
-            onClick={onNavigateToBookings}
-            className="w-full flex items-center gap-3 p-3 bg-background/50 rounded-lg border border-border hover:bg-secondary/50 transition-colors text-left"
-          >
-            <Hotel className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">Add your hotel</p>
-              <p className="text-xs text-muted-foreground">Get transfer times, costs, and check-in recommendations</p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Show partial prompt when only flight is missing
-  if (!hasFlight) {
-    return (
-      <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500/20 rounded-full">
-                <Plane className="h-5 w-5 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Add Your Flight Details</h3>
-                <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Get personalized arrival day planning</p>
-              </div>
-            </div>
-            {onNavigateToBookings && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={onNavigateToBookings}
-                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
-              >
-                Add Flight
-              </Button>
-            )}
-          </div>
-        </div>
-        <div className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-              <Hotel className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-medium text-sm">Staying at {hotelSelection?.name}</p>
-              <p className="text-xs text-muted-foreground">Add flight details to see transfer times and arrival recommendations</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show partial prompt when only hotel is missing (has flight)
-  if (!hasHotel) {
-    return (
-      <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-amber-500/20 bg-amber-500/10">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500/20 rounded-full">
-                <Hotel className="h-5 w-5 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-serif text-lg font-medium text-amber-700 dark:text-amber-400">Add Your Hotel</h3>
-                <p className="text-sm text-amber-600/80 dark:text-amber-400/80">Get transfer times and check-in recommendations</p>
-              </div>
-            </div>
-            {onNavigateToBookings && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={onNavigateToBookings}
-                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
-              >
-                Add Hotel
-              </Button>
-            )}
-          </div>
-        </div>
-        <div className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <Plane className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="font-medium text-sm">
-                Landing at {outbound.arrival?.time}{outbound.arrival?.airport ? ` (${outbound.arrival.airport})` : ''}
-              </p>
-              <p className="text-xs text-muted-foreground">Add your hotel to see transfer options and personalized arrival tips</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Parse arrival time and calculate recommendations
-  const arrivalTime = outbound.arrival?.time || '';
-  const arrivalAirport = outbound.arrival?.airport || '';
-  const departureTime = outbound.departure?.time || '';
+  // Parse arrival time and calculate recommendations (move up to use in all states)
+  const arrivalTime = outbound?.arrival?.time || '';
+  const arrivalAirport = outbound?.arrival?.airport || '';
+  const departureTime = outbound?.departure?.time || '';
   
   // Calculate recommended airport arrival (2.5 hours before for international, 2 for domestic)
   const getRecommendedAirportArrival = () => {
@@ -3814,18 +3673,20 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
 
   // Post-landing advice based on arrival time - aware of hotel availability
   const getPostLandingAdvice = (): { action: string; reason: string; isMissing?: boolean } => {
-    const hasHotel = !!hotelSelection?.name;
+    if (!hasFlight) {
+      return { action: 'Add flight for arrival tips', reason: 'We\'ll plan your arrival day activities', isMissing: true };
+    }
     
     if (!arrivalTime) {
       return hasHotel 
         ? { action: 'Head to your hotel', reason: 'Check in and settle before exploring' }
-        : { action: 'Add your hotel for personalized tips', reason: 'We\'ll help plan your arrival day perfectly', isMissing: true };
+        : { action: 'Add hotel for personalized tips', reason: 'We\'ll help plan your arrival day perfectly', isMissing: true };
     }
     
     const match = arrivalTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
     if (!match) return hasHotel 
       ? { action: 'Head to your hotel', reason: 'Check in and settle before exploring' }
-      : { action: 'Add your hotel for personalized tips', reason: 'We\'ll help plan your arrival day perfectly', isMissing: true };
+      : { action: 'Add hotel for personalized tips', reason: 'We\'ll help plan your arrival day perfectly', isMissing: true };
     
     let hours = parseInt(match[1], 10);
     const period = match[3]?.toUpperCase();
@@ -3833,7 +3694,7 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
     if (period === 'AM' && hours === 12) hours = 0;
     
     if (!hasHotel) {
-      return { action: 'Add your hotel for personalized tips', reason: 'We\'ll calculate transfer times and plan your arrival', isMissing: true };
+      return { action: 'Add hotel for personalized tips', reason: 'We\'ll calculate transfer times and plan your arrival', isMissing: true };
     }
     
     if (hours >= 21 || hours < 6) {
@@ -3884,45 +3745,15 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Recommended Airport Arrival */}
-        {recommendedArrival && (
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-medium text-sm">Arrive at airport by {recommendedArrival}</p>
-              <p className="text-xs text-muted-foreground">
-                We recommend 2.5 hours before your {departureTime} departure for international flights
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Landing Info */}
-        {arrivalTime && (
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <MapPin className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="font-medium text-sm">
-                Land at {arrivalTime}{arrivalAirport ? ` (${arrivalAirport})` : ''}
-              </p>
-              <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Transfer Options */}
-        {hotelSelection?.name && (
+        {/* Hotel Section */}
+        {hasHotel ? (
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
               <Hotel className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <p className="font-medium text-sm">Getting to {hotelSelection.name}</p>
+                <p className="font-medium text-sm">Getting to {hotelSelection?.name}</p>
                 {isLoadingTransfer && (
                   <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
                 )}
@@ -3932,45 +3763,115 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
                   </Badge>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                  <span className="font-medium">🚕 Taxi/Uber</span>
-                  <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
+              {hasFlight && (
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                    <span className="font-medium">🚕 Taxi/Uber</span>
+                    <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
+                  </div>
+                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                    <span className="font-medium">🚆 Train/Metro</span>
+                    <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
+                  </div>
                 </div>
-                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                  <span className="font-medium">🚆 Train/Metro</span>
-                  <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
-                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 p-3 bg-amber-500/5 rounded-lg border border-amber-500/20">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                <Hotel className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-medium text-sm text-amber-700 dark:text-amber-400">Add Your Hotel</p>
+                <p className="text-xs text-muted-foreground">Get transfer times and check-in recommendations</p>
               </div>
             </div>
+            {onNavigateToBookings && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onNavigateToBookings}
+                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+              >
+                Add Hotel
+              </Button>
+            )}
           </div>
         )}
 
-        {/* Post-Landing Action */}
-        <div className={cn(
-          "flex items-start gap-3 pt-3 border-t border-border",
-          postLanding.isMissing && "bg-amber-500/5 -mx-4 px-4 pb-4 pt-4 mt-4 border-t-0 border border-amber-500/20 rounded-lg mx-0"
-        )}>
-          <div className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-            postLanding.isMissing ? "bg-amber-500/10" : "bg-primary/10"
-          )}>
-            {postLanding.isMissing ? (
-              <Hotel className="h-4 w-4 text-amber-600" />
-            ) : (
-              <Sparkles className="h-4 w-4 text-primary" />
+        {/* Flight Section */}
+        {hasFlight ? (
+          <>
+            {/* Recommended Airport Arrival */}
+            {recommendedArrival && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Arrive at airport by {recommendedArrival}</p>
+                  <p className="text-xs text-muted-foreground">
+                    We recommend 2.5 hours before your {departureTime} departure for international flights
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Landing Info */}
+            {arrivalTime && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <MapPin className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">
+                    Landing at {arrivalTime}{arrivalAirport ? ` (${arrivalAirport})` : ''}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {hasHotel ? postLanding.reason : 'Add your hotel to see transfer options and personalized arrival tips'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-3 p-3 bg-amber-500/5 rounded-lg border border-amber-500/20">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                <Plane className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-medium text-sm text-amber-700 dark:text-amber-400">Add Your Flight</p>
+                <p className="text-xs text-muted-foreground">We'll plan your arrival day around your landing time</p>
+              </div>
+            </div>
+            {onNavigateToBookings && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onNavigateToBookings}
+                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+              >
+                Add Flight
+              </Button>
             )}
           </div>
-          <div>
-            <p className={cn(
-              "font-medium text-sm",
-              postLanding.isMissing && "text-amber-700 dark:text-amber-400"
-            )}>
-              {postLanding.isMissing ? postLanding.action : `Recommended: ${postLanding.action}`}
-            </p>
-            <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
+        )}
+
+        {/* Post-Landing Action - only show when both flight and hotel exist */}
+        {hasFlight && hasHotel && (
+          <div className="flex items-start gap-3 pt-3 border-t border-border">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <Sparkles className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">Recommended: {postLanding.action}</p>
+              <p className="text-xs text-muted-foreground">{postLanding.reason}</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
