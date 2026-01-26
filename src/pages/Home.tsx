@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import ScrollTarget from '@/components/common/ScrollTarget';
-import CinematicHero from '@/components/home/CinematicHero';
-import HowItWorksCarousel from '@/components/home/HowItWorksCarousel';
+import TravelDNAHero from '@/components/home/TravelDNAHero';
+import SampleArchetype from '@/components/home/SampleArchetype';
+import DNAHowItWorks from '@/components/home/DNAHowItWorks';
+import WhatVoyanceDoes from '@/components/home/WhatVoyanceDoes';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
 import TravelQuote from '@/components/home/TravelQuote';
 import FinalCTA from '@/components/home/FinalCTA';
@@ -41,10 +43,12 @@ export default function Home() {
       <OnboardingRedirect />
       <TopNav />
       <div className="bg-background overflow-hidden relative">
-        <CinematicHero />
+        <TravelDNAHero />
+        <SampleArchetype />
         <ScrollTarget id="features-section" className="scroll-mt-16">
-          <HowItWorksCarousel />
+          <DNAHowItWorks />
         </ScrollTarget>
+        <WhatVoyanceDoes />
         <ScrollTarget id="preview-section" className="scroll-mt-16">
           <ItineraryShowcase />
         </ScrollTarget>
