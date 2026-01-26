@@ -88,6 +88,50 @@ export function useEntitlements() {
   // QA MODE: Bypass all payment gates - treat everyone as premium
   const QA_MODE_PREMIUM = true;
 
+  // Refresh entitlements (e.g., after checkout)
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['entitlements'] });
+  };
+
+  // QA Override: Return premium status immediately without API call
+  // This prevents 401 errors for unauthenticated users on public pages
+  if (QA_MODE_PREMIUM) {
+    return {
+      data: {
+        user_id: user?.id || 'demo',
+        plans: ['monthly'],
+        is_paid: true,
+        has_addon: true,
+        subscription_end: null,
+        entitlements: {},
+        usage: {},
+        can_build_itinerary: true,
+        can_build_day: true,
+        can_use_flight_hotel_optimization: true,
+        can_use_group_budgeting: true,
+        can_co_edit: true,
+        can_optimize_routes: true,
+        limits: {
+          freeBuildsRemaining: 999,
+          draftTripsRemaining: 999,
+          fullBuilds: 999,
+          draftTrips: 999,
+        },
+      } as EntitlementsResponse,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: () => Promise.resolve({ data: undefined, error: null }),
+      refresh,
+      // Force premium status for QA
+      isPaid: true,
+      hasAddon: true,
+      plans: ['monthly'],
+      entitlements: {},
+      usage: {},
+    };
+  }
+
   const query = useQuery({
     queryKey: ['entitlements', user?.id],
     queryFn: async (): Promise<EntitlementsResponse> => {
@@ -125,43 +169,6 @@ export function useEntitlements() {
       return failureCount < 2;
     },
   });
-
-  // Refresh entitlements (e.g., after checkout)
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['entitlements'] });
-  };
-
-  // QA Override: If QA_MODE_PREMIUM is true, override all limits
-  if (QA_MODE_PREMIUM) {
-    return {
-      ...query,
-      refresh,
-      // Force premium status for QA
-      isPaid: true,
-      hasAddon: true,
-      plans: ['monthly'],
-      entitlements: query.data?.entitlements ?? {},
-      usage: query.data?.usage ?? {},
-      // Override data to include premium limits
-      data: query.data ? {
-        ...query.data,
-        is_paid: true,
-        has_addon: true,
-        plans: ['monthly'],
-        can_build_itinerary: true,
-        can_build_day: true,
-        can_use_flight_hotel_optimization: true,
-        can_use_group_budgeting: true,
-        can_co_edit: true,
-        can_optimize_routes: true,
-        limits: {
-          ...query.data.limits,
-          freeBuildsRemaining: 999,
-          draftTripsRemaining: 999,
-        },
-      } : undefined,
-    };
-  }
 
   return {
     ...query,
