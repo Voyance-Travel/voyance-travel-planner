@@ -5,6 +5,7 @@ import { DemoHero } from '@/components/demo/DemoHero';
 import { DemoFeatureShowcase } from '@/components/demo/DemoFeatureShowcase';
 import { DemoPlayground } from '@/components/demo/DemoPlayground';
 import { DemoArchetypeComparison } from '@/components/demo/DemoArchetypeComparison';
+import { DemoGroupBlend } from '@/components/demo/DemoGroupBlend';
 import { DemoCTA } from '@/components/demo/DemoCTA';
 
 export default function Demo() {
@@ -50,6 +51,9 @@ export default function Demo() {
       <div ref={comparisonRef}>
         <DemoArchetypeComparison />
       </div>
+
+      {/* Group Travel Blending Demo */}
+      <DemoGroupBlend />
 
       {/* Interactive playground */}
       <div ref={playgroundRef}>
