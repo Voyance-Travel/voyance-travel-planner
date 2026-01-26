@@ -4,11 +4,13 @@ import Head from '@/components/common/Head';
 import { DemoHero } from '@/components/demo/DemoHero';
 import { DemoFeatureShowcase } from '@/components/demo/DemoFeatureShowcase';
 import { DemoPlayground } from '@/components/demo/DemoPlayground';
+import { DemoArchetypeComparison } from '@/components/demo/DemoArchetypeComparison';
 import { DemoCTA } from '@/components/demo/DemoCTA';
 
 export default function Demo() {
   const [showTour, setShowTour] = useState(false);
   const playgroundRef = useRef<HTMLDivElement>(null);
+  const comparisonRef = useRef<HTMLDivElement>(null);
 
   const handleStartTour = () => {
     setShowTour(true);
@@ -16,8 +18,8 @@ export default function Demo() {
 
   const handleTourComplete = () => {
     setShowTour(false);
-    // Scroll to playground
-    playgroundRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Scroll to comparison section first
+    comparisonRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleSkipToPlayground = () => {
@@ -43,6 +45,11 @@ export default function Demo() {
       {showTour && (
         <DemoFeatureShowcase onComplete={handleTourComplete} />
       )}
+
+      {/* Archetype Comparison - Prove personalization works */}
+      <div ref={comparisonRef}>
+        <DemoArchetypeComparison />
+      </div>
 
       {/* Interactive playground */}
       <div ref={playgroundRef}>
