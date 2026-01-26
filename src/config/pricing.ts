@@ -163,7 +163,7 @@ export const PLAN_FEATURES = {
     cta: 'Buy 10 Credits — $149',
   },
   // ============================================
-  // TRAVEL AGENT TIERS - Trip Operating System
+  // TRAVEL AGENT TIERS - Professional Plans
   // ============================================
   AGENT_STARTER: {
     id: 'agent_starter',
@@ -235,7 +235,7 @@ export const PLAN_FEATURES = {
     id: 'agent_agency',
     name: 'Agency',
     badge: 'Teams',
-    headline: 'Your complete Trip Operating System.',
+    headline: 'Everything your agency needs.',
     subheadline: 'Multi-seat, permissioning, reconciliation exports, and everything your agency needs.',
     bestFor: 'Agencies and teams needing full workflow automation.',
     price: 499,
@@ -275,7 +275,7 @@ export const PLAN_FEATURES = {
     id: 'travel_agent',
     name: 'Travel Agent',
     badge: 'For Professionals',
-    headline: 'Your complete Trip Operating System.',
+    headline: 'Build trips faster, track everything.',
     subheadline: 'Build and revise trips in minutes. Keep confirmations, payments, tasks, and commissions attached to the trip.',
     bestFor: 'Travel agents and advisors managing client trips.',
     price: 79,
