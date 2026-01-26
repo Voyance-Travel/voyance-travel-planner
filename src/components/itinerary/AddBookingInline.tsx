@@ -37,6 +37,7 @@ export interface ManualFlightEntry {
   departureTime: string;
   arrivalTime: string;
   departureDate: string;
+  price?: number; // Optional price for budget tracking
 }
 
 export interface ManualHotelEntry {
@@ -107,6 +108,7 @@ export function AddFlightInline({
       departureTime: '',
       arrivalTime: '',
       departureDate: startDate,
+      price: undefined,
     }
   );
   
@@ -119,6 +121,7 @@ export function AddFlightInline({
       departureTime: '',
       arrivalTime: '',
       departureDate: endDate,
+      price: undefined,
     }
   );
 
@@ -145,7 +148,7 @@ export function AddFlightInline({
             airport: outboundFlight.arrivalAirport,
             time: outboundFlight.arrivalTime,
           },
-          price: 0, // Manual entry, no price
+          price: outboundFlight.price || 0,
           cabin: 'economy',
         },
         return: returnFlight.airline ? {
@@ -160,7 +163,7 @@ export function AddFlightInline({
             airport: returnFlight.arrivalAirport,
             time: returnFlight.arrivalTime,
           },
-          price: 0,
+          price: returnFlight.price || 0,
           cabin: 'economy',
         } : undefined,
         isManualEntry: true,
@@ -266,7 +269,7 @@ export function AddFlightInline({
                     onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureTime: e.target.value }))}
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
                   <Label className="text-xs">Arrival Time (at destination)</Label>
                   <Input
                     type="time"
@@ -275,6 +278,18 @@ export function AddFlightInline({
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     This helps us plan your Day 1 activities
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs">Price (USD)</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 450"
+                    value={outboundFlight.price || ''}
+                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    For budget tracking
                   </p>
                 </div>
               </div>
@@ -335,13 +350,25 @@ export function AddFlightInline({
                     onChange={(e) => setReturnFlight(prev => ({ ...prev, departureTime: e.target.value }))}
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
                   <Label className="text-xs">Arrival Time (at home)</Label>
                   <Input
                     type="time"
                     value={returnFlight.arrivalTime}
                     onChange={(e) => setReturnFlight(prev => ({ ...prev, arrivalTime: e.target.value }))}
                   />
+                </div>
+                <div>
+                  <Label className="text-xs">Price (USD)</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 450"
+                    value={returnFlight.price || ''}
+                    onChange={(e) => setReturnFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    For budget tracking
+                  </p>
                 </div>
               </div>
             </div>
