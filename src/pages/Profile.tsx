@@ -244,8 +244,15 @@ export default function Profile() {
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState<string | null>(null);
 
-  // Handle success/cancel query params
+  // Handle URL query params for tab selection and success states
   useEffect(() => {
+    // Handle tab query param
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['overview', 'trips', 'friends', 'subscription', 'preferences'].includes(tabParam)) {
+      setActiveTab(tabParam as TabType);
+    }
+    
+    // Handle success/cancel query params
     if (searchParams.get('success') === 'true') {
       toast.success('Subscription activated successfully!');
       setActiveTab('subscription');

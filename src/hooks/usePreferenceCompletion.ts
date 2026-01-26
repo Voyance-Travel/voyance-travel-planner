@@ -35,25 +35,25 @@ const MISSING_ITEMS_CONFIG: Record<string, Omit<MissingItem, 'id'>> = {
     label: 'Dietary preferences',
     description: 'Get restaurant recommendations that match your diet',
     impact: 'medium',
-    action: '/profile?section=preferences',
+    action: '/profile?tab=preferences',
   },
   pace: {
     label: 'Travel pace',
     description: 'Match activity density to your energy level',
     impact: 'medium',
-    action: '/quiz',
+    action: '/profile?tab=preferences',
   },
   interests: {
     label: 'Interests & activities',
     description: 'See more of what you love in your itinerary',
     impact: 'medium',
-    action: '/quiz',
+    action: '/profile?tab=preferences',
   },
   budget: {
     label: 'Budget preferences',
     description: 'Get recommendations within your price range',
     impact: 'high',
-    action: '/quiz',
+    action: '/profile?tab=preferences',
   },
 };
 

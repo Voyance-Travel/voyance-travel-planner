@@ -127,12 +127,12 @@ function MissingItemRow({ item, onClick }: { item: MissingItem; onClick: () => v
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors text-left group"
+      className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/60 transition-colors text-left group border border-transparent hover:border-border"
     >
       <div className={cn(
-        'p-1.5 rounded-md',
+        'p-2 rounded-md',
         item.impact === 'high' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-        'bg-muted text-muted-foreground'
+        'bg-primary/10 text-primary'
       )}>
         {ICON_MAP[item.id] || <Target className="h-4 w-4" />}
       </div>
@@ -140,7 +140,7 @@ function MissingItemRow({ item, onClick }: { item: MissingItem; onClick: () => v
         <p className="text-sm font-medium truncate">{item.label}</p>
         <p className="text-xs text-muted-foreground truncate">{item.description}</p>
       </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
+      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all flex-shrink-0" />
     </button>
   );
 }
@@ -284,9 +284,9 @@ export function PreferenceNudge({
     <Card className={cn('overflow-hidden', config.border, className)}>
       <CardContent className="p-6">
         <div className="flex items-start gap-6">
-          {/* Confidence Ring */}
+          {/* Personalization Ring - shows completion percent */}
           <div className="flex-shrink-0">
-            <ConfidenceRing confidence={status.confidence} size={72} />
+            <ConfidenceRing confidence={status.completionPercent} size={72} />
             <p className="text-xs text-center text-muted-foreground mt-1">
               Personalization
             </p>
