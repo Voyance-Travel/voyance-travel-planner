@@ -158,6 +158,19 @@ export default function Pricing() {
                 </p>
               </div>
             </div>
+
+            {/* Feature Gating Callout */}
+            <div className="mt-8 pt-6 border-t border-primary/10">
+              <div className="flex items-center justify-center gap-3 text-center">
+                <Lock className="w-5 h-5 text-muted-foreground" />
+                <p className="text-foreground">
+                  <span className="font-medium">Free users see Day 1 only.</span>{' '}
+                  <span className="text-muted-foreground">Upgrade to see your full itinerary — every day matched to </span>
+                  <span className="text-primary font-medium italic">your</span>
+                  <span className="text-muted-foreground"> Travel DNA.</span>
+                </p>
+              </div>
+            </div>
           </motion.div>
         </div>
       </section>
