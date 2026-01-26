@@ -9,7 +9,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ChevronRight, ChevronLeft, Lock, MoreHorizontal, 
-  RefreshCw, Save, Calendar, Sparkles, ArrowRightLeft
+  RefreshCw, Save, Calendar, Sparkles, ArrowRightLeft,
+  Route, Globe, Share2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,30 @@ const TOUR_STEPS: TourStep[] = [
     description: 'This is your personalized travel plan. Let me show you how to customize it to make it perfect for your trip.',
     icon: <Sparkles className="h-5 w-5" />,
     position: 'center',
+  },
+  {
+    id: 'optimize',
+    title: 'Optimize Your Route',
+    description: 'Click Optimize to intelligently reorder activities and minimize travel time between stops—typically saving ~30 minutes per day.',
+    icon: <Route className="h-5 w-5" />,
+    selector: '[data-tour="optimize-button"]',
+    position: 'bottom',
+  },
+  {
+    id: 'currency',
+    title: 'Switch Currencies',
+    description: 'Toggle between local currency and USD to see costs in your preferred format. Great for budgeting!',
+    icon: <Globe className="h-5 w-5" />,
+    selector: '[data-tour="currency-toggle"]',
+    position: 'bottom',
+  },
+  {
+    id: 'share',
+    title: 'Share Your Trip',
+    description: 'Share your itinerary with travel companions or save it for later. They can view and collaborate on the plan.',
+    icon: <Share2 className="h-5 w-5" />,
+    selector: '[data-tour="share-button"]',
+    position: 'bottom',
   },
   {
     id: 'day-picker',
