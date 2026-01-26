@@ -281,10 +281,50 @@ export function convertBackendActivity(activity: BackendActivity): ItineraryActi
 }
 
 /**
+ * Parse time string (e.g., "9:00 AM", "14:30") to minutes since midnight
+ */
+function parseTimeToMinutes(timeStr: string | undefined): number {
+  if (!timeStr) return 0;
+  
+  const normalized = timeStr.trim().toUpperCase();
+  
+  // Handle 12-hour format (e.g., "9:00 AM", "2:30 PM")
+  const match12 = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = parseInt(match12[2], 10);
+    const period = match12[3];
+    
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    
+    return hours * 60 + minutes;
+  }
+  
+  // Handle 24-hour format (e.g., "14:30")
+  const match24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    const hours = parseInt(match24[1], 10);
+    const minutes = parseInt(match24[2], 10);
+    return hours * 60 + minutes;
+  }
+  
+  return 0;
+}
+
+/**
  * Convert backend day to frontend-friendly format
  */
 export function convertBackendDay(day: BackendDay): DayItinerary {
   const activities = day.activities.map(convertBackendActivity);
+  
+  // Sort activities chronologically by time
+  activities.sort((a, b) => {
+    const aMinutes = parseTimeToMinutes(a.time);
+    const bMinutes = parseTimeToMinutes(b.time);
+    return aMinutes - bMinutes;
+  });
+  
   const totalCost = activities.reduce((sum, a) => sum + a.cost, 0);
 
   const conditionMap: Record<string, WeatherCondition> = {
