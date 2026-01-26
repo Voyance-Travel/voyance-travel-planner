@@ -1925,14 +1925,28 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       }
     }
 
-    // Parse hotel information  
-    const hotel = trip.hotel_selection as {
+    // Parse hotel information - handle both array (new) and object (legacy) formats
+    interface HotelInfo {
       name?: string;
       address?: string;
       neighborhood?: string;
       checkIn?: string;
       checkOut?: string;
-    } | null;
+    }
+    
+    const hotelRaw = trip.hotel_selection;
+    let hotel: HotelInfo | null = null;
+    
+    // Handle array format (multi-hotel support)
+    if (Array.isArray(hotelRaw) && hotelRaw.length > 0) {
+      // Use the first hotel for primary context
+      hotel = hotelRaw[0] as HotelInfo;
+      console.log(`[FlightHotel] Parsed hotel from array: ${hotel?.name || 'No name'}`);
+    } else if (hotelRaw && typeof hotelRaw === 'object' && !Array.isArray(hotelRaw)) {
+      // Legacy single object format
+      hotel = hotelRaw as HotelInfo;
+      console.log(`[FlightHotel] Parsed hotel from legacy object: ${hotel?.name || 'No name'}`);
+    }
     
     if (hotel) {
       const hotelInfo: string[] = [];
@@ -1948,8 +1962,10 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
         hotelInfo.push(`   Neighborhood: ${hotel.neighborhood}`);
       }
       if (hotelInfo.length > 0) {
-        sections.push(`\n${'='.repeat(40)}\n🏨 ACCOMMODATION (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the hotel area and end nearby for easy return.`);
+        sections.push(`\n${'='.repeat(40)}\n🏨 ACCOMMODATION (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the hotel area and end nearby for easy return.\n⚠️ CRITICAL: Day 1 activities must NOT begin before hotel check-in is complete. Standard check-in is 3:00 PM - do not schedule sightseeing before this unless arrival is very early.`);
       }
+    } else {
+      console.log(`[FlightHotel] No hotel data found in trip`);
     }
 
     return {
@@ -3605,10 +3621,37 @@ async function earlySaveItinerary(supabase: any, tripId: string, days: StrictDay
   console.log(`[Stage 3] Early save for trip ${tripId} with ${days.length} days`);
 
   try {
-    const totalActivities = days.reduce((sum, day) => sum + day.activities.length, 0);
+    // Sanitize activity titles to remove system prefixes before saving
+    const SYSTEM_PREFIXES = [
+      'EDGE_ACTIVITY:', 'SIGNATURE_MEAL:', 'LINGER_BLOCK:', 'WELLNESS_MOMENT:',
+      'AUTHENTIC_ENCOUNTER:', 'SOCIAL_EXPERIENCE:', 'SOLO_RETREAT:', 'DEEP_CONTEXT:',
+      'SPLURGE_EXPERIENCE:', 'VIP_EXPERIENCE:', 'COUPLES_MOMENT:', 'CONNECTIVITY_SPOT:', 'FAMILY_ACTIVITY:',
+    ];
+    
+    const sanitizeTitle = (title: string): string => {
+      let sanitized = title.trim();
+      for (const prefix of SYSTEM_PREFIXES) {
+        if (sanitized.toUpperCase().startsWith(prefix.toUpperCase())) {
+          sanitized = sanitized.slice(prefix.length).trim();
+          break;
+        }
+      }
+      return sanitized;
+    };
+    
+    // Apply sanitization to all activity titles
+    const sanitizedDays = days.map(day => ({
+      ...day,
+      activities: day.activities.map((act: StrictActivity) => ({
+        ...act,
+        title: sanitizeTitle(act.title),
+      })),
+    }));
+    
+    const totalActivities = sanitizedDays.reduce((sum, day) => sum + day.activities.length, 0);
 
     const itineraryData = {
-      days,
+      days: sanitizedDays,
       status: 'generating', // Will be updated to 'ready' after full enrichment
       generatedAt: new Date().toISOString(),
       enrichmentMetadata: {
