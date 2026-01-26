@@ -1459,33 +1459,33 @@ export function EditorialItinerary({
       {/* Onboarding Tour for first-time visitors */}
       <ItineraryOnboardingTour tripId={tripId} />
       {/* Trip Summary Bar - Editorial Style - Sticky for visibility */}
-      <div className="py-4 px-4 -mx-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl sticky top-16 z-30 backdrop-blur-sm border-b border-border/50 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
+      <div className="py-3 sm:py-4 px-3 sm:px-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl sticky top-16 z-30 backdrop-blur-sm border border-border/50 shadow-sm overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           {/* Left: Trip info pills */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-background border border-border text-sm">
-              <Calendar className="h-3.5 w-3.5 text-primary" />
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
+            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-background border border-border text-xs sm:text-sm shrink-0">
+              <Calendar className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
               <span className="font-medium text-foreground">{days.length} Days</span>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-background border border-border text-sm">
-              <Users className="h-3.5 w-3.5 text-primary" />
+            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-background border border-border text-xs sm:text-sm shrink-0">
+              <Users className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
               <span className="font-medium text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
             </div>
           </div>
           
           {/* Right: Cost + Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
             {effectiveIsEditable && hasChanges && (
-              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse text-xs">
+              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse text-xs shrink-0">
                 <AlertCircle className="h-3 w-3 mr-1" />
                 Unsaved
               </Badge>
             )}
             {/* Currency Toggle + Total */}
-            <div className="flex items-center gap-0">
+            <div className="flex items-center gap-0 shrink-0">
               <button
                 onClick={() => setShowLocalCurrency((v) => !v)}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
+                className="flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
                 title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
               >
                 <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
@@ -1496,8 +1496,8 @@ export function EditorialItinerary({
                   USD
                 </span>
               </button>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-r-md bg-primary/10 border border-primary/20 text-sm">
-                <span className="text-muted-foreground">Total:</span>
+              <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-r-md bg-primary/10 border border-primary/20 text-xs sm:text-sm">
+                <span className="text-muted-foreground hidden sm:inline">Total:</span>
                 <span className="font-semibold text-primary">{formatCurrency(totalCost, tripCurrency)}</span>
               </div>
             </div>
@@ -1507,10 +1507,10 @@ export function EditorialItinerary({
               variant="outline" 
               size="sm"
               onClick={() => setShowShareModal(true)}
-              className="gap-1.5 h-8 text-xs"
+              className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
             >
-              <Share2 className="h-3.5 w-3.5" />
-              Share
+              <Share2 className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+              <span className="hidden sm:inline">Share</span>
             </Button>
             
             {effectiveIsEditable && (
@@ -1528,10 +1528,10 @@ export function EditorialItinerary({
                         }
                       }} 
                       disabled={isOptimizing || days.length === 0} 
-                      className="gap-1.5 h-8 text-xs"
+                      className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
                     >
-                      {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
-                      {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                      {isOptimizing ? <RefreshCw className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
+                      <span className="hidden sm:inline">{isOptimizing ? 'Optimizing...' : 'Optimize'}</span>
                       {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
                     </Button>
                   </TooltipTrigger>
@@ -1543,11 +1543,11 @@ export function EditorialItinerary({
                   size="sm"
                   onClick={handleSave} 
                   disabled={isSaving || !hasChanges} 
-                  className="gap-1.5 h-8 text-xs"
+                  className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
                   data-tour="save-button"
                 >
-                  {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                  {hasChanges ? 'Save' : 'Saved ✓'}
+                  {isSaving ? <RefreshCw className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <Save className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
+                  <span className="hidden sm:inline">{hasChanges ? 'Save' : 'Saved ✓'}</span>
                 </Button>
               </>
             )}
@@ -1576,29 +1576,30 @@ export function EditorialItinerary({
         isLoading={imagesLoading}
       />
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-border">
-        <div className="flex gap-1">
+      {/* Navigation Tabs - Horizontally scrollable on mobile */}
+      <div className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex gap-1 min-w-max">
           {[
-            { id: 'itinerary', label: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
-            { id: 'budget', label: 'Budget', icon: <Wallet className="h-4 w-4" /> },
-            { id: 'payments', label: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-            { id: 'weather', label: 'Weather', icon: <CloudSun className="h-4 w-4" /> },
-            { id: 'overview', label: 'Flight & Hotel', icon: <Plane className="h-4 w-4" /> },
-            { id: 'needtoknow', label: 'Need to Know', icon: <Info className="h-4 w-4" /> },
+            { id: 'itinerary', label: 'Itinerary', fullLabel: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
+            { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
+            { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
+            { id: 'weather', label: 'Weather', fullLabel: 'Weather', icon: <CloudSun className="h-4 w-4" /> },
+            { id: 'overview', label: 'Flights', fullLabel: 'Flight & Hotel', icon: <Plane className="h-4 w-4" /> },
+            { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" /> },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
               className={cn(
-                "px-6 py-3 text-sm font-sans tracking-wide transition-colors relative flex items-center gap-2",
+                "px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-sans tracking-wide transition-colors relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0",
                 activeTab === tab.id
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               {tab.icon}
-              {tab.label}
+              <span className="sm:hidden">{tab.label}</span>
+              <span className="hidden sm:inline">{tab.fullLabel}</span>
               {activeTab === tab.id && (
                 <motion.div
                   layoutId="editorialItineraryTab"
@@ -3989,37 +3990,37 @@ function DayCard({
   return (
     <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
       {/* Day Header - Editorial Style with Color Accent */}
-      <div className="relative p-6 bg-gradient-to-r from-primary/5 via-transparent to-accent/5">
+      <div className="relative p-4 sm:p-6 bg-gradient-to-r from-primary/5 via-transparent to-accent/5">
         {/* Decorative accent bar */}
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-accent to-primary/50" />
         
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <span className="text-5xl font-serif font-light text-primary/40">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="relative shrink-0">
+              <span className="text-3xl sm:text-5xl font-serif font-light text-primary/40">
                 {String(day.dayNumber).padStart(2, '0')}
               </span>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 sm:w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
             </div>
-            <div>
-              <h3 className="font-serif text-xl font-medium text-foreground mb-1">
+            <div className="min-w-0">
+              <h3 className="font-serif text-lg sm:text-xl font-medium text-foreground mb-0.5 sm:mb-1 truncate">
                 {day.title || day.theme || `Day ${day.dayNumber}`}
               </h3>
               {day.description && (
-                <p className="text-sm text-muted-foreground italic">{day.description}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground italic line-clamp-1 sm:line-clamp-none">{day.description}</p>
               )}
             </div>
           </div>
 
           {/* Day Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pl-10 sm:pl-0">
             {totalCost > 0 && (
-              <Badge variant="outline" className="text-sm font-semibold border-primary/30 bg-primary/5 text-primary">
+              <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0">
                 {formatCurrency(totalCost, tripCurrency)}
               </Badge>
             )}
             {day.weather && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-secondary/50 text-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-secondary/50 text-xs sm:text-sm shrink-0">
                 {weatherIcons[day.weather.condition?.toLowerCase() || 'sunny']}
                 {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
               </div>
@@ -4030,14 +4031,14 @@ function DayCard({
               size="sm"
               onClick={() => setShowTransportDetails(prev => !prev)}
               className={cn(
-                "h-8 gap-1.5 text-xs font-medium transition-all",
+                "h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-medium transition-all shrink-0 px-2 sm:px-3",
                 showTransportDetails 
                   ? "bg-primary text-primary-foreground" 
                   : "border-primary/30 hover:bg-primary/10 hover:border-primary/50"
               )}
               title={showTransportDetails ? 'Hide route details' : 'Show route details'}
             >
-              <Route className="h-3.5 w-3.5" />
+              <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
               <span className="hidden sm:inline">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
             </Button>
             {isEditable && (
@@ -4046,21 +4047,21 @@ function DayCard({
                   variant="ghost"
                   size="icon"
                   onClick={() => onDayLock(dayIndex)}
-                  className="h-8 w-8 hover:bg-primary/10"
+                  className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-primary/10 shrink-0"
                   title={allLocked ? 'Unlock Day' : 'Lock Day'}
                 >
-                  {allLocked ? <Lock className="h-4 w-4 text-primary" /> : <Unlock className="h-4 w-4" />}
+                  {allLocked ? <Lock className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary" /> : <Unlock className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={onDayRegenerate}
                   disabled={isRegenerating}
-                  className="h-8 w-8 hover:bg-accent/10"
+                  className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-accent/10 shrink-0"
                   title="Regenerate Day"
                   data-tour="regenerate-button"
                 >
-                  <RefreshCw className={cn("h-4 w-4", isRegenerating && "animate-spin text-accent")} />
+                  <RefreshCw className={cn("h-3.5 sm:h-4 w-3.5 sm:w-4", isRegenerating && "animate-spin text-accent")} />
                 </Button>
                 {/* Save to Library button removed - agent features disabled */}
               </>
@@ -4069,10 +4070,10 @@ function DayCard({
               variant="ghost"
               size="icon"
               onClick={onToggle}
-              className="h-8 w-8"
+              className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
               title={isExpanded ? 'Collapse' : 'Expand'}
             >
-              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {isExpanded ? <ChevronUp className="h-3.5 sm:h-4 w-3.5 sm:w-4" /> : <ChevronDown className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
             </Button>
           </div>
         </div>
@@ -4339,14 +4340,24 @@ function ActivityRow({
 
   return (
     <div className={cn(
-      "flex items-stretch group/activity hover:bg-secondary/10 transition-colors",
+      "flex flex-col sm:flex-row sm:items-stretch group/activity hover:bg-secondary/10 transition-colors",
       !isLast && "border-b border-border",
       activity.isLocked && "bg-primary/5"
     )}>
-      {/* Time Column - Clickable for editing */}
+      {/* Mobile: Compact header with time + icon */}
+      <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-gradient-to-r from-secondary/20 to-transparent">
+        <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
+        <span className="text-xs font-medium text-foreground">{formatTime(time)}</span>
+        {activity.duration && (
+          <span className="text-xs text-muted-foreground">• {activity.duration}</span>
+        )}
+        {activity.isLocked && <Lock className="h-3 w-3 text-primary ml-auto" />}
+      </div>
+
+      {/* Time Column - Hidden on mobile, visible on desktop */}
       <div 
         className={cn(
-          "w-24 shrink-0 p-4 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5",
+          "hidden sm:block w-24 shrink-0 p-4 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5",
           isEditable && "cursor-pointer hover:from-primary/10 hover:to-primary/5 transition-colors group"
         )}
         onClick={() => isEditable && onTimeEdit(dayIndex, activityIndex, activity)}
@@ -4364,9 +4375,9 @@ function ActivityRow({
         )}
       </div>
 
-      {/* Thumbnail Column - Always show for non-transport, non-downtime activities */}
+      {/* Thumbnail Column - Hidden on mobile, visible on desktop */}
       {showThumbnail && (
-        <div className="w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
+        <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
           {thumbnailUrl && !thumbnailError ? (
             <>
               <img
@@ -4387,10 +4398,10 @@ function ActivityRow({
       )}
 
       {/* Content */}
-      <div className="flex-1 p-4">
+      <div className="flex-1 p-3 sm:p-4">
         <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex-1 min-w-0">
+            <div className="hidden sm:flex items-center gap-2 mb-1.5">
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
               {/* Rating badge - clickable to view reviews (only for reviewable activity types) */}
