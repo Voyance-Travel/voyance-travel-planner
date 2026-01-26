@@ -1900,6 +1900,48 @@ export type Database = {
         }
         Relationships: []
       }
+      consent_records: {
+        Row: {
+          consent_type: string
+          consent_version: string
+          consented_at: string
+          created_at: string
+          id: string
+          ip_hash: string | null
+          preferences: Json | null
+          revoked_at: string | null
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          consent_type: string
+          consent_version: string
+          consented_at?: string
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          preferences?: Json | null
+          revoked_at?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          consent_type?: string
+          consent_version?: string
+          consented_at?: string
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          preferences?: Json | null
+          revoked_at?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           action_key: string | null
