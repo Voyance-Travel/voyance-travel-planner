@@ -892,12 +892,16 @@ export default function Start() {
         }
         
         // Save flight times with origin/destination for itinerary generation
-        if (flightDetails || originSelection.cityName) {
+        // Build flight selection from flightDetails or origin/destination
+        const originAirport = flightDetails?.outbound?.departureAirport || originSelection.airportCodes?.[0] || originSelection.cityName;
+        const hasOriginInfo = originAirport || flightDetails?.outbound?.departureAirport;
+        
+        if (flightDetails || hasOriginInfo) {
           updatePayload.flight_selection = {
             outbound: {
-              departure: originSelection.cityName ? {
-                airport: flightDetails?.outbound?.departureAirport || originSelection.airportCodes?.[0] || originSelection.cityName,
-                city: originSelection.cityName,
+              departure: hasOriginInfo ? {
+                airport: originAirport,
+                city: originSelection.cityName || flightDetails?.outbound?.departureAirport,
                 time: flightDetails?.outbound?.departureTime,
               } : undefined,
               arrival: {
@@ -912,9 +916,9 @@ export default function Start() {
                 city: destinationSelection.cityName,
                 time: flightDetails.return.departureTime || undefined,
               },
-              arrival: originSelection.cityName ? {
-                airport: flightDetails.return.arrivalAirport || originSelection.airportCodes?.[0] || originSelection.cityName,
-                city: originSelection.cityName,
+              arrival: hasOriginInfo ? {
+                airport: flightDetails.return.arrivalAirport || originAirport,
+                city: originSelection.cityName || flightDetails.return.arrivalAirport,
                 time: flightDetails.return.arrivalTime,
               } : undefined,
             } : undefined,
@@ -1046,26 +1050,11 @@ export default function Start() {
             className="bg-white/95 dark:bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 md:p-8"
           >
             <div className="space-y-5">
-              {/* Departure City - Only for hotel flow */}
-              {!itineraryOnlyMode && (
-                <div className="space-y-2">
-                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    Departing from
-                  </label>
-                  <AirportAutocomplete
-                    value={originSelection.display}
-                    onChange={setOriginSelection}
-                    placeholder="Your home city"
-                    icon={Plane}
-                  />
-                </div>
-              )}
-              
-              {/* Destination */}
+              {/* Destination - Both flows */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    {itineraryOnlyMode ? 'Destination' : 'Flying to'}
+                    Destination
                   </label>
                   <Link 
                     to={ROUTES.PLANNER.MULTI_CITY}
@@ -1091,107 +1080,108 @@ export default function Start() {
                 )}
               </div>
 
-              {/* Flight Details - Itinerary-only mode */}
-              {itineraryOnlyMode && (
-                <div className="space-y-3">
-                  <span className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    Flight Details
-                  </span>
-                  
-                  {flightDetails ? (
-                    <div 
-                      className="p-4 rounded-lg border border-border bg-muted/30 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => setShowFlightDetailsModal(true)}
-                    >
-                      {/* Outbound summary */}
-                      <div className="flex items-center gap-2">
-                        <Plane className="h-4 w-4 text-primary rotate-[-45deg]" />
+              {/* Flight Details - Both flows */}
+              <div className="space-y-3">
+                <span className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                  Flight Details {!itineraryOnlyMode && <span className="normal-case text-muted-foreground/70">(optional)</span>}
+                </span>
+                
+                {flightDetails ? (
+                  <div 
+                    className="p-4 rounded-lg border border-border bg-muted/30 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setShowFlightDetailsModal(true)}
+                  >
+                    {/* Outbound summary */}
+                    <div className="flex items-center gap-2">
+                      <Plane className="h-4 w-4 text-primary rotate-[-45deg]" />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">
+                          {flightDetails.outbound.departureAirport || originSelection.cityName || 'Home'} → {flightDetails.outbound.arrivalAirport || destinationSelection.cityName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {flightDetails.outbound.departureTime && `Departs ${flightDetails.outbound.departureTime}`}
+                          {flightDetails.outbound.departureTime && flightDetails.outbound.arrivalTime && ' · '}
+                          {flightDetails.outbound.arrivalTime && `Arrives ${flightDetails.outbound.arrivalTime}`}
+                          {startDate && ` on ${format(startDate, 'MMM d')}`}
+                        </div>
+                        {flightDetails.outboundLayovers && flightDetails.outboundLayovers.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            + {flightDetails.outboundLayovers.length} connection(s)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Return summary */}
+                    {flightDetails.return && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                        <Plane className="h-4 w-4 text-primary rotate-45" />
                         <div className="flex-1">
                           <div className="text-sm font-medium">
-                            {flightDetails.outbound.departureAirport || 'TBD'} → {flightDetails.outbound.arrivalAirport || destinationSelection.cityName}
+                            {flightDetails.return.departureAirport || destinationSelection.cityName} → {flightDetails.return.arrivalAirport || originSelection.cityName || 'Home'}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {flightDetails.outbound.departureTime && `Departs ${flightDetails.outbound.departureTime}`}
-                            {flightDetails.outbound.departureTime && flightDetails.outbound.arrivalTime && ' · '}
-                            {flightDetails.outbound.arrivalTime && `Arrives ${flightDetails.outbound.arrivalTime}`}
-                            {startDate && ` on ${format(startDate, 'MMM d')}`}
+                            {flightDetails.return.departureTime && `Departs ${flightDetails.return.departureTime}`}
+                            {flightDetails.return.departureTime && flightDetails.return.arrivalTime && ' · '}
+                            {flightDetails.return.arrivalTime && `Arrives ${flightDetails.return.arrivalTime}`}
+                            {endDate && ` on ${format(endDate, 'MMM d')}`}
                           </div>
-                          {flightDetails.outboundLayovers && flightDetails.outboundLayovers.length > 0 && (
+                          {flightDetails.returnLayovers && flightDetails.returnLayovers.length > 0 && (
                             <div className="text-[10px] text-muted-foreground mt-0.5">
-                              + {flightDetails.outboundLayovers.length} connection(s)
+                              + {flightDetails.returnLayovers.length} connection(s)
                             </div>
                           )}
                         </div>
                       </div>
-                      
-                      {/* Return summary */}
-                      {flightDetails.return && (
-                        <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-                          <Plane className="h-4 w-4 text-primary rotate-45" />
-                          <div className="flex-1">
-                            <div className="text-sm font-medium">
-                              {flightDetails.return.departureAirport || destinationSelection.cityName} → {flightDetails.return.arrivalAirport || 'Home'}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {flightDetails.return.departureTime && `Departs ${flightDetails.return.departureTime}`}
-                              {flightDetails.return.departureTime && flightDetails.return.arrivalTime && ' · '}
-                              {flightDetails.return.arrivalTime && `Arrives ${flightDetails.return.arrivalTime}`}
-                              {endDate && ` on ${format(endDate, 'MMM d')}`}
-                            </div>
-                            {flightDetails.returnLayovers && flightDetails.returnLayovers.length > 0 && (
-                              <div className="text-[10px] text-muted-foreground mt-0.5">
-                                + {flightDetails.returnLayovers.length} connection(s)
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                    )}
 
-                      {/* Inter-city transfers summary */}
-                      {flightDetails.interCityTransfers && flightDetails.interCityTransfers.length > 0 && (
-                        <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-                          <div className="h-4 w-4 flex items-center justify-center text-primary">
-                            🚄
+                    {/* Inter-city transfers summary */}
+                    {flightDetails.interCityTransfers && flightDetails.interCityTransfers.length > 0 && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                        <div className="h-4 w-4 flex items-center justify-center text-primary">
+                          🚄
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">
+                            {flightDetails.interCityTransfers.length} inter-city transfer{flightDetails.interCityTransfers.length > 1 ? 's' : ''}
                           </div>
-                          <div className="flex-1">
-                            <div className="text-sm font-medium">
-                              {flightDetails.interCityTransfers.length} inter-city transfer{flightDetails.interCityTransfers.length > 1 ? 's' : ''}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {flightDetails.interCityTransfers.map((t, i) => (
-                                <span key={i}>
-                                  {i > 0 && ' · '}
-                                  {t.fromCity} → {t.toCity}
-                                </span>
-                              ))}
-                            </div>
+                          <div className="text-xs text-muted-foreground">
+                            {flightDetails.interCityTransfers.map((t, i) => (
+                              <span key={i}>
+                                {i > 0 && ' · '}
+                                {t.fromCity} → {t.toCity}
+                              </span>
+                            ))}
                           </div>
                         </div>
-                      )}
-                      
-                      <p className="text-[10px] text-primary text-center pt-1">
-                        Click to edit flight details
-                      </p>
-                    </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full h-12 justify-start text-muted-foreground"
-                      onClick={() => setShowFlightDetailsModal(true)}
-                    >
-                      <Plane className="h-4 w-4 mr-2 rotate-[-45deg]" />
-                      Add flight details (optional)
-                    </Button>
-                  )}
-                  
-                  {startDate && !flightDetails && (
-                    <p className="text-[10px] text-muted-foreground">
-                      Arrival time plans Day 1, departure time plans your last day
+                      </div>
+                    )}
+                    
+                    <p className="text-[10px] text-primary text-center pt-1">
+                      Click to edit flight details
                     </p>
-                  )}
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-12 justify-start text-muted-foreground"
+                    onClick={() => setShowFlightDetailsModal(true)}
+                  >
+                    <Plane className="h-4 w-4 mr-2 rotate-[-45deg]" />
+                    {itineraryOnlyMode ? 'Add flight details' : 'Add flight details (helps plan your trip)'}
+                  </Button>
+                )}
+                
+                {startDate && !flightDetails && (
+                  <p className="text-[10px] text-muted-foreground">
+                    {itineraryOnlyMode 
+                      ? 'Arrival time plans Day 1, departure time plans your last day'
+                      : 'Adding flights helps us find hotels near your arrival and plan your itinerary'}
+                  </p>
+                )}
+              </div>
+
 
               {/* Hotel Input - Only for itinerary-only mode */}
               {itineraryOnlyMode && (
