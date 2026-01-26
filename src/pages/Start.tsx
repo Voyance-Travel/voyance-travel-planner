@@ -1087,7 +1087,7 @@ export default function Start() {
                 <>Find My <em className="italic">Hotel</em></>
               )}
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground max-w-lg mx-auto">
+            <p className="mt-4 text-base sm:text-lg text-foreground/70 max-w-lg mx-auto font-medium px-4 sm:px-0">
               {itineraryOnlyMode
                 ? "You've got your flights and hotel sorted. We'll craft the perfect daily activities."
                 : "Search and book through us, or add your existing reservation."}
