@@ -756,8 +756,11 @@ export default function Start() {
   }, [plannerState.basics]);
 
   const handleStart = async () => {
-    // Validate: destination must be a real selection (has airport codes), not just typed text
-    const hasValidDestination = destinationSelection.cityName && destinationSelection.airportCodes?.length;
+    // Validate: in itinerary mode, just need cityName; otherwise need airport codes too
+    const hasValidDestination = itineraryOnlyMode 
+      ? !!destinationSelection.cityName 
+      : (destinationSelection.cityName && destinationSelection.airportCodes?.length);
+    
     if (!hasValidDestination || !startDate || !endDate) {
       if (!hasValidDestination && destinationSelection.display) {
         toast.error('Please select a destination from the dropdown');
