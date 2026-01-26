@@ -1,5 +1,10 @@
 /**
  * Hook to check user's preference completion status for personalization
+ * 
+ * Checks data from multiple sources:
+ * - profiles.quiz_completed
+ * - travel_dna_profiles.trait_scores (pace, budget)
+ * - user_preferences (dietary_restrictions, interests)
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -75,25 +80,36 @@ export function usePreferenceCompletion() {
         };
       }
 
-      // Fetch travel DNA profile
-      const { data: dnaProfile } = await supabase
-        .from('travel_dna_profiles')
-        .select('dna_confidence_score, trait_scores, travel_dna_v2')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Fetch all data sources in parallel
+      const [dnaProfileResult, profileResult, userPrefsResult] = await Promise.all([
+        // Travel DNA profile for trait scores and confidence
+        supabase
+          .from('travel_dna_profiles')
+          .select('dna_confidence_score, trait_scores, travel_dna_v2')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        // Profile for quiz completion
+        supabase
+          .from('profiles')
+          .select('quiz_completed, travel_dna, travel_dna_overrides')
+          .eq('id', user.id)
+          .maybeSingle(),
+        // User preferences for dietary and interests
+        supabase
+          .from('user_preferences')
+          .select('dietary_restrictions, interests, budget_tier')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ]);
 
-      // Fetch user profile for quiz completion and travel DNA
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('quiz_completed, travel_dna, travel_dna_overrides')
-        .eq('id', user.id)
-        .maybeSingle();
+      const dnaProfile = dnaProfileResult.data;
+      const profile = profileResult.data;
+      const userPrefs = userPrefsResult.data;
 
       const hasQuiz = profile?.quiz_completed === true;
       const hasDNA = !!dnaProfile?.trait_scores || !!dnaProfile?.travel_dna_v2;
       const confidence = dnaProfile?.dna_confidence_score ?? 0;
       const traitScores = dnaProfile?.trait_scores as Record<string, number> | null;
-      const travelDNA = profile?.travel_dna as Record<string, unknown> | null;
 
       // Determine missing items
       const missingItems: MissingItem[] = [];
@@ -101,30 +117,31 @@ export function usePreferenceCompletion() {
       if (!hasQuiz) {
         missingItems.push({ id: 'quiz', ...MISSING_ITEMS_CONFIG.quiz });
       } else {
-        // Quiz completed but check for specific missing data
-        if (!traitScores?.pace && traitScores?.pace !== 0) {
+        // Quiz completed - pace comes from trait_scores
+        // If trait_scores exists at all (quiz done), pace is set
+        const hasPace = traitScores?.pace !== undefined;
+        if (!hasPace) {
           missingItems.push({ id: 'pace', ...MISSING_ITEMS_CONFIG.pace });
         }
-        if (!traitScores?.budget && traitScores?.budget !== 0) {
+        
+        // Budget from trait_scores OR user_preferences
+        const hasBudget = traitScores?.budget !== undefined || !!userPrefs?.budget_tier;
+        if (!hasBudget) {
           missingItems.push({ id: 'budget', ...MISSING_ITEMS_CONFIG.budget });
         }
       }
 
-      // Check dietary preferences from travel_dna
-      const hasDietary = travelDNA?.dietary_restrictions && 
-        (Array.isArray(travelDNA.dietary_restrictions) 
-          ? (travelDNA.dietary_restrictions as unknown[]).length > 0 
-          : Object.keys(travelDNA.dietary_restrictions as object).length > 0);
+      // Check dietary preferences from user_preferences table
+      const dietaryArray = userPrefs?.dietary_restrictions;
+      const hasDietary = Array.isArray(dietaryArray) && dietaryArray.length > 0;
       
       if (!hasDietary) {
         missingItems.push({ id: 'dietary', ...MISSING_ITEMS_CONFIG.dietary });
       }
 
-      // Check interests from travel_dna
-      const hasInterests = travelDNA?.interests && 
-        (Array.isArray(travelDNA.interests) 
-          ? (travelDNA.interests as unknown[]).length > 0 
-          : true);
+      // Check interests from user_preferences table
+      const interestsArray = userPrefs?.interests;
+      const hasInterests = Array.isArray(interestsArray) && interestsArray.length > 0;
       
       if (!hasInterests && hasQuiz) {
         missingItems.push({ id: 'interests', ...MISSING_ITEMS_CONFIG.interests });
@@ -135,14 +152,18 @@ export function usePreferenceCompletion() {
       const completedItems = totalItems - missingItems.length;
       const completionPercent = Math.round((completedItems / totalItems) * 100);
 
-      // Determine personalization level
+      // Determine personalization level based on what we actually have
       let personalizationLevel: PreferenceStatus['personalizationLevel'] = 'none';
-      if (hasQuiz && confidence >= 70) {
-        personalizationLevel = 'excellent';
-      } else if (hasQuiz && confidence >= 50) {
-        personalizationLevel = 'good';
-      } else if (hasQuiz || hasDNA) {
-        personalizationLevel = 'basic';
+      
+      if (hasQuiz) {
+        // Quiz done is the baseline
+        if (hasDNA && completedItems >= 4) {
+          personalizationLevel = 'excellent';
+        } else if (hasDNA && completedItems >= 3) {
+          personalizationLevel = 'good';
+        } else {
+          personalizationLevel = 'basic';
+        }
       }
 
       return {
