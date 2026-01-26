@@ -84,6 +84,14 @@ const DEMO_FEATURES = [
   },
 ];
 
+// Convert 24-hour time to 12-hour AM/PM format
+const formatTime12h = (time24: string): string => {
+  const [hours, minutes] = time24.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12;
+  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+};
+
 export function DemoPlayground() {
   const [selectedDest, setSelectedDest] = useState(DESTINATIONS[0]);
   const [itinerary, setItinerary] = useState<ReturnType<typeof getItineraryBySlug>>(null);
@@ -795,7 +803,7 @@ function ActivityRow({
 
       {/* Time column */}
       <div className="w-[68px] shrink-0 py-2.5 px-2.5 border-r border-border/30 bg-muted/20">
-        <p className="text-xs font-medium text-foreground">{activity.time}</p>
+        <p className="text-xs font-medium text-foreground">{formatTime12h(activity.time)}</p>
         <p className="text-[10px] text-muted-foreground">{activity.duration}</p>
       </div>
 
