@@ -909,15 +909,13 @@ export default function Start() {
                   <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                     {itineraryOnlyMode ? 'Destination' : 'Flying to'}
                   </label>
-                  {!itineraryOnlyMode && (
-                    <Link 
-                      to={ROUTES.PLANNER.MULTI_CITY}
-                      className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-                    >
-                      <Globe className="h-3.5 w-3.5" />
-                      Multiple cities?
-                    </Link>
-                  )}
+                  <Link 
+                    to={ROUTES.PLANNER.MULTI_CITY}
+                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                    Multiple cities?
+                  </Link>
                 </div>
                 {itineraryOnlyMode ? (
                   <DestinationAutocomplete
