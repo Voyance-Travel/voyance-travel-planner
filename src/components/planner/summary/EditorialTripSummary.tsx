@@ -258,8 +258,12 @@ export default function EditorialTripSummary({
               <Sparkles className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-lg font-medium text-foreground">Trip Confirmed</h2>
-              <p className="text-sm text-muted-foreground">Review your selections below</p>
+              <h2 className="text-lg font-medium text-foreground">
+                {hasSelections ? 'Trip Confirmed' : 'Trip Overview'}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {hasSelections ? 'Review your selections below' : 'Ready to build your personalized itinerary'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -295,7 +299,62 @@ export default function EditorialTripSummary({
         {/* Two Column Layout */}
         <div className="grid lg:grid-cols-3 gap-12 lg:gap-16">
           {/* Left Column - Details */}
-          <div className="lg:col-span-2 space-y-16">
+          <div className="lg:col-span-2 space-y-12">
+            {/* Empty State - No bookings yet */}
+            {!data.outboundFlight && !data.hotel && (
+              <motion.section
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="space-y-6"
+              >
+                {/* Itinerary-Only Message */}
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-8">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium mb-2">Building Your Itinerary</h3>
+                      <p className="text-muted-foreground text-sm leading-relaxed mb-4">
+                        We're creating a personalized day-by-day plan for your {nights}-night trip to {destinationCity}. 
+                        You can add your flight and hotel details anytime from your itinerary view.
+                      </p>
+                      <Button onClick={onBuildItinerary} className="gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        Generate My Itinerary
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Add Cards */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="bg-muted/30 border border-border/50 rounded-lg p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Plane className="w-5 h-5 text-muted-foreground" />
+                      <h4 className="font-medium">Flight Details</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Add your flight times so we can plan Day 1 and departure day around your schedule.
+                    </p>
+                    <Badge variant="outline" className="text-xs">Add later from itinerary</Badge>
+                  </div>
+                  
+                  <div className="bg-muted/30 border border-border/50 rounded-lg p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Hotel className="w-5 h-5 text-muted-foreground" />
+                      <h4 className="font-medium">Accommodation</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Add your hotel to see it on your itinerary map and get nearby recommendations.
+                    </p>
+                    <Badge variant="outline" className="text-xs">Add later from itinerary</Badge>
+                  </div>
+                </div>
+              </motion.section>
+            )}
+
             {/* Flights Section */}
             {data.outboundFlight && (
               <motion.section
