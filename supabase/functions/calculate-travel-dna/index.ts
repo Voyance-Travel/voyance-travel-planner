@@ -1846,11 +1846,7 @@ async function generatePerfectTrip(
         messages: [
           {
             role: 'system',
-            content: `You are a luxury travel concierge crafting the perfect trip vision. 
-Write in second person ("you"), be evocative and aspirational but realistic. 
-Keep the response to 2-3 sentences max. Do NOT include specific dates or prices.
-Focus on the *feeling* and *experience* rather than logistics.
-${confidence < 60 ? 'This traveler has a mixed profile - acknowledge versatility.' : ''}`,
+            content: `You are a luxury travel concierge. Write ONE short sentence (15-20 words max) describing this traveler's perfect trip. Be evocative but extremely concise. No dates, prices, or logistics. Second person ("you").`,
           },
           { role: 'user', content: prompt },
         ],
@@ -1937,21 +1933,21 @@ function buildPerfectTripPromptV2(
 
 function getFallbackPerfectTrip(archetypeId: string): string {
   const fallbacks: Record<string, string> = {
-    cultural_anthropologist: 'A month exploring local life: morning markets, cooking classes, and dinner invitations from people you just met.',
-    urban_nomad: 'City-hopping between amazing neighborhoods: great coffee spots, rooftop bars, and hidden gems around every corner.',
-    wilderness_pioneer: 'Hiking through stunning landscapes: sleeping under stars, earning your views, and finding peace in nature.',
-    zen_seeker: 'A peaceful retreat: waking to birdsong, unhurried mornings, and the luxury of having nowhere to be.',
-    culinary_cartographer: 'Eating your way through a new place: night markets, family restaurants, and cooking classes with locals.',
-    luxury_luminary: 'A beautifully planned getaway: amazing hotels, great dining, and every detail taken care of.',
-    adrenaline_architect: 'An adventure-packed trip: thrilling activities, stunning settings, and experiences that get your heart racing.',
-    slow_traveler: 'Staying long enough to have a favorite café: one place, really getting to know it, feeling like a local.',
-    family_architect: 'A trip the whole family will remember: activities for everyone, shared meals, and stories you\'ll tell for years.',
-    story_seeker: 'Meeting fascinating people: local celebrations, meaningful conversations, and connections that last.',
-    escape_artist: 'A complete getaway: beautiful setting, no agenda, just space to breathe and recharge.',
-    social_butterfly: 'Making new friends everywhere: group adventures, shared meals, and a travel crew you\'ll stay in touch with.',
+    cultural_anthropologist: 'Morning markets, cooking with locals, and dinner invitations from new friends.',
+    urban_nomad: 'City-hopping through hidden neighborhoods, great coffee, and rooftop views.',
+    wilderness_pioneer: 'Earning your views on mountain trails, sleeping under stars.',
+    zen_seeker: 'Waking to birdsong, unhurried mornings, nowhere to be.',
+    culinary_cartographer: 'Eating your way through night markets and family-run restaurants.',
+    luxury_luminary: 'Impeccable hotels, memorable dining, every detail perfected.',
+    adrenaline_architect: 'Heart-racing adventures in stunning, wild settings.',
+    slow_traveler: 'One place, deeply known—your own favorite local café.',
+    family_architect: 'Adventures everyone loves, shared meals, lasting memories.',
+    story_seeker: 'Meaningful encounters and local celebrations that change you.',
+    escape_artist: 'Complete stillness in a beautiful setting, space to breathe.',
+    social_butterfly: 'Group adventures and new friends around every corner.',
   };
   
-  return fallbacks[archetypeId] || 'A trip that matches your style—experiences that feel right for you and memories you\'ll treasure.';
+  return fallbacks[archetypeId] || 'A trip perfectly matched to your style.';
 }
 
 // ============================================================================
