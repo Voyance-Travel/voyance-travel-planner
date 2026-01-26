@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,8 @@ import { useItineraryGeneration, GeneratedDay, TripOverview } from '@/hooks/useI
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UsageLimitNotice } from '@/components/common/UsageLimitNotice';
 import { PreferenceNudge, usePreferenceCompletion } from '@/components/common/PreferenceNudge';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 
 interface ItineraryGeneratorProps {
@@ -69,6 +71,10 @@ export function ItineraryGenerator({
   const freeBuildsRemaining = entitlements?.limits?.freeBuildsRemaining ?? 1;
   const freeBuildsLimit = entitlements?.limits?.fullBuilds ?? 1;
 
+  // Get auth state
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
   // Get preference completion status
   const { data: preferenceStatus } = usePreferenceCompletion();
   const showPreferenceNudge = preferenceStatus && 
@@ -99,13 +105,13 @@ export function ItineraryGenerator({
     }
   };
 
-  // Auto-start generation if prop is true and user has builds remaining
+  // Auto-start generation if prop is true and user has builds remaining AND is authenticated
   useEffect(() => {
-    if (autoStart && !autoStartTriggered.current && (isPaid || freeBuildsRemaining > 0)) {
+    if (autoStart && !autoStartTriggered.current && user && (isPaid || freeBuildsRemaining > 0)) {
       autoStartTriggered.current = true;
       handleGenerate();
     }
-  }, [autoStart, isPaid, freeBuildsRemaining]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStart, isPaid, freeBuildsRemaining, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const handleRetry = () => {
@@ -131,6 +137,53 @@ export function ItineraryGenerator({
 
   // Initial state - show generate button
   if (!hasStarted) {
+    // Show sign-in prompt if not authenticated
+    if (!user) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center py-16"
+        >
+          <div className="max-w-md mx-auto">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mx-auto mb-6">
+              <LogIn className="h-10 w-10 text-primary" />
+            </div>
+            
+            <h2 className="text-2xl font-serif font-bold mb-3">
+              Sign In to Generate Your Itinerary
+            </h2>
+            
+            <p className="text-muted-foreground mb-6">
+              Create a free account to generate personalized itineraries for{' '}
+              <span className="font-medium text-foreground">{destination}</span>.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <Button 
+                size="lg" 
+                onClick={() => navigate(`/login?redirect=/trip/${tripId}?generate=true`)}
+                className="gap-2"
+              >
+                <LogIn className="h-5 w-5" />
+                Sign In to Continue
+              </Button>
+              
+              {onCancel && (
+                <Button variant="ghost" onClick={onCancel}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground mt-6">
+              Free accounts get 1 itinerary build per month
+            </p>
+          </div>
+        </motion.div>
+      );
+    }
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
