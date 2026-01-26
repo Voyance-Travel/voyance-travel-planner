@@ -235,6 +235,30 @@ export function convertBackendActivity(activity: BackendActivity): ItineraryActi
     accommodation: 'accommodation',
   };
 
+  // Handle location being either a string or an object (from restaurant swaps)
+  let locationObj: ActivityLocation;
+  if (typeof activity.location === 'string') {
+    locationObj = {
+      name: activity.venue?.name || activity.location,
+      address: activity.location,
+      coordinates: activity.coordinates,
+    };
+  } else if (activity.location && typeof activity.location === 'object') {
+    // Location is already an object (e.g., from restaurant swap)
+    const loc = activity.location as { name?: string; address?: string; coordinates?: { lat: number; lng: number } };
+    locationObj = {
+      name: loc.name || '',
+      address: loc.address || '',
+      coordinates: loc.coordinates || activity.coordinates,
+    };
+  } else {
+    locationObj = {
+      name: activity.venue?.name || '',
+      address: '',
+      coordinates: activity.coordinates,
+    };
+  }
+
   return {
     id: activity.id,
     title: activity.name,
@@ -243,11 +267,7 @@ export function convertBackendActivity(activity: BackendActivity): ItineraryActi
     duration: activity.duration,
     type: typeMap[activity.category] || 'activity',
     cost: activity.estimatedCost?.amount || 0,
-    location: {
-      name: activity.venue?.name || activity.location,
-      address: activity.location,
-      coordinates: activity.coordinates,
-    },
+    location: locationObj,
     rating: activity.venue?.rating,
     tags: [],
     // Preserve explicit lock state from backend; fall back to legacy fields if present.
