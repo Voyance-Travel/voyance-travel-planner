@@ -40,19 +40,19 @@ export function DemoCTA() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
             <Button 
               size="lg" 
-              onClick={() => navigate('/quiz')}
+              onClick={() => navigate('/archetypes')}
               className="min-w-[220px] h-14 text-lg group"
             >
               <Sparkles className="h-5 w-5 mr-2 group-hover:rotate-12 transition-transform" />
-              Take the Quiz
+              Discover Your Travel DNA
             </Button>
             <Button 
               size="lg" 
               variant="outline" 
-              onClick={() => navigate('/start?mode=itinerary')}
+              onClick={() => navigate('/quiz')}
               className="min-w-[220px] h-14 text-lg"
             >
-              Start Planning
+              Take the Quiz
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>

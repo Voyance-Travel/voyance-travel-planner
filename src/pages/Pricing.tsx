@@ -139,15 +139,18 @@ export default function Pricing() {
                   We learn your pace, energy, and travel personality
                 </p>
               </div>
-              <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+              <Link to={ROUTES.ARCHETYPES} className="text-center group cursor-pointer">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-primary/20 transition-colors">
                   <Dna className="w-6 h-6 text-primary" />
                 </div>
-                <h3 className="font-medium text-foreground mb-1">27 Archetypes</h3>
+                <h3 className="font-medium text-foreground mb-1 group-hover:text-primary transition-colors">27 Archetypes</h3>
                 <p className="text-sm text-muted-foreground">
                   From "Slow Traveler" to "Adrenaline Chaser" — we find your match
                 </p>
-              </div>
+                <span className="text-xs text-primary mt-2 inline-block opacity-0 group-hover:opacity-100 transition-opacity">
+                  See all archetypes →
+                </span>
+              </Link>
               <div className="text-center">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
                   <Heart className="w-6 h-6 text-primary" />
