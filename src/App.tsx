@@ -20,6 +20,7 @@ import Explore from "./pages/Explore";
 import Destinations from "./pages/Destinations";
 import DestinationDetail from "./pages/DestinationDetail";
 import Guides from "./pages/Guides";
+import TravelTips from "./pages/TravelTips";
 import GuideDetail from "./pages/GuideDetail";
 import About from "./pages/About";
 import Archetypes from "./pages/Archetypes";
@@ -122,6 +123,7 @@ const App = () => (
               <Route path="/destination/:slug" element={<DestinationDetail />} />
               <Route path="/guides" element={<Guides />} />
               <Route path="/guides/:slug" element={<GuideDetail />} />
+              <Route path="/travel-tips" element={<TravelTips />} />
               <Route path="/about" element={<About />} />
               <Route path="/archetypes" element={<Archetypes />} />
               <Route path="/how-it-works" element={<HowItWorks />} />

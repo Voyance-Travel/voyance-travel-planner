@@ -1,12 +1,7 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Facebook, Send } from 'lucide-react';
+import { Instagram, Facebook, ArrowRight } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
-import { useAuth } from '@/contexts/AuthContext';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 
 const footerLinks = {
   company: [
@@ -46,25 +41,6 @@ const socialLinks = [
 ];
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear();
-  const { user } = useAuth();
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleNewsletterSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !email.includes('@')) {
-      toast.error('Please enter a valid email address');
-      return;
-    }
-    setIsSubmitting(true);
-    // TODO: Integrate with email service
-    await new Promise(resolve => setTimeout(resolve, 500));
-    toast.success('Thanks! You\'ll receive personalized travel tips soon.');
-    setEmail('');
-    setIsSubmitting(false);
-  };
-
   return (
     <footer className="bg-muted/30 border-t border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
@@ -146,30 +122,22 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Newsletter Signup */}
+          {/* Travel Tips Link */}
           <div className="col-span-2 md:col-span-4 lg:col-span-1">
-            <h4 className="text-sm font-medium mb-3">Get personalized travel tips</h4>
-            <form onSubmit={handleNewsletterSignup} className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="Your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-9 text-sm flex-1"
-                disabled={isSubmitting}
-              />
-              <Button 
-                type="submit" 
-                size="sm" 
-                className="h-9 px-3"
-                disabled={isSubmitting}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
-            <p className="text-xs text-muted-foreground mt-2">
-              Weekly inspiration, no spam
-            </p>
+            <Link 
+              to={ROUTES.TRAVEL_TIPS}
+              className="group flex items-center gap-3 p-4 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-xl transition-colors"
+            >
+              <div className="flex-1">
+                <h4 className="font-medium text-foreground group-hover:text-primary transition-colors">
+                  Travel Tips
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Weekly inspiration, no spam
+                </p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+            </Link>
           </div>
         </div>
 
