@@ -45,6 +45,39 @@ interface AlternativeActivity {
   suggestionType?: 'similar' | 'different';
 }
 
+// Map AI category strings to valid ActivityType
+const normalizeCategory = (category: string): ItineraryActivity['type'] => {
+  const categoryLower = (category || '').toLowerCase();
+  
+  // Direct matches
+  if (['transportation', 'accommodation', 'dining', 'cultural', 'activity', 'relaxation', 'shopping'].includes(categoryLower)) {
+    return categoryLower as ItineraryActivity['type'];
+  }
+  
+  // Map common variations
+  if (['restaurant', 'food', 'cafe', 'bar', 'eating', 'breakfast', 'lunch', 'dinner'].some(k => categoryLower.includes(k))) {
+    return 'dining';
+  }
+  if (['museum', 'art', 'history', 'heritage', 'monument', 'gallery', 'theater', 'theatre'].some(k => categoryLower.includes(k))) {
+    return 'cultural';
+  }
+  if (['shop', 'market', 'boutique', 'store', 'mall'].some(k => categoryLower.includes(k))) {
+    return 'shopping';
+  }
+  if (['spa', 'wellness', 'massage', 'beach', 'pool'].some(k => categoryLower.includes(k))) {
+    return 'relaxation';
+  }
+  if (['flight', 'train', 'bus', 'taxi', 'transfer', 'transit'].some(k => categoryLower.includes(k))) {
+    return 'transportation';
+  }
+  if (['hotel', 'hostel', 'stay', 'lodging', 'airbnb'].some(k => categoryLower.includes(k))) {
+    return 'accommodation';
+  }
+  
+  // Default to 'activity' for sightseeing, adventure, outdoor, etc.
+  return 'activity';
+};
+
 // Quick suggestion chips
 const QUICK_SUGGESTIONS = [
   { label: 'Similar', icon: ArrowRightLeft, query: null, type: 'similar' as const },
@@ -275,7 +308,7 @@ export default function ActivityAlternativesDrawer({
       description: alt.description,
       time: activity?.time || '09:00',
       duration: alt.estimatedDuration,
-      type: alt.category as ItineraryActivity['type'],
+      type: normalizeCategory(alt.category),
       cost: alt.estimatedCost,
       location: {
         name: alt.location,
