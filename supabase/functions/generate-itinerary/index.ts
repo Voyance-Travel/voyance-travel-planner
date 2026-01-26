@@ -5739,10 +5739,29 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
         console.log(`[generate-day] Added ${lockedActivities.length} locked slots to AI prompt`);
       }
 
-      // Get user preferences
+      // Get user preferences AND Travel DNA for personalization
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
       const userPrefs = userId ? await getUserPreferences(supabase, userId) : null;
-      const preferenceContext = buildPreferenceContext(insights, userPrefs);
+      const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
+      
+      // Build preference context (basic preferences)
+      const basicPreferenceContext = buildPreferenceContext(insights, userPrefs);
+      
+      // Build Travel DNA context (archetypes, traits, budget intent) - CRITICAL for personalization
+      const dnaResult = await buildTravelDNAContext(travelDNA, null, budgetTier, supabase, userId);
+      const travelDNAContext = dnaResult.context;
+      
+      // Log personalization data for debugging
+      if (travelDNA) {
+        const archetypes = travelDNA.archetype_matches || travelDNA.travel_dna_v2?.archetype_matches;
+        const primaryArchetype = Array.isArray(archetypes) ? archetypes[0]?.name : null;
+        console.log(`[generate-day] Travel DNA loaded: archetype=${primaryArchetype}, traits=${JSON.stringify(travelDNA.trait_scores)}`);
+      } else {
+        console.log(`[generate-day] No Travel DNA profile found for user ${userId}`);
+      }
+      
+      // Combine contexts: DNA context (archetypes, traits) + basic preferences
+      const preferenceContext = travelDNAContext + '\n' + basicPreferenceContext;
 
       // Load trip-specific intents (e.g. "romantic", "mom is coming")
       let tripIntentsContext = '';
