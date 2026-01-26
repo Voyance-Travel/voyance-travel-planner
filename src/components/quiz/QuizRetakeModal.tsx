@@ -58,6 +58,7 @@ export default function QuizRetakeModal({
                 <button
                   onClick={onClose}
                   className="p-1 rounded-lg hover:bg-muted transition-colors"
+                  aria-label="Close dialog"
                 >
                   <X className="w-5 h-5 text-muted-foreground" />
                 </button>

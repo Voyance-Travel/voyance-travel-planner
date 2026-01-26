@@ -65,7 +65,7 @@ export default function HeroSection({
                 className="pl-11 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-foreground"
               />
             </div>
-            <Button onClick={onFilterToggle} variant="ghost" size="icon" className="shrink-0 text-muted-foreground">
+            <Button onClick={onFilterToggle} variant="ghost" size="icon" className="shrink-0 text-muted-foreground" aria-label="Toggle filters">
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
             <Button onClick={onSearchSubmit || onBrowseClick} className="rounded-full px-6">

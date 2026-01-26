@@ -26,9 +26,9 @@
     --secondary: 40 25% 93%;
     --secondary-foreground: 220 15% 18%;
 
-    /* Muted - Soft warm gray */
+    /* Muted - Soft warm gray with improved contrast */
     --muted: 35 12% 90%;
-    --muted-foreground: 220 8% 45%;
+    --muted-foreground: 220 10% 38%;
 
     /* Accent - Rich teal for highlights */
     --accent: 175 50% 38%;
@@ -99,7 +99,7 @@
     --secondary-foreground: 0 0% 88%;
 
     --muted: 220 8% 15%;
-    --muted-foreground: 220 8% 55%;
+    --muted-foreground: 220 10% 62%;
 
     --accent: 175 55% 48%;
     --accent-foreground: 0 0% 98%;

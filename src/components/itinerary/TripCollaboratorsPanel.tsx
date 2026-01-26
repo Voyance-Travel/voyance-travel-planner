@@ -151,7 +151,7 @@ export function TripCollaboratorsPanel({
               Trip Members
             </CardTitle>
             {compact && (
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setExpanded(false)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setExpanded(false)} aria-label="Close panel">
                 <X className="h-4 w-4" />
               </Button>
             )}
@@ -253,7 +253,7 @@ export function TripCollaboratorsPanel({
 
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Member options">
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>

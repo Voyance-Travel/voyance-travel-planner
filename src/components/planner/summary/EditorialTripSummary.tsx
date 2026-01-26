@@ -323,7 +323,7 @@ export default function EditorialTripSummary({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="ghost" size="icon" onClick={handlePrint} className="print:hidden">
+            <Button variant="ghost" size="icon" onClick={handlePrint} className="print:hidden" aria-label="Print trip summary">
               <Printer className="w-4 h-4" />
             </Button>
           </div>

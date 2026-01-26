@@ -180,7 +180,7 @@ export default function DNAFeedbackChat({
             <p className="text-xs text-muted-foreground">Tell us what feels off</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
+        <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} aria-label="Close feedback chat">
           <X className="h-4 w-4" />
         </Button>
       </div>

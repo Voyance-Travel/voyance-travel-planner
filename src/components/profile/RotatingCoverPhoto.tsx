@@ -242,7 +242,7 @@ export default function RotatingCoverPhoto({
           >
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold text-foreground">Choose Cover Photo</h3>
-              <Button variant="ghost" size="icon" onClick={() => setShowPicker(false)}>
+              <Button variant="ghost" size="icon" onClick={() => setShowPicker(false)} aria-label="Close photo picker">
                 <X className="h-4 w-4" />
               </Button>
             </div>
