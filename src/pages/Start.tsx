@@ -1217,20 +1217,24 @@ export default function Start() {
               </div>
 
 
-              {/* Hotel Input - Only for itinerary-only mode */}
-              {itineraryOnlyMode && (
-                <div className="space-y-2">
-                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    Staying at <span className="normal-case text-muted-foreground/70">(optional)</span>
-                  </label>
-                  <HotelAutocomplete
-                    value={hotelSelection}
-                    onChange={setHotelSelection}
-                    destination={destinationSelection.cityName}
-                    placeholder="Search your hotel..."
-                  />
-                </div>
-              )}
+              {/* Hotel Input - Available for BOTH flows */}
+              <div className="space-y-2">
+                <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                  {itineraryOnlyMode ? 'Staying at' : 'Already have a hotel?'}{' '}
+                  <span className="normal-case text-muted-foreground/70">(optional)</span>
+                </label>
+                <HotelAutocomplete
+                  value={hotelSelection}
+                  onChange={setHotelSelection}
+                  destination={destinationSelection.cityName}
+                  placeholder={itineraryOnlyMode ? "Search your hotel..." : "Add your hotel if already booked..."}
+                />
+                {!itineraryOnlyMode && hotelSelection && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Great! We'll still show hotel options, but can focus on activities near your stay.
+                  </p>
+                )}
+              </div>
 
               {/* Dates - Side by side */}
               <div className="grid grid-cols-2 gap-4">
