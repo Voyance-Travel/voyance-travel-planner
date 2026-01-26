@@ -4636,7 +4636,39 @@ serve(async (req) => {
       // FLIGHT & HOTEL CONTEXT - Use booked flight/hotel in itinerary planning
       // =======================================================================
       console.log("[Stage 1.4] Fetching flight and hotel context...");
-      const flightHotelResult = await getFlightHotelContext(supabase, tripId);
+      let flightHotelResult = await getFlightHotelContext(supabase, tripId);
+      
+      // IMPORTANT: Use tripData.arrivalTime/departureTime as fallback when DB doesn't have flight data
+      // This handles the case where user entered times in ItineraryContextForm but hasn't saved flight_selection
+      if (tripData?.arrivalTime && !flightHotelResult.arrivalTime) {
+        const arrival24 = normalizeTo24h(tripData.arrivalTime) || tripData.arrivalTime;
+        const ARRIVAL_BUFFER_MINS = 4 * 60;
+        const earliestActivity = minutesToHHMM((parseTimeToMinutes(arrival24) || 0) + ARRIVAL_BUFFER_MINS);
+        
+        flightHotelResult = {
+          ...flightHotelResult,
+          arrivalTime: tripData.arrivalTime,
+          arrivalTime24: arrival24,
+          earliestFirstActivityTime: earliestActivity,
+          context: flightHotelResult.context || `Flight arrives at ${tripData.arrivalTime}. Plan Day 1 activities after ${earliestActivity}.`,
+        };
+        console.log(`[Stage 1.4] Using arrival time from tripData: ${tripData.arrivalTime}, earliest activity: ${earliestActivity}`);
+      }
+      
+      if (tripData?.departureTime && !flightHotelResult.returnDepartureTime) {
+        const departure24 = normalizeTo24h(tripData.departureTime) || tripData.departureTime;
+        const latestActivity = addMinutesToHHMM(departure24, -180);
+        
+        flightHotelResult = {
+          ...flightHotelResult,
+          returnDepartureTime: tripData.departureTime,
+          returnDepartureTime24: departure24,
+          latestLastActivityTime: latestActivity,
+          context: (flightHotelResult.context || '') + ` Return flight departs at ${tripData.departureTime}. Last activity must end by ${latestActivity}.`,
+        };
+        console.log(`[Stage 1.4] Using departure time from tripData: ${tripData.departureTime}, latest activity: ${latestActivity}`);
+      }
+      
       if (flightHotelResult.context) {
         console.log("[Stage 1.4] Flight/hotel context added to AI prompt");
         if (flightHotelResult.earliestFirstActivityTime) {
@@ -5602,9 +5634,40 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
       }
 
       // CRITICAL: Fetch flight/hotel context for Day 1 and last day timing
-      const flightContext = tripId ? await getFlightHotelContext(supabase, tripId) : { context: '' };
+      let flightContext = tripId ? await getFlightHotelContext(supabase, tripId) : { context: '' };
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
+      
+      // IMPORTANT: Use preferences.arrivalTime/departureTime as fallback when DB doesn't have flight data
+      // This handles the case where user entered times in ItineraryContextForm but hasn't saved flight_selection
+      if (preferences?.arrivalTime && !flightContext.arrivalTime) {
+        const arrival24 = normalizeTo24h(preferences.arrivalTime) || preferences.arrivalTime;
+        const ARRIVAL_BUFFER_MINS = 4 * 60;
+        const earliestActivity = minutesToHHMM((parseTimeToMinutes(arrival24) || 0) + ARRIVAL_BUFFER_MINS);
+        
+        flightContext = {
+          ...flightContext,
+          arrivalTime: preferences.arrivalTime,
+          arrivalTime24: arrival24,
+          earliestFirstActivityTime: earliestActivity,
+          context: flightContext.context || `Flight arrives at ${preferences.arrivalTime}. Plan Day 1 activities after ${earliestActivity}.`,
+        };
+        console.log(`[generate-day] Using arrival time from preferences: ${preferences.arrivalTime}, earliest activity: ${earliestActivity}`);
+      }
+      
+      if (preferences?.departureTime && !flightContext.returnDepartureTime) {
+        const departure24 = normalizeTo24h(preferences.departureTime) || preferences.departureTime;
+        const latestActivity = addMinutesToHHMM(departure24, -180);
+        
+        flightContext = {
+          ...flightContext,
+          returnDepartureTime: preferences.departureTime,
+          returnDepartureTime24: departure24,
+          latestLastActivityTime: latestActivity,
+          context: (flightContext.context || '') + ` Return flight departs at ${preferences.departureTime}. Last activity must end by ${latestActivity}.`,
+        };
+        console.log(`[generate-day] Using departure time from preferences: ${preferences.departureTime}, latest activity: ${latestActivity}`);
+      }
       
       console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}, lockedCount=${lockedActivities.length}`);
       if (flightContext.arrivalTime) {
