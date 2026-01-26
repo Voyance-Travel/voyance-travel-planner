@@ -10,6 +10,7 @@ import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/h
 import { useAuth } from '@/contexts/AuthContext';
 import { isQuizCompleted } from '@/utils/quizUtils';
 import { formatWeatherCondition } from '@/utils/textFormatting';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { useLovableItinerary } from '@/hooks/useLovableItinerary';
 import { AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
@@ -117,7 +118,7 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
                 <span className="text-sm">{activity.time}</span>
               </div>
               <div className="flex-1">
-                <p className="font-medium text-foreground">{activity.title}</p>
+                <p className="font-medium text-foreground">{sanitizeActivityName(activity.title)}</p>
                 <p className="text-sm text-muted-foreground">{activity.description}</p>
                 {activity.location?.name && (
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">

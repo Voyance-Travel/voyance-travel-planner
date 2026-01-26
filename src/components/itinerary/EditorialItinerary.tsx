@@ -41,6 +41,7 @@ import { format, parseISO, isToday } from 'date-fns';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { useDestinationImages } from '@/hooks/useDestinationImages';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
@@ -4126,8 +4127,8 @@ function ActivityRow({
   const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
   
-  // Normalize title: use title, fallback to name (backend may return either)
-  const activityTitle = activity.title || (activity as { name?: string }).name || 'Activity';
+  // Normalize title: use title, fallback to name (backend may return either), and strip system prefixes
+  const activityTitle = sanitizeActivityName(activity.title || (activity as { name?: string }).name);
   
   // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
   const titleLower = activityTitle.toLowerCase();

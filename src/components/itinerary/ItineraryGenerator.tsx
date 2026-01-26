@@ -12,6 +12,7 @@ import { PreferenceNudge, usePreferenceCompletion } from '@/components/common/Pr
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 
 interface ItineraryGeneratorProps {
   tripId: string;
@@ -119,9 +120,10 @@ export function ItineraryGenerator({
     handleGenerate();
   };
 
-  // Get activity name (supports both formats)
+  // Get activity name (supports both formats) and sanitize system prefixes
   const getActivityName = (activity: GeneratedDay['activities'][0]) => {
-    return activity.title || (activity as { name?: string }).name || 'Activity';
+    const rawName = activity.title || (activity as { name?: string }).name || 'Activity';
+    return sanitizeActivityName(rawName);
   };
 
   // Get activity cost

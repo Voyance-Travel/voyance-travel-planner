@@ -1,5 +1,6 @@
 import { Lock, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { sanitizeActivityName } from "@/utils/activityNameSanitizer";
 
 interface LockedActivity {
   id: string;
@@ -36,7 +37,7 @@ export const MyLockedActivities: React.FC<MyLockedActivitiesProps> = ({
             className="flex items-center justify-between p-2.5 bg-muted/50 rounded-md"
           >
             <div>
-              <p className="text-sm font-medium text-foreground">{activity.name}</p>
+              <p className="text-sm font-medium text-foreground">{sanitizeActivityName(activity.name)}</p>
               <p className="text-xs text-muted-foreground">Day {activity.day}</p>
             </div>
             {onUnlock && (

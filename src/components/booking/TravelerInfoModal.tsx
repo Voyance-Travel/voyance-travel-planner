@@ -25,6 +25,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { BookableActivity, TravelerInfo, useUpdateTravelerInfo } from '@/services/bookingStateMachine';
 import { supabase } from '@/integrations/supabase/client';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 
 // Validation schema
 const travelerSchema = z.object({
@@ -148,7 +149,7 @@ export function TravelerInfoModal({
         <DialogHeader>
           <DialogTitle>Traveler Information</DialogTitle>
           <DialogDescription>
-            Enter details for all travelers booking "{activity.title}".
+            Enter details for all travelers booking "{sanitizeActivityName(activity.title)}".
             Names must match travel documents.
           </DialogDescription>
         </DialogHeader>

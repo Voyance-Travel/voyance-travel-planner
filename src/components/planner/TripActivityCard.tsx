@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getActivityIcon, getActivityColor, formatDuration } from '@/utils/plannerUtils';
 import { trackActivityClick } from '@/services/behaviorTrackingService';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import type { TripActivity } from '@/types/trip';
 
 interface TripActivityCardProps {
@@ -54,7 +55,7 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h4 className="font-medium text-foreground">{activity.name}</h4>
+              <h4 className="font-medium text-foreground">{sanitizeActivityName(activity.name)}</h4>
               {activity.description && (
                 <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
                   {activity.description}
