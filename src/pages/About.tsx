@@ -387,29 +387,27 @@ export default function About() {
               <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Full Story</span>
               <div className="mt-8 space-y-6 text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-xl">
-                  Voyance started because I was sick of being played by the travel internet.
+                  Voyance started with a simple belief: travel should feel personal, not prescribed.
                 </p>
                 <p className="text-muted-foreground">
-                  Travel planning online isn't planning—it's being marketed to. Affiliate lists pretending 
-                  to be advice. Influencers selling "must-dos" that are overcrowded, overpriced, or just 
-                  not you. And then you're sitting there with 40 tabs open, drowning in noise.
+                  We've all had those trips where everything just clicked—the timing, the discoveries, 
+                  the unexpected moments that became the best memories. That magic isn't luck. 
+                  It's thoughtful planning that respects who you are as a traveler.
                 </p>
                 <p className="text-muted-foreground">
-                  I kept seeing the same outcome: people spend money, waste time in lines, do what 
-                  everyone else did, and still feel like something was missing.
+                  We built Voyance to bring that feeling to every trip. Not by telling you where 
+                  everyone else goes, but by understanding how you actually want to experience a place—your 
+                  pace, your curiosities, your definition of a perfect day.
                 </p>
                 <p className="text-foreground font-medium">
-                  So I built the opposite.
+                  The result? Itineraries that feel like they were made by a friend who knows you well.
                 </p>
                 <p className="text-muted-foreground">
-                  Voyance designs trips around the traveler—not hype. Smart timing. Logical flow. 
-                  Honest recommendations. No affiliate games.
-                </p>
-                <p className="text-muted-foreground">
-                  We're early. We're building this properly. If you join now, you're shaping it.
+                  We're early in this journey, building something we believe in. If you're here now, 
+                  you're part of shaping what Voyance becomes.
                 </p>
                 <p className="text-foreground font-medium italic">
-                  Not because it's cute—because it's real.
+                  And that's exactly how the best adventures begin—together.
                 </p>
               </div>
               
