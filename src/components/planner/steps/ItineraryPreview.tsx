@@ -388,6 +388,24 @@ export default function ItineraryPreview({
     })));
   }, []);
 
+  // Handle day restore from version history (undo)
+  const handleDayRestore = useCallback((
+    dayNumber: number, 
+    activities: ItineraryActivity[], 
+    metadata?: { title?: string; theme?: string }
+  ) => {
+    setLocalDays(prev => prev.map(day => 
+      day.dayNumber === dayNumber 
+        ? { 
+            ...day, 
+            activities,
+            theme: metadata?.theme || day.theme,
+            description: metadata?.title || day.description, // title maps to description
+          } 
+        : day
+    ));
+  }, []);
+
   // TEMPORARILY DISABLED: Premium gate removed - will be re-enabled later
   // Original check: if (!isLoadingEntitlements && !canGenerate && !isReady && !isGenerating) { ... }
 
@@ -642,10 +660,12 @@ export default function ItineraryPreview({
                   key={day.dayNumber || dayIndex}
                   day={day}
                   dayIndex={dayIndex}
+                  tripId={tripId}
                   onRegenerateDay={handleRegenerateDay}
                   isRegenerating={regeneratingDayNumber === day.dayNumber}
                   onActivityLock={handleActivityLock}
                   onActivitySwap={handleActivitySwap}
+                  onDayRestore={handleDayRestore}
                   destination={tripDetails.destination}
                 />
               ))

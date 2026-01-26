@@ -3,23 +3,32 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { 
   Clock, MapPin, ChevronDown, ChevronUp, RefreshCw, 
-  Search, Lock, LockOpen, ArrowRightLeft, Sparkles
+  Search, Lock, LockOpen, Undo2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
 import { formatWeatherCondition } from '@/utils/textFormatting';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
+import { useVersionHistory } from '@/hooks/useVersionHistory';
 
 interface CustomerDayCardProps {
   day: DayItinerary;
   dayIndex: number;
+  tripId?: string;
   isNew?: boolean;
   onRegenerateDay?: (dayNumber: number, keepActivities?: string[]) => void;
   isRegenerating?: boolean;
   onActivityLock?: (activityId: string, locked: boolean) => void;
   onActivitySwap?: (activityId: string, newActivity: ItineraryActivity) => void;
+  onDayRestore?: (dayNumber: number, activities: ItineraryActivity[], metadata?: { title?: string; theme?: string }) => void;
   destination?: string;
 }
 
@@ -36,16 +45,27 @@ const activityTypeStyles: Record<string, { bg: string; text: string; border: str
 export default function CustomerDayCard({
   day,
   dayIndex,
+  tripId,
   isNew = false,
   onRegenerateDay,
   isRegenerating = false,
   onActivityLock,
   onActivitySwap,
+  onDayRestore,
   destination,
 }: CustomerDayCardProps) {
   const [isExpanded, setIsExpanded] = useState(dayIndex < 2);
   const [selectedActivityForSwap, setSelectedActivityForSwap] = useState<ItineraryActivity | null>(null);
   const [hoveredActivity, setHoveredActivity] = useState<string | null>(null);
+
+  // Version history for undo
+  const { canUndoDay, isUndoing, handleUndo } = useVersionHistory({
+    tripId,
+    dayNumber: day.dayNumber,
+    onRestore: (activities, metadata) => {
+      onDayRestore?.(day.dayNumber, activities, metadata);
+    },
+  });
 
   const handleRegenerateDay = () => {
     if (onRegenerateDay) {
@@ -118,6 +138,29 @@ export default function CustomerDayCard({
                   <p className="font-medium">{day.weather.high}°/{day.weather.low}°</p>
                   <p>{formatWeatherCondition(day.weather.condition)}</p>
                 </div>
+              )}
+              
+              {/* Undo Button */}
+              {canUndoDay && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleUndo}
+                        disabled={isUndoing || isRegenerating}
+                        className="gap-2"
+                      >
+                        <Undo2 className={cn("h-4 w-4", isUndoing && "animate-pulse")} />
+                        <span className="hidden sm:inline">Undo</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Restore previous version</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               
               {onRegenerateDay && (
