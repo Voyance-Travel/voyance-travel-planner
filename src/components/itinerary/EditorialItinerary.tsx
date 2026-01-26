@@ -21,7 +21,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye
 } from 'lucide-react';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
@@ -821,7 +821,7 @@ export function EditorialItinerary({
 
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
-    if (!hasChanges || !isEditable) return;
+    if (!hasChanges || !effectiveIsEditable) return;
     
     const autoSaveTimer = setTimeout(async () => {
       try {
@@ -881,7 +881,7 @@ export function EditorialItinerary({
     }, 3000); // Auto-save 3 seconds after last change
 
     return () => clearTimeout(autoSaveTimer);
-  }, [hasChanges, days, tripId, isEditable]);
+  }, [hasChanges, days, tripId, effectiveIsEditable]);
 
   // ===========================================================================
   // HANDLERS
@@ -1472,7 +1472,7 @@ export function EditorialItinerary({
           
           {/* Right: Cost + Actions */}
           <div className="flex items-center gap-2">
-            {isEditable && hasChanges && (
+            {effectiveIsEditable && hasChanges && (
               <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse text-xs">
                 <AlertCircle className="h-3 w-3 mr-1" />
                 Unsaved
@@ -1510,7 +1510,7 @@ export function EditorialItinerary({
               Share
             </Button>
             
-            {isEditable && (
+            {effectiveIsEditable && (
               <>
                 <Button 
                   variant="outline" 
@@ -1537,6 +1537,19 @@ export function EditorialItinerary({
           </div>
         </div>
       </div>
+
+      {/* View-Only Mode Indicator */}
+      {isEditable && !effectiveIsEditable && tripPermission && (
+        <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+          <Eye className="h-4 w-4 text-muted-foreground" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">View Only</p>
+            <p className="text-xs text-muted-foreground">
+              You have viewer access to this trip. Contact the owner to request edit permissions.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Destination Hero Image */}
       <DestinationHeroImage 
@@ -1692,7 +1705,7 @@ export function EditorialItinerary({
                 destination={destination}
                 isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
                 isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
-                isEditable={isEditable}
+                isEditable={effectiveIsEditable}
                 tripId={tripId}
                 getPaymentForItem={getPaymentForItem}
                 refreshPayments={refreshPayments}
