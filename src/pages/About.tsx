@@ -284,19 +284,14 @@ function VoyanceMockup() {
 }
 
 export default function About() {
-  const stats = [
-    { value: '15+', label: 'Hours saved per trip' },
-    { value: '190+', label: 'Countries covered' },
-  ];
-
   return (
     <MainLayout>
       <Head
-        title="About Voyance | AI-Powered Travel Planning"
-        description="Learn about Voyance's mission to revolutionize travel planning with AI-powered personalization."
+        title="About | Travel Designed, Not Consumed"
+        description="Voyance started because travel planning online isn't planning—it's being marketed to. We built the opposite."
       />
       
-      {/* Hero Section - Editorial Style */}
+      {/* Hero Section - Your Vision */}
       <section className="relative pt-32 pb-24 overflow-hidden">
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
@@ -314,33 +309,21 @@ export default function About() {
               transition={{ delay: 0.2 }}
               className="inline-block text-primary text-sm font-medium uppercase tracking-[0.2em] mb-6"
             >
-              Our Story
+              Why We Exist
             </motion.span>
             <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-bold mb-8 leading-[1.1]">
-              Travel planning was{' '}
-              <span className="text-primary italic">broken</span>.
+              Travel{' '}
+              <span className="text-primary italic">designed</span>,
               <br />
-              We fixed it.
+              not consumed.
             </h1>
             <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
-              Voyance is an intelligent trip builder that listens, curates, and learns, 
-              transforming the chaos of travel planning into a seamless, personalized experience.
+              Voyance started because travel planning online isn't planning—it's being marketed to. 
+              Affiliate lists. Influencer hype. 40 tabs of noise.
             </p>
-            
-            {/* Stats row */}
-            <div className="flex gap-12 mt-12 pt-8 border-t border-border/50">
-              {stats.map((stat, i) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 + i * 0.1 }}
-                >
-                  <div className="text-3xl font-serif font-bold text-foreground">{stat.value}</div>
-                  <div className="text-sm text-muted-foreground">{stat.label}</div>
-                </motion.div>
-              ))}
-            </div>
+            <p className="text-xl text-foreground font-medium mt-6 max-w-2xl">
+              We built the opposite: research-backed itineraries designed around you, not trends.
+            </p>
           </motion.div>
         </div>
       </section>
@@ -358,13 +341,13 @@ export default function About() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Transformation</span>
+            <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Problem</span>
             <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4 mb-6">
-              From chaos to clarity
+              Clarity instead of chaos
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              See the difference. What used to take dozens of tabs, endless research, 
-              and hours of coordination now happens in one intelligent interface.
+              People spend money, waste time in lines, do what everyone else did, 
+              and still feel like something was missing. We built the opposite.
             </p>
           </motion.div>
 
@@ -390,10 +373,57 @@ export default function About() {
         </div>
       </section>
 
-      {/* Core Principles - Creative Bento Layout */}
+      {/* The Full Story Section */}
       <section className="py-24 bg-background relative overflow-hidden">
-        {/* Decorative elements */}
         <div className="absolute top-20 left-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl" />
+        
+        <div className="container mx-auto px-6 relative z-10">
+          <div className="max-w-3xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Full Story</span>
+              <div className="mt-8 space-y-6 text-lg leading-relaxed">
+                <p className="text-foreground font-medium text-xl">
+                  Voyance started because I was sick of being played by the travel internet.
+                </p>
+                <p className="text-muted-foreground">
+                  Travel planning online isn't planning—it's being marketed to. Affiliate lists pretending 
+                  to be advice. Influencers selling "must-dos" that are overcrowded, overpriced, or just 
+                  not you. And then you're sitting there with 40 tabs open, drowning in noise.
+                </p>
+                <p className="text-muted-foreground">
+                  I kept seeing the same outcome: people spend money, waste time in lines, do what 
+                  everyone else did, and still feel like something was missing.
+                </p>
+                <p className="text-foreground font-medium">
+                  So I built the opposite.
+                </p>
+                <p className="text-muted-foreground">
+                  Voyance designs trips around the traveler—not hype. Smart timing. Logical flow. 
+                  Honest recommendations. No affiliate games.
+                </p>
+                <p className="text-muted-foreground">
+                  We're early. We're building this properly. If you join now, you're shaping it.
+                </p>
+                <p className="text-foreground font-medium italic">
+                  Not because it's cute—because it's real.
+                </p>
+              </div>
+              
+              {/* Signature */}
+              <div className="mt-12 pt-8 border-t border-border/50">
+                <p className="text-foreground font-serif text-xl">— The Voyance Team</p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Core Principles - Your Killer Lines */}
+      <section className="py-24 bg-gradient-to-b from-muted/30 to-background relative overflow-hidden">
         <div className="absolute bottom-20 right-10 w-48 h-48 bg-accent/10 rounded-full blur-3xl" />
         
         <div className="container mx-auto px-6 relative z-10">
@@ -403,15 +433,15 @@ export default function About() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Our Principles</span>
+            <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Our Standards</span>
             <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4">
-              What we believe
+              Nothing exists without a reason
             </h2>
           </motion.div>
 
-          {/* Bento Grid Layout */}
+          {/* Killer Lines Grid */}
           <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Large featured card */}
+            {/* We design your time */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -420,20 +450,18 @@ export default function About() {
             >
               <div className="h-full bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-3xl border border-primary/20 p-8 md:p-10 transition-all duration-300 hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/10">
                 <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-8">
-                  <Heart className="w-8 h-8 text-primary" />
+                  <Clock className="w-8 h-8 text-primary" />
                 </div>
-                <h3 className="font-serif text-2xl md:text-3xl font-bold mb-4">Anti-Hype</h3>
+                <h3 className="font-serif text-2xl md:text-3xl font-bold mb-4">We design your time</h3>
                 <p className="text-muted-foreground leading-relaxed text-lg">
-                  Real recommendations based on your preferences, not tourist traps or sponsored content. 
-                  <span className="block mt-4 text-foreground font-medium">Transparency is non-negotiable.</span>
+                  Not just destinations. Not just bookings. We craft how you spend your hours abroad—
+                  the flow between moments, the rhythm of your days.
+                  <span className="block mt-4 text-foreground font-medium">That's the difference.</span>
                 </p>
-                <div className="absolute bottom-8 right-8 w-24 h-24 rounded-full bg-primary/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Sparkles className="w-10 h-10 text-primary/40" />
-                </div>
               </div>
             </motion.div>
 
-            {/* Time card */}
+            {/* No fake trust */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -442,20 +470,18 @@ export default function About() {
               className="relative group"
             >
               <div className="h-full bg-gradient-to-br from-accent/20 via-accent/10 to-transparent rounded-3xl border border-accent/30 p-8 transition-all duration-300 hover:border-accent/50 hover:shadow-xl">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
-                    <Clock className="w-6 h-6 text-foreground" />
-                  </div>
-                  <span className="text-4xl font-bold text-accent/60">15+</span>
+                <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center mb-4">
+                  <Shield className="w-6 h-6 text-foreground" />
                 </div>
-                <h3 className="font-serif text-xl font-bold mb-2">Your Time Matters</h3>
+                <h3 className="font-serif text-xl font-bold mb-2">No fake trust</h3>
                 <p className="text-muted-foreground text-sm">
-                  Hours saved per trip. Your vacation planning shouldn't feel like a second job.
+                  If we don't earn trust at the beginning, we'll never deserve it later. 
+                  Honesty isn't a marketing angle—it's how we operate.
                 </p>
               </div>
             </motion.div>
 
-            {/* Transparency card */}
+            {/* Taste instead of trends */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -465,11 +491,11 @@ export default function About() {
             >
               <div className="h-full bg-gradient-to-br from-secondary via-secondary/80 to-secondary/50 rounded-3xl border border-border/50 p-8 transition-all duration-300 hover:shadow-xl">
                 <div className="w-12 h-12 rounded-xl bg-background/50 backdrop-blur flex items-center justify-center mb-4">
-                  <Shield className="w-6 h-6 text-foreground" />
+                  <Heart className="w-6 h-6 text-foreground" />
                 </div>
-                <h3 className="font-serif text-xl font-bold mb-2">Radical Transparency</h3>
+                <h3 className="font-serif text-xl font-bold mb-2">Taste instead of trends</h3>
                 <p className="text-muted-foreground text-sm">
-                  No hidden fees, no surprise markups. What you see is what you pay. Trust is earned through honesty.
+                  We recommend what fits you, not what's viral. Real curation over algorithmic hype.
                 </p>
               </div>
             </motion.div>
@@ -675,13 +701,19 @@ export default function About() {
               <Compass className="w-16 h-16 text-primary mx-auto mb-6" />
             </motion.div>
             <h2 className="font-serif text-4xl md:text-6xl font-bold mb-6 leading-tight">
-              Ready to plan{' '}
-              <span className="text-primary italic">differently?</span>
+              Travel should be{' '}
+              <span className="text-primary italic">designed</span>
             </h2>
-            <p className="text-xl text-muted-foreground mb-10">
-              Discover your Travel DNA and let Voyance craft your perfect trip. 
-              It takes 5 minutes and changes everything.
+            <p className="text-xl text-muted-foreground mb-6">
+              Not consumed. Not endured. Designed.
             </p>
+            
+            {/* Trust Signal */}
+            <p className="text-sm text-muted-foreground mb-10 max-w-md mx-auto bg-muted/50 rounded-lg px-4 py-3 border border-border/50">
+              We're early. We don't have thousands of users yet. 
+              But we're building something we'd actually use ourselves.
+            </p>
+            
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/quiz">
                 <Button size="lg" className="gap-2 w-full sm:w-auto text-lg px-8 py-6 shadow-xl shadow-primary/25 hover:shadow-primary/35 transition-shadow">
