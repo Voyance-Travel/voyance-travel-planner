@@ -297,16 +297,27 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
           </motion.div>
         )}
 
-        {/* Tooltip card - always centered horizontally for consistent UX */}
+        {/* Tooltip card - mobile-optimized positioning */}
         <div 
-          className="pointer-events-auto fixed inset-x-0 flex justify-center p-4"
+          className="pointer-events-auto fixed inset-x-0 flex justify-center px-3 sm:px-4"
           style={{ 
             zIndex: 102,
-            ...(step.position === 'bottom' && highlightRect ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 280) } : {}),
-            ...(step.position === 'top' && highlightRect ? { bottom: window.innerHeight - highlightRect.top + 20 } : {}),
-            ...(step.position === 'left' && highlightRect ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } : {}),
-            ...(step.position === 'right' && highlightRect ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } : {}),
-            ...(isCentered ? { top: '50%', transform: 'translateY(-50%)' } : {}),
+            // On mobile, always position at bottom of screen for consistency
+            // On desktop, position relative to highlighted element
+            ...(typeof window !== 'undefined' && window.innerWidth < 640 
+              ? { bottom: 16 } 
+              : step.position === 'bottom' && highlightRect 
+                ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 280) } 
+                : step.position === 'top' && highlightRect 
+                  ? { bottom: window.innerHeight - highlightRect.top + 20 } 
+                  : step.position === 'left' && highlightRect 
+                    ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } 
+                    : step.position === 'right' && highlightRect 
+                      ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) } 
+                      : isCentered 
+                        ? { top: '50%', transform: 'translateY(-50%)' } 
+                        : {}
+            ),
           }}
         >
           <motion.div
@@ -315,12 +326,12 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="w-[320px] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
+            className="w-full sm:w-[320px] max-w-[calc(100vw-1.5rem)] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
           >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-primary/10 to-transparent">
+          {/* Header - more compact on mobile */}
+          <div className="flex items-center justify-between p-3 sm:p-4 border-b border-border bg-gradient-to-r from-primary/10 to-transparent">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 text-primary">
                 {step.icon}
               </div>
               <span className="text-xs text-muted-foreground font-medium">
@@ -331,44 +342,45 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
               onClick={handleSkip}
               className="p-1.5 rounded-full hover:bg-secondary transition-colors text-muted-foreground"
               title="Skip tour"
+              aria-label="Skip tour"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Content */}
-          <div className="p-4">
-            <h3 className="font-serif text-lg font-semibold mb-2">{step.title}</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
+          {/* Content - tighter padding on mobile */}
+          <div className="p-3 sm:p-4">
+            <h3 className="font-serif text-base sm:text-lg font-semibold mb-1.5 sm:mb-2">{step.title}</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
               {step.description}
             </p>
           </div>
 
-          {/* Footer with navigation */}
-          <div className="flex items-center justify-between p-4 pt-2 border-t border-border bg-secondary/30">
+          {/* Footer with navigation - compact on mobile */}
+          <div className="flex items-center justify-between p-3 sm:p-4 pt-2 border-t border-border bg-secondary/30">
             <Button
               variant="ghost"
               size="sm"
               onClick={handlePrev}
               disabled={isFirst}
-              className={cn(isFirst && "invisible")}
+              className={cn("h-8 px-2 sm:px-3", isFirst && "invisible")}
             >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Back
+              <ChevronLeft className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Back</span>
             </Button>
 
-            {/* Progress dots */}
-            <div className="flex items-center gap-1">
+            {/* Progress dots - smaller on mobile */}
+            <div className="flex items-center gap-0.5 sm:gap-1">
               {TOUR_STEPS.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setCurrentStep(idx)}
                   aria-label={`Go to step ${idx + 1}`}
                   className={cn(
-                    "h-1.5 rounded-full transition-all",
+                    "h-1 sm:h-1.5 rounded-full transition-all",
                     idx === currentStep
-                      ? "bg-primary w-3"
-                      : "bg-muted-foreground/30 hover:bg-muted-foreground/50 w-1.5"
+                      ? "bg-primary w-2 sm:w-3"
+                      : "bg-muted-foreground/30 hover:bg-muted-foreground/50 w-1 sm:w-1.5"
                   )}
                 />
               ))}
@@ -377,10 +389,10 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
             <Button
               size="sm"
               onClick={handleNext}
-              className="gap-1"
+              className="h-8 px-2 sm:px-3 gap-0.5 sm:gap-1"
             >
-              {isLast ? 'Get Started' : 'Next'}
-              {!isLast && <ChevronRight className="h-4 w-4" />}
+              <span className="text-xs sm:text-sm">{isLast ? 'Start' : 'Next'}</span>
+              {!isLast && <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />}
             </Button>
           </div>
           </motion.div>
