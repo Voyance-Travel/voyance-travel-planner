@@ -4699,6 +4699,7 @@ function ActivityRow({
                       <DropdownMenuItem
                         onClick={() => onSwap?.(dayIndex, activity)}
                         className="cursor-pointer gap-2"
+                        data-tour="find-alternative"
                       >
                         <ArrowRightLeft className="h-4 w-4" />
                         Find alternative
