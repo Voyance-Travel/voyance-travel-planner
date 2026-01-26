@@ -94,9 +94,10 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
 
   if (isLoading) {
     return (
-      <span className={`inline-flex items-center gap-1.5 text-xs text-muted-foreground ${className || ''}`}>
-        <Loader2 className="h-3 w-3 animate-spin" />
-        Finding restaurant...
+      <span className={`inline-flex items-center gap-1 sm:gap-1.5 text-xs text-muted-foreground ${className || ''}`}>
+        <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+        <span className="sm:hidden">Loading...</span>
+        <span className="hidden sm:inline">Finding restaurant...</span>
       </span>
     );
   }
@@ -112,10 +113,11 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center gap-1.5 text-xs text-primary hover:underline ${className || ''}`}
+      className={`inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline ${className || ''}`}
     >
-      <ExternalLink className="h-3 w-3" />
-      View Restaurant
+      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+      <span className="sm:hidden">View</span>
+      <span className="hidden sm:inline">View Restaurant</span>
     </a>
   );
 }

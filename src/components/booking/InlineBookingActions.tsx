@@ -266,24 +266,25 @@ export function InlineBookingActions({
           href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline"
         >
-          <ExternalLink className="h-3 w-3" />
-          View Details
+          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+          <span className="sm:hidden">Details</span>
+          <span className="hidden sm:inline">View Details</span>
         </a>
       );
     }
-    
     if (linkType === 'view_menu' && directUrl) {
       return (
         <a
           href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline"
         >
-          <ExternalLink className="h-3 w-3" />
-          View Menu & Reserve
+          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+          <span className="sm:hidden">Reserve</span>
+          <span className="hidden sm:inline">View Menu & Reserve</span>
         </a>
       );
     }
@@ -309,10 +310,11 @@ export function InlineBookingActions({
           href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline"
         >
-          <ExternalLink className="h-3 w-3" />
-          View Details
+          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+          <span className="sm:hidden">Details</span>
+          <span className="hidden sm:inline">View Details</span>
         </a>
       );
     }
@@ -328,10 +330,11 @@ export function InlineBookingActions({
         href={restaurantUrl!}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+        className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline"
       >
-        <ExternalLink className="h-3 w-3" />
-        View Menu & Reserve
+        <ExternalLink className="h-3 w-3 flex-shrink-0" />
+        <span className="sm:hidden">Reserve</span>
+        <span className="hidden sm:inline">View Menu & Reserve</span>
       </a>
     );
   }
@@ -402,10 +405,11 @@ export function InlineBookingActions({
                     variant="default"
                     onClick={handlePrimaryAction}
                     disabled={selectMutation.isPending}
-                    className="gap-1.5 text-xs bg-primary"
+                    className="gap-1 sm:gap-1.5 text-xs bg-primary px-2 sm:px-3 h-7 sm:h-8"
                   >
-                    <Sparkles className="h-3 w-3" />
-                    {compact ? 'Book' : 'Book Now'}
+                    <Sparkles className="h-3 w-3 flex-shrink-0" />
+                    <span className="sm:hidden">Book</span>
+                    <span className="hidden sm:inline">{compact ? 'Book' : 'Book Now'}</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -413,7 +417,7 @@ export function InlineBookingActions({
                 </TooltipContent>
               </Tooltip>
               {price > 0 && (
-                <span className="text-xs text-muted-foreground">
+                <span className="hidden sm:inline text-xs text-muted-foreground">
                   ~{formatPrice(price)}
                 </span>
               )}
@@ -428,7 +432,7 @@ export function InlineBookingActions({
         const actualBookingUrl = activity.externalBookingUrl || activity.bookingUrl || activity.website;
         
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <VendorBookingLink
               activityName={activity.title}
               destination={destination}
@@ -438,7 +442,7 @@ export function InlineBookingActions({
               size="sm"
             />
             {!actualBookingUrl && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="hidden sm:inline text-[10px] text-muted-foreground">
                 Search
               </span>
             )}
