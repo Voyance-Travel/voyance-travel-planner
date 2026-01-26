@@ -300,7 +300,42 @@ export async function checkMilestoneAchievements(action: string, context?: Recor
   }
 }
 
-// Tier color mapping for UI
+/**
+ * Sync trip count achievements based on actual trip count
+ * Call after creating a new trip to update progress on trips_5, trips_10, trips_25
+ */
+export async function syncTripCountAchievements(): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Count user's trips
+    const { count, error } = await supabase
+      .from('trips')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    if (error || count === null) return;
+
+    // Update progress for count-based trip achievements
+    const tripAchievements = [
+      { id: 'trips_5', threshold: 5 },
+      { id: 'trips_10', threshold: 10 },
+      { id: 'trips_25', threshold: 25 },
+    ];
+
+    for (const { id, threshold } of tripAchievements) {
+      if (count >= threshold) {
+        await unlockAchievement(id, { tripCount: count });
+      } else {
+        await updateAchievementProgress(id, count);
+      }
+    }
+  } catch (err) {
+    console.error('[Achievements] Sync trip count error:', err);
+  }
+}
+
 export const TIER_COLORS: Record<AchievementTier, string> = {
   bronze: 'from-amber-600 to-amber-400',
   silver: 'from-slate-400 to-slate-200',

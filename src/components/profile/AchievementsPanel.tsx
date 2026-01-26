@@ -16,12 +16,15 @@ import {
   Bookmark,
   Star,
   Award,
+  ExternalLink,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 import { useUserAchievements, type UserAchievement } from '@/services/achievementsAPI';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 // Map icon names from DB to Lucide components
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -44,28 +47,65 @@ const ICON_MAP: Record<string, LucideIcon> = {
 };
 
 // Tier colors
-const TIER_STYLES: Record<string, { bg: string; border: string; text: string }> = {
+const TIER_STYLES: Record<string, { bg: string; border: string; text: string; label: string }> = {
   bronze: { 
     bg: 'bg-amber-100 dark:bg-amber-900/30', 
     border: 'border-amber-300 dark:border-amber-700',
-    text: 'text-amber-700 dark:text-amber-400'
+    text: 'text-amber-700 dark:text-amber-400',
+    label: 'Bronze'
   },
   silver: { 
     bg: 'bg-slate-100 dark:bg-slate-800/50', 
     border: 'border-slate-300 dark:border-slate-600',
-    text: 'text-slate-600 dark:text-slate-300'
+    text: 'text-slate-600 dark:text-slate-300',
+    label: 'Silver'
   },
   gold: { 
     bg: 'bg-yellow-100 dark:bg-yellow-900/30', 
     border: 'border-yellow-400 dark:border-yellow-600',
-    text: 'text-yellow-700 dark:text-yellow-400'
+    text: 'text-yellow-700 dark:text-yellow-400',
+    label: 'Gold'
   },
   platinum: { 
     bg: 'bg-violet-100 dark:bg-violet-900/30', 
     border: 'border-violet-400 dark:border-violet-600',
-    text: 'text-violet-700 dark:text-violet-400'
+    text: 'text-violet-700 dark:text-violet-400',
+    label: 'Platinum'
   },
 };
+
+/**
+ * Share an achievement to social media
+ */
+function shareAchievement(achievement: UserAchievement) {
+  const tierLabel = TIER_STYLES[achievement.tier]?.label || 'Bronze';
+  const text = `🏆 I just earned the "${achievement.name}" ${tierLabel} badge on Voyance! ${achievement.description}`;
+  const url = 'https://voyance-travel-planner.lovable.app';
+  
+  // Try native share first, fall back to Twitter
+  if (navigator.share) {
+    navigator.share({
+      title: `Voyance Achievement: ${achievement.name}`,
+      text,
+      url,
+    }).catch(() => {
+      // User cancelled or error - fall back to copy
+      copyShareText(text, url);
+    });
+  } else {
+    // Open Twitter share
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    window.open(twitterUrl, '_blank', 'width=550,height=420');
+  }
+}
+
+function copyShareText(text: string, url: string) {
+  navigator.clipboard.writeText(`${text}\n${url}`).then(() => {
+    toast.success('Copied to clipboard!');
+  }).catch(() => {
+    toast.error('Could not copy');
+  });
+}
 
 interface AchievementBadgeProps {
   achievement: UserAchievement;
@@ -134,6 +174,19 @@ function AchievementBadge({ achievement, index }: AchievementBadgeProps) {
               </p>
             </div>
           )}
+          
+          {/* Share button for unlocked achievements */}
+          {isUnlocked && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => shareAchievement(achievement)}
+              className="mt-2 h-7 px-2 text-xs gap-1.5 hover:bg-primary/10"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Share
+            </Button>
+          )}
         </div>
       </div>
     </motion.div>
@@ -177,6 +230,13 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
   
   return (
     <div className={cn("space-y-6", className)}>
+      {/* Intro text explaining achievements */}
+      <div className="text-center space-y-2 pb-2">
+        <p className="text-sm text-muted-foreground">
+          Earn badges as you explore. Share your travel milestones with friends.
+        </p>
+      </div>
+      
       {/* Summary Header */}
       <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
         <div className="flex items-center gap-3">
@@ -190,7 +250,7 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
         </div>
         <div className="text-right">
           <p className="text-lg font-semibold text-foreground">{unlockedCount}/{totalAchievements}</p>
-          <p className="text-xs text-muted-foreground">Achievements</p>
+          <p className="text-xs text-muted-foreground">Badges Earned</p>
         </div>
       </div>
       
@@ -199,7 +259,7 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
         <div className="space-y-3">
           <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground flex items-center gap-2">
             <Sparkles className="h-3 w-3" />
-            Earned
+            Earned Badges
           </h4>
           <div className="grid gap-3">
             {unlockedAchievements.map((achievement, i) => (
@@ -214,7 +274,7 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
         <div className="space-y-3">
           <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground flex items-center gap-2">
             <Lock className="h-3 w-3" />
-            In Progress
+            Up Next
           </h4>
           <div className="grid gap-3">
             {lockedAchievements.slice(0, 4).map((achievement, i) => (
@@ -223,7 +283,7 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
           </div>
           {lockedAchievements.length > 4 && (
             <p className="text-xs text-muted-foreground text-center pt-2">
-              +{lockedAchievements.length - 4} more to unlock
+              +{lockedAchievements.length - 4} more badges to earn
             </p>
           )}
         </div>
@@ -233,8 +293,9 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
       {unlockedAchievements.length === 0 && (
         <div className="text-center py-8">
           <Trophy className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">
-            Complete actions to earn achievements
+          <p className="text-sm font-medium text-foreground mb-1">Start Your Collection</p>
+          <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+            Take the Travel DNA quiz, plan your first trip, or generate an itinerary to earn your first badge.
           </p>
         </div>
       )}
