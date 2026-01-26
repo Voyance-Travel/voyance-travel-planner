@@ -387,27 +387,27 @@ export default function About() {
               <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Full Story</span>
               <div className="mt-8 space-y-6 text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-xl">
-                  Voyance started with a simple belief: travel should feel personal, not prescribed.
+                  We're not going to tell you we're "revolutionizing travel" or that we have "millions of happy users."
                 </p>
                 <p className="text-muted-foreground">
-                  We've all had those trips where everything just clicked—the timing, the discoveries, 
-                  the unexpected moments that became the best memories. That magic isn't luck. 
-                  It's thoughtful planning that respects who you are as a traveler.
+                  The truth? We're a small team building something we actually want to use. We got tired of 
+                  planning trips with 40 browser tabs, conflicting reviews, and recommendations that felt 
+                  like they were written for someone else.
                 </p>
                 <p className="text-muted-foreground">
-                  We built Voyance to bring that feeling to every trip. Not by telling you where 
-                  everyone else goes, but by understanding how you actually want to experience a place—your 
-                  pace, your curiosities, your definition of a perfect day.
+                  So we built Voyance: AI that understands how <em>you</em> travel—your pace, your interests, 
+                  your definition of a good day—and creates itineraries that actually fit.
                 </p>
                 <p className="text-foreground font-medium">
-                  The result? Itineraries that feel like they were made by a friend who knows you well.
+                  We're early. Some features are still being polished. But what's here works, and we're 
+                  shipping improvements every week.
                 </p>
                 <p className="text-muted-foreground">
-                  We're early in this journey, building something we believe in. If you're here now, 
-                  you're part of shaping what Voyance becomes.
+                  If you try it and something's off, tell us. We read every message. This isn't a faceless 
+                  corporation—it's a real team that cares about getting this right.
                 </p>
                 <p className="text-foreground font-medium italic">
-                  And that's exactly how the best adventures begin—together.
+                  No hype. Just honest tools for better trips.
                 </p>
               </div>
               
@@ -415,6 +415,122 @@ export default function About() {
               <div className="mt-12 pt-8 border-t border-border/50">
                 <p className="text-foreground font-serif text-xl">— The Voyance Team</p>
               </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Company Credibility Block */}
+      <section className="py-16 bg-muted/30 border-y border-border/50">
+        <div className="container mx-auto px-6">
+          <div className="max-w-4xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center"
+            >
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-6 h-6 text-primary" />
+                </div>
+                <h4 className="font-medium text-foreground mb-1">Voyance Travel, LLC</h4>
+                <p className="text-sm text-muted-foreground">Registered US company</p>
+              </div>
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <Globe className="w-6 h-6 text-primary" />
+                </div>
+                <h4 className="font-medium text-foreground mb-1">Voyance™</h4>
+                <p className="text-sm text-muted-foreground">Registered trademark</p>
+              </div>
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                </div>
+                <h4 className="font-medium text-foreground mb-1">3 Patents Pending</h4>
+                <p className="text-sm text-muted-foreground">Travel DNA & AI personalization</p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Product Capabilities Table */}
+      <section className="py-24 bg-background relative overflow-hidden">
+        <div className="container mx-auto px-6">
+          <div className="max-w-4xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center mb-12"
+            >
+              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Transparency</span>
+              <h2 className="font-serif text-3xl md:text-4xl font-bold mt-4">
+                What works today
+              </h2>
+              <p className="text-muted-foreground mt-4 max-w-lg mx-auto">
+                We believe in being upfront about our capabilities. Here's what you can expect right now.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="rounded-2xl border border-border overflow-hidden"
+            >
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left p-4 font-medium text-foreground">Feature</th>
+                    <th className="text-center p-4 font-medium text-foreground w-24">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {[
+                    { feature: 'Travel DNA Quiz (27 unique archetypes)', status: 'live' },
+                    { feature: 'AI-generated personalized itineraries', status: 'live' },
+                    { feature: 'Real-time activity swapping', status: 'live' },
+                    { feature: 'Multi-source review aggregation (Google, TripAdvisor, Foursquare)', status: 'live' },
+                    { feature: 'Group travel preference blending', status: 'live' },
+                    { feature: 'Budget tracking & expense management', status: 'live' },
+                    { feature: 'Weather-aware scheduling', status: 'live' },
+                    { feature: 'Direct booking via Viator', status: 'live' },
+                    { feature: 'Flight & hotel booking', status: 'external', note: 'Links to partners' },
+                    { feature: 'Mobile app', status: 'coming', note: 'Q2 2026' },
+                    { feature: 'Offline access', status: 'coming', note: 'Q2 2026' },
+                  ].map((item, idx) => (
+                    <tr key={idx} className="hover:bg-muted/20 transition-colors">
+                      <td className="p-4 text-foreground">
+                        {item.feature}
+                        {item.note && <span className="text-muted-foreground text-sm ml-2">({item.note})</span>}
+                      </td>
+                      <td className="p-4 text-center">
+                        {item.status === 'live' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-xs font-medium">
+                            <Check className="w-3 h-3" />
+                            Live
+                          </span>
+                        )}
+                        {item.status === 'external' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 text-blue-600 text-xs font-medium">
+                            <Globe className="w-3 h-3" />
+                            External
+                          </span>
+                        )}
+                        {item.status === 'coming' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
+                            <Clock className="w-3 h-3" />
+                            Soon
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </motion.div>
           </div>
         </div>
