@@ -5,7 +5,7 @@ import {
   ChevronDown, Sparkles, 
   DollarSign, Sun, Cloud, Utensils, Camera, Compass, Hotel, Car,
   Route, MessageSquare, CreditCard, Heart, Zap, ExternalLink,
-  Users, UserPlus, X, GripVertical
+  Users, UserPlus, X, GripVertical, Trash2, Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -195,6 +195,20 @@ export function DemoPlayground() {
         label: 'Learn More',
         onClick: () => {},
       },
+    });
+  };
+
+  const handleDelete = (activityTitle: string) => {
+    toast.success('Activity removed!', {
+      description: `"${activityTitle}" has been removed from your itinerary.`,
+      icon: <Trash2 className="h-4 w-4" />,
+    });
+  };
+
+  const handleAddCustom = () => {
+    toast.success('Add your own activity!', {
+      description: 'Search any experience, restaurant, or attraction to add it to your trip.',
+      icon: <Plus className="h-4 w-4" />,
     });
   };
 
@@ -553,6 +567,28 @@ export function DemoPlayground() {
                     <span className="text-sm font-medium">Optimize Routes</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Save walking time between stops</p>
+                </button>
+
+                <button 
+                  onClick={() => handleDelete('Temple Visit')}
+                  className="w-full text-left p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="h-4 w-4 text-rose-500" />
+                    <span className="text-sm font-medium">Remove Activity</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Delete any activity from your day</p>
+                </button>
+
+                <button 
+                  onClick={handleAddCustom}
+                  className="w-full text-left p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Plus className="h-4 w-4 text-violet-600" />
+                    <span className="text-sm font-medium">Add Custom Activity</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Add your own finds beyond AI picks</p>
                 </button>
               </CardContent>
             </Card>
