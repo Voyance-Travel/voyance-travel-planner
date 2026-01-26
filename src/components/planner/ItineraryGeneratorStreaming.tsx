@@ -9,7 +9,7 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Calendar, MapPin, Sparkles, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLovableItinerary, GenerationPreferences, GenerationStep } from '@/hooks/useLovableItinerary';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
@@ -110,65 +110,140 @@ export function ItineraryGeneratorStreaming({
       );
     }
 
-    // Show day-by-day generation progress
+    // Show day-by-day generation progress with engaging visuals
     return (
       <div className="space-y-6">
-        {/* Progress Header */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="relative">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <Sparkles className="w-4 h-4 text-primary absolute -top-1 -right-1" />
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-medium">{message}</span>
-                  <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
-                </div>
-                <Progress value={progress} className="h-2" />
-              </div>
-            </div>
+        {/* Animated Progress Header */}
+        <Card className="overflow-hidden">
+          <CardContent className="pt-6 relative">
+            {/* Background animation */}
+            <motion.div 
+              className="absolute inset-0 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5"
+              animate={{ x: ['-100%', '100%'] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+            />
             
-            {currentStep === 'generating' && totalDays > 0 && (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Calendar className="w-4 h-4" />
-                <span>Day {currentDay} of {totalDays}</span>
+            <div className="relative">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="relative">
+                  {/* Pulsing background ring */}
+                  <motion.div
+                    className="absolute inset-0 rounded-full bg-primary/20"
+                    animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                  <motion.div
+                    className="relative w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <Sparkles className="w-6 h-6 text-primary-foreground" />
+                  </motion.div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-center mb-2">
+                    <motion.span 
+                      className="font-semibold text-foreground"
+                      key={message}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                    >
+                      {message}
+                    </motion.span>
+                    <span className="text-sm font-medium text-primary">{Math.round(progress)}%</span>
+                  </div>
+                  <div className="relative h-3 rounded-full bg-muted overflow-hidden">
+                    <motion.div 
+                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary via-primary/80 to-primary rounded-full"
+                      style={{ width: `${progress}%` }}
+                      transition={{ duration: 0.5 }}
+                    />
+                    {/* Shimmer effect */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                      animate={{ x: ['-100%', '200%'] }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                  </div>
+                </div>
               </div>
-            )}
+              
+              {currentStep === 'generating' && totalDays > 0 && (
+                <motion.div 
+                  className="flex items-center justify-center gap-3 py-2 rounded-lg bg-primary/5"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                >
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <span className="font-medium text-foreground">
+                    Crafting Day {currentDay} of {totalDays}
+                  </span>
+                  <motion.div
+                    className="flex gap-1"
+                    animate={{ opacity: [1, 0.5, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary/30" />
+                  </motion.div>
+                </motion.div>
+              )}
 
-            <div className="flex justify-center mt-4">
-              <Button variant="ghost" size="sm" onClick={cancel}>
-                Cancel
-              </Button>
+              <div className="flex justify-center mt-4">
+                <Button variant="ghost" size="sm" onClick={cancel}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Streaming Day Cards */}
+        {/* Streaming Day Cards with enhanced animations */}
         <AnimatePresence mode="popLayout">
           {days.map((day, index) => (
             <motion.div
               key={day.dayNumber}
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              initial={{ opacity: 0, y: 30, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.4, delay: index * 0.1 }}
+              transition={{ 
+                duration: 0.5, 
+                delay: index * 0.15,
+                type: 'spring',
+                stiffness: 100
+              }}
             >
               <StreamingDayCard day={day} isNew={index === days.length - 1} />
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {/* Placeholder for next day */}
+        {/* Enhanced placeholder for next day being generated */}
         {currentDay > 0 && currentDay <= totalDays && days.length < currentDay && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative border-2 border-dashed border-primary/30 rounded-xl p-8 bg-gradient-to-br from-primary/5 to-transparent overflow-hidden"
           >
-            <div className="flex items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Generating Day {currentDay}...</span>
+            {/* Animated background */}
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent"
+              animate={{ x: ['-100%', '100%'] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+            />
+            
+            <div className="relative flex flex-col items-center justify-center gap-4">
+              <motion.div
+                className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </motion.div>
+              <div className="text-center">
+                <p className="font-semibold text-foreground">Creating Day {currentDay}</p>
+                <p className="text-sm text-muted-foreground">Finding the perfect activities...</p>
+              </div>
             </div>
           </motion.div>
         )}
