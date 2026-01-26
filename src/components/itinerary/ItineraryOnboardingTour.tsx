@@ -74,18 +74,11 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'more-actions',
-    title: 'More Actions Menu',
-    description: 'Click the ⋯ menu to move activities up/down, transfer them to another day, find alternatives, or remove them.',
+    title: 'More Actions & Alternatives',
+    description: 'Click the ⋯ menu to find alternatives for any activity, move items up/down, transfer to another day, or remove them.',
     icon: <MoreHorizontal className="h-5 w-5" />,
     selector: '[data-tour="more-actions"]',
     position: 'left',
-  },
-  {
-    id: 'find-alternative',
-    title: 'Find Alternatives',
-    description: 'Not feeling an activity? Use "Find alternative" to discover similar options that match your preferences.',
-    icon: <ArrowRightLeft className="h-5 w-5" />,
-    position: 'center',
   },
   {
     id: 'regenerate',
