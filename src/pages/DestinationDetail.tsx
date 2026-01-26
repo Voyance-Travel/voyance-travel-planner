@@ -19,7 +19,11 @@ import {
   ChevronRight,
   Sparkles,
   Info,
-  Loader2
+  Loader2,
+  Train,
+  Bus,
+  Car,
+  CheckCircle2
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -91,26 +95,13 @@ export default function DestinationDetail() {
       recommended: boolean;
       notes: string;
       appName?: string;
+      estimatedCost?: string;
     }> | null;
     
-    // Build getting around text from transport modes
-    let gettingAroundText = '';
-    if (transportModes && Array.isArray(transportModes) && transportModes.length > 0) {
-      const recommended = transportModes.filter(t => t.recommended);
-      const notRecommended = transportModes.filter(t => !t.recommended);
-      
-      if (recommended.length > 0) {
-        gettingAroundText = recommended.map(t => {
-          let text = t.mode;
-          if (t.appName) text += ` (${t.appName})`;
-          if (t.notes) text += ` - ${t.notes}`;
-          return text;
-        }).join('. ') + '.';
-      }
-      if (notRecommended.length > 0) {
-        gettingAroundText += ' Avoid: ' + notRecommended.map(t => `${t.mode}${t.notes ? ` (${t.notes})` : ''}`).join(', ') + '.';
-      }
-    }
+    // Store structured transport data instead of building a text string
+    const transportData = transportModes && Array.isArray(transportModes) && transportModes.length > 0
+      ? transportModes
+      : null;
     
     // Parse best time to visit - handle both formats "April to September" and "Apr, May, Jun"
     let bestMonths: string[] | undefined;
@@ -147,7 +138,8 @@ export default function DestinationDetail() {
       images: dbDestination.stock_image_url ? [dbDestination.stock_image_url] : [],
       climate: climateText || undefined,
       bestMonths,
-      gettingAround: gettingAroundText || undefined,
+      gettingAround: undefined, // We'll use transportData instead
+      transportData,
       localTips: undefined, // Will use fallback
     };
   }, [staticDestination, dbDestination]);
@@ -249,8 +241,14 @@ export default function DestinationDetail() {
   // Climate - use destination data or generate contextual fallback
   const climateText = destination.climate || `Pleasant year-round. Check local weather forecasts before your visit.`;
   
-  // Getting around - use destination data or fallback
-  const gettingAroundText = destination.gettingAround || `Various transport options available. Walking-friendly in central areas.`;
+  // Getting around - use structured transport data or fallback text
+  const transportData = (destination as any).transportData as Array<{
+    mode: string;
+    recommended: boolean;
+    notes: string;
+    appName?: string;
+    estimatedCost?: string;
+  }> | null;
   
   // Local tips - use destination data or generate contextual fallback
   const localTips = destination.localTips || [
@@ -258,6 +256,18 @@ export default function DestinationDetail() {
     'Be respectful of local customs and traditions',
     'Book popular attractions in advance during peak season',
   ];
+  
+  // Helper to get transport icon
+  const getTransportIcon = (mode: string) => {
+    const modeLower = mode.toLowerCase();
+    if (modeLower.includes('metro') || modeLower.includes('train') || modeLower.includes('subway')) {
+      return Train;
+    }
+    if (modeLower.includes('bus')) {
+      return Bus;
+    }
+    return Car;
+  };
 
   return (
     <MainLayout>
@@ -425,13 +435,59 @@ export default function DestinationDetail() {
                   <div className="p-5 bg-card rounded-xl border border-border">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center">
-                        <MapPin className="h-5 w-5 text-secondary-foreground" />
+                        <Train className="h-5 w-5 text-secondary-foreground" />
                       </div>
                       <h3 className="font-medium">Getting Around</h3>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {gettingAroundText}
-                    </p>
+                    
+                    {transportData && transportData.length > 0 ? (
+                      <div className="space-y-3">
+                        {/* Recommended transport options */}
+                        {transportData.filter(t => t.recommended).map((transport, idx) => {
+                          const Icon = getTransportIcon(transport.mode);
+                          return (
+                            <div key={idx} className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <Icon className="h-4 w-4 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-foreground">
+                                    {transport.mode}
+                                    {transport.appName && <span className="text-muted-foreground font-normal"> ({transport.appName})</span>}
+                                  </span>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                                </div>
+                                {transport.estimatedCost && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">{transport.estimatedCost}</p>
+                                )}
+                                {transport.notes && (
+                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{transport.notes}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        
+                        {/* Not recommended (shown smaller) */}
+                        {transportData.filter(t => !t.recommended).length > 0 && (
+                          <div className="pt-2 border-t border-border">
+                            <p className="text-xs text-muted-foreground mb-2">Less recommended:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {transportData.filter(t => !t.recommended).map((transport, idx) => (
+                                <span key={idx} className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                                  {transport.mode}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Various transport options available. Walking-friendly in central areas.
+                      </p>
+                    )}
                   </div>
                   
                   <div className="p-5 bg-card rounded-xl border border-border sm:col-span-2">
