@@ -262,10 +262,12 @@ export default function CustomerDayCard({
                               </div>
                             </div>
 
-                            {activity.location?.name && (
+                            {activity.location && (
                               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                                 <MapPin className="w-3 h-3" />
-                                {activity.location.name}
+                                {typeof activity.location === 'string' 
+                                  ? activity.location 
+                                  : activity.location.name || activity.location.address}
                               </p>
                             )}
 
