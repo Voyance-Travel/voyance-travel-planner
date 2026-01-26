@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Clock, Lock, RefreshCw, Star, 
   ChevronDown, Sparkles, 
   DollarSign, Sun, Cloud, Utensils, Camera, Compass, Hotel, Car,
   Route, MessageSquare, CreditCard, Heart, Zap, ExternalLink,
-  Users, UserPlus, X
+  Users, UserPlus, X, GripVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,23 @@ import { cn } from '@/lib/utils';
 import { getItineraryBySlug } from '@/data/sampleItineraries';
 import { toast } from 'sonner';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const DESTINATIONS = [
   { slug: 'bali-wellness', name: 'Bali', subtitle: 'Wellness & Temples', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600' },
@@ -70,6 +87,7 @@ const DEMO_FEATURES = [
 export function DemoPlayground() {
   const [selectedDest, setSelectedDest] = useState(DESTINATIONS[0]);
   const [itinerary, setItinerary] = useState<ReturnType<typeof getItineraryBySlug>>(null);
+  const [dayActivities, setDayActivities] = useState<Record<number, typeof itinerary extends { days: infer D } ? D extends Array<{ activities: infer A }> ? A : never : never>>({});
   const [lockedActivities, setLockedActivities] = useState<Set<string>>(new Set());
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]));
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -78,13 +96,48 @@ export function DemoPlayground() {
   const [isBlending, setIsBlending] = useState(false);
   const [hasBlended, setHasBlended] = useState(false);
 
+  // Drag and drop sensors
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: { distance: 8 },
+  });
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: sortableKeyboardCoordinates,
+  });
+  const sensors = useSensors(pointerSensor, keyboardSensor);
+
   useEffect(() => {
     const data = getItineraryBySlug(selectedDest.slug);
     setItinerary(data);
     setLockedActivities(new Set());
     setExpandedDays(new Set([1]));
     setHasBlended(false);
+    // Initialize day activities
+    if (data) {
+      const activities: Record<number, any> = {};
+      data.days.forEach(day => {
+        activities[day.dayNumber] = [...day.activities];
+      });
+      setDayActivities(activities);
+    }
   }, [selectedDest]);
+
+  const handleDragEnd = (dayNumber: number) => (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const activities = dayActivities[dayNumber] || [];
+      const oldIndex = activities.findIndex((a: any) => a.id === active.id);
+      const newIndex = activities.findIndex((a: any) => a.id === over.id);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newActivities = arrayMove(activities, oldIndex, newIndex);
+        setDayActivities(prev => ({ ...prev, [dayNumber]: newActivities }));
+        toast.success('Activity reordered!', {
+          description: 'Drag activities to customize your day.',
+          icon: <GripVertical className="h-4 w-4" />,
+        });
+      }
+    }
+  };
 
   const toggleDay = (dayNumber: number) => {
     setExpandedDays(prev => {
@@ -285,6 +338,8 @@ export function DemoPlayground() {
             <div className="space-y-3">
               {itinerary.days.slice(0, 3).map((day) => {
                 const isExpanded = expandedDays.has(day.dayNumber);
+                const activities = dayActivities[day.dayNumber] || day.activities;
+                const activityIds = activities.map((a: any) => a.id);
                 
                 return (
                   <Card key={day.dayNumber} className="overflow-hidden border-border/50">
@@ -297,7 +352,7 @@ export function DemoPlayground() {
                           <div className="flex-1 min-w-0">
                             <h4 className="font-serif text-sm font-semibold truncate">{day.theme}</h4>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                              <span>{day.activities.length} activities</span>
+                              <span>{activities.length} activities</span>
                               {day.weather && (
                                 <span className="flex items-center gap-0.5">
                                   {day.weather.condition === 'sunny' ? <Sun className="h-3 w-3 text-amber-500" /> : <Cloud className="h-3 w-3" />}
@@ -322,19 +377,27 @@ export function DemoPlayground() {
                         >
                           <CardContent className="p-0">
                             <div className="border-t border-border/50">
-                              {day.activities.slice(0, 5).map((activity, idx) => (
-                                <ActivityRow
-                                  key={activity.id}
-                                  activity={activity}
-                                  isLocked={lockedActivities.has(activity.id)}
-                                  isLast={idx === Math.min(day.activities.length - 1, 4)}
-                                  showingReviews={showReviewsFor === activity.id}
-                                  onLock={() => toggleLock(activity.id, activity.title)}
-                                  onSwap={() => handleSwap(activity.title)}
-                                  onViewReviews={() => handleViewReviews(activity.title, activity.id)}
-                                  onBook={() => handleBook(activity.title)}
-                                />
-                              ))}
+                              <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd(day.dayNumber)}
+                              >
+                                <SortableContext items={activityIds} strategy={verticalListSortingStrategy}>
+                                  {activities.slice(0, 5).map((activity: any, idx: number) => (
+                                    <SortableActivityRow
+                                      key={activity.id}
+                                      activity={activity}
+                                      isLocked={lockedActivities.has(activity.id)}
+                                      isLast={idx === Math.min(activities.length - 1, 4)}
+                                      showingReviews={showReviewsFor === activity.id}
+                                      onLock={() => toggleLock(activity.id, activity.title)}
+                                      onSwap={() => handleSwap(activity.title)}
+                                      onViewReviews={() => handleViewReviews(activity.title, activity.id)}
+                                      onBook={() => handleBook(activity.title)}
+                                    />
+                                  ))}
+                                </SortableContext>
+                              </DndContext>
                             </div>
                           </CardContent>
                         </motion.div>
@@ -522,12 +585,81 @@ export function DemoPlayground() {
         {/* Hint */}
         <div className="mt-8 text-center">
           <p className="text-xs text-muted-foreground inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50">
-            <Lock className="h-3 w-3" />
-            Click any activity's lock or swap icon to try it
+            <GripVertical className="h-3 w-3" />
+            Drag activities to reorder • Lock or swap to customize
           </p>
         </div>
       </div>
     </section>
+  );
+}
+
+// Sortable wrapper for ActivityRow
+interface SortableActivityRowProps {
+  activity: {
+    id: string;
+    title: string;
+    description?: string;
+    time: string;
+    duration: string;
+    type: string;
+    cost: number;
+    rating?: number;
+    location?: { name?: string; address?: string };
+    photos?: string[];
+    tags?: string[];
+  };
+  isLocked: boolean;
+  isLast: boolean;
+  showingReviews: boolean;
+  onLock: () => void;
+  onSwap: () => void;
+  onViewReviews: () => void;
+  onBook: () => void;
+}
+
+function SortableActivityRow(props: SortableActivityRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.activity.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "relative group",
+        isDragging && "opacity-60 shadow-lg bg-card"
+      )}
+    >
+      {/* Drag Handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={cn(
+          "absolute left-1 top-1/2 -translate-y-1/2 z-10",
+          "opacity-0 group-hover:opacity-100 transition-opacity",
+          "cursor-grab active:cursor-grabbing",
+          "p-1 rounded bg-background/80 border shadow-sm",
+          "hover:bg-muted",
+          isDragging && "opacity-100"
+        )}
+      >
+        <GripVertical className="h-3 w-3 text-muted-foreground" />
+      </div>
+      <ActivityRow {...props} />
+    </div>
   );
 }
 
