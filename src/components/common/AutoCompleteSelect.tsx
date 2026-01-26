@@ -158,10 +158,10 @@ export default function AutoCompleteSelect({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
-            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto"
+            className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto"
           >
             {isLoading ? (
-              <div className="px-4 py-3 text-sm text-muted-foreground">
+              <div className="px-4 py-3 text-sm text-muted-foreground bg-card">
                 Searching...
               </div>
             ) : options.length > 0 ? (
@@ -172,7 +172,7 @@ export default function AutoCompleteSelect({
                   animate={{ opacity: 1 }}
                   transition={{ delay: index * 0.05 }}
                   onClick={() => handleSelect(option)}
-                  className="px-4 py-3 cursor-pointer hover:bg-accent flex items-center gap-3"
+                  className="px-4 py-3 cursor-pointer bg-card hover:bg-muted transition-colors flex items-center gap-3 border-b border-border last:border-b-0"
                 >
                   {option.icon && (
                     <div className="flex-shrink-0">
@@ -196,7 +196,7 @@ export default function AutoCompleteSelect({
                 </motion.div>
               ))
             ) : (
-              <div className="px-4 py-3 text-sm text-muted-foreground">
+              <div className="px-4 py-3 text-sm text-muted-foreground bg-card">
                 {noResultsMessage}
               </div>
             )}
