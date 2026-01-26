@@ -272,16 +272,16 @@ export default function TopNav() {
               </>
             ) : (
               <>
-                {/* Hotel Link */}
-                <Link
-                  to={ROUTES.START}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                    isTransparent ? 'text-white/80 hover:text-white' : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                {/* Book Hotel Button */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(ROUTES.START)}
+                  className={`gap-2 ${isTransparent ? 'bg-white/10 border-white/30 text-white hover:bg-white/20' : ''}`}
                 >
-                  <Building2 className="h-3.5 w-3.5" />
-                  Hotel
-                </Link>
+                  <Building2 className="h-4 w-4" />
+                  Book Hotel
+                </Button>
 
                 {/* Build Itinerary Button */}
                 <Button
@@ -425,13 +425,14 @@ export default function TopNav() {
                 ) : (
                   <>
                     <div className="space-y-2 mb-4">
-                      <Link
-                        to={ROUTES.START}
-                        className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => navigate(ROUTES.START)}
                       >
                         <Building2 className="h-4 w-4" />
-                        Hotel
-                      </Link>
+                        Book Hotel
+                      </Button>
                       <Button
                         className="w-full gap-2"
                         onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
