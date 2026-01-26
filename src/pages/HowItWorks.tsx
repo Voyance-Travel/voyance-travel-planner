@@ -1,70 +1,103 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { CheckCircle, Sparkles, Calendar, MapPin, Clock, Users, ArrowRight, Compass, Heart, Shield, Dna, Sliders, RefreshCw } from 'lucide-react';
+import { 
+  CheckCircle, 
+  Sparkles, 
+  Calendar, 
+  MapPin, 
+  Clock, 
+  Users, 
+  ArrowRight, 
+  Dna, 
+  Route,
+  Star,
+  Lock,
+  RefreshCw,
+  DollarSign,
+  Shield,
+  Eye
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { ARCHETYPE_NARRATIVES } from '@/data/archetypeNarratives';
 
 const steps = [
   {
+    number: '01',
+    title: 'Take the Quiz',
+    time: '2 min',
+    description: 'Answer 10 questions. We identify your archetype from 27 traveler types.',
     icon: Dna,
-    title: 'Discover Your Travel DNA',
-    description: 'Take our 2-minute quiz to uncover your unique travel personality from 27 distinct archetypes. We learn your pace, interests, and dream experiences.',
-    image: 'https://images.unsplash.com/photo-1522199755839-a2bacb67c546?w=600&q=80',
   },
   {
-    icon: Compass,
-    title: 'Get Matched Experiences',
-    description: 'Our AI matches you with destinations and experiences that resonate with who you are. Every suggestion is tailored to your travel style.',
-    image: 'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&q=80',
+    number: '02',
+    title: 'Tell Us Your Trip',
+    time: '1 min',
+    description: 'Destination, dates, hotel, arrival time. We need this to optimize your days.',
+    icon: MapPin,
   },
   {
+    number: '03',
+    title: 'Get Your Itinerary',
+    time: 'Instant',
+    description: 'Day-by-day. Activity-by-activity. Routes optimized. Reviews included.',
     icon: Calendar,
-    title: 'Build Your Itinerary',
-    description: 'Watch as we craft a day-by-day plan with the right mix of activities, dining, and downtime. Customize anything until it feels just right.',
-    image: 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?w=600&q=80',
   },
 ];
 
-const benefits = [
+const features = [
   {
-    icon: Clock,
-    title: 'Save 15+ Hours',
-    description: 'Skip the endless research. We do the heavy lifting so you can focus on dreaming.',
+    icon: Calendar,
+    title: 'Day-by-Day Schedule',
+    description: 'Every activity timed to your pace',
+    color: 'bg-blue-500/10 text-blue-600',
   },
   {
-    icon: Heart,
-    title: 'Truly Personal',
-    description: 'Every recommendation reflects your unique preferences, not generic tourist traps.',
+    icon: RefreshCw,
+    title: 'Swap & Lock',
+    description: "Don't like something? Swap it. Love it? Lock it.",
+    color: 'bg-amber-500/10 text-amber-600',
+  },
+  {
+    icon: Star,
+    title: 'Real Reviews',
+    description: 'Aggregated from Google, TripAdvisor, Foursquare',
+    color: 'bg-yellow-500/10 text-yellow-600',
+  },
+  {
+    icon: Route,
+    title: 'Route Optimization',
+    description: 'We reorder your day to minimize transit time',
+    color: 'bg-emerald-500/10 text-emerald-600',
+  },
+  {
+    icon: DollarSign,
+    title: 'Budget Tracking',
+    description: 'See costs per activity, per day, per trip',
+    color: 'bg-green-500/10 text-green-600',
   },
   {
     icon: Users,
-    title: 'Group Friendly',
-    description: 'Planning with others? We balance everyone\'s preferences for perfect group trips.',
-  },
-  {
-    icon: Shield,
-    title: 'Book with Confidence',
-    description: 'Transparent pricing and verified booking options you can trust.',
+    title: 'Group Blending',
+    description: 'Traveling together? We merge your Travel DNA',
+    color: 'bg-purple-500/10 text-purple-600',
   },
 ];
 
 const stats = [
-  { value: '27', label: 'Unique Travel Archetypes', icon: Dna },
-  { value: '190+', label: 'Countries Covered', icon: MapPin },
+  { value: '27', label: 'traveler personalities', icon: Dna },
+  { value: '190+', label: 'destinations', icon: MapPin },
+  { value: '8', label: 'traits analyzed', icon: Sparkles },
+  { value: '30-45', label: 'min saved daily', icon: Clock },
 ];
 
-// Featured archetypes to showcase (curated for variety)
-const FEATURED_ARCHETYPES = [
-  'slow_traveler',
-  'cultural_anthropologist',
-  'adrenaline_architect',
-  'culinary_cartographer',
-  'family_architect',
-  'luxury_luminary',
+const promises = [
+  { text: 'No credit card to explore', icon: Shield },
+  { text: 'Real reviews, not paid placements', icon: Star },
+  { text: "Book direct - we don't mark up prices", icon: DollarSign },
+  { text: 'Your data stays yours', icon: Lock },
 ];
 
 export default function HowItWorks() {
@@ -72,10 +105,10 @@ export default function HowItWorks() {
     <MainLayout>
       <Head
         title="How It Works | Voyance"
-        description="Learn how Voyance uses AI to create your perfect personalized travel itinerary in minutes."
+        description="From quiz to itinerary in minutes. See how Voyance builds personalized day-by-day travel plans."
       />
       
-      {/* Hero */}
+      {/* Hero - Sharper messaging */}
       <section className="pt-32 pb-20 bg-gradient-to-br from-primary/10 via-background to-accent/10 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent" />
         <div className="max-w-5xl mx-auto px-4 text-center relative">
@@ -84,7 +117,7 @@ export default function HowItWorks() {
             animate={{ opacity: 1, y: 0 }}
             className="inline-block px-4 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium mb-6"
           >
-            The Smarter Way to Travel
+            Quiz → Trip Details → Itinerary
           </motion.span>
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
@@ -92,17 +125,24 @@ export default function HowItWorks() {
             transition={{ delay: 0.1 }}
             className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6 leading-tight"
           >
-            Your Dream Trip,<br />
-            <span className="text-primary">Perfectly Planned</span>
+            From Quiz to Itinerary<br />
+            <span className="text-primary">in Minutes</span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
+            className="text-xl text-muted-foreground max-w-2xl mx-auto mb-4"
           >
-            No more endless tabs, conflicting reviews, or overwhelming choices. 
-            Voyance learns who you are and builds the journey you've been dreaming of.
+            Tell us who you are. We'll build your days.
+          </motion.p>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="text-base text-muted-foreground/80 max-w-xl mx-auto mb-10"
+          >
+            Every activity timed. Every route optimized. Every recommendation real.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -117,38 +157,81 @@ export default function HowItWorks() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="text-lg px-8">
-              <Link to={ROUTES.EXPLORE}>Explore Destinations</Link>
+              <Link to={ROUTES.DEMO}>
+                <Eye className="mr-2 h-5 w-5" />
+                See a Demo
+              </Link>
             </Button>
           </motion.div>
         </div>
       </section>
 
-      {/* Stats Bar */}
-      <section className="py-12 bg-gradient-to-r from-primary/5 via-card to-primary/5 border-y border-border">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="grid grid-cols-2 gap-12">
-            {stats.map((stat, index) => (
+      {/* 3 Steps - Sharpened */}
+      <section className="py-24 bg-muted/30">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+              Three Steps. That's It.
+            </h2>
+            <p className="text-lg text-muted-foreground">
+              No account required to start. No credit card to explore.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {steps.map((step, index) => (
               <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * index }}
-                className="text-center"
+                key={step.title}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                className="relative"
               >
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <stat.icon className="w-5 h-5 text-primary" />
+                {/* Connector line */}
+                {index < steps.length - 1 && (
+                  <div className="hidden md:block absolute top-12 left-full w-full h-px bg-gradient-to-r from-border to-transparent z-0" />
+                )}
+                
+                <div className="relative bg-card border border-border rounded-2xl p-8 h-full">
+                  {/* Step number */}
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+                      <step.icon className="h-7 w-7 text-primary" />
+                    </div>
+                    <Badge variant="secondary" className="text-xs">
+                      {step.time}
+                    </Badge>
                   </div>
-                  <p className="text-4xl font-bold text-primary">{stat.value}</p>
+                  
+                  <div className="text-5xl font-bold text-primary/20 mb-3">{step.number}</div>
+                  <h3 className="text-xl font-bold text-foreground mb-3">{step.title}</h3>
+                  <p className="text-muted-foreground leading-relaxed">{step.description}</p>
                 </div>
-                <p className="text-muted-foreground">{stat.label}</p>
               </motion.div>
             ))}
           </div>
+
+          {/* Additional context for step 3 */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-8 text-center"
+          >
+            <p className="text-sm text-muted-foreground">
+              <span className="text-foreground font-medium">Then customize:</span> Swap anything. Lock your favorites. Regenerate what doesn't fit.
+            </p>
+          </motion.div>
         </div>
       </section>
-      
-      {/* Steps - Alternating Layout */}
+
+      {/* What You Actually Get - Visual Feature Grid */}
       <section className="py-24">
         <div className="max-w-6xl mx-auto px-4">
           <motion.div
@@ -157,328 +240,140 @@ export default function HowItWorks() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-              Three Steps to Your Perfect Trip
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From dream to departure in less time than it takes to scroll through travel blogs
-            </p>
-          </motion.div>
-
-          <div className="space-y-24">
-            {steps.map((step, index) => (
-              <motion.div
-                key={step.title}
-                initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.6 }}
-                className={`grid lg:grid-cols-2 gap-12 items-center ${
-                  index % 2 === 1 ? 'lg:flex-row-reverse' : ''
-                }`}
-              >
-                <div className={index % 2 === 1 ? 'lg:order-2' : ''}>
-                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-6">
-                    <step.icon className="h-7 w-7" />
-                  </div>
-                  <div className="text-sm font-semibold text-primary mb-2">Step {index + 1}</div>
-                  <h3 className="text-2xl md:text-3xl font-bold text-foreground mb-4">{step.title}</h3>
-                  <p className="text-lg text-muted-foreground leading-relaxed">{step.description}</p>
-                </div>
-                <div className={`relative ${index % 2 === 1 ? 'lg:order-1' : ''}`}>
-                  <div className="absolute inset-0 bg-primary/10 rounded-3xl blur-2xl opacity-50 -m-4" />
-                  <img
-                    src={step.image}
-                    alt={step.title}
-                    className="relative w-full aspect-[4/3] object-cover rounded-2xl shadow-xl"
-                  />
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Travel DNA Deep Dive */}
-      <section className="py-20 bg-muted/30">
-        <div className="max-w-5xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-14"
-          >
             <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
-              <Dna className="w-3 h-3 mr-1" />
-              The Science of Travel
+              <Sparkles className="w-3 h-3 mr-1" />
+              What You Get
             </Badge>
             <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-              How Travel DNA Works
+              What Your Itinerary Includes
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              We match you to one of 27 distinct traveler personalities through a blend of psychology and data.
+              Not just a list of places. A complete day-by-day plan you can actually use.
             </p>
           </motion.div>
 
-          {/* DNA Process Steps */}
-          <div className="grid md:grid-cols-3 gap-8 mb-14">
-            {[
-              {
-                icon: Sparkles,
-                title: 'Profile Your Style',
-                description: 'Our quiz measures 8 core travel traits—from planning style to social energy to adventure tolerance. Each answer helps paint your travel portrait.',
-              },
-              {
-                icon: Sliders,
-                title: 'Match & Rank',
-                description: 'We compare your trait profile against 27 archetypes, finding the personality that best captures how you actually travel—not how you think you travel.',
-              },
-              {
-                icon: RefreshCw,
-                title: 'Evolve Over Time',
-                description: 'Your DNA isn\'t static. Rate activities, adjust preferences, and your profile refines—so recommendations get smarter with every trip.',
-              },
-            ].map((item, index) => (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {features.map((feature, index) => (
               <motion.div
-                key={item.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-card border border-border rounded-xl p-6"
-              >
-                <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <item.icon className="w-5 h-5 text-primary" />
-                </div>
-                <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Sample Archetypes Preview */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="mb-10"
-          >
-            <h3 className="text-center text-lg font-medium text-foreground mb-6">
-              A glimpse at some archetypes
-            </h3>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {FEATURED_ARCHETYPES.map((id, index) => {
-                const archetype = ARCHETYPE_NARRATIVES[id];
-                if (!archetype) return null;
-                
-                return (
-                  <motion.div
-                    key={id}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-card border border-border rounded-lg p-4 hover:border-primary/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-xl">{archetype.emoji}</span>
-                      <h4 className="font-medium text-foreground text-sm">{archetype.name}</h4>
-                    </div>
-                    <p className="text-xs text-muted-foreground italic line-clamp-2">
-                      "{archetype.hookLine}"
-                    </p>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </motion.div>
-
-          <div className="text-center">
-            <Button asChild variant="outline" size="lg">
-              <Link to={ROUTES.ARCHETYPES}>
-                Explore All 27 Archetypes
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Benefits - Enhanced */}
-      <section className="py-24 relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute top-0 left-0 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
-        
-        <div className="max-w-6xl mx-auto px-4 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-3xl md:text-5xl font-display font-bold text-foreground mb-4">
-              Why It Works
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              We handle the complexity so you can enjoy the journey
-            </p>
-          </motion.div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {benefits.map((benefit, index) => (
-              <motion.div
-                key={benefit.title}
+                key={feature.title}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
-                className="group relative"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="relative bg-card/80 backdrop-blur-sm p-8 rounded-3xl border border-border hover:border-primary/30 transition-all duration-300 h-full">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                    <benefit.icon className="h-7 w-7 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-bold text-foreground mb-3">{benefit.title}</h3>
-                  <p className="text-muted-foreground">{benefit.description}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Promise Section - Enhanced with imagery */}
-      <section className="py-24 relative overflow-hidden">
-        {/* Gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-accent/20 via-transparent to-transparent" />
-        
-        {/* Decorative images */}
-        <div className="absolute top-0 right-0 w-1/3 h-full opacity-20">
-          <img 
-            src="https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=800&q=80" 
-            alt="" 
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-900" />
-        </div>
-        
-        <div className="max-w-5xl mx-auto px-4 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-white/80 text-sm font-medium mb-4 border border-white/20">
-              <Shield className="w-4 h-4" />
-              Built on Trust
-            </span>
-            <h2 className="text-3xl md:text-5xl font-display font-bold text-white mb-4">
-              Our Promise to You
-            </h2>
-            <p className="text-lg text-white/60 max-w-2xl mx-auto">
-              We're building Voyance on a foundation of honesty and transparency
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: Shield,
-                title: 'No Hidden Fees',
-                description: 'What you see is what you pay. We never add surprise charges or markups.',
-                color: 'from-emerald-500 to-teal-500',
-              },
-              {
-                icon: Heart,
-                title: 'Honest Recommendations',
-                description: 'Every suggestion is based on your preferences, not paid partnerships.',
-                color: 'from-rose-500 to-pink-500',
-              },
-              {
-                icon: Sparkles,
-                title: 'Genuinely Personalized',
-                description: 'Your itinerary is crafted for you, not recycled from a template.',
-                color: 'from-violet-500 to-purple-500',
-              },
-            ].map((promise, index) => (
-              <motion.div
-                key={promise.title}
-                initial={{ opacity: 0, y: 30, rotateX: 15 }}
-                whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.15, duration: 0.6 }}
-                whileHover={{ y: -5, scale: 1.02 }}
+                whileHover={{ y: -4 }}
                 className="group"
               >
-                <div className="relative h-full bg-white/5 backdrop-blur-lg p-8 rounded-3xl border border-white/10 hover:border-white/30 transition-all duration-300 overflow-hidden">
-                  {/* Gradient overlay on hover */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${promise.color} opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
-                  
-                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${promise.color} flex items-center justify-center mx-auto mb-6 shadow-lg shadow-black/20`}>
-                    <promise.icon className="h-7 w-7 text-white" />
+                <div className="bg-card border border-border rounded-2xl p-6 h-full hover:border-primary/30 transition-all duration-300">
+                  <div className={`w-12 h-12 rounded-xl ${feature.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                    <feature.icon className="h-6 w-6" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-3 text-center">{promise.title}</h3>
-                  <p className="text-white/60 text-center">{promise.description}</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">{feature.title}</h3>
+                  <p className="text-muted-foreground text-sm">{feature.description}</p>
                 </div>
               </motion.div>
             ))}
           </div>
-          
-          {/* Trust indicators */}
+        </div>
+      </section>
+
+      {/* Stats - Reframed with outcome metric */}
+      <section className="py-16 bg-muted/30 border-y border-border">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {stats.map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 * index }}
+                className="text-center"
+              >
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <stat.icon className="w-5 h-5 text-primary" />
+                  <p className="text-3xl md:text-4xl font-bold text-primary">{stat.value}</p>
+                </div>
+                <p className="text-sm text-muted-foreground">{stat.label}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Our Promise - Simplified */}
+      <section className="py-24 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
+        
+        <div className="max-w-4xl mx-auto px-4 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ delay: 0.4 }}
-            className="mt-16 flex flex-wrap items-center justify-center gap-8 text-white/40 text-sm"
+            className="text-center mb-12"
           >
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-emerald-400" />
-              <span>No credit card required to explore</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-emerald-400" />
-              <span>Transparent pricing with no hidden fees</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-emerald-400" />
-              <span>Verified booking options</span>
-            </div>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-white mb-4">
+              Our Promise
+            </h2>
           </motion.div>
+
+          <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+            {promises.map((promise, index) => (
+              <motion.div
+                key={promise.text}
+                initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-5 py-4"
+              >
+                <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <promise.icon className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-white/90 text-sm font-medium">{promise.text}</span>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
-      
-      {/* CTA */}
-      <section className="py-24 bg-gradient-to-br from-primary/10 via-accent/5 to-background">
-        <div className="max-w-3xl mx-auto px-4 text-center">
+
+      {/* CTA - Sharpened */}
+      <section className="py-24 bg-gradient-to-b from-background to-muted/30">
+        <div className="max-w-4xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
             <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-              Ready to Plan Your Next Adventure?
+              Ready to see your itinerary?
             </h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-              Start with our free quiz to discover your Travel DNA. No credit card required.
+              Take the quiz, tell us where you're going, and watch your days come together.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="text-lg px-8">
                 <Link to={ROUTES.QUIZ}>
-                  Take the Travel Quiz
+                  Build My Itinerary
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link to={ROUTES.DESTINATIONS}>Browse Destinations</Link>
+              <Button asChild size="lg" variant="outline" className="text-lg px-8">
+                <Link to={ROUTES.DEMO}>Explore the Demo</Link>
               </Button>
             </div>
+            
+            {/* Trust indicator */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.3 }}
+              className="mt-8 flex items-center justify-center gap-2 text-sm text-muted-foreground"
+            >
+              <CheckCircle className="w-4 h-4 text-green-500" />
+              <span>No account required to start</span>
+            </motion.div>
           </motion.div>
         </div>
       </section>
