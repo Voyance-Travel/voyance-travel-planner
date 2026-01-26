@@ -5,6 +5,8 @@ import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, Doll
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
+import { DraftLimitBanner, DraftLimitBlocker } from '@/components/common/DraftLimitBanner';
+import { useDraftLimitCheck } from '@/hooks/useDraftLimitCheck';
 import heroItineraryImage from '@/assets/hero-itinerary.jpg';
 import heroHotelImage from '@/assets/hero-hotel.jpg';
 import { Button } from '@/components/ui/button';
@@ -500,10 +502,19 @@ export default function Start() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { canCreateDraft, isFreeUser } = useDraftLimitCheck();
+  const [showLimitBlocker, setShowLimitBlocker] = useState(false);
   
   // Check for mode and destination from query params
   const destinationFromQuery = searchParams.get('destination');
   const itineraryOnlyMode = searchParams.get('mode') === 'itinerary';
+  
+  // Show blocker if at limit
+  useEffect(() => {
+    if (!canCreateDraft && user) {
+      setShowLimitBlocker(true);
+    }
+  }, [canCreateDraft, user]);
   
   // Structured location state - stores both display and data
   const [originSelection, setOriginSelection] = useState<LocationSelection>({
@@ -944,6 +955,11 @@ export default function Start() {
         title="Start Planning | Voyance"
         description="Start planning your dream trip with Voyance's AI-powered travel planner."
       />
+      
+      {/* Draft limit blocker modal */}
+      {showLimitBlocker && (
+        <DraftLimitBlocker onClose={() => setShowLimitBlocker(false)} />
+      )}
       
       {/* Scrapbook Photo Collage Hero */}
       <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-gradient-to-br from-stone-100 via-amber-50/50 to-stone-100 dark:from-stone-900 dark:via-stone-800 dark:to-stone-900">

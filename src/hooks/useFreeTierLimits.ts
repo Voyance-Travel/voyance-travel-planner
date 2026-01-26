@@ -13,7 +13,14 @@ export interface FreeTierLimits {
   canSwapActivity: boolean;
   
   // Day regeneration
+  maxRegenerates: number;
+  regeneratesRemaining: number;
   canRegenerateDay: boolean;
+  
+  // Itinerary builds
+  maxItinerariesPerMonth: number;
+  itinerariesRemaining: number;
+  canBuildItinerary: boolean;
   
   // Export/Share
   canExport: boolean;
@@ -26,7 +33,7 @@ export interface FreeTierLimits {
 
 /**
  * Hook to check free tier limits for the current user.
- * Free users can only see Day 1 and swap 3 activities.
+ * Free users: 5 itineraries/month, Day 1 only, 3 swaps, 3 regenerates
  */
 export function useFreeTierLimits(tripId?: string): FreeTierLimits {
   const { data, isPaid } = useEntitlements();
@@ -43,9 +50,15 @@ export function useFreeTierLimits(tripId?: string): FreeTierLimits {
     // User has full access if they're paid OR this trip is unlocked
     const hasFullAccess = isUnlocked || tripUnlocked;
 
-    // Get swap usage from entitlements
+    // Get usage from entitlements
     const swapsUsed = data?.usage?.activity_swaps ?? 0;
     const swapsRemaining = Math.max(0, FREE_TIER_LIMITS.maxActivitySwaps - swapsUsed);
+    
+    const regeneratesUsed = data?.usage?.day_regenerates ?? 0;
+    const regeneratesRemaining = Math.max(0, FREE_TIER_LIMITS.maxRegenerates - regeneratesUsed);
+    
+    const itinerariesUsed = data?.usage?.itinerary_builds ?? 0;
+    const itinerariesRemaining = Math.max(0, FREE_TIER_LIMITS.maxItinerariesPerMonth - itinerariesUsed);
 
     if (hasFullAccess) {
       return {
@@ -54,7 +67,12 @@ export function useFreeTierLimits(tripId?: string): FreeTierLimits {
         maxActivitySwaps: -1,
         swapsRemaining: -1,
         canSwapActivity: true,
+        maxRegenerates: -1,
+        regeneratesRemaining: -1,
         canRegenerateDay: true,
+        maxItinerariesPerMonth: -1,
+        itinerariesRemaining: -1,
+        canBuildItinerary: true,
         canExport: true,
         canShare: true,
         isFreeUser: false,
@@ -69,7 +87,12 @@ export function useFreeTierLimits(tripId?: string): FreeTierLimits {
       maxActivitySwaps: FREE_TIER_LIMITS.maxActivitySwaps,
       swapsRemaining,
       canSwapActivity: swapsRemaining > 0,
-      canRegenerateDay: FREE_TIER_LIMITS.canRegenerateDay,
+      maxRegenerates: FREE_TIER_LIMITS.maxRegenerates,
+      regeneratesRemaining,
+      canRegenerateDay: regeneratesRemaining > 0,
+      maxItinerariesPerMonth: FREE_TIER_LIMITS.maxItinerariesPerMonth,
+      itinerariesRemaining,
+      canBuildItinerary: itinerariesRemaining > 0,
       canExport: FREE_TIER_LIMITS.canExport,
       canShare: FREE_TIER_LIMITS.canShare,
       isFreeUser: true,

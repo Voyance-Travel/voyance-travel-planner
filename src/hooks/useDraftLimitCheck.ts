@@ -1,103 +1,95 @@
 /**
  * Draft Limit Check Hook
  * 
- * Enforces draft trip limits based on user's subscription plan.
- * Free users: 1 draft, Monthly: 5 drafts, Yearly: unlimited
+ * Enforces itinerary build limits based on user's subscription plan.
+ * All tiers: 5 itineraries/month (free users see Day 1 only)
  */
 
 import { useMemo } from 'react';
 import { useEntitlements } from './useEntitlements';
+import { FREE_TIER_LIMITS } from '@/config/pricing';
 
 interface DraftLimitResult {
-  /** Whether user can create a new draft trip */
+  /** Whether user can create a new itinerary */
   canCreateDraft: boolean;
-  /** Current number of draft trips */
+  /** Current number of itineraries built this month */
   currentDrafts: number;
-  /** Maximum allowed drafts (-1 = unlimited) */
+  /** Maximum allowed itineraries per month (-1 = unlimited) */
   maxDrafts: number;
-  /** Remaining draft slots available */
+  /** Remaining itinerary slots available */
   remaining: number;
   /** User-friendly message explaining the limit */
   message: string;
   /** Whether data is still loading */
   isLoading: boolean;
   /** Suggested upgrade path if at limit */
-  upgradePath: 'monthly' | 'yearly' | null;
+  upgradePath: 'trip_pass' | 'credits' | null;
+  /** Whether user is on free tier */
+  isFreeUser: boolean;
 }
 
 export function useDraftLimitCheck(): DraftLimitResult {
-  const { data, isLoading } = useEntitlements();
+  const { data, isLoading, isPaid } = useEntitlements();
 
   return useMemo(() => {
     if (isLoading || !data) {
       return {
         canCreateDraft: true, // Optimistic during loading
         currentDrafts: 0,
-        maxDrafts: 1,
-        remaining: 1,
+        maxDrafts: FREE_TIER_LIMITS.maxItinerariesPerMonth,
+        remaining: FREE_TIER_LIMITS.maxItinerariesPerMonth,
         message: 'Loading...',
         isLoading: true,
         upgradePath: null,
+        isFreeUser: true,
       };
     }
 
-    const limits = data.limits || {};
-    const maxDrafts = limits.draftTrips ?? 1;
-    const remaining = limits.draftTripsRemaining ?? 1;
-
-    // Unlimited drafts
-    if (maxDrafts === -1) {
+    const isFreeUser = !isPaid && !(data?.is_paid ?? false);
+    
+    // Paid users have unlimited itineraries
+    if (!isFreeUser) {
       return {
         canCreateDraft: true,
-        currentDrafts: 0, // Not tracked for unlimited
+        currentDrafts: 0,
         maxDrafts: -1,
         remaining: -1,
-        message: 'Unlimited draft trips available',
+        message: 'Unlimited itineraries available',
         isLoading: false,
         upgradePath: null,
+        isFreeUser: false,
       };
     }
 
-    const currentDrafts = maxDrafts - remaining;
+    // Free tier: 5 itineraries/month
+    const maxDrafts = FREE_TIER_LIMITS.maxItinerariesPerMonth;
+    const itinerariesUsed = data?.usage?.itinerary_builds ?? 0;
+    const remaining = Math.max(0, maxDrafts - itinerariesUsed);
     const canCreateDraft = remaining > 0;
-
-    // Determine upgrade path
-    let upgradePath: 'monthly' | 'yearly' | null = null;
-    if (!canCreateDraft) {
-      const plan = data.plans?.[0] || 'free';
-      if (plan === 'free') {
-        upgradePath = 'monthly';
-      } else if (plan === 'monthly') {
-        upgradePath = 'yearly';
-      }
-    }
 
     // Build message
     let message = '';
     if (canCreateDraft) {
       if (remaining === 1) {
-        message = `${remaining} draft trip slot remaining`;
+        message = `Last free itinerary this month. Upgrade for full access.`;
       } else {
-        message = `${remaining} draft trip slots remaining`;
+        message = `${remaining} free itineraries remaining this month`;
       }
     } else {
-      if (maxDrafts === 1) {
-        message = "You've reached your free draft limit. Upgrade for more.";
-      } else {
-        message = `You've reached your ${maxDrafts} draft trip limit. Upgrade to Yearly for unlimited.`;
-      }
+      message = "You've used all 5 free itineraries this month. Upgrade to continue.";
     }
 
     return {
       canCreateDraft,
-      currentDrafts,
+      currentDrafts: itinerariesUsed,
       maxDrafts,
       remaining,
       message,
       isLoading: false,
-      upgradePath,
+      upgradePath: canCreateDraft ? null : 'trip_pass',
+      isFreeUser: true,
     };
-  }, [data, isLoading]);
+  }, [data, isLoading, isPaid]);
 }
 
 export default useDraftLimitCheck;
