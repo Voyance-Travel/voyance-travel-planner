@@ -99,6 +99,7 @@ interface GenerationContext {
   endDate: string;
   totalDays: number;
   travelers: number;
+  childrenCount?: number; // Number of children in the travel party
   tripType?: string;
   budgetTier?: string;
   pace?: string;
@@ -2855,6 +2856,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     endDate: trip.end_date,
     totalDays,
     travelers: trip.travelers || 1,
+    childrenCount: trip.metadata?.childrenCount || 0,
     tripType: trip.trip_type,
     budgetTier: trip.budget_tier,
     pace: trip.metadata?.pace || 'moderate',
@@ -5082,11 +5084,15 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       // Derive forced slots (trait-based required activities per day)
       // Build slot derivation context for archetype-specific slots
       const travelCompanions = prefs?.travel_companions || [];
-      const hasChildrenIndicators = travelCompanions.some((c: string) => 
+      const hasChildrenFromCompanions = travelCompanions.some((c: string) => 
         c.toLowerCase().includes('family') || 
         c.toLowerCase().includes('kid') || 
         c.toLowerCase().includes('child')
-      ) || context.tripType === 'family';
+      );
+      // Use explicit childrenCount from trip metadata, or fall back to companion/tripType indicators
+      const hasChildren = (context.childrenCount && context.childrenCount > 0) || 
+        hasChildrenFromCompanions || 
+        context.tripType === 'family';
       
       // Get archetype IDs from either normalized context or travel_dna_v2
       const primaryArchetypeId = normalizedContext?.archetypes?.[0]?.id || 
@@ -5099,7 +5105,7 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       const slotContext = {
         tripType: context.tripType,
         travelCompanions,
-        hasChildren: hasChildrenIndicators,
+        hasChildren,
         primaryArchetype: primaryArchetypeId,
         secondaryArchetype: secondaryArchetypeId
       };

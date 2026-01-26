@@ -547,6 +547,7 @@ export default function Start() {
     return startOfMonth(new Date());
   });
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
+  const [childrenCount, setChildrenCount] = useState(plannerState.basics.childrenCount || 0);
   const [tripType, setTripType] = useState<string>('leisure');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [hotelSelection, setHotelSelection] = useState<HotelSelectionData | null>(null);
@@ -688,6 +689,7 @@ export default function Start() {
           startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
           endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
           travelers,
+          childrenCount,
           tripType: tripType as 'solo' | 'couple' | 'family' | 'group',
           budgetTier: getBudgetTier(budgetAmount),
           budgetAmount,
@@ -703,7 +705,7 @@ export default function Start() {
         }
       }
     }, 1500); // Debounce 1.5 seconds
-  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, budgetAmount, user, setBasics, saveTrip]);
+  }, [destinationSelection, originSelection, startDate, endDate, travelers, childrenCount, tripType, budgetAmount, user, setBasics, saveTrip]);
 
   // Trigger incremental save when data changes
   useEffect(() => {
@@ -715,7 +717,7 @@ export default function Start() {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [destinationSelection, originSelection, startDate, endDate, travelers, tripType, budgetAmount, saveIncrementally]);
+  }, [destinationSelection, originSelection, startDate, endDate, travelers, childrenCount, tripType, budgetAmount, saveIncrementally]);
 
   useEffect(() => {
     if (plannerState.basics.destination && plannerState.basics.destination !== destinationSelection.cityName) {
@@ -746,6 +748,9 @@ export default function Start() {
     }
     if (plannerState.basics.travelers && plannerState.basics.travelers !== travelers) {
       setTravelers(plannerState.basics.travelers);
+    }
+    if (plannerState.basics.childrenCount !== undefined && plannerState.basics.childrenCount !== childrenCount) {
+      setChildrenCount(plannerState.basics.childrenCount);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plannerState.basics]);
@@ -778,6 +783,7 @@ export default function Start() {
       startDate: start,
       endDate: end,
       travelers,
+      childrenCount,
       originCity: originSelection.cityName,
       budgetTier: getBudgetTier(budgetAmount),
       budgetAmount,
@@ -798,6 +804,8 @@ export default function Start() {
               isDestinationMetro: destinationSelection.isMetroArea,
               isOriginMetro: originSelection.isMetroArea,
               budgetAmount: budgetAmount,
+              childrenCount: childrenCount,
+              adults: travelers - childrenCount,
             },
           }).eq('id', tripId);
         } catch (err) {
@@ -1315,7 +1323,13 @@ export default function Start() {
                       <button
                         key={num}
                         type="button"
-                        onClick={() => setTravelers(num)}
+                        onClick={() => {
+                          setTravelers(num);
+                          // Reset children if reducing travelers
+                          if (childrenCount > num) {
+                            setChildrenCount(Math.max(0, num - 1));
+                          }
+                        }}
                         className={cn(
                           "w-12 h-12 rounded-lg border-2 transition-all text-sm font-medium",
                           travelers === num
@@ -1341,6 +1355,45 @@ export default function Start() {
                     </button>
                   )}
                 </div>
+                
+                {/* Children Count */}
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-sm text-muted-foreground">Any children?</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setChildrenCount(Math.max(0, childrenCount - 1))}
+                      disabled={childrenCount === 0}
+                      className={cn(
+                        "w-8 h-8 rounded-full border flex items-center justify-center text-sm font-medium transition-all",
+                        childrenCount === 0 
+                          ? "border-border/50 text-muted-foreground/50 cursor-not-allowed"
+                          : "border-border text-foreground hover:bg-muted"
+                      )}
+                    >
+                      −
+                    </button>
+                    <span className="w-6 text-center text-sm font-medium">{childrenCount}</span>
+                    <button
+                      type="button"
+                      onClick={() => setChildrenCount(Math.min(travelers - 1, childrenCount + 1))}
+                      disabled={childrenCount >= travelers - 1}
+                      className={cn(
+                        "w-8 h-8 rounded-full border flex items-center justify-center text-sm font-medium transition-all",
+                        childrenCount >= travelers - 1
+                          ? "border-border/50 text-muted-foreground/50 cursor-not-allowed"
+                          : "border-border text-foreground hover:bg-muted"
+                      )}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                {childrenCount > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    {travelers - childrenCount} adult{travelers - childrenCount !== 1 ? 's' : ''}, {childrenCount} child{childrenCount !== 1 ? 'ren' : ''}
+                  </p>
+                )}
               </div>
 
               {/* Trip Occasion - Compact */}
