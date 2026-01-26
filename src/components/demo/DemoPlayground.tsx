@@ -4,7 +4,8 @@ import {
   MapPin, Clock, Lock, RefreshCw, Star, 
   ChevronDown, Sparkles, 
   DollarSign, Sun, Cloud, Utensils, Camera, Compass, Hotel, Car,
-  Route, MessageSquare, CreditCard, Heart, Zap, ExternalLink
+  Route, MessageSquare, CreditCard, Heart, Zap, ExternalLink,
+  Users, UserPlus, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +13,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { getItineraryBySlug } from '@/data/sampleItineraries';
 import { toast } from 'sonner';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 const DESTINATIONS = [
   { slug: 'bali-wellness', name: 'Bali', subtitle: 'Wellness & Temples', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600' },
@@ -20,7 +22,19 @@ const DESTINATIONS = [
   { slug: 'iceland-adventure', name: 'Iceland', subtitle: 'Adventure & Nature', image: 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=600' },
 ];
 
+const GROUP_MEMBERS = [
+  { id: 'you', name: 'You', initials: 'Y', color: 'bg-primary', interests: ['Relaxation', 'Food'] },
+  { id: 'alex', name: 'Alex', initials: 'A', color: 'bg-emerald-500', interests: ['Adventure', 'Culture'] },
+  { id: 'sam', name: 'Sam', initials: 'S', color: 'bg-amber-500', interests: ['Photography', 'Nature'] },
+];
+
 const DEMO_FEATURES = [
+  { 
+    icon: Users, 
+    label: 'Group Travel', 
+    description: 'Blend everyone\'s tastes',
+    color: 'text-indigo-600'
+  },
   { 
     icon: Lock, 
     label: 'Lock Favorites', 
@@ -46,12 +60,6 @@ const DEMO_FEATURES = [
     color: 'text-blue-600'
   },
   { 
-    icon: CreditCard, 
-    label: 'One-Click Booking', 
-    description: 'Reserve directly',
-    color: 'text-violet-600'
-  },
-  { 
     icon: Heart, 
     label: 'Learns Your Taste', 
     description: 'Gets smarter over time',
@@ -66,12 +74,16 @@ export function DemoPlayground() {
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]));
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showReviewsFor, setShowReviewsFor] = useState<string | null>(null);
+  const [groupMembers, setGroupMembers] = useState([GROUP_MEMBERS[0]]);
+  const [isBlending, setIsBlending] = useState(false);
+  const [hasBlended, setHasBlended] = useState(false);
 
   useEffect(() => {
     const data = getItineraryBySlug(selectedDest.slug);
     setItinerary(data);
     setLockedActivities(new Set());
     setExpandedDays(new Set([1]));
+    setHasBlended(false);
   }, [selectedDest]);
 
   const toggleDay = (dayNumber: number) => {
@@ -133,6 +145,38 @@ export function DemoPlayground() {
     });
   };
 
+  const addGroupMember = () => {
+    const available = GROUP_MEMBERS.filter(m => !groupMembers.find(gm => gm.id === m.id));
+    if (available.length > 0) {
+      setGroupMembers([...groupMembers, available[0]]);
+      toast.success(`${available[0].name} joined the trip!`, {
+        description: `Interests: ${available[0].interests.join(', ')}`,
+      });
+    }
+  };
+
+  const removeGroupMember = (memberId: string) => {
+    if (memberId === 'you') return;
+    setGroupMembers(groupMembers.filter(m => m.id !== memberId));
+    setHasBlended(false);
+  };
+
+  const handleBlendPreferences = () => {
+    if (groupMembers.length < 2) {
+      toast.error('Add at least one friend to blend preferences');
+      return;
+    }
+    setIsBlending(true);
+    setTimeout(() => {
+      setIsBlending(false);
+      setHasBlended(true);
+      toast.success('Preferences blended!', {
+        description: 'Itinerary now balances everyone\'s interests.',
+        icon: <Heart className="h-4 w-4" />,
+      });
+    }, 1800);
+  };
+
   if (!itinerary) return null;
 
   const totalCost = itinerary.days.reduce((sum, d) => sum + (d.totalCost || 0), 0);
@@ -144,14 +188,14 @@ export function DemoPlayground() {
         {/* Section header */}
         <div className="text-center mb-10">
           <Badge variant="outline" className="mb-4 px-3 py-1 text-xs">
-            <Sparkles className="h-3 w-3 mr-1.5" />
-            Interactive Playground
+            <MapPin className="h-3 w-3 mr-1.5" />
+            Sample Itinerary
           </Badge>
           <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3">
-            Explore the Full Experience
+            See It in Action
           </h2>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            This is exactly how our planner works. Try every feature below.
+            This is exactly how your trip looks. Interact with every feature below.
           </p>
         </div>
 
@@ -304,6 +348,102 @@ export function DemoPlayground() {
 
           {/* Sidebar - Feature demos */}
           <div className="space-y-4">
+            {/* Group travel */}
+            <Card className="border-border/50 overflow-hidden">
+              <CardHeader className="p-4 pb-2">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Users className="h-4 w-4 text-indigo-600" />
+                  Group Travel
+                </h4>
+              </CardHeader>
+              <CardContent className="p-4 pt-2">
+                {/* Members row */}
+                <div className="flex items-center gap-2 mb-3">
+                  {groupMembers.map((member) => (
+                    <div key={member.id} className="relative group">
+                      <Avatar className={cn("w-9 h-9 border-2 border-background shadow-sm", member.color)}>
+                        <AvatarFallback className="text-white text-xs font-medium">{member.initials}</AvatarFallback>
+                      </Avatar>
+                      {member.id !== 'you' && (
+                        <button
+                          onClick={() => removeGroupMember(member.id)}
+                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {groupMembers.length < GROUP_MEMBERS.length && (
+                    <button
+                      onClick={addGroupMember}
+                      className="w-9 h-9 rounded-full border-2 border-dashed border-border hover:border-primary/50 flex items-center justify-center transition-colors"
+                    >
+                      <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Interests preview */}
+                {groupMembers.length > 1 && (
+                  <div className="space-y-1.5 mb-3">
+                    {groupMembers.map((member) => (
+                      <div key={member.id} className="flex items-center gap-2 text-xs">
+                        <span className={cn("w-2 h-2 rounded-full", member.color)} />
+                        <span className="text-muted-foreground w-10">{member.name}</span>
+                        <div className="flex gap-1">
+                          {member.interests.map((i) => (
+                            <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">{i}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Blend button */}
+                {groupMembers.length > 1 && !hasBlended && (
+                  <Button
+                    size="sm"
+                    onClick={handleBlendPreferences}
+                    disabled={isBlending}
+                    className="w-full gap-2"
+                  >
+                    {isBlending ? (
+                      <>
+                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                          <Zap className="h-3.5 w-3.5" />
+                        </motion.div>
+                        Blending...
+                      </>
+                    ) : (
+                      <>
+                        <Heart className="h-3.5 w-3.5" />
+                        Blend Preferences
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {/* Blended result */}
+                {hasBlended && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-2 rounded-lg bg-primary/5 border border-primary/20 text-center"
+                  >
+                    <p className="text-xs text-primary font-medium">✓ Itinerary balanced for all</p>
+                  </motion.div>
+                )}
+
+                {groupMembers.length === 1 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Add friends to see preference blending
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Quick actions demo */}
             <Card className="border-border/50">
               <CardHeader className="p-4 pb-2">
@@ -372,21 +512,6 @@ export function DemoPlayground() {
                     </div>
                     <p className="text-xs text-muted-foreground italic">"Absolutely magical experience..."</p>
                     <p className="text-[10px] text-muted-foreground mt-1">— From 2,847 reviews</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Personalization */}
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Heart className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-medium">Learns Your Taste</h4>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Every lock and swap teaches our AI what you love. Your future trips get even better.
-                    </p>
                   </div>
                 </div>
               </CardContent>
