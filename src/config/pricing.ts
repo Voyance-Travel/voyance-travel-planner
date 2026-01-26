@@ -340,10 +340,10 @@ export const COMPARISON_TABLE = {
   headers: ['Feature', 'Free', 'Trip Pass', '5 Credits', '10 Credits'],
   rows: [
     { feature: 'Travel DNA Quiz', free: '✓', tripPass: '✓', credits5: '✓', credits10: '✓' },
-    { feature: 'Itineraries/Month', free: '5', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
+    { feature: 'Itineraries/Month', free: '5 (Day 1 only)', tripPass: '1 trip', credits5: '5 trips', credits10: '10 trips' },
     { feature: 'View All Days', free: 'Day 1 only', tripPass: 'All days', credits5: 'All days', credits10: 'All days' },
-    { feature: 'Activity Swaps', free: '3/trip', tripPass: 'Unlimited', credits5: '1 credit each', credits10: '1 credit each' },
-    { feature: 'Regenerate Days', free: '3/trip', tripPass: 'Unlimited', credits5: '1 credit each', credits10: '1 credit each' },
+    { feature: 'Activity Swaps', free: '3/trip', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
+    { feature: 'Regenerate Days', free: '3/month', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
     { feature: 'Export (PDF)', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
     { feature: 'Route Optimization', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
   ],
