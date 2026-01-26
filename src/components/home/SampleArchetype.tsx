@@ -73,18 +73,18 @@ export default function SampleArchetype() {
         >
           <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xl">
             {/* Header with gradient */}
-            <div className="bg-gradient-to-r from-green-500/10 via-green-400/5 to-violet-400/10 p-8 md:p-12 border-b border-border">
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-accent/10 p-8 md:p-12 border-b border-border">
               <div className="flex items-start gap-6">
                 {/* Icon */}
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-400 to-violet-400 flex items-center justify-center text-3xl shrink-0">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-3xl shrink-0">
                   {SAMPLE_ARCHETYPE.emoji}
                 </div>
                 
                 <div className="flex-1">
                   {/* Category badge */}
                   <div className="flex items-center gap-2 mb-2">
-                    <Leaf className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <span className="text-xs tracking-wider uppercase text-green-700 dark:text-green-300 font-medium">
+                    <Leaf className="w-4 h-4 text-primary" />
+                    <span className="text-xs tracking-wider uppercase text-primary font-medium">
                       {SAMPLE_ARCHETYPE.category}
                     </span>
                   </div>
@@ -119,7 +119,7 @@ export default function SampleArchetype() {
                     <ul className="space-y-3">
                       {SAMPLE_ARCHETYPE.whatThisMeans.map((item, idx) => (
                         <li key={idx} className="flex items-start gap-3">
-                          <Check className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                          <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                           <span className="text-foreground font-sans">{item}</span>
                         </li>
                       ))}
@@ -159,7 +159,7 @@ export default function SampleArchetype() {
                             whileInView={{ width: `${score}%` }}
                             viewport={{ once: true }}
                             transition={{ duration: 1, delay: 0.5 }}
-                            className="h-full bg-gradient-to-r from-green-400 to-violet-400 rounded-full"
+                            className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
                           />
                         </div>
                       </div>
