@@ -157,14 +157,14 @@ export function ItineraryGenerator({
             </h2>
             
             <p className="text-muted-foreground mb-6">
-              Create a free account to generate personalized itineraries for{' '}
-              <span className="font-medium text-foreground">{destination}</span>.
+              Create a free account to generate personalized itineraries tailored to your travel style.
+              It's free and takes just seconds.
             </p>
 
             <div className="flex flex-col gap-3">
               <Button 
                 size="lg" 
-                onClick={() => navigate(`/login?redirect=/trip/${tripId}?generate=true`)}
+                onClick={() => navigate(`/signin?redirect=${encodeURIComponent(`/trip/${tripId}?generate=true`)}`)}
                 className="gap-2"
               >
                 <LogIn className="h-5 w-5" />
@@ -312,7 +312,7 @@ export function ItineraryGenerator({
             <div className="flex flex-col gap-3">
               <Button 
                 size="lg" 
-                onClick={() => navigate(`/signup?redirect=/trip/${tripId}?generate=true`)}
+                onClick={() => navigate(`/signup?redirect=${encodeURIComponent(`/trip/${tripId}?generate=true`)}`)}
                 className="gap-2"
               >
                 <Sparkles className="h-5 w-5" />
@@ -321,7 +321,7 @@ export function ItineraryGenerator({
               
               <Button 
                 variant="outline" 
-                onClick={() => navigate(`/login?redirect=/trip/${tripId}?generate=true`)}
+                onClick={() => navigate(`/signin?redirect=${encodeURIComponent(`/trip/${tripId}?generate=true`)}`)}
                 className="gap-2"
               >
                 <LogIn className="h-5 w-5" />
