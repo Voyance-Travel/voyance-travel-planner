@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format, differenceInDays } from 'date-fns';
@@ -25,6 +25,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
+import { generateConsumerTripPdf } from '@/utils/consumerPdfGenerator';
 
 interface TripData {
   id: string;
@@ -222,6 +223,23 @@ export default function TripConfirmation() {
   const nights = trip 
     ? differenceInDays(new Date(trip.end_date), new Date(trip.start_date))
     : 0;
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (!trip) return;
+    try {
+      toast.info('Generating PDF...');
+      await generateConsumerTripPdf({
+        destination: trip.destination,
+        startDate: trip.start_date,
+        endDate: trip.end_date,
+        travelers: trip.travelers,
+      });
+      toast.success('PDF downloaded!');
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      toast.error('Failed to generate PDF');
+    }
+  }, [trip]);
 
   // Loading state
   if (isVerifying) {
@@ -530,7 +548,7 @@ export default function TripConfirmation() {
               <Share2 className="h-4 w-4" />
               Share Trip
             </Button>
-            <Button variant="ghost" className="gap-2 text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" className="gap-2 text-muted-foreground hover:text-foreground" onClick={handleDownloadPdf}>
               <Download className="h-4 w-4" />
               Download PDF
             </Button>
