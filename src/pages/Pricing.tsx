@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, ArrowRight, Loader2, Sparkles, Briefcase, Clock, Zap, FileText, Wallet, Route, Layers, Download, Lock } from 'lucide-react';
+import { Check, ArrowRight, Loader2, Sparkles, Briefcase, Clock, Zap, FileText, Wallet, Route, Layers, Download, Lock, Dna, Brain, Users, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
@@ -70,10 +70,10 @@ export default function Pricing() {
 
   return (
     <MainLayout>
-      <Head title="Pricing | Voyance" description="Build your perfect trip. Try free, upgrade when you're ready." />
+      <Head title="Pricing | Voyance" description="Travel DNA personalization. Pay only for the trips you take." />
       
       {/* Hero */}
-      <section className="relative min-h-[45vh] flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-[50vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <img 
             src={pricingHero} 
@@ -84,20 +84,21 @@ export default function Pricing() {
         </div>
         
         <div className="relative z-10 max-w-3xl mx-auto px-4 text-center py-16">
-          <motion.p
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-primary font-medium text-sm mb-3"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-full text-primary font-medium text-sm mb-4"
           >
-            Simple, transparent pricing
-          </motion.p>
+            <Dna className="w-4 h-4" />
+            Powered by Travel DNA
+          </motion.div>
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
             className="text-3xl md:text-5xl font-serif font-bold text-foreground mb-4"
           >
-            Build Your Trip. Unlock When Ready.
+            Itineraries Built Around <span className="text-primary italic">You</span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0 }}
@@ -105,8 +106,59 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="text-muted-foreground text-lg max-w-xl mx-auto"
           >
-            Start for free. See Day 1 of any itinerary. Upgrade to unlock all days, unlimited swaps, and export.
+            Your Travel DNA shapes every recommendation. Preview Day 1 free, then unlock your complete personalized trip.
           </motion.p>
+        </div>
+      </section>
+
+      {/* Why Personalization Matters */}
+      <section className="py-12 -mt-8 mb-8">
+        <div className="max-w-4xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="bg-gradient-to-br from-primary/5 via-card to-primary/5 rounded-2xl border border-primary/20 p-8"
+          >
+            <div className="text-center mb-8">
+              <h2 className="text-xl font-serif font-bold text-foreground mb-2">
+                Not just <span className="line-through text-muted-foreground">any</span> itinerary. <span className="text-primary italic">Your</span> itinerary.
+              </h2>
+              <p className="text-muted-foreground max-w-lg mx-auto">
+                Generic travel guides don't know you hate crowds, love hidden cafés, or need a slower pace. Your Travel DNA does.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <Brain className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-medium text-foreground mb-1">2-Minute Quiz</h3>
+                <p className="text-sm text-muted-foreground">
+                  We learn your pace, energy, and travel personality
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <Dna className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-medium text-foreground mb-1">27 Archetypes</h3>
+                <p className="text-sm text-muted-foreground">
+                  From "Slow Traveler" to "Adrenaline Chaser" — we find your match
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <Heart className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-medium text-foreground mb-1">Every Activity Fits</h3>
+                <p className="text-sm text-muted-foreground">
+                  Dining, activities, and timing tailored to your preferences
+                </p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
@@ -316,8 +368,8 @@ export default function Pricing() {
           >
             <h3 className="font-medium text-foreground mb-2">How Credits Work</h3>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-              1 credit = Build a full trip, regenerate a day, or swap an activity. 
-              Use them across any trip, anytime.
+              1 credit = Build a full DNA-personalized trip, regenerate a day with fresh recommendations, or swap an activity. 
+              Use them across any trip, anytime. Your Travel DNA ensures every action is tailored to you.
             </p>
           </motion.div>
         </div>
@@ -333,10 +385,10 @@ export default function Pricing() {
             className="text-center mb-10"
           >
             <h2 className="text-2xl font-serif font-bold text-foreground mb-3">
-              What's Included
+              What You Get
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              A complete breakdown of what you get with each option.
+              Every plan includes Travel DNA personalization. Here's what each tier unlocks.
             </p>
           </motion.div>
 
@@ -353,7 +405,11 @@ export default function Pricing() {
               <div className="space-y-3 text-sm">
                 <div className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Build any itinerary</span>
+                  <span>Travel DNA quiz & archetype</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Build personalized itineraries</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-primary flex-shrink-0" />
@@ -365,11 +421,7 @@ export default function Pricing() {
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Lock className="w-4 h-4 flex-shrink-0" />
-                  <span>No export</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Lock className="w-4 h-4 flex-shrink-0" />
-                  <span>No sharing</span>
+                  <span>No export or sharing</span>
                 </div>
               </div>
             </motion.div>
@@ -547,10 +599,26 @@ export default function Pricing() {
 
           <div className="space-y-6">
             {[
-              { q: 'What can I do for free?', a: 'Build any itinerary and see Day 1 completely free. You can also swap up to 3 activities to try our AI-powered refinements.' },
-              { q: 'What does a Trip Pass unlock?', a: 'Full access to one trip: all days visible, unlimited activity swaps, day regeneration, PDF export, and sharing with travel companions.' },
-              { q: 'How do credits work?', a: 'Credits are flexible tokens. 1 credit = build a full trip, regenerate a day, or swap an activity. Use them across any trip. They never expire.' },
-              { q: 'Can I upgrade later?', a: 'Absolutely! Start free, and purchase a Trip Pass or credits whenever you\'re ready to unlock your trip.' },
+              { 
+                q: 'What is Travel DNA?', 
+                a: 'Travel DNA is your personalization profile. A 2-minute quiz identifies your travel personality from 27 archetypes — things like your pace, energy levels, food preferences, and crowd tolerance. Every itinerary we build uses your DNA to select activities, restaurants, and timing that actually fit how you travel.' 
+              },
+              { 
+                q: 'What can I do for free?', 
+                a: 'Take the Travel DNA quiz, discover your archetype, and build a fully personalized itinerary. You can see Day 1 completely free and swap up to 3 activities to try our AI-powered refinements.' 
+              },
+              { 
+                q: 'What does a Trip Pass unlock?', 
+                a: 'Full access to your complete personalized trip: all days visible, unlimited AI-powered activity swaps, day regeneration, PDF export, and sharing with travel companions. It\'s everything you need for one trip.' 
+              },
+              { 
+                q: 'How do credits work?', 
+                a: 'Credits are flexible tokens that work across any trip. 1 credit = build a full personalized trip, regenerate a day with new recommendations, or swap an activity. Credits never expire, so you can use them whenever you\'re ready.' 
+              },
+              { 
+                q: 'Does my Travel DNA improve over time?', 
+                a: 'Yes! The more you use Voyance, the smarter your recommendations become. When you save, skip, or swap activities, we learn what resonates and refine future suggestions.' 
+              },
             ].map((faq, i) => (
               <motion.div
                 key={faq.q}
