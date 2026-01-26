@@ -14,6 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievement_unlocks: {
+        Row: {
+          achievement_id: string
+          id: string
+          metadata: Json | null
+          notified: boolean | null
+          progress: number | null
+          unlocked_at: string
+          user_id: string
+        }
+        Insert: {
+          achievement_id: string
+          id?: string
+          metadata?: Json | null
+          notified?: boolean | null
+          progress?: number | null
+          unlocked_at?: string
+          user_id: string
+        }
+        Update: {
+          achievement_id?: string
+          id?: string
+          metadata?: Json | null
+          notified?: boolean | null
+          progress?: number | null
+          unlocked_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "achievement_unlocks_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "achievements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      achievements: {
+        Row: {
+          category: string
+          created_at: string
+          description: string
+          icon: string
+          id: string
+          is_active: boolean | null
+          is_hidden: boolean | null
+          name: string
+          points: number
+          requirement_meta: Json | null
+          requirement_type: string
+          requirement_value: number | null
+          sort_order: number | null
+          tier: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description: string
+          icon?: string
+          id: string
+          is_active?: boolean | null
+          is_hidden?: boolean | null
+          name: string
+          points?: number
+          requirement_meta?: Json | null
+          requirement_type: string
+          requirement_value?: number | null
+          sort_order?: number | null
+          tier?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string
+          icon?: string
+          id?: string
+          is_active?: boolean | null
+          is_hidden?: boolean | null
+          name?: string
+          points?: number
+          requirement_meta?: Json | null
+          requirement_type?: string
+          requirement_value?: number | null
+          sort_order?: number | null
+          tier?: string
+        }
+        Relationships: []
+      }
       activities: {
         Row: {
           accessibility_info: Json | null
