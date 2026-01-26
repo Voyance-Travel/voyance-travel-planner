@@ -24,16 +24,24 @@ import ItineraryContextForm, { ItineraryContextData } from '@/components/planner
 import SaveAsTemplateDialog from '@/components/itinerary/SaveAsTemplateDialog';
 
 interface FlightSelectionData {
-  outbound?: {
-    departure?: { airport?: string; time?: string; city?: string };
-    arrival?: { airport?: string; time?: string; city?: string };
+  // New structure (matches backend reader)
+  departure?: {
+    arrival?: { airport?: string; time?: string; city?: string; date?: string };
+    arrivalTime?: string;
+    departureTime?: string;
     connections?: Array<{ departureAirport?: string; arrivalAirport?: string; departureTime?: string; arrivalTime?: string }>;
   };
   return?: {
-    departure?: { airport?: string; time?: string; city?: string };
-    arrival?: { airport?: string; time?: string; city?: string };
+    departure?: { airport?: string; time?: string; city?: string; date?: string };
+    departureTime?: string;
     connections?: Array<{ departureAirport?: string; arrivalAirport?: string; departureTime?: string; arrivalTime?: string }>;
   };
+  // Legacy flat structure
+  arrivalTime?: string;
+  returnDepartureTime?: string;
+  departureAirport?: string;
+  arrivalAirport?: string;
+  // Multi-city
   interCityTransfers?: Array<{ mode?: string; fromCity?: string; toCity?: string; departureTime?: string; arrivalTime?: string }>;
   isMultiCity?: boolean;
 }
@@ -192,9 +200,14 @@ export default function ItineraryPreview({
   const remainingGenerations = getRemainingQuota(entitlements, 'ai.itinerary.generate_quota_month');
 
   // Extract flight times from existing flight_selection data (collected on Start page)
+  // Handle both new structure (departure.arrival.time) and flat (arrivalTime)
   const existingFlightData = tripDetails.flightSelection;
-  const existingArrivalTime = existingFlightData?.outbound?.arrival?.time;
-  const existingDepartureTime = existingFlightData?.return?.departure?.time;
+  const existingArrivalTime = existingFlightData?.departure?.arrival?.time 
+    || existingFlightData?.departure?.arrivalTime 
+    || existingFlightData?.arrivalTime;
+  const existingDepartureTime = existingFlightData?.return?.departure?.time 
+    || existingFlightData?.return?.departureTime 
+    || existingFlightData?.returnDepartureTime;
   const existingHotelLocation = tripDetails.hotelLocation;
   
   // Determine if we already have sufficient context from Start page

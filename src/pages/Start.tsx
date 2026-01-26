@@ -893,35 +893,69 @@ export default function Start() {
         
         // Save flight times with origin/destination for itinerary generation
         // Build flight selection from flightDetails or origin/destination
+        // IMPORTANT: Structure must match what getFlightHotelContext reads:
+        //   - departure.arrival.time for Day 1 arrival
+        //   - return.departure.time for last day departure
         const originAirport = flightDetails?.outbound?.departureAirport || originSelection.airportCodes?.[0] || originSelection.cityName;
+        const destAirport = flightDetails?.outbound?.arrivalAirport || destinationSelection.airportCodes?.[0] || destinationSelection.cityName;
         const hasOriginInfo = originAirport || flightDetails?.outbound?.departureAirport;
         
         if (flightDetails || hasOriginInfo) {
           updatePayload.flight_selection = {
-            outbound: {
-              departure: hasOriginInfo ? {
-                airport: originAirport,
-                city: originSelection.cityName || flightDetails?.outbound?.departureAirport,
-                time: flightDetails?.outbound?.departureTime,
-              } : undefined,
+            // Use 'departure' key (not 'outbound') to match backend reader
+            departure: {
+              departureAirport: originAirport,
+              departureCity: originSelection.cityName || flightDetails?.outbound?.departureAirport,
+              departureTime: flightDetails?.outbound?.departureTime,
+              departureDate: start, // Include date for persistence
+              arrivalAirport: destAirport,
+              arrivalCity: destinationSelection.cityName,
+              arrivalTime: flightDetails?.outbound?.arrivalTime || undefined,
+              arrivalDate: start, // Same day arrival
+              // Nested structure for backend compatibility
               arrival: {
-                airport: flightDetails?.outbound?.arrivalAirport || destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
+                airport: destAirport,
                 city: destinationSelection.cityName,
                 time: flightDetails?.outbound?.arrivalTime || undefined,
+                date: start,
               },
+              connections: flightDetails?.outboundLayovers?.map(l => ({
+                departureAirport: l.departureAirport,
+                arrivalAirport: l.arrivalAirport,
+                departureTime: l.departureTime,
+                arrivalTime: l.arrivalTime,
+              })),
             },
+            // Use 'return' key to match backend reader
             return: flightDetails?.return ? {
+              departureAirport: flightDetails.return.departureAirport || destAirport,
+              departureCity: destinationSelection.cityName,
+              departureTime: flightDetails.return.departureTime || undefined,
+              departureDate: end, // Include date for persistence
+              arrivalAirport: flightDetails.return.arrivalAirport || originAirport,
+              arrivalCity: originSelection.cityName || flightDetails.return.arrivalAirport,
+              arrivalTime: flightDetails.return.arrivalTime,
+              arrivalDate: end,
+              // Nested structure for backend compatibility
               departure: {
-                airport: flightDetails.return.departureAirport || destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
+                airport: flightDetails.return.departureAirport || destAirport,
                 city: destinationSelection.cityName,
                 time: flightDetails.return.departureTime || undefined,
+                date: end,
               },
-              arrival: hasOriginInfo ? {
-                airport: flightDetails.return.arrivalAirport || originAirport,
-                city: originSelection.cityName || flightDetails.return.arrivalAirport,
-                time: flightDetails.return.arrivalTime,
-              } : undefined,
+              connections: flightDetails?.returnLayovers?.map(l => ({
+                departureAirport: l.departureAirport,
+                arrivalAirport: l.arrivalAirport,
+                departureTime: l.departureTime,
+                arrivalTime: l.arrivalTime,
+              })),
             } : undefined,
+            // Also keep flat format for legacy/display compatibility
+            arrivalTime: flightDetails?.outbound?.arrivalTime,
+            returnDepartureTime: flightDetails?.return?.departureTime,
+            departureAirport: originAirport,
+            arrivalAirport: destAirport,
+            // Multi-city transfers
             interCityTransfers: flightDetails?.interCityTransfers?.map(t => ({
               mode: t.mode,
               fromCity: t.fromCity,
