@@ -508,8 +508,16 @@ export default function PlannerHotelEnhanced() {
     navigate(`/planner/summary?${params.toString()}`);
   };
 
-  const handleSkipHotel = () => {
-    setShowSkipModal(true);
+  const handleSkipHotel = async () => {
+    // Skip directly to itinerary generation - no modal needed
+    // User explicitly said "I'll add my hotel later"
+    const tripId = plannerState.tripId || await saveTrip();
+    if (tripId) {
+      // Navigate directly to itinerary with generate flag
+      navigate(`/trip/${tripId}?generate=true`);
+    } else {
+      toast.error('Could not save trip. Please try again.');
+    }
   };
 
   const handleManualHotelSubmit = async (data: { hotel?: ManualHotelData }) => {
@@ -534,12 +542,6 @@ export default function PlannerHotelEnhanced() {
     const params = getNavigationParams();
     params.set('skippedHotel', 'true');
     if (data.hotel) params.set('manualHotel', 'true');
-    navigate(`/planner/summary?${params.toString()}`);
-  };
-
-  const handleSkipWithoutDetails = () => {
-    const params = getNavigationParams();
-    params.set('skippedHotel', 'true');
     navigate(`/planner/summary?${params.toString()}`);
   };
 
@@ -692,13 +694,13 @@ export default function PlannerHotelEnhanced() {
         </div>
       </section>
 
-      {/* Skip Hotel Modal */}
+      {/* Manual Entry Modal - for entering hotel details manually */}
       <ManualBookingModal
         open={showSkipModal}
         onClose={() => setShowSkipModal(false)}
         onSubmit={handleManualHotelSubmit}
         type="hotel"
-        onSkip={handleSkipWithoutDetails}
+        onSkip={handleSkipHotel}
       />
     </MainLayout>
   );
