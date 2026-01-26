@@ -1061,9 +1061,15 @@ export default function Start() {
             <img src="https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=400&q=80" alt="" className="w-full h-full object-cover" />
           </div>
           
-          {/* Soft center fade for readability */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-stone-100/80 to-stone-100 dark:via-stone-900/80 dark:to-stone-900" />
-          <div className="absolute inset-0 bg-radial-gradient from-stone-100/90 via-stone-100/60 to-transparent dark:from-stone-900/90 dark:via-stone-900/60" style={{ background: 'radial-gradient(ellipse at center, hsl(var(--background) / 0.85) 0%, transparent 70%)' }} />
+          {/* Strong center overlay for text readability - especially on mobile */}
+          <div className="absolute inset-0 bg-gradient-to-b from-stone-100/40 via-stone-100/95 to-stone-100 dark:from-stone-900/40 dark:via-stone-900/95 dark:to-stone-900" />
+          {/* Extra strong center spotlight for header text */}
+          <div 
+            className="absolute inset-0" 
+            style={{ 
+              background: 'radial-gradient(ellipse 80% 60% at 50% 35%, hsl(var(--background)) 0%, hsl(var(--background) / 0.95) 30%, hsl(var(--background) / 0.7) 50%, transparent 80%)' 
+            }} 
+          />
         </div>
 
         {/* Content */}
@@ -1075,19 +1081,19 @@ export default function Start() {
             transition={{ duration: 0.6 }}
             className="text-center mb-10"
           >
-            <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 ${
+            <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 drop-shadow-sm ${
               itineraryOnlyMode ? 'text-amber-600' : 'text-sky-600'
             }`}>
               {itineraryOnlyMode ? 'Flight Booked' : 'Need Accommodation'}
             </p>
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-foreground leading-tight">
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-foreground leading-tight drop-shadow-sm">
               {itineraryOnlyMode ? (
                 <>Build My <em className="italic">Itinerary</em></>
               ) : (
                 <>Find My <em className="italic">Hotel</em></>
               )}
             </h1>
-            <p className="mt-4 text-base sm:text-lg text-foreground max-w-lg mx-auto px-4 sm:px-0">
+            <p className="mt-4 text-base sm:text-lg text-foreground/90 max-w-lg mx-auto px-4 sm:px-0 drop-shadow-sm">
               {itineraryOnlyMode
                 ? "You've got your flights and hotel sorted. We'll craft the perfect daily activities."
                 : "Search and book through us, or add your existing reservation."}
