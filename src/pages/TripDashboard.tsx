@@ -120,9 +120,9 @@ interface TripGroup {
   region: string;
 }
 
-type TabValue = 'all' | 'upcoming' | 'drafts' | 'completed';
-type TripStatus = 'draft' | 'planning' | 'booked' | 'completed' | 'cancelled';
-type DisplayStatus = 'draft' | 'upcoming' | 'completed' | 'canceled';
+type TabValue = 'all' | 'upcoming' | 'completed';
+type TripStatus = 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
+type DisplayStatus = 'upcoming' | 'active' | 'completed' | 'canceled';
 
 interface Trip {
   id: string;
@@ -139,17 +139,33 @@ interface Trip {
   hasItineraryData: boolean;
 }
 
-function mapToDisplayStatus(status: TripStatus): DisplayStatus {
-  if (['booked', 'planning'].includes(status)) return 'upcoming';
-  if (status === 'completed') return 'completed';
-  if (status === 'cancelled') return 'canceled';
-  return 'draft';
+// Simplified status mapping - no more "draft" display, all future trips are "upcoming"
+function mapToDisplayStatus(status: TripStatus, startDate: string | null, endDate: string | null): DisplayStatus {
+  const now = new Date();
+  
+  // Completed or past trips
+  if (status === 'completed' || (endDate && new Date(endDate) < now)) {
+    return 'completed';
+  }
+  
+  // Cancelled trips
+  if (status === 'cancelled') {
+    return 'canceled';
+  }
+  
+  // Active trips (currently happening)
+  if (status === 'active' || (startDate && endDate && new Date(startDate) <= now && new Date(endDate) >= now)) {
+    return 'active';
+  }
+  
+  // Everything else (draft, planning, booked with future dates) = upcoming
+  return 'upcoming';
 }
 
 const statusConfig: Record<DisplayStatus, { label: string; color: string; icon: typeof Edit3 }> = {
-  draft: { label: 'Draft', color: 'bg-amber-500/20 text-amber-700 border border-amber-500/30', icon: Edit3 },
   upcoming: { label: 'Upcoming', color: 'bg-primary/20 text-primary border border-primary/30', icon: Clock },
-  completed: { label: 'Completed', color: 'bg-green-500/20 text-green-700 border border-green-500/30', icon: CheckCircle },
+  active: { label: 'In Progress', color: 'bg-green-500/20 text-green-700 border border-green-500/30', icon: Plane },
+  completed: { label: 'Completed', color: 'bg-muted text-muted-foreground border border-border', icon: CheckCircle },
   canceled: { label: 'Cancelled', color: 'bg-destructive/20 text-destructive border border-destructive/30', icon: Edit3 },
 };
 
@@ -173,7 +189,7 @@ function formatDateRange(startDate: string | null, endDate: string | null): stri
 
 function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
   const navigate = useNavigate();
-  const displayStatus = mapToDisplayStatus(trip.status);
+  const displayStatus = mapToDisplayStatus(trip.status, trip.startDate, trip.endDate);
   const status = statusConfig[displayStatus];
   const StatusIcon = status.icon;
   
@@ -350,8 +366,6 @@ function EmptyState({ tab }: { tab: TabValue }) {
             ? "Your Next Adventure Awaits" 
             : tab === 'upcoming' 
             ? "No Upcoming Trips Yet"
-            : tab === 'drafts'
-            ? "No Draft Trips"
             : "No Past Adventures"}
         </h2>
         
@@ -359,9 +373,7 @@ function EmptyState({ tab }: { tab: TabValue }) {
           {tab === 'all' 
             ? "Start planning your dream vacation with personalized itineraries crafted just for you."
             : tab === 'upcoming'
-            ? "Your confirmed trips will appear here. Start planning your next getaway!"
-            : tab === 'drafts'
-            ? "Trips you're working on will be saved here. Begin planning today!"
+            ? "All your planned trips will appear here. Start planning your next getaway!"
             : "Completed adventures will be stored here as cherished memories."}
         </p>
 
@@ -493,20 +505,23 @@ export default function TripDashboard() {
     loadTrips();
   }, [isAuthenticated, user?.id]);
 
+  // Simplified filtering - drafts are now included in "upcoming"
   const filterTrips = (tab: TabValue): Trip[] => {
     const now = new Date();
     switch (tab) {
       case 'upcoming': 
-        return trips.filter(t => 
-          ['booked', 'confirmed', 'planning'].includes(t.status) && 
-          t.startDate && new Date(t.startDate) > now
-        );
-      case 'drafts': 
-        return trips.filter(t => t.status === 'draft');
+        // All future trips regardless of status (draft, planning, booked)
+        return trips.filter(t => {
+          // Exclude completed/cancelled
+          if (t.status === 'completed' || t.status === 'cancelled') return false;
+          // Exclude past trips
+          if (t.endDate && new Date(t.endDate) < now) return false;
+          return true;
+        });
       case 'completed': 
         return trips.filter(t => 
           t.status === 'completed' || 
-          (t.status === 'booked' && t.endDate && new Date(t.endDate) < now)
+          (t.endDate && new Date(t.endDate) < now)
         );
       default: 
         return trips;
@@ -515,7 +530,6 @@ export default function TripDashboard() {
 
   const filteredTrips = filterTrips(activeTab);
   const upcomingCount = filterTrips('upcoming').length;
-  const draftsCount = filterTrips('drafts').length;
   const completedCount = filterTrips('completed').length;
 
   // Group trips by destination
@@ -607,13 +621,6 @@ export default function TripDashboard() {
                   Upcoming
                   {upcomingCount > 0 && (
                     <Badge variant="secondary" className="text-xs">{upcomingCount}</Badge>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="drafts" className="gap-2 px-4 py-2.5">
-                  <Edit3 className="h-4 w-4" />
-                  Drafts
-                  {draftsCount > 0 && (
-                    <Badge variant="secondary" className="text-xs">{draftsCount}</Badge>
                   )}
                 </TabsTrigger>
                 <TabsTrigger value="completed" className="gap-2 px-4 py-2.5">
