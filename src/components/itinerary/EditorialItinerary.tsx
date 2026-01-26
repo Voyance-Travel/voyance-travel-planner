@@ -1720,6 +1720,7 @@ export function EditorialItinerary({
             tripId={tripId}
             travelers={travelers}
             totalDays={days.length}
+            itineraryDays={days}
           />
         )}
 
