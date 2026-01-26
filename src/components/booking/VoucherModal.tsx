@@ -23,6 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { BookableActivity, getStateLabel, getStateColor } from '@/services/bookingStateMachine';
 import { formatPrice } from '@/utils/bookingUtils';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { useState } from 'react';
 
 interface VoucherModalProps {
@@ -67,7 +68,7 @@ export function VoucherModal({
             <DialogTitle>Booking Confirmation</DialogTitle>
           </div>
           <DialogDescription>
-            Your booking details for "{activity.title}"
+            Your booking details for "{sanitizeActivityName(activity.title)}"
           </DialogDescription>
         </DialogHeader>
 
@@ -111,7 +112,7 @@ export function VoucherModal({
 
           {/* Activity Details */}
           <div className="space-y-3">
-            <h4 className="font-medium">{activity.title}</h4>
+            <h4 className="font-medium">{sanitizeActivityName(activity.title)}</h4>
             
             {activity.description && (
               <p className="text-sm text-muted-foreground">{activity.description}</p>

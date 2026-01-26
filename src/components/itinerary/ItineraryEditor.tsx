@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import type { GeneratedDay, GeneratedActivity, TripOverview } from '@/hooks/useItineraryGeneration';
 
 // =============================================================================
@@ -156,7 +157,8 @@ function formatCurrency(amount: number | null | undefined): string {
 }
 
 function getActivityName(activity: GeneratedActivity): string {
-  return activity.title || (activity as { name?: string }).name || 'Activity';
+  const rawName = activity.title || (activity as { name?: string }).name || 'Activity';
+  return sanitizeActivityName(rawName);
 }
 
 function getActivityCost(activity: GeneratedActivity): number | null {

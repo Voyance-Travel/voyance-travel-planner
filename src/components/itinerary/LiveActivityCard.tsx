@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { useActivityFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 
 type ActivityStatus = 'upcoming' | 'current' | 'completed' | 'skipped';
 
@@ -152,7 +153,7 @@ export function LiveActivityCard({
               'font-semibold text-foreground',
               status === 'skipped' && 'line-through text-muted-foreground'
             )}>
-              {activity.name}
+              {sanitizeActivityName(activity.name)}
             </h4>
             
             {activity.description && (

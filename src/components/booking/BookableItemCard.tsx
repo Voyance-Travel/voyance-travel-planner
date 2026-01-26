@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import {
   BookableActivity,
   BookingItemState,
@@ -223,7 +224,7 @@ export function BookableItemCard({
           <Badge variant="outline" className={stateColor}>
             {stateLabel}
           </Badge>
-          <span className="font-medium text-sm">{activity.title}</span>
+          <span className="font-medium text-sm">{sanitizeActivityName(activity.title)}</span>
         </div>
         <div className="flex items-center gap-2">
           <PriceDisplay />
@@ -260,7 +261,7 @@ export function BookableItemCard({
                   </Badge>
                 )}
               </div>
-              <h3 className="font-semibold text-foreground">{activity.title}</h3>
+              <h3 className="font-semibold text-foreground">{sanitizeActivityName(activity.title)}</h3>
               {activity.description && (
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                   {activity.description}

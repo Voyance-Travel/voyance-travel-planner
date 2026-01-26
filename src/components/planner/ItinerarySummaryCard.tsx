@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 
 interface Activity {
   id: string;
@@ -202,7 +203,7 @@ export default function ItinerarySummaryCard({
                                 <div className="flex items-start justify-between">
                                   <div>
                                     <h4 className="font-medium text-foreground">
-                                      {activity.title}
+                                      {sanitizeActivityName(activity.title)}
                                     </h4>
                                     <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                                       <span className="flex items-center gap-1">

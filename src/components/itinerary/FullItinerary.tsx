@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
   FlightInfo, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
@@ -469,7 +470,7 @@ function ActivityCard({
               </>
             )}
           </div>
-          <h4 className="font-medium text-sm">{activity.title}</h4>
+          <h4 className="font-medium text-sm">{sanitizeActivityName(activity.title)}</h4>
           <p className="text-xs mt-1 opacity-80">{activity.description}</p>
           <div className="flex items-center gap-2 mt-2">
             <MapPin className="h-3 w-3 opacity-60" />

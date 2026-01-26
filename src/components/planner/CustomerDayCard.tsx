@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
 import { formatWeatherCondition } from '@/utils/textFormatting';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
 
@@ -221,7 +222,7 @@ export default function CustomerDayCard({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className={cn("font-medium", style.text)}>{activity.title}</p>
+                                <p className={cn("font-medium", style.text)}>{sanitizeActivityName(activity.title)}</p>
                                 <p className="text-sm text-muted-foreground mt-0.5">
                                   {activity.description}
                                 </p>

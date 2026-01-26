@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLovableItinerary, GenerationPreferences } from '@/hooks/useLovableItinerary';
+import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import type { DayItinerary } from '@/types/itinerary';
 
 interface ItineraryGeneratorStreamingProps {
@@ -238,7 +239,7 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
                 {activity.time}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{activity.title}</div>
+                <div className="font-medium truncate">{sanitizeActivityName(activity.title)}</div>
                 <div className="text-sm text-muted-foreground flex items-center gap-1">
                   <MapPin className="w-3 h-3" />
                   <span className="truncate">{activity.location.name}</span>
