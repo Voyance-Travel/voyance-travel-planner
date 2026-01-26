@@ -20,6 +20,10 @@ interface ItineraryContextFormProps {
   onContinue: (data: ItineraryContextData) => void;
   onSkip: () => void;
   isLoading?: boolean;
+  // Pre-populated values from Start page (if available)
+  initialHotelLocation?: string;
+  initialArrivalTime?: string;
+  initialDepartureTime?: string;
 }
 
 export default function ItineraryContextForm({
@@ -29,10 +33,13 @@ export default function ItineraryContextForm({
   onContinue,
   onSkip,
   isLoading,
+  initialHotelLocation,
+  initialArrivalTime,
+  initialDepartureTime,
 }: ItineraryContextFormProps) {
-  const [hotelLocation, setHotelLocation] = useState('');
-  const [arrivalTime, setArrivalTime] = useState('');
-  const [departureTime, setDepartureTime] = useState('');
+  const [hotelLocation, setHotelLocation] = useState(initialHotelLocation || '');
+  const [arrivalTime, setArrivalTime] = useState(initialArrivalTime || '');
+  const [departureTime, setDepartureTime] = useState(initialDepartureTime || '');
 
   const hasAnyData = hotelLocation || arrivalTime || departureTime;
 

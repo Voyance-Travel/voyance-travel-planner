@@ -45,6 +45,7 @@ export default function PlannerItinerary() {
   }, [searchParams, state.tripId, saveTrip, navigate]);
 
   // Build trip details from context (works for both anonymous and authenticated users)
+  // Include flight_selection data to avoid re-asking for times
   const [tripDetails, setTripDetails] = useState({
     name: state.basics.destination ? `Trip to ${state.basics.destination}` : '',
     destination: state.basics.destination || '',
@@ -52,6 +53,8 @@ export default function PlannerItinerary() {
     startDate: state.basics.startDate || '',
     endDate: state.basics.endDate || '',
     travelers: state.basics.travelers || 1,
+    flightSelection: state.flights ? (state.flights as any) : undefined,
+    hotelLocation: state.hotel?.name || state.hotel?.neighborhood || undefined,
   });
 
   // Update trip details from context when it changes
@@ -64,9 +67,11 @@ export default function PlannerItinerary() {
         startDate: state.basics.startDate || '',
         endDate: state.basics.endDate || '',
         travelers: state.basics.travelers || 1,
+        flightSelection: state.flights ? (state.flights as any) : undefined,
+        hotelLocation: state.hotel?.name || state.hotel?.neighborhood || undefined,
       });
     }
-  }, [state.basics]);
+  }, [state.basics, state.flights, state.hotel]);
 
   // If authenticated user with tripId but no context data, fetch from Supabase
   useEffect(() => {
@@ -79,6 +84,10 @@ export default function PlannerItinerary() {
           .single();
 
         if (data && !error) {
+          // Extract flight_selection and hotel data to avoid re-asking
+          const flightSelection = data.flight_selection as any;
+          const hotelSelection = data.hotel_selection as any;
+          
           setTripDetails({
             name: data.name,
             destination: data.destination,
@@ -86,6 +95,8 @@ export default function PlannerItinerary() {
             startDate: data.start_date,
             endDate: data.end_date,
             travelers: data.travelers || 1,
+            flightSelection: flightSelection || undefined,
+            hotelLocation: hotelSelection?.name || hotelSelection?.neighborhood || undefined,
           });
         }
       };
