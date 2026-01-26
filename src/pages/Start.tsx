@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown, Clipboard } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -27,7 +27,7 @@ import {
 } from '@/services/locationSearchAPI';
 import { searchHotelsByName, type HotelSearchByNameResult } from '@/services/hotelAPI';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
-import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
+import { FlightDetailsModal, type FlightDetails, type FlightSegment } from '@/components/itinerary/FlightDetailsModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -552,10 +552,9 @@ export default function Start() {
   const [hotelSelection, setHotelSelection] = useState<HotelSelectionData | null>(null);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [showBudget, setShowBudget] = useState(!!plannerState.basics.budgetAmount);
-  // Flight times for itinerary-only mode
-  const [arrivalTime, setArrivalTime] = useState('');
-  const [departureTime, setDepartureTime] = useState('');
-  const [showFlightImport, setShowFlightImport] = useState(false);
+  // Flight details for itinerary-only mode
+  const [flightDetails, setFlightDetails] = useState<FlightDetails | null>(null);
+  const [showFlightDetailsModal, setShowFlightDetailsModal] = useState(false);
   const today = startOfToday();
 
   // Prefill origin city from user preferences (home_airport or flight_preferences)
@@ -893,30 +892,32 @@ export default function Start() {
         }
         
         // Save flight times with origin/destination for itinerary generation
-        if (arrivalTime || departureTime || originSelection.cityName) {
+        if (flightDetails || originSelection.cityName) {
           updatePayload.flight_selection = {
             outbound: {
               departure: originSelection.cityName ? {
-                airport: originSelection.airportCodes?.[0] || originSelection.cityName,
+                airport: flightDetails?.outbound?.departureAirport || originSelection.airportCodes?.[0] || originSelection.cityName,
                 city: originSelection.cityName,
+                time: flightDetails?.outbound?.departureTime,
               } : undefined,
               arrival: {
-                airport: destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
+                airport: flightDetails?.outbound?.arrivalAirport || destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
                 city: destinationSelection.cityName,
-                time: arrivalTime || undefined,
+                time: flightDetails?.outbound?.arrivalTime || undefined,
               },
             },
-            return: {
+            return: flightDetails?.return ? {
               departure: {
-                airport: destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
+                airport: flightDetails.return.departureAirport || destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
                 city: destinationSelection.cityName,
-                time: departureTime || undefined,
+                time: flightDetails.return.departureTime || undefined,
               },
               arrival: originSelection.cityName ? {
-                airport: originSelection.airportCodes?.[0] || originSelection.cityName,
+                airport: flightDetails.return.arrivalAirport || originSelection.airportCodes?.[0] || originSelection.cityName,
                 city: originSelection.cityName,
+                time: flightDetails.return.arrivalTime,
               } : undefined,
-            },
+            } : undefined,
           };
         }
         
@@ -1080,62 +1081,83 @@ export default function Start() {
                 )}
               </div>
 
-              {/* Flight Times - Only for itinerary-only mode */}
+              {/* Flight Details - Itinerary-only mode */}
               {itineraryOnlyMode && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                      Flight times
-                    </span>
+                  <span className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                    Flight Details
+                  </span>
+                  
+                  {flightDetails ? (
+                    <div 
+                      className="p-4 rounded-lg border border-border bg-muted/30 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => setShowFlightDetailsModal(true)}
+                    >
+                      {/* Outbound summary */}
+                      <div className="flex items-center gap-2">
+                        <Plane className="h-4 w-4 text-primary rotate-[-45deg]" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">
+                            {flightDetails.outbound.departureAirport || 'TBD'} → {flightDetails.outbound.arrivalAirport || destinationSelection.cityName}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {flightDetails.outbound.departureTime && `Departs ${flightDetails.outbound.departureTime}`}
+                            {flightDetails.outbound.departureTime && flightDetails.outbound.arrivalTime && ' · '}
+                            {flightDetails.outbound.arrivalTime && `Arrives ${flightDetails.outbound.arrivalTime}`}
+                            {startDate && ` on ${format(startDate, 'MMM d')}`}
+                          </div>
+                          {flightDetails.outboundLayovers && flightDetails.outboundLayovers.length > 0 && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              + {flightDetails.outboundLayovers.length} connection(s)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Return summary */}
+                      {flightDetails.return && (
+                        <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                          <Plane className="h-4 w-4 text-primary rotate-45" />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">
+                              {flightDetails.return.departureAirport || destinationSelection.cityName} → {flightDetails.return.arrivalAirport || 'Home'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {flightDetails.return.departureTime && `Departs ${flightDetails.return.departureTime}`}
+                              {flightDetails.return.departureTime && flightDetails.return.arrivalTime && ' · '}
+                              {flightDetails.return.arrivalTime && `Arrives ${flightDetails.return.arrivalTime}`}
+                              {endDate && ` on ${format(endDate, 'MMM d')}`}
+                            </div>
+                            {flightDetails.returnLayovers && flightDetails.returnLayovers.length > 0 && (
+                              <div className="text-[10px] text-muted-foreground mt-0.5">
+                                + {flightDetails.returnLayovers.length} connection(s)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <p className="text-[10px] text-primary text-center pt-1">
+                        Click to edit flight details
+                      </p>
+                    </div>
+                  ) : (
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-primary hover:text-primary/80"
-                      onClick={() => setShowFlightImport(true)}
+                      variant="outline"
+                      className="w-full h-12 justify-start text-muted-foreground"
+                      onClick={() => setShowFlightDetailsModal(true)}
                     >
-                      <Clipboard className="h-3 w-3 mr-1.5" />
-                      Paste from confirmation
+                      <Plane className="h-4 w-4 mr-2 rotate-[-45deg]" />
+                      Add flight details (optional)
                     </Button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Plane className="h-3.5 w-3.5 rotate-[-45deg]" />
-                        Arrival time
-                      </label>
-                      <Input
-                        type="time"
-                        value={arrivalTime}
-                        onChange={(e) => setArrivalTime(e.target.value)}
-                        className="h-12"
-                        placeholder="When you land"
-                      />
-                      {startDate && (
-                        <p className="text-[10px] text-muted-foreground">
-                          When you land on {format(startDate, 'MMM d')}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Plane className="h-3.5 w-3.5 rotate-45" />
-                        Departure time
-                      </label>
-                      <Input
-                        type="time"
-                        value={departureTime}
-                        onChange={(e) => setDepartureTime(e.target.value)}
-                        className="h-12"
-                        placeholder="When you leave"
-                      />
-                      {endDate && (
-                        <p className="text-[10px] text-muted-foreground">
-                          When you leave on {format(endDate, 'MMM d')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  )}
+                  
+                  {startDate && !flightDetails && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Adding arrival time helps plan Day 1 activities
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1540,18 +1562,18 @@ export default function Start() {
         onGuestsConfirmed={handleGuestsConfirmed}
       />
 
-      {/* Flight Import Modal */}
-      <FlightImportModal
-        open={showFlightImport}
-        onOpenChange={setShowFlightImport}
-        onImport={(outbound) => {
-          // Set times from imported flight
-          if (outbound.arrivalTime) setArrivalTime(outbound.arrivalTime);
-          if (outbound.departureTime) setDepartureTime(outbound.departureTime);
-          toast.success('Flight times imported!');
+      {/* Flight Details Modal */}
+      <FlightDetailsModal
+        open={showFlightDetailsModal}
+        onOpenChange={setShowFlightDetailsModal}
+        onSave={(details) => {
+          setFlightDetails(details);
+          toast.success('Flight details saved!');
         }}
+        initialDetails={flightDetails || undefined}
         tripStartDate={startDate ? format(startDate, 'yyyy-MM-dd') : undefined}
         tripEndDate={endDate ? format(endDate, 'yyyy-MM-dd') : undefined}
+        destination={destinationSelection.cityName}
       />
     </MainLayout>
   );
