@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Instagram, Facebook, ArrowRight } from 'lucide-react';
+import { Instagram, Facebook } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 
@@ -15,6 +15,7 @@ const footerLinks = {
     { label: 'Destinations', href: ROUTES.DESTINATIONS },
     { label: 'Travel Guides', href: ROUTES.GUIDES },
     { label: 'Travel Quiz', href: ROUTES.QUIZ },
+    { label: 'Travel Tips', href: ROUTES.TRAVEL_TIPS },
   ],
   support: [
     { label: 'Help Center', href: ROUTES.HELP_CENTER },
@@ -44,9 +45,9 @@ export default function Footer() {
   return (
     <footer className="bg-muted/30 border-t border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 lg:gap-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 lg:gap-12">
           {/* Brand Column */}
-          <div className="col-span-2 md:col-span-4 lg:col-span-1">
+          <div className="col-span-2 md:col-span-1">
             <Link to={ROUTES.HOME} className="flex items-center mb-4">
               <VoyanceWordmark size="md" />
             </Link>
@@ -120,24 +121,6 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-          </div>
-
-          {/* Travel Tips Link */}
-          <div className="col-span-2 md:col-span-4 lg:col-span-1">
-            <Link 
-              to={ROUTES.TRAVEL_TIPS}
-              className="group flex items-center gap-3 p-4 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-xl transition-colors"
-            >
-              <div className="flex-1">
-                <h4 className="font-medium text-foreground group-hover:text-primary transition-colors">
-                  Travel Tips
-                </h4>
-                <p className="text-sm text-muted-foreground">
-                  Weekly inspiration, no spam
-                </p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-            </Link>
           </div>
         </div>
 
