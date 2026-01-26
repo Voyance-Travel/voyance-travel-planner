@@ -3567,10 +3567,14 @@ interface AirportGamePlanProps {
 
 function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavigateToBookings }: AirportGamePlanProps) {
   const outbound = flightSelection?.outbound;
-  const hasFlight = !!outbound;
   const hasHotel = !!hotelSelection?.name;
   const [transferData, setTransferData] = useState<TransferData | null>(null);
   const [isLoadingTransfer, setIsLoadingTransfer] = useState(false);
+  
+  // Determine flight completeness: need arrival time for game plan to be useful
+  const hasAnyFlightData = !!outbound;
+  const hasCompleteFlightData = !!(outbound?.arrival?.time || outbound?.departure?.time);
+  const hasFlight = hasCompleteFlightData; // Only show game plan if we have times
   
   // Fetch dynamic transfer data from Google Maps Distance Matrix API
   useEffect(() => {
@@ -3780,7 +3784,35 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
               </div>
             )}
           </>
+        ) : hasAnyFlightData ? (
+          // Partial flight data - show what we have and prompt to finish
+          <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                <Plane className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Finish Flight Details</p>
+                <p className="text-xs text-muted-foreground">
+                  {outbound?.airline ? `${outbound.airline} ` : ''}
+                  {outbound?.flightNumber ? `${outbound.flightNumber} • ` : ''}
+                  Add times for your personalized game plan
+                </p>
+              </div>
+            </div>
+            {onNavigateToBookings && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onNavigateToBookings}
+                className="shrink-0"
+              >
+                Finish Details
+              </Button>
+            )}
+          </div>
         ) : (
+          // No flight data at all
           <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
