@@ -47,12 +47,15 @@ export default function ShareTripModal({ open, onOpenChange, tripId, tripName }:
   };
 
   const generateToken = () => {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let token = '';
-    for (let i = 0; i < 12; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
+    // Use crypto.getRandomValues for cryptographically secure token generation
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    // Convert to base64url format (URL-safe)
+    const base64 = btoa(String.fromCharCode(...array))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+    return base64.slice(0, 16); // 16 character token
   };
 
   const toggleSharing = async () => {

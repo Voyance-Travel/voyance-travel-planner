@@ -5519,7 +5519,9 @@ export type Database = {
       generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
-      generate_share_token: { Args: never; Returns: string }
+      generate_share_token:
+        | { Args: never; Returns: string }
+        | { Args: { size?: number }; Returns: string }
       get_intake_account: {
         Args: { p_intake_token: string }
         Returns: {
