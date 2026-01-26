@@ -21,6 +21,7 @@ import { NotificationBell } from '@/components/common/NotificationBell';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 
 const navLinks = [
+  { href: ROUTES.DEMO, label: 'See Demo', highlight: true },
   { href: ROUTES.EXPLORE, label: 'Explore' },
   { href: ROUTES.DESTINATIONS, label: 'Destinations' },
   { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
@@ -118,7 +119,11 @@ export default function TopNav() {
                 key={link.href}
                 to={link.href}
                 className={`text-sm font-medium transition-colors hover:opacity-80 ${
-                  location.pathname === link.href
+                  'highlight' in link && link.highlight
+                    ? isTransparent
+                      ? 'text-white bg-white/15 px-3 py-1.5 rounded-full'
+                      : 'text-primary bg-primary/10 px-3 py-1.5 rounded-full'
+                    : location.pathname === link.href
                     ? isTransparent
                       ? 'text-white'
                       : 'text-primary'
@@ -352,7 +357,9 @@ export default function TopNav() {
                   key={link.href}
                   to={link.href}
                   className={`block py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === link.href
+                    'highlight' in link && link.highlight
+                      ? 'bg-primary/10 text-primary border border-primary/20'
+                      : location.pathname === link.href
                       ? 'bg-accent/10 text-primary'
                       : 'text-muted-foreground hover:bg-muted'
                   }`}
