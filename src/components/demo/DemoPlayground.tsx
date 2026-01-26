@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Clock, Lock, RefreshCw, Star, 
-  ChevronDown, ChevronUp, Sparkles, 
-  DollarSign, Sun, Cloud, Utensils, Camera, Compass, Hotel, Car
+  ChevronDown, Sparkles, 
+  DollarSign, Sun, Cloud, Utensils, Camera, Compass, Hotel, Car,
+  Route, MessageSquare, CreditCard, Heart, Zap, ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,12 +20,52 @@ const DESTINATIONS = [
   { slug: 'iceland-adventure', name: 'Iceland', subtitle: 'Adventure & Nature', image: 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=600' },
 ];
 
+const DEMO_FEATURES = [
+  { 
+    icon: Lock, 
+    label: 'Lock Favorites', 
+    description: 'Keep activities you love',
+    color: 'text-primary'
+  },
+  { 
+    icon: RefreshCw, 
+    label: 'Smart Swap', 
+    description: 'AI suggests alternatives',
+    color: 'text-emerald-600'
+  },
+  { 
+    icon: Star, 
+    label: 'Real Reviews', 
+    description: 'Aggregated from 3 sources',
+    color: 'text-amber-500'
+  },
+  { 
+    icon: Route, 
+    label: 'Route Optimization', 
+    description: 'Save 45+ mins daily',
+    color: 'text-blue-600'
+  },
+  { 
+    icon: CreditCard, 
+    label: 'One-Click Booking', 
+    description: 'Reserve directly',
+    color: 'text-violet-600'
+  },
+  { 
+    icon: Heart, 
+    label: 'Learns Your Taste', 
+    description: 'Gets smarter over time',
+    color: 'text-rose-500'
+  },
+];
+
 export function DemoPlayground() {
   const [selectedDest, setSelectedDest] = useState(DESTINATIONS[0]);
   const [itinerary, setItinerary] = useState<ReturnType<typeof getItineraryBySlug>>(null);
   const [lockedActivities, setLockedActivities] = useState<Set<string>>(new Set());
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]));
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [showReviewsFor, setShowReviewsFor] = useState<string | null>(null);
 
   useEffect(() => {
     const data = getItineraryBySlug(selectedDest.slug);
@@ -45,14 +86,15 @@ export function DemoPlayground() {
     });
   };
 
-  const handleGenerate = () => {
-    setIsGenerating(true);
+  const handleOptimize = () => {
+    setIsOptimizing(true);
     setTimeout(() => {
-      setIsGenerating(false);
-      toast.success('Itinerary refreshed!', {
-        description: 'Activities have been optimized for your preferences.',
+      setIsOptimizing(false);
+      toast.success('Routes optimized!', {
+        description: 'Saved 47 minutes of travel time today.',
+        icon: <Route className="h-4 w-4" />,
       });
-    }, 1800);
+    }, 1500);
   };
 
   const toggleLock = (activityId: string, activityTitle: string) => {
@@ -60,16 +102,10 @@ export function DemoPlayground() {
       const next = new Set(prev);
       if (next.has(activityId)) {
         next.delete(activityId);
-        toast('Unlocked', { 
-          description: `"${activityTitle}" can now be swapped`,
-          duration: 2000,
-        });
+        toast('Unlocked', { description: `"${activityTitle}" can be swapped` });
       } else {
         next.add(activityId);
-        toast.success('Locked', { 
-          description: `"${activityTitle}" will stay in your itinerary`,
-          duration: 2000,
-        });
+        toast.success('Locked', { description: `"${activityTitle}" stays in your trip` });
       }
       return next;
     });
@@ -77,8 +113,23 @@ export function DemoPlayground() {
 
   const handleSwap = (activityTitle: string) => {
     toast.info('Finding alternatives...', {
-      description: 'In the full app, you\'d see curated replacements here.',
+      description: 'Similar activities • Different vibes • Budget options',
       duration: 3000,
+    });
+  };
+
+  const handleViewReviews = (activityTitle: string, activityId: string) => {
+    setShowReviewsFor(activityId);
+    setTimeout(() => setShowReviewsFor(null), 3000);
+  };
+
+  const handleBook = (activityTitle: string) => {
+    toast.success('Booking available!', {
+      description: `In the full app, you'd book "${activityTitle}" directly.`,
+      action: {
+        label: 'Learn More',
+        onClick: () => {},
+      },
     });
   };
 
@@ -89,7 +140,7 @@ export function DemoPlayground() {
 
   return (
     <section id="playground" className="py-20 bg-background">
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="max-w-5xl mx-auto px-4">
         {/* Section header */}
         <div className="text-center mb-10">
           <Badge variant="outline" className="mb-4 px-3 py-1 text-xs">
@@ -97,198 +148,257 @@ export function DemoPlayground() {
             Interactive Playground
           </Badge>
           <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3">
-            Explore Sample Itineraries
+            Explore the Full Experience
           </h2>
-          <p className="text-muted-foreground max-w-md mx-auto">
-            Lock activities you love. Swap ones that don't fit. This is exactly how our planner works.
+          <p className="text-muted-foreground max-w-lg mx-auto">
+            This is exactly how our planner works. Try every feature below.
           </p>
         </div>
 
-        {/* Destination selector */}
-        <div className="grid grid-cols-4 gap-2 mb-6">
-          {DESTINATIONS.map((dest) => (
-            <button
-              key={dest.slug}
-              onClick={() => setSelectedDest(dest)}
-              className={cn(
-                "relative rounded-lg overflow-hidden transition-all aspect-[4/3] group",
-                selectedDest.slug === dest.slug
-                  ? "ring-2 ring-primary shadow-lg"
-                  : "opacity-70 hover:opacity-100"
-              )}
+        {/* Feature highlights */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
+          {DEMO_FEATURES.map((feature, idx) => (
+            <motion.div
+              key={feature.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="text-center p-3 rounded-xl bg-muted/30 border border-border/50 hover:bg-muted/50 transition-colors"
             >
-              <img 
-                src={dest.image} 
-                alt={dest.name}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 p-2 text-white text-left">
-                <p className="font-medium text-sm leading-tight">{dest.name}</p>
-                <p className="text-[10px] text-white/70 hidden sm:block">{dest.subtitle}</p>
-              </div>
-            </button>
+              <feature.icon className={cn("h-5 w-5 mx-auto mb-2", feature.color)} />
+              <p className="text-xs font-medium">{feature.label}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 hidden sm:block">{feature.description}</p>
+            </motion.div>
           ))}
         </div>
 
-        {/* Trip overview card */}
-        <Card className="mb-4 overflow-hidden border-border/50">
-          <div className="relative h-28 sm:h-36">
-            <img 
-              src={selectedDest.image} 
-              alt={itinerary.destination}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/30" />
-            <div className="absolute inset-0 p-5 flex flex-col justify-end">
-              <h3 className="text-xl sm:text-2xl font-serif font-bold text-white">{itinerary.destination}</h3>
-              <div className="flex items-center gap-3 text-white/80 text-sm mt-1">
-                <span>{itinerary.days.length} days</span>
-                <span className="w-1 h-1 rounded-full bg-white/50" />
-                <span className="capitalize">{itinerary.pace} pace</span>
-              </div>
-            </div>
-          </div>
-          <div className="p-4 flex items-center justify-between border-t border-border/50 bg-card">
-            <div className="flex items-center gap-5 text-sm">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <DollarSign className="h-4 w-4 text-primary" />
-                <span className="font-medium text-foreground">${totalCost.toLocaleString()}</span>
-                <span className="hidden sm:inline">estimated</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <MapPin className="h-4 w-4 text-primary" />
-                <span>{totalActivities} activities</span>
-              </div>
-            </div>
-            <Button 
-              onClick={handleGenerate} 
-              disabled={isGenerating}
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-            >
-              {isGenerating ? (
-                <>
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </motion.div>
-                  <span className="hidden sm:inline">Refreshing...</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Refresh</span>
-                </>
-              )}
-            </Button>
-          </div>
-        </Card>
-
-        {/* Days */}
-        <div className="space-y-3">
-          {itinerary.days.slice(0, 3).map((day) => {
-            const isExpanded = expandedDays.has(day.dayNumber);
-            
-            return (
-              <Card key={day.dayNumber} className="overflow-hidden border-border/50">
-                {/* Day header */}
+        <div className="grid lg:grid-cols-[1fr_280px] gap-6">
+          {/* Main itinerary */}
+          <div>
+            {/* Destination selector */}
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {DESTINATIONS.map((dest) => (
                 <button
-                  onClick={() => toggleDay(day.dayNumber)}
-                  className="w-full text-left"
+                  key={dest.slug}
+                  onClick={() => setSelectedDest(dest)}
+                  className={cn(
+                    "relative rounded-lg overflow-hidden transition-all aspect-[4/3] group",
+                    selectedDest.slug === dest.slug
+                      ? "ring-2 ring-primary shadow-lg"
+                      : "opacity-60 hover:opacity-100"
+                  )}
                 >
-                  <CardHeader className="p-4 hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center font-bold text-primary-foreground shadow-sm">
-                        {day.dayNumber}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-serif text-base font-semibold truncate">{day.theme}</h4>
+                  <img src={dest.image} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-2 text-white text-left">
+                    <p className="font-medium text-sm leading-tight">{dest.name}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Trip overview */}
+            <Card className="mb-4 overflow-hidden border-border/50">
+              <div className="relative h-24">
+                <img src={selectedDest.image} alt={itinerary.destination} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/30" />
+                <div className="absolute inset-0 p-4 flex flex-col justify-end">
+                  <h3 className="text-lg font-serif font-bold text-white">{itinerary.destination}</h3>
+                  <p className="text-white/80 text-sm">{itinerary.days.length} days • {itinerary.pace} pace</p>
+                </div>
+              </div>
+              <div className="p-3 flex items-center justify-between border-t border-border/50 bg-card">
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <DollarSign className="h-4 w-4 text-primary" />
+                    <span className="font-medium">${totalCost.toLocaleString()}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    {totalActivities} activities
+                  </span>
+                </div>
+                <Button 
+                  onClick={handleOptimize} 
+                  disabled={isOptimizing}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                >
+                  {isOptimizing ? (
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+                      <Route className="h-3.5 w-3.5" />
+                    </motion.div>
+                  ) : (
+                    <Route className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">Optimize</span>
+                </Button>
+              </div>
+            </Card>
+
+            {/* Days */}
+            <div className="space-y-3">
+              {itinerary.days.slice(0, 3).map((day) => {
+                const isExpanded = expandedDays.has(day.dayNumber);
+                
+                return (
+                  <Card key={day.dayNumber} className="overflow-hidden border-border/50">
+                    <button onClick={() => toggleDay(day.dayNumber)} className="w-full text-left">
+                      <CardHeader className="p-3 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center font-bold text-primary-foreground text-sm">
+                            {day.dayNumber}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-serif text-sm font-semibold truncate">{day.theme}</h4>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                              <span>{day.activities.length} activities</span>
+                              {day.weather && (
+                                <span className="flex items-center gap-0.5">
+                                  {day.weather.condition === 'sunny' ? <Sun className="h-3 w-3 text-amber-500" /> : <Cloud className="h-3 w-3" />}
+                                  {day.weather.high}°
+                                </span>
+                              )}
+                              {day.totalCost && <span className="text-primary font-medium">${day.totalCost}</span>}
+                            </div>
+                          </div>
+                          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
                         </div>
-                        <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-0.5">
-                          <span>{day.activities.length} activities</span>
-                          {day.weather && (
-                            <>
-                              <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                              <span className="flex items-center gap-1">
-                                {day.weather.condition === 'sunny' ? (
-                                  <Sun className="h-3 w-3 text-amber-500" />
-                                ) : (
-                                  <Cloud className="h-3 w-3 text-slate-400" />
-                                )}
-                                {day.weather.high}°
-                              </span>
-                            </>
-                          )}
-                          {day.totalCost && day.totalCost > 0 && (
-                            <>
-                              <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                              <span className="text-primary font-medium">${day.totalCost}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <ChevronDown className={cn(
-                        "h-5 w-5 text-muted-foreground transition-transform",
-                        isExpanded && "rotate-180"
-                      )} />
-                    </div>
-                  </CardHeader>
+                      </CardHeader>
+                    </button>
+
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <CardContent className="p-0">
+                            <div className="border-t border-border/50">
+                              {day.activities.slice(0, 5).map((activity, idx) => (
+                                <ActivityRow
+                                  key={activity.id}
+                                  activity={activity}
+                                  isLocked={lockedActivities.has(activity.id)}
+                                  isLast={idx === Math.min(day.activities.length - 1, 4)}
+                                  showingReviews={showReviewsFor === activity.id}
+                                  onLock={() => toggleLock(activity.id, activity.title)}
+                                  onSwap={() => handleSwap(activity.title)}
+                                  onViewReviews={() => handleViewReviews(activity.title, activity.id)}
+                                  onBook={() => handleBook(activity.title)}
+                                />
+                              ))}
+                            </div>
+                          </CardContent>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sidebar - Feature demos */}
+          <div className="space-y-4">
+            {/* Quick actions demo */}
+            <Card className="border-border/50">
+              <CardHeader className="p-4 pb-2">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  Try These Features
+                </h4>
+              </CardHeader>
+              <CardContent className="p-4 pt-2 space-y-3">
+                <button 
+                  onClick={() => toggleLock('bali-1-5', 'Sunset Yoga')}
+                  className="w-full text-left p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Lock an Activity</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Click lock icon on any activity</p>
                 </button>
 
-                {/* Activities */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                    >
-                      <CardContent className="p-0">
-                        <div className="border-t border-border/50">
-                          {day.activities.slice(0, 6).map((activity, idx) => (
-                            <ActivityRow
-                              key={activity.id}
-                              activity={activity}
-                              isLocked={lockedActivities.has(activity.id)}
-                              isLast={idx === Math.min(day.activities.length - 1, 5)}
-                              onLock={() => toggleLock(activity.id, activity.title)}
-                              onSwap={() => handleSwap(activity.title)}
-                            />
-                          ))}
-                          {day.activities.length > 6 && (
-                            <div className="px-4 py-3 text-center text-xs text-muted-foreground border-t border-border/30 bg-muted/20">
-                              + {day.activities.length - 6} more activities
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </Card>
-            );
-          })}
+                <button 
+                  onClick={() => handleSwap('Temple Visit')}
+                  className="w-full text-left p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 text-emerald-600" />
+                    <span className="text-sm font-medium">Swap Activity</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Get AI-curated alternatives</p>
+                </button>
 
-          {itinerary.days.length > 3 && (
-            <div className="text-center py-4">
-              <p className="text-sm text-muted-foreground">
-                + {itinerary.days.length - 3} more days in full itinerary
-              </p>
-            </div>
-          )}
+                <button 
+                  onClick={handleOptimize}
+                  className="w-full text-left p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Route className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium">Optimize Routes</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Save walking time between stops</p>
+                </button>
+              </CardContent>
+            </Card>
+
+            {/* Reviews preview */}
+            <Card className="border-border/50 overflow-hidden">
+              <CardHeader className="p-4 pb-2">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-500" />
+                  Aggregated Reviews
+                </h4>
+              </CardHeader>
+              <CardContent className="p-4 pt-2">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">🔍 Google</span>
+                    <span className="text-muted-foreground">🦉 TripAdvisor</span>
+                    <span className="text-muted-foreground">📍 Foursquare</span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+                    <div className="flex items-center gap-1 mb-1">
+                      {[1,2,3,4,5].map(i => (
+                        <Star key={i} className={cn("h-3 w-3", i <= 4 ? "fill-amber-500 text-amber-500" : "text-muted-foreground")} />
+                      ))}
+                      <span className="text-xs font-medium ml-1">4.8</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground italic">"Absolutely magical experience..."</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">— From 2,847 reviews</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Personalization */}
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Heart className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-medium">Learns Your Taste</h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Every lock and swap teaches our AI what you love. Your future trips get even better.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
-        {/* Tip */}
-        <div className="mt-6 text-center">
+        {/* Hint */}
+        <div className="mt-8 text-center">
           <p className="text-xs text-muted-foreground inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50">
             <Lock className="h-3 w-3" />
-            Click lock to keep • Click swap to replace
+            Click any activity's lock or swap icon to try it
           </p>
         </div>
       </div>
@@ -300,8 +410,11 @@ function ActivityRow({
   activity, 
   isLocked, 
   isLast,
+  showingReviews,
   onLock, 
-  onSwap 
+  onSwap,
+  onViewReviews,
+  onBook,
 }: { 
   activity: {
     id: string;
@@ -318,8 +431,11 @@ function ActivityRow({
   };
   isLocked: boolean;
   isLast: boolean;
+  showingReviews: boolean;
   onLock: () => void;
   onSwap: () => void;
+  onViewReviews: () => void;
+  onBook: () => void;
 }) {
   const getTypeConfig = (type: string) => {
     const configs: Record<string, { label: string; icon: React.ReactNode; bg: string; text: string }> = {
@@ -336,48 +452,77 @@ function ActivityRow({
   const config = getTypeConfig(activity.type);
   const isTransport = activity.type === 'transportation';
   const thumbnail = activity.photos?.[0];
+  const isBookable = ['dining', 'cultural', 'activity', 'relaxation'].includes(activity.type) && activity.rating;
 
   return (
     <div className={cn(
-      "flex items-stretch transition-colors",
+      "flex items-stretch transition-colors relative",
       !isLast && "border-b border-border/30",
-      isLocked ? "bg-primary/5" : "hover:bg-muted/30"
+      isLocked ? "bg-primary/5" : "hover:bg-muted/20"
     )}>
+      {/* Reviews overlay */}
+      <AnimatePresence>
+        {showingReviews && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute inset-x-0 top-0 z-10 p-3 bg-card border-b border-amber-500/30 shadow-lg"
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5">
+                {[1,2,3,4,5].map(i => (
+                  <Star key={i} className={cn("h-3 w-3", i <= 4 ? "fill-amber-500 text-amber-500" : "text-muted-foreground/30")} />
+                ))}
+              </div>
+              <span className="text-xs font-medium">4.8 from 847 reviews</span>
+              <span className="text-[10px] text-muted-foreground">— Google, TripAdvisor, Foursquare</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Time column */}
-      <div className="w-[72px] shrink-0 py-3 px-3 border-r border-border/30 bg-muted/20">
-        <p className="text-sm font-medium text-foreground">{activity.time}</p>
-        <p className="text-[10px] text-muted-foreground mt-0.5">{activity.duration}</p>
+      <div className="w-[68px] shrink-0 py-2.5 px-2.5 border-r border-border/30 bg-muted/20">
+        <p className="text-xs font-medium text-foreground">{activity.time}</p>
+        <p className="text-[10px] text-muted-foreground">{activity.duration}</p>
       </div>
 
       {/* Thumbnail */}
       {!isTransport && thumbnail && (
-        <div className="w-16 h-16 shrink-0 m-2 rounded-lg overflow-hidden bg-muted">
-          <img
-            src={thumbnail}
-            alt=""
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
+        <div className="w-14 h-14 shrink-0 m-2 rounded-md overflow-hidden bg-muted">
+          <img src={thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
         </div>
       )}
 
       {/* Content */}
-      <div className={cn("flex-1 py-3 min-w-0", thumbnail && !isTransport ? "pl-1 pr-3" : "px-3")}>
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium", config.bg, config.text)}>
+      <div className={cn("flex-1 py-2.5 min-w-0", thumbnail && !isTransport ? "pl-0.5 pr-2" : "px-2.5")}>
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium", config.bg, config.text)}>
             {config.icon}
             {config.label}
           </span>
           {activity.rating && activity.rating > 0 && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600">
+            <button 
+              onClick={onViewReviews}
+              className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 hover:text-amber-700 transition-colors"
+            >
               <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
               {activity.rating.toFixed(1)}
-            </span>
+            </button>
+          )}
+          {isBookable && (
+            <button
+              onClick={onBook}
+              className="ml-auto text-[10px] text-primary hover:underline flex items-center gap-0.5"
+            >
+              Book <ExternalLink className="h-2.5 w-2.5" />
+            </button>
           )}
         </div>
         <h5 className="text-sm font-medium text-foreground leading-tight line-clamp-1">{activity.title}</h5>
         {activity.location?.name && (
-          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 line-clamp-1">
+          <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1 line-clamp-1">
             <MapPin className="h-2.5 w-2.5 shrink-0" />
             {activity.location.name}
           </p>
@@ -386,7 +531,7 @@ function ActivityRow({
 
       {/* Cost */}
       {activity.cost > 0 && (
-        <div className="hidden sm:flex items-center justify-end w-16 pr-2 text-sm text-muted-foreground shrink-0">
+        <div className="hidden sm:flex items-center justify-end w-14 pr-1 text-xs text-muted-foreground shrink-0">
           ${activity.cost}
         </div>
       )}
@@ -396,26 +541,23 @@ function ActivityRow({
         <button
           onClick={(e) => { e.stopPropagation(); onLock(); }}
           className={cn(
-            "h-full w-10 flex items-center justify-center transition-colors",
+            "h-full w-9 flex items-center justify-center transition-colors",
             isLocked ? "bg-primary/10 hover:bg-primary/20" : "hover:bg-muted/50"
           )}
-          title={isLocked ? "Unlock activity" : "Lock activity"}
+          title={isLocked ? "Unlock" : "Lock"}
         >
-          <Lock className={cn(
-            "h-4 w-4 transition-colors",
-            isLocked ? "text-primary" : "text-muted-foreground/60"
-          )} />
+          <Lock className={cn("h-3.5 w-3.5", isLocked ? "text-primary" : "text-muted-foreground/50")} />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onSwap(); }}
           disabled={isLocked}
           className={cn(
-            "h-full w-10 flex items-center justify-center transition-colors border-l border-border/30",
+            "h-full w-9 flex items-center justify-center transition-colors border-l border-border/30",
             isLocked ? "opacity-30 cursor-not-allowed" : "hover:bg-muted/50"
           )}
-          title="Swap activity"
+          title="Swap"
         >
-          <RefreshCw className="h-4 w-4 text-muted-foreground/60" />
+          <RefreshCw className="h-3.5 w-3.5 text-muted-foreground/50" />
         </button>
       </div>
     </div>
