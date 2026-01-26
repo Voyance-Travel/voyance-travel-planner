@@ -918,6 +918,16 @@ export default function Start() {
                 time: flightDetails.return.arrivalTime,
               } : undefined,
             } : undefined,
+            interCityTransfers: flightDetails?.interCityTransfers?.map(t => ({
+              mode: t.mode,
+              fromCity: t.fromCity,
+              toCity: t.toCity,
+              departureDate: t.departureDate,
+              departureTime: t.departureTime,
+              arrivalTime: t.arrivalTime,
+              carrier: t.carrier,
+            })),
+            isMultiCity: flightDetails?.isMultiCity,
           };
         }
         
@@ -1136,6 +1146,28 @@ export default function Start() {
                           </div>
                         </div>
                       )}
+
+                      {/* Inter-city transfers summary */}
+                      {flightDetails.interCityTransfers && flightDetails.interCityTransfers.length > 0 && (
+                        <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                          <div className="h-4 w-4 flex items-center justify-center text-primary">
+                            🚄
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">
+                              {flightDetails.interCityTransfers.length} inter-city transfer{flightDetails.interCityTransfers.length > 1 ? 's' : ''}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {flightDetails.interCityTransfers.map((t, i) => (
+                                <span key={i}>
+                                  {i > 0 && ' · '}
+                                  {t.fromCity} → {t.toCity}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       
                       <p className="text-[10px] text-primary text-center pt-1">
                         Click to edit flight details
@@ -1155,7 +1187,7 @@ export default function Start() {
                   
                   {startDate && !flightDetails && (
                     <p className="text-[10px] text-muted-foreground">
-                      Adding arrival time helps plan Day 1 activities
+                      Arrival time plans Day 1, departure time plans your last day
                     </p>
                   )}
                 </div>

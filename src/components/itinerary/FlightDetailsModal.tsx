@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Plane, ChevronDown, ChevronUp, Plus, X, Clipboard } from 'lucide-react';
+import { Plane, ChevronDown, ChevronUp, Plus, X, Clipboard, Train, Bus, Car, Ship, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,6 +18,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Collapsible,
   CollapsibleContent,
@@ -38,11 +45,26 @@ export interface FlightSegment {
   airline?: string;
 }
 
+export type TransportMode = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+
+export interface InterCityTransfer {
+  mode: TransportMode;
+  fromCity: string;
+  toCity: string;
+  departureDate: string;
+  departureTime: string;
+  arrivalTime?: string;
+  carrier?: string;
+  reference?: string;
+}
+
 export interface FlightDetails {
   outbound: FlightSegment;
   outboundLayovers?: FlightSegment[];
   return?: FlightSegment;
   returnLayovers?: FlightSegment[];
+  interCityTransfers?: InterCityTransfer[];
+  isMultiCity?: boolean;
 }
 
 interface FlightDetailsModalProps {
@@ -178,9 +200,19 @@ export function FlightDetailsModal({
   const [hasReturn, setHasReturn] = useState(!!initialDetails?.return);
   const [returnFlight, setReturnFlight] = useState<FlightSegment>(initialDetails?.return || { ...emptySegment });
   const [returnLayovers, setReturnLayovers] = useState<FlightSegment[]>(initialDetails?.returnLayovers || []);
+  const [interCityTransfers, setInterCityTransfers] = useState<InterCityTransfer[]>(initialDetails?.interCityTransfers || []);
+  const [showInterCity, setShowInterCity] = useState((initialDetails?.interCityTransfers?.length || 0) > 0);
   const [showOutboundLayovers, setShowOutboundLayovers] = useState(false);
   const [showReturnLayovers, setShowReturnLayovers] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+
+  const emptyTransfer: InterCityTransfer = {
+    mode: 'train',
+    fromCity: '',
+    toCity: '',
+    departureDate: '',
+    departureTime: '',
+  };
 
   // Reset when modal opens
   useEffect(() => {
@@ -190,6 +222,8 @@ export function FlightDetailsModal({
       setHasReturn(!!initialDetails?.return);
       setReturnFlight(initialDetails?.return || { ...emptySegment });
       setReturnLayovers(initialDetails?.returnLayovers || []);
+      setInterCityTransfers(initialDetails?.interCityTransfers || []);
+      setShowInterCity((initialDetails?.interCityTransfers?.length || 0) > 0);
     }
   }, [open, initialDetails]);
 
@@ -209,9 +243,11 @@ export function FlightDetailsModal({
     const details: FlightDetails = {
       outbound,
       outboundLayovers: outboundLayovers.length > 0 ? outboundLayovers : undefined,
+      interCityTransfers: interCityTransfers.length > 0 ? interCityTransfers : undefined,
+      isMultiCity: interCityTransfers.length > 0,
     };
 
-    if (hasReturn && returnFlight.arrivalTime) {
+    if (hasReturn && (returnFlight.arrivalTime || returnFlight.departureTime)) {
       details.return = returnFlight;
       if (returnLayovers.length > 0) {
         details.returnLayovers = returnLayovers;
@@ -232,6 +268,21 @@ export function FlightDetailsModal({
     setShowReturnLayovers(true);
   };
 
+  const addInterCityTransfer = () => {
+    setInterCityTransfers([...interCityTransfers, { ...emptyTransfer }]);
+    setShowInterCity(true);
+  };
+
+  const getModeIcon = (mode: TransportMode) => {
+    switch (mode) {
+      case 'flight': return <Plane className="h-3.5 w-3.5" />;
+      case 'train': return <Train className="h-3.5 w-3.5" />;
+      case 'bus': return <Bus className="h-3.5 w-3.5" />;
+      case 'car': return <Car className="h-3.5 w-3.5" />;
+      case 'ferry': return <Ship className="h-3.5 w-3.5" />;
+    }
+  };
+
   const canSave = outbound.arrivalTime && outbound.departureAirport && outbound.arrivalAirport;
 
   return (
@@ -241,10 +292,10 @@ export function FlightDetailsModal({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plane className="h-5 w-5 text-primary" />
-              Flight Details
+              Flight & Transportation Details
             </DialogTitle>
             <DialogDescription>
-              Enter your flight information for accurate itinerary planning
+              Arrival times help plan your first day, departure times help plan your last day
             </DialogDescription>
           </DialogHeader>
 
@@ -263,15 +314,20 @@ export function FlightDetailsModal({
 
             {/* Outbound Flight */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Plane className="h-4 w-4 text-primary rotate-[-45deg]" />
-                <span className="text-sm font-medium">Outbound Flight</span>
-                {tripStartDate && (
-                  <span className="text-xs text-muted-foreground">
-                    ({tripStartDate})
-                  </span>
-                )}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Plane className="h-4 w-4 text-primary rotate-[-45deg]" />
+                  <span className="text-sm font-medium">Outbound Flight</span>
+                  {tripStartDate && (
+                    <span className="text-xs text-muted-foreground">
+                      ({tripStartDate})
+                    </span>
+                  )}
+                </div>
               </div>
+              <p className="text-[10px] text-muted-foreground -mt-1">
+                Arrival time determines when Day 1 activities can start
+              </p>
 
               <FlightSegmentForm
                 segment={outbound}
@@ -320,7 +376,6 @@ export function FlightDetailsModal({
               </Button>
             </div>
 
-            {/* Return Flight */}
             <Collapsible open={hasReturn} onOpenChange={setHasReturn}>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="w-full justify-between text-sm">
@@ -337,6 +392,9 @@ export function FlightDetailsModal({
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-3 pt-3">
+                <p className="text-[10px] text-muted-foreground">
+                  Departure time determines when last day activities must end
+                </p>
                 <FlightSegmentForm
                   segment={returnFlight}
                   onChange={setReturnFlight}
@@ -381,6 +439,177 @@ export function FlightDetailsModal({
                 >
                   <Plus className="h-3.5 w-3.5 mr-1" />
                   Add layover/connection
+                </Button>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Inter-City Transportation - for multi-city trips */}
+            <Collapsible open={showInterCity} onOpenChange={setShowInterCity}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between text-sm border border-dashed border-border">
+                  <div className="flex items-center gap-2">
+                    <Train className="h-4 w-4 text-primary" />
+                    <span>Multi-City Transportation</span>
+                    {interCityTransfers.length > 0 && (
+                      <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                        {interCityTransfers.length}
+                      </span>
+                    )}
+                  </div>
+                  {showInterCity ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 pt-3">
+                <p className="text-[10px] text-muted-foreground">
+                  Add flights, trains, or buses between cities in your multi-city trip
+                </p>
+
+                {interCityTransfers.map((transfer, idx) => (
+                  <div key={idx} className="space-y-3 p-3 bg-muted/30 rounded-lg relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Transfer {idx + 1}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setInterCityTransfers(interCityTransfers.filter((_, i) => i !== idx))}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Mode</Label>
+                        <Select
+                          value={transfer.mode}
+                          onValueChange={(value) => {
+                            const updated = [...interCityTransfers];
+                            updated[idx] = { ...transfer, mode: value as TransportMode };
+                            setInterCityTransfers(updated);
+                          }}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="flight">
+                              <div className="flex items-center gap-2">
+                                <Plane className="h-3.5 w-3.5" />
+                                Flight
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="train">
+                              <div className="flex items-center gap-2">
+                                <Train className="h-3.5 w-3.5" />
+                                Train
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="bus">
+                              <div className="flex items-center gap-2">
+                                <Bus className="h-3.5 w-3.5" />
+                                Bus
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="car">
+                              <div className="flex items-center gap-2">
+                                <Car className="h-3.5 w-3.5" />
+                                Car
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="ferry">
+                              <div className="flex items-center gap-2">
+                                <Ship className="h-3.5 w-3.5" />
+                                Ferry
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Date</Label>
+                        <Input
+                          type="date"
+                          value={transfer.departureDate}
+                          onChange={(e) => {
+                            const updated = [...interCityTransfers];
+                            updated[idx] = { ...transfer, departureDate: e.target.value };
+                            setInterCityTransfers(updated);
+                          }}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Departs</Label>
+                        <Input
+                          type="time"
+                          value={transfer.departureTime}
+                          onChange={(e) => {
+                            const updated = [...interCityTransfers];
+                            updated[idx] = { ...transfer, departureTime: e.target.value };
+                            setInterCityTransfers(updated);
+                          }}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Arrives</Label>
+                        <Input
+                          type="time"
+                          value={transfer.arrivalTime || ''}
+                          onChange={(e) => {
+                            const updated = [...interCityTransfers];
+                            updated[idx] = { ...transfer, arrivalTime: e.target.value };
+                            setInterCityTransfers(updated);
+                          }}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">From City</Label>
+                        <Input
+                          value={transfer.fromCity}
+                          onChange={(e) => {
+                            const updated = [...interCityTransfers];
+                            updated[idx] = { ...transfer, fromCity: e.target.value };
+                            setInterCityTransfers(updated);
+                          }}
+                          placeholder="Marrakech"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">To City</Label>
+                        <Input
+                          value={transfer.toCity}
+                          onChange={(e) => {
+                            const updated = [...interCityTransfers];
+                            updated[idx] = { ...transfer, toCity: e.target.value };
+                            setInterCityTransfers(updated);
+                          }}
+                          placeholder="Lisbon"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground w-full"
+                  onClick={addInterCityTransfer}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add inter-city transportation
                 </Button>
               </CollapsibleContent>
             </Collapsible>
