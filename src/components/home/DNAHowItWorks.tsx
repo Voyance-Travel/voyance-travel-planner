@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Dna, User, MapPin, RefreshCw, ArrowRight } from 'lucide-react';
+import { Dna, Sliders, MapPin, RefreshCw, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -14,9 +14,9 @@ const STEPS = [
   },
   {
     number: '2',
-    icon: User,
+    icon: Sliders,
     title: 'See yourself',
-    description: 'Get a personalized profile that captures how you really travel. Your superpowers, your preferences, your perfect trip preview.',
+    description: 'Get a personalized profile that captures how you really travel. Your strengths, your preferences, your perfect trip preview.',
     highlight: 'Personalized profile',
   },
   {
@@ -37,11 +37,11 @@ const STEPS = [
 
 export default function DNAHowItWorks() {
   return (
-    <section className="py-20 md:py-24 bg-muted/50 relative overflow-hidden">
+    <section className="py-20 md:py-24 bg-muted/30 relative overflow-hidden">
       {/* Top curved divider */}
       <div className="absolute top-0 left-0 right-0 h-24 -translate-y-full">
         <svg viewBox="0 0 1440 96" fill="none" className="absolute bottom-0 w-full h-24" preserveAspectRatio="none">
-          <path d="M0 96L1440 96L1440 0C1440 0 1080 96 720 96C360 96 0 0 0 0L0 96Z" className="fill-muted/50" />
+          <path d="M0 96L1440 96L1440 0C1440 0 1080 96 720 96C360 96 0 0 0 0L0 96Z" className="fill-muted/30" />
         </svg>
       </div>
       <div className="max-w-6xl mx-auto px-8 md:px-16">

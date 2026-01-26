@@ -1,19 +1,12 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Compass, Users, Trophy, Leaf, Gem, Sparkles, ArrowRight } from 'lucide-react';
+import { ArrowRight, Dna, Sliders, Sparkles } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { ARCHETYPE_NARRATIVES, CATEGORY_COLORS, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
-
-const CATEGORY_ICONS = {
-  EXPLORER: Compass,
-  CONNECTOR: Users,
-  ACHIEVER: Trophy,
-  RESTORER: Leaf,
-  CURATOR: Gem,
-  TRANSFORMER: Sparkles,
-};
+import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
+import React from 'react';
 
 const CATEGORY_ORDER = ['EXPLORER', 'CONNECTOR', 'ACHIEVER', 'RESTORER', 'CURATOR', 'TRANSFORMER'] as const;
 
@@ -28,53 +21,38 @@ const FEATURED_ARCHETYPE_IDS = [
 ];
 
 function ArchetypeCard({ archetype, index }: { archetype: ArchetypeNarrative; index: number }) {
-  const categoryStyle = CATEGORY_COLORS[archetype.category];
-
   return (
     <motion.article
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
-      transition={{ delay: index * 0.03, duration: 0.5 }}
+      transition={{ delay: index * 0.02, duration: 0.4 }}
       className="group"
     >
-      <div className="relative bg-card rounded-2xl border border-border overflow-hidden transition-all duration-300 hover:shadow-xl hover:border-primary/20 hover:-translate-y-1">
-        {/* Gradient accent bar */}
-        <div className={`h-1 bg-gradient-to-r ${categoryStyle.primary}`} />
-        
-        <div className="p-6">
+      <div className="relative bg-card rounded-xl border border-border overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5 h-full">
+        <div className="p-5">
           {/* Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">{archetype.emoji}</span>
-              <div>
-                <h3 className="font-serif font-bold text-lg text-foreground leading-tight">
-                  {archetype.name}
-                </h3>
-                <span className={`text-xs font-medium ${categoryStyle.text}`}>
-                  {CATEGORY_DESCRIPTIONS[archetype.category].name}
-                </span>
-              </div>
+          <div className="flex items-start gap-3 mb-3">
+            <span className="text-2xl">{archetype.emoji}</span>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-serif font-semibold text-foreground leading-tight">
+                {archetype.name}
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                {CATEGORY_DESCRIPTIONS[archetype.category].name}
+              </span>
             </div>
           </div>
 
           {/* Hook line */}
-          <blockquote className="text-foreground font-medium italic border-l-2 border-primary/30 pl-3 mb-4">
+          <p className="text-sm text-foreground/80 italic mb-3 line-clamp-2">
             "{archetype.hookLine}"
-          </blockquote>
-
-          {/* Description */}
-          <p className="text-sm text-muted-foreground leading-relaxed mb-5">
-            {archetype.coreDescription}
           </p>
 
-          {/* Perfect trip */}
-          <div className="pt-4 border-t border-border/50">
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Perfect trip:</span>{' '}
-              {archetype.perfectTripPreview}
-            </p>
-          </div>
+          {/* Description */}
+          <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
+            {archetype.coreDescription}
+          </p>
         </div>
       </div>
     </motion.article>
@@ -88,27 +66,24 @@ function CategoryNav({ activeCategory, onSelect }: { activeCategory: string | nu
         onClick={() => onSelect(null)}
         className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
           activeCategory === null
-            ? 'bg-foreground text-background'
+            ? 'bg-primary text-primary-foreground'
             : 'bg-muted text-muted-foreground hover:bg-muted/80'
         }`}
       >
         All Types
       </button>
       {CATEGORY_ORDER.map((category) => {
-        const Icon = CATEGORY_ICONS[category];
-        const style = CATEGORY_COLORS[category];
         const isActive = activeCategory === category;
         return (
           <button
             key={category}
             onClick={() => onSelect(category)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
               isActive
-                ? `bg-gradient-to-r ${style.primary} text-white`
-                : `${style.bg} ${style.text} hover:opacity-80`
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
             }`}
           >
-            <Icon className="w-3.5 h-3.5" />
             {CATEGORY_DESCRIPTIONS[category].name}
           </button>
         );
@@ -128,11 +103,8 @@ export default function Archetypes() {
   return (
     <MainLayout>
       {/* Hero */}
-      <section className="pt-24 pb-16 md:pt-32 md:pb-20 relative overflow-hidden">
-        {/* Background elements */}
-        <div className="absolute inset-0 bg-gradient-to-b from-muted/40 via-background to-background" />
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute top-20 right-1/4 w-64 h-64 bg-accent/5 rounded-full blur-3xl" />
+      <section className="pt-24 pb-12 md:pt-32 md:pb-16 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-muted/30 via-background to-background" />
         
         <div className="max-w-4xl mx-auto px-4 text-center relative">
           <motion.div
@@ -140,28 +112,24 @@ export default function Archetypes() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <motion.p 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="text-sm font-medium text-primary tracking-wide uppercase mb-4"
-            >
+            <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
+              <Dna className="w-3 h-3 mr-1" />
               Travel DNA System
-            </motion.p>
+            </Badge>
             
-            <h1 className="text-4xl md:text-6xl font-serif font-bold text-foreground mb-6 leading-[1.1]">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-foreground mb-5 leading-[1.1]">
               Twenty-Seven Ways<br />
               <span className="text-primary">to See the World</span>
             </h1>
             
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
-              Everyone travels differently. We've identified 27 distinct traveler personalities—each 
-              with unique superpowers, blind spots, and perfect adventures.
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
+              Everyone travels differently. We've mapped 27 distinct traveler personalities—each 
+              with unique strengths, preferences, and ideal adventures.
             </p>
             
             <Button asChild size="lg" className="rounded-full px-8">
               <Link to={ROUTES.QUIZ}>
-                Discover Yours
+                Discover Your Type
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
@@ -169,16 +137,55 @@ export default function Archetypes() {
         </div>
       </section>
 
-      {/* Category Navigation */}
-      <section className="py-8 border-y border-border bg-muted/20 sticky top-16 z-40 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto px-4">
+      {/* How We Match You - Brief Explainer */}
+      <section className="py-12 border-y border-border bg-muted/20">
+        <div className="max-w-5xl mx-auto px-4">
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="grid md:grid-cols-3 gap-6 text-center"
           >
-            <CategoryNav activeCategory={activeCategory} onSelect={setActiveCategory} />
+            {[
+              {
+                icon: Sparkles,
+                title: '8 Core Traits',
+                description: 'We measure planning style, social energy, pace, adventure tolerance, and more to build your profile.',
+              },
+              {
+                icon: Sliders,
+                title: 'Weighted Matching',
+                description: 'Your quiz responses are scored against each archetype to find the personality that fits best.',
+              },
+              {
+                icon: Dna,
+                title: 'Personalized Plans',
+                description: 'Your archetype shapes every recommendation—from destinations to daily itineraries.',
+              },
+            ].map((item, index) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                className="p-4"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <item.icon className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="font-medium text-foreground mb-1">{item.title}</h3>
+                <p className="text-sm text-muted-foreground">{item.description}</p>
+              </motion.div>
+            ))}
           </motion.div>
+        </div>
+      </section>
+
+      {/* Category Navigation */}
+      <section className="py-6 sticky top-16 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
+        <div className="max-w-6xl mx-auto px-4">
+          <CategoryNav activeCategory={activeCategory} onSelect={setActiveCategory} />
         </div>
       </section>
 
@@ -187,24 +194,13 @@ export default function Archetypes() {
         <motion.section 
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
-          className="py-8 bg-gradient-to-r from-background via-muted/30 to-background"
+          className="py-6 bg-muted/20"
         >
           <div className="max-w-3xl mx-auto px-4 text-center">
-            <div className="flex items-center justify-center gap-3 mb-3">
-              {(() => {
-                const Icon = CATEGORY_ICONS[activeCategory as keyof typeof CATEGORY_ICONS];
-                const style = CATEGORY_COLORS[activeCategory as keyof typeof CATEGORY_COLORS];
-                return (
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-br ${style.primary}`}>
-                    <Icon className="w-5 h-5 text-white" />
-                  </div>
-                );
-              })()}
-              <h2 className="text-2xl font-serif font-bold text-foreground">
-                {CATEGORY_DESCRIPTIONS[activeCategory as keyof typeof CATEGORY_DESCRIPTIONS].name}s
-              </h2>
-            </div>
-            <p className="text-muted-foreground">
+            <h2 className="text-xl font-serif font-semibold text-foreground mb-2">
+              {CATEGORY_DESCRIPTIONS[activeCategory as keyof typeof CATEGORY_DESCRIPTIONS].name}s
+            </h2>
+            <p className="text-muted-foreground text-sm">
               {CATEGORY_DESCRIPTIONS[activeCategory as keyof typeof CATEGORY_DESCRIPTIONS].description}
             </p>
           </div>
@@ -212,11 +208,11 @@ export default function Archetypes() {
       )}
 
       {/* Archetypes Grid */}
-      <section className="py-16 md:py-20">
+      <section className="py-12 md:py-16">
         <div className="max-w-7xl mx-auto px-4">
           <motion.div 
             layout
-            className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
+            className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
           >
             {filteredArchetypes.map((archetype, index) => (
               <ArchetypeCard key={archetype.id} archetype={archetype} index={index} />
@@ -231,25 +227,22 @@ export default function Archetypes() {
         </div>
       </section>
 
-      {/* Editorial CTA */}
-      <section className="py-20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
-        
-        <div className="max-w-3xl mx-auto px-4 text-center relative z-10">
+      {/* CTA */}
+      <section className="py-16 bg-muted/30">
+        <div className="max-w-3xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-3xl md:text-4xl font-serif font-bold text-white mb-4">
+            <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-4">
               Which archetype are you?
             </h2>
-            <p className="text-lg text-white/60 mb-8 max-w-xl mx-auto">
+            <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
               Take our 2-minute quiz. We'll match your personality to one of 27 archetypes 
               and build trips that actually fit how you travel.
             </p>
-            <Button asChild size="lg" className="rounded-full px-8 bg-white text-slate-900 hover:bg-white/90">
+            <Button asChild size="lg" className="rounded-full px-8">
               <Link to={ROUTES.QUIZ}>
                 Take the Quiz
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -261,6 +254,3 @@ export default function Archetypes() {
     </MainLayout>
   );
 }
-
-// Need React for useState
-import React from 'react';
