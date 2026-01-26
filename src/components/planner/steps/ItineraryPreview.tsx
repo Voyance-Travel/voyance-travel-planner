@@ -23,6 +23,21 @@ import { toast } from 'sonner';
 import ItineraryContextForm, { ItineraryContextData } from '@/components/planner/ItineraryContextForm';
 import SaveAsTemplateDialog from '@/components/itinerary/SaveAsTemplateDialog';
 
+interface FlightSelectionData {
+  outbound?: {
+    departure?: { airport?: string; time?: string; city?: string };
+    arrival?: { airport?: string; time?: string; city?: string };
+    connections?: Array<{ departureAirport?: string; arrivalAirport?: string; departureTime?: string; arrivalTime?: string }>;
+  };
+  return?: {
+    departure?: { airport?: string; time?: string; city?: string };
+    arrival?: { airport?: string; time?: string; city?: string };
+    connections?: Array<{ departureAirport?: string; arrivalAirport?: string; departureTime?: string; arrivalTime?: string }>;
+  };
+  interCityTransfers?: Array<{ mode?: string; fromCity?: string; toCity?: string; departureTime?: string; arrivalTime?: string }>;
+  isMultiCity?: boolean;
+}
+
 interface ItineraryPreviewProps {
   tripId?: string;
   tripDetails: {
@@ -32,6 +47,8 @@ interface ItineraryPreviewProps {
     startDate: string;
     endDate: string;
     travelers: number;
+    flightSelection?: FlightSelectionData;
+    hotelLocation?: string;
   };
   onComplete: () => void;
   onBack: () => void;
@@ -174,6 +191,15 @@ export default function ItineraryPreview({
   const canRegenerate = canUse(entitlements, 'ai.itinerary.regenerate');
   const remainingGenerations = getRemainingQuota(entitlements, 'ai.itinerary.generate_quota_month');
 
+  // Extract flight times from existing flight_selection data (collected on Start page)
+  const existingFlightData = tripDetails.flightSelection;
+  const existingArrivalTime = existingFlightData?.outbound?.arrival?.time;
+  const existingDepartureTime = existingFlightData?.return?.departure?.time;
+  const existingHotelLocation = tripDetails.hotelLocation;
+  
+  // Determine if we already have sufficient context from Start page
+  const hasPreExistingContext = Boolean(existingArrivalTime || existingDepartureTime || existingHotelLocation);
+
   // Use new Lovable AI itinerary hook
   const {
     loading,
@@ -193,7 +219,7 @@ export default function ItineraryPreview({
     clearError,
   } = useLovableItinerary(tripId || null);
 
-  // Check for existing itinerary on mount, then auto-start if needed
+  // Check for existing itinerary on mount, then auto-start if we have context
   useEffect(() => {
     if (!tripId) return;
     
@@ -201,10 +227,22 @@ export default function ItineraryPreview({
       const exists = await checkExisting();
       if (exists) {
         setHasSetContext(true); // Already has itinerary, skip context form
+      } else if (hasPreExistingContext) {
+        // We have flight data from Start page - auto-start generation
+        console.log('[ItineraryPreview] Using pre-existing flight context from Start page');
+        const preContext: ItineraryContextData = {
+          hotelLocation: existingHotelLocation,
+          arrivalTime: existingArrivalTime,
+          departureTime: existingDepartureTime,
+        };
+        setItineraryContext(preContext);
+        setHasSetContext(true);
+        setHasConsumedQuota(true);
+        generateItinerary(preContext);
       }
     };
     init();
-  }, [tripId]);
+  }, [tripId, hasPreExistingContext, existingArrivalTime, existingDepartureTime, existingHotelLocation]);
 
   // Handle context form submission - start generation with optional context
   const handleContextSubmit = (data: ItineraryContextData) => {
@@ -449,7 +487,8 @@ export default function ItineraryPreview({
     );
   }
 
-  // Show context form before generation starts
+  // Show context form before generation starts (only if no pre-existing flight context)
+  // This is a fallback for edge cases - normally we auto-start with flight data from Start page
   if (!hasSetContext && !isGenerating && !isReady && !hasExistingItinerary) {
     return (
       <ItineraryContextForm
@@ -458,6 +497,9 @@ export default function ItineraryPreview({
         endDate={tripDetails.endDate}
         onContinue={handleContextSubmit}
         onSkip={handleSkipContext}
+        initialHotelLocation={existingHotelLocation}
+        initialArrivalTime={existingArrivalTime}
+        initialDepartureTime={existingDepartureTime}
       />
     );
   }
