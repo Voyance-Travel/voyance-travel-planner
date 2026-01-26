@@ -596,7 +596,7 @@ export default function Pricing() {
                 For Travel Professionals
               </Badge>
               <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground">
-                Your Trip Operating System
+                Professional Tools for Travel Advisors
               </h2>
               <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
                 Build and revise trips in minutes. Keep confirmations, payments, and commissions attached.

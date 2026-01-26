@@ -120,7 +120,7 @@ export default function AgentSidebar({ taskCount }: AgentSidebarProps) {
           <SheetContent side="left" className="w-72 p-0">
             <div className="flex flex-col h-full">
               <div className="p-4 border-b">
-                <h2 className="font-semibold text-lg">Trip OS</h2>
+                <h2 className="font-semibold text-lg">Agent Tools</h2>
               </div>
               <NavContent taskCount={taskCount} onNavigate={() => setMobileOpen(false)} />
             </div>
