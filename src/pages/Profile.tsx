@@ -49,7 +49,6 @@ import { AddCreditsModal } from '@/components/checkout';
 import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
 import { Wallet } from 'lucide-react';
 import { getTripStats, TripStats } from '@/services/userAPI';
-import { calculateEvolutionPath, TRAVELER_STAGES } from '@/data/evolutionData';
 import { getArchetypeNarrative } from '@/data/archetypeNarratives';
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
 
@@ -408,15 +407,7 @@ export default function Profile() {
     upcomingTrips: tripStats?.upcomingTrips ?? upcomingTrips.length,
   };
 
-  // Calculate traveler status using the evolution system
-  const evolution = calculateEvolutionPath(
-    stats.tripsCompleted,
-    actualTravelDNA?.category || 'EXPLORER',
-    {
-      quizCompleted: user?.quizCompleted,
-    }
-  );
-  const travelerStatus = TRAVELER_STAGES[evolution.currentStage]?.name || 'Traveler';
+  // Use actual Travel DNA from database - format properly using narrative lookup
 
   // Use actual Travel DNA from database - format properly using narrative lookup
   const displayArchetype = actualTravelDNA?.archetype 
@@ -467,12 +458,9 @@ export default function Profile() {
                 {user?.name || 'Traveler'}
               </h1>
               <p className="text-muted-foreground">{user?.email}</p>
-              {(displayArchetype || travelerStatus) && (
+              {displayArchetype && (
                 <p className="text-sm text-primary font-medium mt-1">
-                  {displayArchetype || travelerStatus}
-                  {displayArchetype && travelerStatus && displayArchetype !== travelerStatus && (
-                    <span className="text-muted-foreground font-normal"> • {travelerStatus}</span>
-                  )}
+                  {displayArchetype}
                 </p>
               )}
             </div>

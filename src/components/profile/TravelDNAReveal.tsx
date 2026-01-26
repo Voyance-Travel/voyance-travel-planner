@@ -35,7 +35,7 @@ import DNAAccuracyFeedback from './DNAAccuracyFeedback';
 import DNAFeedbackChat from './DNAFeedbackChat';
 import TraitOverrideSliders from './TraitOverrideSliders';
 import MicroDisambiguation from './MicroDisambiguation';
-import TravelDNAEvolution from './TravelDNAEvolution';
+import AchievementsPanel from './AchievementsPanel';
 
 /** Map category names to their Lucide icon components */
 const CATEGORY_ICONS = {
@@ -614,10 +614,10 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               Adjust
             </TabsTrigger>
             <TabsTrigger 
-              value="evolution" 
+              value="achievements" 
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
-              Evolution
+              Achievements
             </TabsTrigger>
           </TabsList>
 
@@ -629,15 +629,9 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               />
             </TabsContent>
 
-            {/* Evolution Tab - Traveler Maturity & Growth */}
-            <TabsContent value="evolution" className="mt-8">
-              <TravelDNAEvolution
-                category={narrative.category}
-                tripCount={dnaData.trip_count || 0}
-                travelFrequency={dnaData.travel_frequency}
-                hasOverrides={dnaData.has_overrides || false}
-                quizCompleted={true}
-              />
+            {/* Achievements Tab - Real earned badges */}
+            <TabsContent value="achievements" className="mt-8">
+              <AchievementsPanel />
             </TabsContent>
 
             {/* NEW: Insights Tab - Travel DNA V2 Transparency */}
