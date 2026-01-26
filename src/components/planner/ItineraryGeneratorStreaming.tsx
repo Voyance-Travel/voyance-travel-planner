@@ -11,9 +11,10 @@ import { Loader2, Calendar, MapPin, Sparkles, CheckCircle, AlertCircle, RefreshC
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useLovableItinerary, GenerationPreferences } from '@/hooks/useLovableItinerary';
+import { useLovableItinerary, GenerationPreferences, GenerationStep } from '@/hooks/useLovableItinerary';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import type { DayItinerary } from '@/types/itinerary';
+import { GenerationPhases } from './shared/GenerationPhases';
 
 interface ItineraryGeneratorStreamingProps {
   tripId: string;
@@ -90,8 +91,26 @@ export function ItineraryGeneratorStreaming({
     );
   }
 
+  // Helper to check if in pre-generation phases
+  const isPreGenerationPhase = ['gathering-dna', 'personalizing', 'preparing'].includes(currentStep);
+
   // Loading/generating state
   if (loading) {
+    // Show pre-generation phases
+    if (isPreGenerationPhase) {
+      return (
+        <div className="py-8">
+          <GenerationPhases currentStep={currentStep} />
+          <div className="flex justify-center mt-6">
+            <Button variant="ghost" size="sm" onClick={cancel}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Show day-by-day generation progress
     return (
       <div className="space-y-6">
         {/* Progress Header */}
