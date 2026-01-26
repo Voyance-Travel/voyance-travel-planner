@@ -8,7 +8,7 @@
  * - Day-by-day budget breakdown
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   DollarSign,
@@ -39,10 +39,27 @@ import { BudgetSetupDialog } from './BudgetSetupDialog';
 import { BudgetWarning } from './BudgetWarning';
 import type { BudgetCategory } from '@/services/tripBudgetService';
 
+interface ItineraryActivity {
+  id: string;
+  title?: string;
+  name?: string;
+  category?: string;
+  type?: string;
+  cost?: { amount: number; currency: string } | number;
+}
+
+interface ItineraryDay {
+  dayNumber: number;
+  date?: string;
+  activities: ItineraryActivity[];
+}
+
 interface BudgetTabProps {
   tripId: string;
   travelers: number;
   totalDays: number;
+  /** Pass itinerary days to auto-sync planned costs to budget ledger */
+  itineraryDays?: ItineraryDay[];
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -72,8 +89,10 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-export function BudgetTab({ tripId, travelers, totalDays }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
+  const syncAttempted = useRef(false);
+  
   const {
     settings,
     summary,
@@ -87,8 +106,42 @@ export function BudgetTab({ tripId, travelers, totalDays }: BudgetTabProps) {
     formattedRemaining,
     updateSettings,
     removeEntry,
+    syncFromItinerary,
     refetch,
   } = useTripBudget({ tripId, totalDays, enabled: true });
+
+  // Auto-sync itinerary costs to budget ledger when days are provided
+  useEffect(() => {
+    if (!itineraryDays || itineraryDays.length === 0 || syncAttempted.current) return;
+    if (!hasBudget) return; // Don't sync if no budget is set
+    
+    // Transform itinerary days to the format expected by syncFromItinerary
+    const daysForSync = itineraryDays.map(day => ({
+      dayNumber: day.dayNumber,
+      date: day.date || '',
+      activities: day.activities.map(act => {
+        // Normalize cost to { amount, currency } format
+        let costObj: { amount: number; currency: string } | undefined;
+        if (typeof act.cost === 'number') {
+          costObj = { amount: act.cost, currency: 'USD' };
+        } else if (act.cost && typeof act.cost === 'object') {
+          costObj = act.cost;
+        }
+        
+        return {
+          id: act.id,
+          title: act.title || act.name || 'Activity',
+          category: act.category || act.type || 'activities',
+          cost: costObj,
+        };
+      }),
+    }));
+    
+    syncAttempted.current = true;
+    syncFromItinerary(daysForSync).catch(err => {
+      console.error('[BudgetTab] Failed to sync itinerary costs:', err);
+    });
+  }, [itineraryDays, hasBudget, syncFromItinerary]);
 
   const formatCurrency = useCallback((cents: number) => {
     const currency = settings?.budget_currency || 'USD';
