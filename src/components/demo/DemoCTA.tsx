@@ -72,6 +72,29 @@ export function DemoCTA() {
               <span>First itinerary free</span>
             </div>
           </div>
+
+          {/* Pricing transparency */}
+          <div className="mt-10 pt-8 border-t border-border/50">
+            <p className="text-xs text-muted-foreground mb-4">
+              This demo shows all premium features. Here's how pricing works:
+            </p>
+            <div className="inline-flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm">
+              <div className="text-center">
+                <p className="font-medium text-foreground">Free</p>
+                <p className="text-xs text-muted-foreground">1 itinerary/month</p>
+              </div>
+              <div className="hidden sm:block w-px h-8 bg-border" />
+              <div className="text-center">
+                <p className="font-medium text-foreground">Trip Pass</p>
+                <p className="text-xs text-muted-foreground">$19.99 per trip</p>
+              </div>
+              <div className="hidden sm:block w-px h-8 bg-border" />
+              <div className="text-center">
+                <p className="font-medium text-foreground">Credits</p>
+                <p className="text-xs text-muted-foreground">5 for $79 • 10 for $149</p>
+              </div>
+            </div>
+          </div>
         </motion.div>
       </div>
     </section>

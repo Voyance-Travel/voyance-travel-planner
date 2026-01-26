@@ -583,10 +583,15 @@ export function DemoPlayground() {
         </div>
 
         {/* Hint */}
-        <div className="mt-8 text-center">
+        <div className="mt-8 text-center space-y-3">
           <p className="text-xs text-muted-foreground inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50">
             <GripVertical className="h-3 w-3" />
             Drag activities to reorder • Lock or swap to customize
+          </p>
+          
+          {/* AI explanation */}
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            <span className="font-medium text-foreground">How it works:</span> Real-time data from Google, TripAdvisor, Foursquare & Viator—combined with smart scheduling for itineraries that actually flow.
           </p>
         </div>
       </div>
@@ -733,8 +738,10 @@ function ActivityRow({
                 ))}
               </div>
               <span className="text-xs font-medium">4.8 from 847 reviews</span>
-              <span className="text-[10px] text-muted-foreground">— Google, TripAdvisor, Foursquare</span>
             </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Reviews aggregated from Google, TripAdvisor & Foursquare
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -769,12 +776,18 @@ function ActivityRow({
             </button>
           )}
           {isBookable && (
-            <button
-              onClick={onBook}
-              className="ml-auto text-[10px] text-primary hover:underline flex items-center gap-0.5"
-            >
-              Book <ExternalLink className="h-2.5 w-2.5" />
-            </button>
+            <div className="ml-auto relative group/book">
+              <button
+                onClick={onBook}
+                className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+              >
+                Book <ExternalLink className="h-2.5 w-2.5" />
+              </button>
+              {/* Tooltip */}
+              <div className="absolute right-0 top-full mt-1 w-48 p-2 rounded-md bg-popover border shadow-lg text-[10px] text-muted-foreground opacity-0 group-hover/book:opacity-100 transition-opacity pointer-events-none z-50">
+                Opens official site to book directly. Voyance connects to Viator for activities.
+              </div>
+            </div>
           )}
         </div>
         <h5 className="text-sm font-medium text-foreground leading-tight line-clamp-1">{activity.title}</h5>
