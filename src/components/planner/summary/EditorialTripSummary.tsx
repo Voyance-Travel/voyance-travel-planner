@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
+import { generateConsumerTripPdf } from '@/utils/consumerPdfGenerator';
 
 interface FlightDetails {
   airline: string;
@@ -138,6 +139,36 @@ export default function EditorialTripSummary({
   const handlePrint = () => {
     window.print();
     toast.success('Opening print dialog...');
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      toast.info('Generating PDF...');
+      await generateConsumerTripPdf({
+        tripName: data.tripName,
+        destination: data.destination,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        travelers: data.travelers,
+        flight: data.outboundFlight ? {
+          airline: data.outboundFlight.airline,
+          departure: data.outboundFlight.departure,
+          arrival: data.outboundFlight.arrival,
+          departureAirport: data.outboundFlight.departureAirport,
+          arrivalAirport: data.outboundFlight.arrivalAirport,
+        } : undefined,
+        hotel: data.hotel ? {
+          name: data.hotel.name,
+          neighborhood: data.hotel.neighborhood,
+          checkIn: data.hotel.checkIn,
+          checkOut: data.hotel.checkOut,
+        } : undefined,
+      });
+      toast.success('PDF downloaded!');
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      toast.error('Failed to generate PDF');
+    }
   };
 
   const handleShare = async (method: 'copy' | 'email' | 'message') => {
@@ -285,7 +316,7 @@ export default function EditorialTripSummary({
                   <MessageCircle className="w-4 h-4 mr-2" />Message
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => toast.info('PDF coming soon')}>
+                <DropdownMenuItem onClick={handleDownloadPdf}>
                   <Download className="w-4 h-4 mr-2" />Download PDF
                 </DropdownMenuItem>
               </DropdownMenuContent>

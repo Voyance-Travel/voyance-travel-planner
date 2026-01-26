@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { UserPlus, Mail, Users, Check, X, Sparkles, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useFriends, type FriendWithProfile } from '@/services/supabase/friends';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAuth } from '@/contexts/AuthContext';
+import { calculateGuestCompatibility } from '@/utils/travelDNACompatibility';
 
 interface GuestLinkModalProps {
   open: boolean;
@@ -34,10 +36,12 @@ export default function GuestLinkModal({
   currentTravelers,
   onGuestsConfirmed,
 }: GuestLinkModalProps) {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'friends' | 'invite'>('friends');
   const [email, setEmail] = useState('');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [isInviting, setIsInviting] = useState(false);
+  const [compatibilityScores, setCompatibilityScores] = useState<Record<string, number | null>>({});
 
   // Fetch approved friends
   const { data: friendsData, isLoading: isLoadingFriends } = useFriends();
@@ -52,10 +56,34 @@ export default function GuestLinkModal({
     (f) => !linkedGuests.some((g) => g.id === f.friend.id)
   );
 
-  const handleSelectFriend = (friend: FriendWithProfile) => {
+  // Calculate compatibility scores for friends when modal opens
+  useEffect(() => {
+    if (!open || !user?.id || friends.length === 0) return;
+    
+    const calculateScores = async () => {
+      const scores: Record<string, number | null> = {};
+      await Promise.all(
+        friends.map(async (friend) => {
+          const score = await calculateGuestCompatibility(user.id, friend.friend.id);
+          scores[friend.friend.id] = score;
+        })
+      );
+      setCompatibilityScores(scores);
+    };
+    
+    calculateScores();
+  }, [open, user?.id, friends]);
+
+  const handleSelectFriend = useCallback(async (friend: FriendWithProfile) => {
     if (remainingSlots <= 0) {
       toast.error(`Maximum ${maxLinkedGuests} additional travelers allowed`);
       return;
+    }
+
+    // Use pre-calculated score or calculate on-demand
+    let matchScore = compatibilityScores[friend.friend.id];
+    if (matchScore === undefined && user?.id) {
+      matchScore = await calculateGuestCompatibility(user.id, friend.friend.id);
     }
 
     const newGuest: LinkedGuest = {
@@ -63,13 +91,13 @@ export default function GuestLinkModal({
       name: friend.friend.display_name || friend.friend.handle || 'Friend',
       email: '', // Email not exposed for privacy
       avatar: friend.friend.avatar_url || undefined,
-      // preferencesMatch calculated when Travel DNA is available for both users
+      preferencesMatch: matchScore ?? undefined,
       isVoyanceUser: true,
     };
 
     setLinkedGuests(prev => [...prev, newGuest]);
     toast.success(`${newGuest.name} added to your trip`);
-  };
+  }, [remainingSlots, maxLinkedGuests, compatibilityScores, user?.id]);
 
   const handleInviteByEmail = async () => {
     if (!email || !email.includes('@')) {
