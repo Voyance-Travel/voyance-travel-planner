@@ -544,21 +544,62 @@ export default function Start() {
   const [departureTime, setDepartureTime] = useState('');
   const today = startOfToday();
 
-  // Prefill origin city from user preferences (home_airport)
+  // Prefill origin city from user preferences (home_airport or flight_preferences)
   useEffect(() => {
     const prefillHomeAirport = async () => {
       // Don't prefill if already set
       if (originSelection.cityName || !user) return;
       
       try {
-        // First check user_preferences
+        // First check user_preferences for home_airport and flight_preferences
         const { data: prefs } = await supabase
           .from('user_preferences')
-          .select('home_airport')
+          .select('home_airport, flight_preferences')
           .eq('user_id', user.id)
           .single();
         
+        // Check flight_preferences.airport_code first (most specific)
+        const flightPrefs = prefs?.flight_preferences as { airport_code?: string; home_airport?: string } | null;
+        const airportCode = flightPrefs?.airport_code || flightPrefs?.home_airport;
+        
+        if (airportCode) {
+          // Look up airport details to get proper display name
+          const { data: airport } = await supabase
+            .from('airports')
+            .select('code, name, city')
+            .eq('code', airportCode.toUpperCase())
+            .single();
+          
+          if (airport) {
+            setOriginSelection({
+              display: `${airport.city} (${airport.code})`,
+              cityName: airport.city,
+              airportCodes: [airport.code],
+            });
+            return;
+          }
+        }
+        
+        // Fallback to home_airport text field
         if (prefs?.home_airport) {
+          // Check if it's an airport code (3 letters)
+          if (prefs.home_airport.length === 3) {
+            const { data: airport } = await supabase
+              .from('airports')
+              .select('code, name, city')
+              .eq('code', prefs.home_airport.toUpperCase())
+              .single();
+            
+            if (airport) {
+              setOriginSelection({
+                display: `${airport.city} (${airport.code})`,
+                cityName: airport.city,
+                airportCodes: [airport.code],
+              });
+              return;
+            }
+          }
+          
           setOriginSelection({
             display: prefs.home_airport,
             cityName: prefs.home_airport,
@@ -575,6 +616,24 @@ export default function Start() {
           .single();
         
         if (profile?.home_airport) {
+          // Check if it's an airport code (3 letters)
+          if (profile.home_airport.length === 3) {
+            const { data: airport } = await supabase
+              .from('airports')
+              .select('code, name, city')
+              .eq('code', profile.home_airport.toUpperCase())
+              .single();
+            
+            if (airport) {
+              setOriginSelection({
+                display: `${airport.city} (${airport.code})`,
+                cityName: airport.city,
+                airportCodes: [airport.code],
+              });
+              return;
+            }
+          }
+          
           setOriginSelection({
             display: profile.home_airport,
             cityName: profile.home_airport,
