@@ -53,10 +53,10 @@ export default function Home() {
         <ScrollTarget id="preview-section" className="scroll-mt-16">
           <ItineraryShowcase />
         </ScrollTarget>
+        <PricingPreview />
         <ScrollTarget id="quote-section" className="scroll-mt-16">
           <TravelQuote />
         </ScrollTarget>
-        <PricingPreview />
         <ScrollTarget id="cta-section" className="scroll-mt-16">
           <FinalCTA />
         </ScrollTarget>
