@@ -9,14 +9,17 @@ import {
   Shield,
   Star,
   DollarSign,
-  Lock
+  Lock,
+  Dna
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { DemoPlayground } from '@/components/demo/DemoPlayground';
+import { HowItWorksSideNav } from '@/components/home/HowItWorksSideNav';
 
 // Import generated images
+import heroImage from '@/assets/howitworks-hero.jpg';
 import quizImage from '@/assets/howitworks-quiz.jpg';
 import planImage from '@/assets/howitworks-plan.jpg';
 import itineraryImage from '@/assets/howitworks-itinerary.jpg';
@@ -35,13 +38,15 @@ export default function HowItWorks() {
         title="How It Works | Voyance"
         description="From quiz to itinerary in minutes. See how Voyance builds personalized day-by-day travel plans."
       />
+
+      {/* Side Navigation */}
+      <HowItWorksSideNav />
       
-      {/* Hero - Editorial, Magazine Style */}
-      <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden">
-        {/* Background image with overlay */}
+      {/* Hero */}
+      <section id="hero" className="relative min-h-[80vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <img 
-            src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
+            src={heroImage}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -112,8 +117,8 @@ export default function HowItWorks() {
         </motion.div>
       </section>
 
-      {/* The Journey - Editorial Storytelling */}
-      <section className="py-32 relative">
+      {/* The Journey */}
+      <section id="journey" className="py-32 relative">
         <div className="max-w-6xl mx-auto px-4">
           {/* Chapter 1 */}
           <motion.div
@@ -128,21 +133,13 @@ export default function HowItWorks() {
                 Tell us who you are
               </h2>
               <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-                Not what you want to see—who you are. Our quiz measures 8 core traits: 
+                Not what you want to see - who you are. Our quiz measures 8 core traits: 
                 how you plan, how you recharge, what thrills you, what bores you.
               </p>
-              <p className="text-lg text-muted-foreground leading-relaxed mb-6">
+              <p className="text-lg text-muted-foreground leading-relaxed">
                 In 2 minutes, we identify your archetype from 27 distinct traveler personalities. 
                 Not a horoscope. A blueprint.
               </p>
-              <Link 
-                to={ROUTES.ARCHETYPES}
-                className="inline-flex items-center gap-2 text-primary font-medium hover:underline"
-              >
-                <Sparkles className="h-4 w-4" />
-                Explore all 27 Travel DNA archetypes
-                <ArrowRight className="h-4 w-4" />
-              </Link>
               <div className="mt-8 flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="px-3 py-1 bg-muted rounded-full">10 questions</span>
                 <span className="px-3 py-1 bg-muted rounded-full">2 minutes</span>
@@ -240,6 +237,73 @@ export default function HowItWorks() {
         </div>
       </section>
 
+      {/* Travel DNA Section */}
+      <section id="travel-dna" className="py-24 bg-gradient-to-br from-primary/5 via-background to-accent/5">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-full text-sm text-primary font-medium mb-6">
+              <Dna className="h-4 w-4" />
+              Travel DNA
+            </div>
+            <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-4">
+              27 traveler personalities
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Every trip is shaped by who you are. Discover your archetype and see how 
+              it transforms every recommendation.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="grid md:grid-cols-3 gap-6 mb-12"
+          >
+            {[
+              { name: 'The Slow Traveler', desc: 'Savors every moment, never rushes', emoji: '🌿' },
+              { name: 'The Adrenaline Architect', desc: 'Plans adventures others dream about', emoji: '⚡' },
+              { name: 'The Cultural Curator', desc: 'Seeks authentic, local experiences', emoji: '🎭' },
+            ].map((archetype, idx) => (
+              <motion.div
+                key={archetype.name}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1 }}
+                className="bg-card border border-border rounded-2xl p-6 text-center"
+              >
+                <div className="text-4xl mb-4">{archetype.emoji}</div>
+                <h3 className="font-semibold text-foreground mb-2">{archetype.name}</h3>
+                <p className="text-sm text-muted-foreground">{archetype.desc}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2 }}
+            className="text-center"
+          >
+            <Button asChild size="lg" variant="outline" className="gap-2">
+              <Link to={ROUTES.ARCHETYPES}>
+                <Sparkles className="h-4 w-4" />
+                Explore all 27 archetypes
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Divider with quote */}
       <section className="py-20 bg-muted/30 border-y border-border">
         <div className="max-w-4xl mx-auto px-4 text-center">
@@ -263,11 +327,13 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* Interactive Playground - "See It in Action" */}
-      <DemoPlayground />
+      {/* Interactive Playground */}
+      <div id="playground">
+        <DemoPlayground />
+      </div>
 
-      {/* Our Promise - Simplified */}
-      <section className="py-24 relative overflow-hidden">
+      {/* Our Promise */}
+      <section id="promise" className="py-24 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
         
@@ -303,8 +369,8 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* CTA - Editorial */}
-      <section className="py-32 bg-gradient-to-b from-background to-muted/30">
+      {/* CTA */}
+      <section id="cta" className="py-32 bg-gradient-to-b from-background to-muted/30">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
