@@ -3387,6 +3387,16 @@ Generate 4-6 activities for this day following ALL quality rules above. Focus on
       }
 
       const data = await response.json();
+      // The gateway can sometimes return HTTP 200 with an error payload.
+      if ((data as any)?.error) {
+        console.error('[Stage 2] AI Gateway error payload:', (data as any).error);
+        const raw = (data as any).error?.message || 'Internal Server Error';
+        const msg = raw === 'Internal Server Error'
+          ? 'AI service temporarily unavailable. Please try again in a moment.'
+          : raw;
+        throw new Error(`AI service error: ${msg}`);
+      }
+
       const message = data.choices?.[0]?.message;
       const toolCall = message?.tool_calls?.[0];
 
@@ -5916,6 +5926,16 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         const data = await response.json();
+        // The gateway can sometimes return HTTP 200 with an error payload.
+        if ((data as any)?.error) {
+          console.error('[generate-day] AI Gateway error payload:', (data as any).error);
+          const raw = (data as any).error?.message || 'Internal Server Error';
+          const msg = raw === 'Internal Server Error'
+            ? 'AI service temporarily unavailable. Please try again in a moment.'
+            : raw;
+          throw new Error(`AI service error: ${msg}`);
+        }
+
         const message = data.choices?.[0]?.message;
         const toolCall = message?.tool_calls?.[0];
 
