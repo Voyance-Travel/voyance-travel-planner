@@ -1080,7 +1080,7 @@ export default function Start() {
             <p className="mt-4 text-lg text-muted-foreground max-w-lg mx-auto">
               {itineraryOnlyMode
                 ? "You've got your flights and hotel sorted. We'll craft the perfect daily activities."
-                : "Tell us where you're headed, and we'll find the ideal place to stay."}
+                : "Search and book through us, or add your existing reservation."}
             </p>
           </motion.div>
 
