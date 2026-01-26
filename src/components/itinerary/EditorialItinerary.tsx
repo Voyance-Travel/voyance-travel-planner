@@ -3581,16 +3581,17 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
   const hasFlight = hasCompleteFlightData; // Only show game plan if we have times
   
   // Fetch dynamic transfer data from Google Maps Distance Matrix API
+  // Runs when hotel exists (flight optional - uses destination airport as fallback)
   useEffect(() => {
-    if (!outbound || !hotelSelection?.name) return;
+    if (!hotelSelection?.name) return;
     
     const fetchTransferData = async () => {
       setIsLoadingTransfer(true);
       try {
-        const arrivalAirport = outbound.arrival?.airport || '';
-        const arrivalTime = outbound.arrival?.time || '';
+        const arrivalAirport = outbound?.arrival?.airport || '';
+        const arrivalTime = outbound?.arrival?.time || '';
         
-        // Build origin string (airport)
+        // Build origin string (airport) - use flight data or fallback to destination airport
         const origin = arrivalAirport 
           ? `${arrivalAirport} Airport, ${destination}`
           : `${destination} Airport`;
@@ -3643,7 +3644,7 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
     };
     
     fetchTransferData();
-  }, [outbound?.arrival?.airport, hotelSelection?.name, destination]);
+  }, [outbound?.arrival?.airport, hotelSelection?.name, hotelSelection?.address, destination]);
   
   // Parse arrival time and calculate recommendations (move up to use in all states)
   const arrivalTime = outbound?.arrival?.time || '';
@@ -3848,7 +3849,9 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <p className="font-medium text-sm">Getting to {hotelSelection?.name}</p>
+                <p className="font-medium text-sm">
+                  {hasFlight ? `Getting to ${hotelSelection?.name}` : `${destination} Airport → ${hotelSelection?.name}`}
+                </p>
                 {isLoadingTransfer && (
                   <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
                 )}
@@ -3858,17 +3861,21 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
                   </Badge>
                 )}
               </div>
-              {hasFlight && (
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                    <span className="font-medium">🚕 Taxi/Uber</span>
-                    <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
-                  </div>
-                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                    <span className="font-medium">🚆 Train/Metro</span>
-                    <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
-                  </div>
+              {/* Always show transfer options when hotel exists (use static fallback if no live data) */}
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                  <span className="font-medium">🚕 Taxi/Uber</span>
+                  <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
                 </div>
+                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                  <span className="font-medium">🚆 Train/Metro</span>
+                  <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
+                </div>
+              </div>
+              {!hasFlight && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Add your flight to get personalized arrival day timing
+                </p>
               )}
             </div>
           </div>
