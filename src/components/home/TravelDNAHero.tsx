@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, Dna } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 
 export default function TravelDNAHero() {
-  const scrollToArchetype = () => {
-    document.getElementById('sample-archetype')?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToFeatures = () => {
+    document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
@@ -19,10 +19,10 @@ export default function TravelDNAHero() {
           className="w-full h-full object-cover"
         />
         {/* Editorial gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-black/70" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/35 to-black/60" />
       </div>
 
-      {/* Editorial Grid Lines */}
+      {/* Editorial Grid Lines - Magazine Detail */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute left-8 md:left-16 top-0 bottom-0 w-px bg-white/10" />
         <div className="absolute right-8 md:right-16 top-0 bottom-0 w-px bg-white/10" />
@@ -36,47 +36,38 @@ export default function TravelDNAHero() {
           transition={{ duration: 1, ease: [0.25, 0.1, 0.25, 1] }}
           className="text-white"
         >
-          {/* Editorial Eyebrow with DNA Icon */}
+          {/* Editorial Eyebrow */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3, duration: 0.8 }}
             className="flex items-center gap-4 mb-8"
           >
-            <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center">
-              <Dna className="w-5 h-5 text-white/80" />
-            </div>
+            <div className="w-12 h-px bg-white/60" />
             <span className="text-xs tracking-[0.3em] uppercase text-white/70 font-sans font-medium">
-              Travel DNA
+              AI-Powered Trip Planning
             </span>
           </motion.div>
 
-          {/* Main Headline */}
-          <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl font-normal mb-6 leading-[1.05] tracking-tight">
-            <span className="block">Discover who you are</span>
-            <span className="block italic">as a traveler</span>
+          {/* Main Headline - Editorial Typography */}
+          <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl font-normal mb-8 leading-[0.95] tracking-tight">
+            <span className="block">Your perfect trip,</span>
+            <span className="block italic">planned in</span>
+            <span className="block">minutes</span>
           </h1>
 
-          {/* Subheadline */}
+          {/* Subheadline - Clean editorial copy */}
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.8 }}
-            className="text-lg md:text-xl text-white/80 mb-4 max-w-xl font-sans font-light leading-relaxed"
+            className="text-lg md:text-xl text-white/75 mb-12 max-w-lg font-sans font-light leading-relaxed"
           >
-            25 distinct travel personalities. One quiz. Two minutes.
-          </motion.p>
-          
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
-            className="text-base md:text-lg text-white/60 mb-10 max-w-lg font-sans font-light leading-relaxed"
-          >
-            Then watch us build trips only we could build for you.
+            Tell us how you travel. Our AI builds a personalized day-by-day itinerary 
+            crafted around your style, interests, and pace.
           </motion.p>
 
-          {/* CTA */}
+          {/* CTA - Editorial Button */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -88,8 +79,8 @@ export default function TravelDNAHero() {
               size="lg" 
               className="text-base px-10 py-6 bg-white text-foreground hover:bg-white/90 font-sans font-medium tracking-wide"
             >
-              <Link to={ROUTES.START}>
-                Take the Quiz
+              <Link to={ROUTES.DEMO}>
+                See How It Works
                 <ArrowRight className="ml-3 h-4 w-4" />
               </Link>
             </Button>
@@ -97,27 +88,29 @@ export default function TravelDNAHero() {
               variant="outline"
               size="lg"
               className="text-base px-10 py-6 border-white/30 text-white bg-transparent hover:bg-white/10 font-sans"
-              onClick={scrollToArchetype}
+              asChild
             >
-              See an Example
+              <Link to={ROUTES.START}>
+                Start Planning
+              </Link>
             </Button>
           </motion.div>
 
-          {/* Editorial Detail */}
+          {/* Editorial Detail - Issue marker */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 0.8 }}
             className="absolute bottom-8 left-8 md:left-16 text-white/40 text-xs tracking-[0.2em] uppercase font-sans"
           >
-            27 Archetypes · 8 Traits
+            Vol. I · Winter 2026
           </motion.div>
         </motion.div>
       </div>
 
-      {/* Scroll Indicator */}
+      {/* Scroll Indicator - Editorial Style */}
       <motion.button
-        onClick={scrollToArchetype}
+        onClick={scrollToFeatures}
         className="absolute bottom-12 right-8 md:right-16 text-white/40 hover:text-white/70 transition-colors flex flex-col items-center gap-2"
         animate={{ y: [0, 6, 0] }}
         transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
