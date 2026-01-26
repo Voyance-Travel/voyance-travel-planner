@@ -465,15 +465,15 @@ export default function Profile() {
       </section>
 
       {/* Tab Navigation */}
-      <section className="border-b border-border mt-8">
+      <section className="border-b border-border mt-8 overflow-x-auto scrollbar-hide">
         <div className="max-w-5xl mx-auto px-4">
-          <nav className="flex gap-8">
+          <nav className="flex gap-4 sm:gap-8 min-w-max">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'py-4 text-sm font-medium border-b-2 transition-colors',
+                  'py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0',
                   activeTab === tab.id
                     ? 'border-foreground text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground'

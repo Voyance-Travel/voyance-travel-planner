@@ -237,9 +237,9 @@ export default function EditorialPreferencesView() {
       className="space-y-6"
     >
       {/* Header */}
-      <div className="relative">
-        <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-primary via-primary/50 to-transparent" />
-        <div className="pl-8">
+      <div className="relative pl-4 sm:pl-8">
+        <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-primary via-primary/50 to-transparent" />
+        <div>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />

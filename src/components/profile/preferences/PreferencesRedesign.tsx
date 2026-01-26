@@ -269,10 +269,10 @@ export default function PreferencesRedesign({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.3 }}
-            className="p-8"
+            className="p-4 sm:p-8"
           >
             {/* Section Header */}
-            <div className="border-l-4 border-primary pl-6 mb-8">
+            <div className="border-l-4 border-primary pl-4 sm:pl-6 mb-6 sm:mb-8">
               <div className="flex items-center gap-3 mb-2">
                 <currentSection.icon className="w-6 h-6 text-primary" />
                 <h3 className="text-xl font-medium text-foreground">{currentSection.title}</h3>
