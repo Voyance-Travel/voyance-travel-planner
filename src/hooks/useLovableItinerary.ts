@@ -73,7 +73,7 @@ interface GeneratedDay {
     startTime: string;
     endTime: string;
     duration: string;
-    location: string;
+    location: string | { name?: string; address?: string; coordinates?: { lat: number; lng: number } };
     estimatedCost: { amount: number; currency: string };
     bookingRequired: boolean;
     tips?: string;
@@ -115,13 +115,29 @@ function convertGeneratedToBackendDay(day: GeneratedDay): BackendDay {
       startTime: a.startTime,
       endTime: a.endTime,
       duration: a.duration,
-      location: a.location,
+      // BackendDay expects a string here; we normalize object locations.
+      location:
+        typeof a.location === 'string'
+          ? a.location
+          : a.location?.address || a.location?.name || '',
       estimatedCost: a.estimatedCost,
       bookingRequired: a.bookingRequired,
       tips: a.tips,
       coordinates: a.coordinates,
     })),
   };
+}
+
+function isTransientAiFailure(message: string) {
+  const m = message.toLowerCase();
+  return (
+    m.includes('temporarily unavailable') ||
+    m.includes('internal server error') ||
+    // Supabase FunctionsHttpError often embeds status/body into message
+    m.includes('returned 500') ||
+    m.includes('status code 500') ||
+    m.includes('ai service error')
+  );
 }
 
 // ============================================================================
@@ -251,44 +267,75 @@ export function useLovableItinerary(tripId: string | null) {
 
         console.log(`[useLovableItinerary] Generating day ${dayNum}/${totalDays}`);
 
-        const { data: dayResponse, error: dayError } = await supabase.functions.invoke('generate-itinerary', {
-          body: {
-            action: 'generate-day',
-            tripId,
-            dayNumber: dayNum,
-            totalDays,
-            destination: tripDetails.destination,
-            destinationCountry: tripDetails.destinationCountry,
-            date: formatDate(tripDetails.startDate, dayNum - 1),
-            travelers: tripDetails.travelers,
-            tripType: tripDetails.tripType,
-            budgetTier: tripDetails.budgetTier,
-            preferences,
-            previousDayActivities: previousActivities.slice(-10),
-            transportationModes: preferences?.transportationModes,
-            primaryTransport: preferences?.primaryTransport,
-            hasRentalCar: preferences?.hasRentalCar,
-          }
-        });
+        let dayResponse: any = null;
+        let lastError: unknown = null;
 
-        if (dayError) {
-          console.error(`[useLovableItinerary] Day ${dayNum} error:`, dayError);
-          // Handle rate limiting
-          if (dayError.message?.includes('429') || dayError.message?.includes('Rate limit')) {
-            throw new Error('Rate limit exceeded. Please try again in a moment.');
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+            body: {
+              action: 'generate-day',
+              tripId,
+              dayNumber: dayNum,
+              totalDays,
+              destination: tripDetails.destination,
+              destinationCountry: tripDetails.destinationCountry,
+              date: formatDate(tripDetails.startDate, dayNum - 1),
+              travelers: tripDetails.travelers,
+              tripType: tripDetails.tripType,
+              budgetTier: tripDetails.budgetTier,
+              preferences,
+              previousDayActivities: previousActivities.slice(-10),
+              transportationModes: preferences?.transportationModes,
+              primaryTransport: preferences?.primaryTransport,
+              hasRentalCar: preferences?.hasRentalCar,
+            }
+          });
+
+          if (error) {
+            lastError = error;
+            const msg = error instanceof Error ? error.message : String(error);
+            console.error(`[useLovableItinerary] Day ${dayNum} error (attempt ${attempt}):`, error);
+
+            if (msg.includes('429') || msg.toLowerCase().includes('rate limit')) {
+              throw new Error('Rate limit exceeded. Please try again in a moment.');
+            }
+            if (msg.includes('402')) {
+              throw new Error('AI credits exhausted. Please add credits to continue.');
+            }
+
+            if (attempt < 3 && isTransientAiFailure(msg)) {
+              await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+              continue;
+            }
+
+            throw error;
           }
-          if (dayError.message?.includes('402')) {
-            throw new Error('AI credits exhausted. Please add credits to continue.');
+
+          if (!data?.success || !data?.day) {
+            lastError = new Error(data?.error || `Failed to generate day ${dayNum}`);
+            const msg = lastError instanceof Error ? lastError.message : String(lastError);
+            if (attempt < 3 && isTransientAiFailure(msg)) {
+              await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+              continue;
+            }
+            throw lastError;
           }
-          throw dayError;
+
+          dayResponse = data;
+          break;
         }
 
         if (!dayResponse?.success || !dayResponse?.day) {
-          throw new Error(`Failed to generate day ${dayNum}`);
+          throw (lastError instanceof Error ? lastError : new Error(`Failed to generate day ${dayNum}`));
         }
 
         const generatedDay = dayResponse.day as GeneratedDay;
         generatedDays.push(generatedDay);
+
+        // Small delay between days to reduce the chance of provider hiccups
+        if (dayNum < totalDays) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
 
         // Track activities to avoid repetition
         generatedDay.activities.forEach(a => previousActivities.push(a.name));

@@ -3289,112 +3289,136 @@ ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on prev
 
 Generate 4-6 activities for this day following ALL quality rules above. Focus on VARIETY - explore different types of experiences each day.`;
 
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "create_day_itinerary",
-              description: "Creates a validated day itinerary",
-              parameters: {
-                type: "object",
-                properties: {
-                  dayNumber: { type: "number" },
-                  date: { type: "string" },
-                  title: { type: "string" },
-                  theme: { type: "string" },
-                  activities: {
-                    type: "array",
-                    minItems: 3,
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: { type: "string" },
-                        title: { type: "string" },
-                        startTime: { type: "string", description: "HH:MM 24-hour format" },
-                        endTime: { type: "string", description: "HH:MM 24-hour format" },
-                        category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
-                        location: {
-                          type: "object",
-                          properties: {
-                            name: { type: "string" },
-                            address: { type: "string" },
-                            coordinates: {
-                              type: "object",
-                              properties: { lat: { type: "number" }, lng: { type: "number" } },
-                              required: ["lat", "lng"]
+      let data: any = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            tools: [{
+              type: "function",
+              function: {
+                name: "create_day_itinerary",
+                description: "Creates a validated day itinerary",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    dayNumber: { type: "number" },
+                    date: { type: "string" },
+                    title: { type: "string" },
+                    theme: { type: "string" },
+                    activities: {
+                      type: "array",
+                      minItems: 3,
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          title: { type: "string" },
+                          startTime: { type: "string", description: "HH:MM 24-hour format" },
+                          endTime: { type: "string", description: "HH:MM 24-hour format" },
+                          category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
+                          location: {
+                            type: "object",
+                            properties: {
+                              name: { type: "string" },
+                              address: { type: "string" },
+                              coordinates: {
+                                type: "object",
+                                properties: { lat: { type: "number" }, lng: { type: "number" } },
+                                required: ["lat", "lng"]
+                              }
+                            },
+                            required: ["name", "address"]
+                          },
+                          cost: {
+                            type: "object",
+                            properties: {
+                              amount: { type: "number", minimum: 0 },
+                              currency: { type: "string" }
+                            },
+                            required: ["amount", "currency"]
+                          },
+                          description: { type: "string" },
+                          tags: { type: "array", items: { type: "string" }, minItems: 5 },
+                          bookingRequired: { type: "boolean" },
+                          transportation: {
+                            type: "object",
+                            properties: {
+                              method: { type: "string" },
+                              duration: { type: "string" },
+                              estimatedCost: {
+                                type: "object",
+                                properties: { amount: { type: "number" }, currency: { type: "string" } }
+                              },
+                              instructions: { type: "string" }
                             }
                           },
-                          required: ["name", "address"]
-                        },
-                        cost: {
-                          type: "object",
-                          properties: {
-                            amount: { type: "number", minimum: 0 },
-                            currency: { type: "string" }
+                          tips: { type: "string" },
+                          rating: {
+                            type: "object",
+                            properties: { value: { type: "number" }, totalReviews: { type: "number" } }
                           },
-                          required: ["amount", "currency"]
+                          website: { type: "string" }
                         },
-                        description: { type: "string" },
-                        tags: { type: "array", items: { type: "string" }, minItems: 5 },
-                        bookingRequired: { type: "boolean" },
-                        transportation: {
-                          type: "object",
-                          properties: {
-                            method: { type: "string" },
-                            duration: { type: "string" },
-                            estimatedCost: {
-                              type: "object",
-                              properties: { amount: { type: "number" }, currency: { type: "string" } }
-                            },
-                            instructions: { type: "string" }
-                          }
-                        },
-                        tips: { type: "string" },
-                        rating: {
-                          type: "object",
-                          properties: { value: { type: "number" }, totalReviews: { type: "number" } }
-                        },
-                        website: { type: "string" }
-                      },
-                      required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired"]
+                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired"]
+                      }
                     }
-                  }
-                },
-                required: ["dayNumber", "date", "title", "activities"]
+                  },
+                  required: ["dayNumber", "date", "title", "activities"]
+                }
               }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
-        }),
-      });
+            }],
+            tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
+          }),
+        });
 
-      if (!response.ok) {
-        const status = response.status;
-        const errorText = await response.text();
-        console.error(`[Stage 2] AI Gateway error for day ${dayNumber}: ${status}`, errorText);
-        throw new Error(status === 429 ? 'Rate limit exceeded' : status === 402 ? 'Credits exhausted' : 'AI generation failed');
+        if (!response.ok) {
+          const status = response.status;
+          const errorText = await response.text();
+          console.error(`[Stage 2] AI Gateway error for day ${dayNumber} (attempt ${attempt}): ${status}`, errorText);
+
+          // Retry transient 5xx
+          if (attempt < 3 && status >= 500) {
+            await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+            continue;
+          }
+
+          throw new Error(status === 429 ? 'Rate limit exceeded' : status === 402 ? 'Credits exhausted' : 'AI generation failed');
+        }
+
+        data = await response.json();
+
+        // The gateway can sometimes return HTTP 200 with an error payload.
+        if ((data as any)?.error) {
+          console.error(`[Stage 2] AI Gateway error payload (attempt ${attempt}):`, (data as any).error);
+          const raw = (data as any).error?.message || 'Internal Server Error';
+          const isTransient = raw === 'Internal Server Error' || (data as any).error?.code === 500;
+          if (attempt < 3 && isTransient) {
+            await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+            data = null;
+            continue;
+          }
+
+          const msg = raw === 'Internal Server Error'
+            ? 'AI service temporarily unavailable. Please try again in a moment.'
+            : raw;
+          throw new Error(`AI service error: ${msg}`);
+        }
+
+        break;
       }
 
-      const data = await response.json();
-      // The gateway can sometimes return HTTP 200 with an error payload.
-      if ((data as any)?.error) {
-        console.error('[Stage 2] AI Gateway error payload:', (data as any).error);
-        const raw = (data as any).error?.message || 'Internal Server Error';
-        const msg = raw === 'Internal Server Error'
-          ? 'AI service temporarily unavailable. Please try again in a moment.'
-          : raw;
-        throw new Error(`AI service error: ${msg}`);
+      if (!data) {
+        throw new Error('AI generation failed');
       }
 
       const message = data.choices?.[0]?.message;
@@ -5844,96 +5868,123 @@ Generate activities following the timing constraints specified in the system pro
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
       try {
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt }
-            ],
-            tools: [{
-              type: "function",
-              function: {
-                name: "create_day_itinerary",
-                description: "Creates a structured day itinerary",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    dayNumber: { type: "number" },
-                    date: { type: "string" },
-                    theme: { type: "string" },
-                    title: { type: "string", description: "Day title like 'Arrival Day' or 'Historic Exploration'" },
-                    activities: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          id: { type: "string" },
-                          title: { type: "string", description: "Activity display name (REQUIRED)" },
-                          name: { type: "string", description: "Alias for title" },
-                          description: { type: "string" },
-                          category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
-                          startTime: { type: "string", description: "HH:MM format (24-hour)" },
-                          endTime: { type: "string", description: "HH:MM format (24-hour)" },
-                          duration: { type: "string" },
-                          location: { 
-                            type: "object",
-                            properties: {
-                              name: { type: "string" },
-                              address: { type: "string" }
-                            }
+        let data: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-3-flash-preview",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+              ],
+              tools: [{
+                type: "function",
+                function: {
+                  name: "create_day_itinerary",
+                  description: "Creates a structured day itinerary",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      dayNumber: { type: "number" },
+                      date: { type: "string" },
+                      theme: { type: "string" },
+                      title: { type: "string", description: "Day title like 'Arrival Day' or 'Historic Exploration'" },
+                      activities: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string" },
+                            title: { type: "string", description: "Activity display name (REQUIRED)" },
+                            name: { type: "string", description: "Alias for title" },
+                            description: { type: "string" },
+                            category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
+                            startTime: { type: "string", description: "HH:MM format (24-hour)" },
+                            endTime: { type: "string", description: "HH:MM format (24-hour)" },
+                            duration: { type: "string" },
+                            location: { 
+                              type: "object",
+                              properties: {
+                                name: { type: "string" },
+                                address: { type: "string" }
+                              }
+                            },
+                            estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
+                            cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
+                            bookingRequired: { type: "boolean" },
+                            tips: { type: "string" },
+                            coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
+                            type: { type: "string" }
                           },
-                          estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
-                          cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
-                          bookingRequired: { type: "boolean" },
-                          tips: { type: "string" },
-                          coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
-                          type: { type: "string" }
-                        },
-                        required: ["title", "category", "startTime", "endTime", "location"]
-                      }
+                          required: ["title", "category", "startTime", "endTime", "location"]
+                        }
+                      },
+                      narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
                     },
-                    narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
-                  },
-                  required: ["dayNumber", "date", "theme", "activities"]
+                    required: ["dayNumber", "date", "theme", "activities"]
+                  }
                 }
-              }
-            }],
-            tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
-          }),
-        });
+              }],
+              tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
+            }),
+          });
 
-        if (!response.ok) {
-          const status = response.status;
-          if (status === 429) {
-            return new Response(
-              JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+          if (!response.ok) {
+            const status = response.status;
+            if (status === 429) {
+              return new Response(
+                JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
+                { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+            if (status === 402) {
+              return new Response(
+                JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
+                { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+
+            const errorText = await response.text();
+            console.error(`[generate-day] AI gateway error (attempt ${attempt}): ${status}`, errorText);
+
+            // Retry transient 5xx
+            if (attempt < 3 && status >= 500) {
+              await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+              continue;
+            }
+
+            throw new Error("AI generation failed");
           }
-          if (status === 402) {
-            return new Response(
-              JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+
+          data = await response.json();
+
+          // The gateway can sometimes return HTTP 200 with an error payload.
+          if ((data as any)?.error) {
+            console.error(`[generate-day] AI Gateway error payload (attempt ${attempt}):`, (data as any).error);
+            const raw = (data as any).error?.message || 'Internal Server Error';
+            const isTransient = raw === 'Internal Server Error' || (data as any).error?.code === 500;
+            if (attempt < 3 && isTransient) {
+              await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+              data = null;
+              continue;
+            }
+
+            const msg = raw === 'Internal Server Error'
+              ? 'AI service temporarily unavailable. Please try again in a moment.'
+              : raw;
+            throw new Error(`AI service error: ${msg}`);
           }
-          throw new Error("AI generation failed");
+
+          break;
         }
 
-        const data = await response.json();
-        // The gateway can sometimes return HTTP 200 with an error payload.
-        if ((data as any)?.error) {
-          console.error('[generate-day] AI Gateway error payload:', (data as any).error);
-          const raw = (data as any).error?.message || 'Internal Server Error';
-          const msg = raw === 'Internal Server Error'
-            ? 'AI service temporarily unavailable. Please try again in a moment.'
-            : raw;
-          throw new Error(`AI service error: ${msg}`);
+        if (!data) {
+          throw new Error('AI generation failed');
         }
 
         const message = data.choices?.[0]?.message;
