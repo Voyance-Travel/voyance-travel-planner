@@ -221,7 +221,8 @@ export default function EditorialTripSummary({
             variant="hero"
             hideOverlayText={true}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
+          {/* Stronger gradient overlay for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
           
           {/* Hero Content */}
           <div className="absolute inset-0 flex flex-col justify-end px-4 md:px-8 lg:px-16 pb-12 md:pb-16">
@@ -231,23 +232,24 @@ export default function EditorialTripSummary({
               transition={{ delay: 0.2, duration: 0.6 }}
               className="max-w-4xl mx-auto w-full"
             >
-              <p className="text-white/70 text-sm font-medium tracking-[0.2em] uppercase mb-3">
+              <p className="text-white/80 text-sm font-medium tracking-[0.2em] uppercase mb-3 drop-shadow-md">
                 Your Journey Awaits
               </p>
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif font-light text-white mb-6 leading-[0.95]">
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif font-light text-white mb-6 leading-[0.95] drop-shadow-lg"
+                  style={{ textShadow: '0 2px 20px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.3)' }}>
                 {destinationCity}
               </h1>
-              <div className="flex flex-wrap items-center gap-6 text-white/80 text-base">
+              <div className="flex flex-wrap items-center gap-6 text-white/90 text-base drop-shadow-md">
                 <span className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
                   {format(new Date(data.startDate), 'MMM d')} – {format(new Date(data.endDate), 'MMM d, yyyy')}
                 </span>
-                <span className="w-px h-4 bg-white/30" />
+                <span className="w-px h-4 bg-white/40" />
                 <span className="flex items-center gap-2">
                   <Users className="w-4 h-4" />
                   {data.travelers} {data.travelers === 1 ? 'traveler' : 'travelers'}
                 </span>
-                <span className="w-px h-4 bg-white/30" />
+                <span className="w-px h-4 bg-white/40" />
                 <span className="flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
                   {nights} nights
