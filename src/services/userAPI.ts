@@ -190,16 +190,37 @@ export async function getTripStats(): Promise<TripStats> {
   if (error) throw new Error(error.message);
   
   const allTrips = trips || [];
-  const completedTrips = allTrips.filter(t => t.status === 'completed');
-  const upcomingTrips = allTrips.filter(t => ['planning', 'booked', 'active'].includes(t.status));
+  const now = new Date();
+  
+  // Filter trips by actual dates, not just status
+  const completedTrips = allTrips.filter(t => {
+    // Status-based: explicitly completed
+    if (t.status === 'completed') return true;
+    // Date-based: trip has ended (end_date is in the past)
+    if (t.end_date && new Date(t.end_date) < now && t.status !== 'draft') return true;
+    return false;
+  });
+  
+  const upcomingTrips = allTrips.filter(t => {
+    // Draft trips are not "upcoming" - they're saved/drafts
+    if (t.status === 'draft') return false;
+    // Explicitly completed trips are not upcoming
+    if (t.status === 'completed') return false;
+    // Trip hasn't ended yet (future or currently ongoing)
+    if (t.end_date && new Date(t.end_date) >= now) return true;
+    // No end date but has future start date
+    if (t.start_date && new Date(t.start_date) >= now) return true;
+    return false;
+  });
+  
   const draftTrips = allTrips.filter(t => t.status === 'draft');
   
-  // Extract unique destinations
-  const destinations = allTrips.map(t => t.destination);
-  const uniqueCities = [...new Set(destinations)];
+  // Extract unique destinations from COMPLETED trips only
+  const completedDestinations = completedTrips.map(t => t.destination);
+  const uniqueCities = [...new Set(completedDestinations)];
   
-  // Derive country from destination when destination_country is missing
-  const countries = allTrips.map(t => {
+  // Derive country from destination when destination_country is missing - COMPLETED trips only
+  const countries = completedTrips.map(t => {
     if (t.destination_country) return t.destination_country;
     // Fallback: infer country from destination city name
     return inferCountryFromDestination(t.destination);
