@@ -776,12 +776,12 @@ export default function Start() {
     if (itineraryOnlyMode) {
       const tripId = await saveTrip();
       if (tripId) {
-        // Build update payload with hotel and flight times
+        // Build update payload with all booking details
         const updatePayload: Record<string, unknown> = {};
         
-        // Save hotel selection if provided
+        // Save hotel selection if provided (as array for multi-hotel support)
         if (hotelSelection) {
-          updatePayload.hotel_selection = {
+          updatePayload.hotel_selection = [{
             id: `manual-${Date.now()}`,
             name: hotelSelection.name,
             address: hotelSelection.address,
@@ -790,25 +790,51 @@ export default function Start() {
             website: hotelSelection.website,
             googleMapsUrl: hotelSelection.googleMapsUrl,
             placeId: hotelSelection.placeId,
+            coordinates: hotelSelection.coordinates,
+            checkIn: start,
+            checkOut: end,
             isManualEntry: true,
-          };
+          }];
         }
         
-        // Save flight times to trip metadata for itinerary generation
-        if (arrivalTime || departureTime) {
+        // Save flight times with origin/destination for itinerary generation
+        if (arrivalTime || departureTime || originSelection.cityName) {
           updatePayload.flight_selection = {
-            outbound: arrivalTime ? {
-              arrival: { time: arrivalTime }
-            } : undefined,
-            return: departureTime ? {
-              departure: { time: departureTime }
-            } : undefined,
+            outbound: {
+              departure: originSelection.cityName ? {
+                airport: originSelection.airportCodes?.[0] || originSelection.cityName,
+                city: originSelection.cityName,
+              } : undefined,
+              arrival: {
+                airport: destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
+                city: destinationSelection.cityName,
+                time: arrivalTime || undefined,
+              },
+            },
+            return: {
+              departure: {
+                airport: destinationSelection.airportCodes?.[0] || destinationSelection.cityName,
+                city: destinationSelection.cityName,
+                time: departureTime || undefined,
+              },
+              arrival: originSelection.cityName ? {
+                airport: originSelection.airportCodes?.[0] || originSelection.cityName,
+                city: originSelection.cityName,
+              } : undefined,
+            },
           };
         }
         
-        if (Object.keys(updatePayload).length > 0) {
-          await supabase.from('trips').update(updatePayload).eq('id', tripId);
-        }
+        // Save metadata with airport codes
+        updatePayload.metadata = {
+          destinationAirportCodes: destinationSelection.airportCodes,
+          originAirportCodes: originSelection.airportCodes,
+          isDestinationMetro: destinationSelection.isMetroArea,
+          isOriginMetro: originSelection.isMetroArea,
+          budgetAmount: budgetAmount,
+        };
+        
+        await supabase.from('trips').update(updatePayload).eq('id', tripId);
         
         navigate(`/trip/${tripId}?generate=true`);
       }
