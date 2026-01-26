@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon } from 'lucide-react';
+import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
@@ -98,6 +99,8 @@ export function AddFlightInline({
   const navigate = useNavigate();
   const [showManualEntry, setShowManualEntry] = useState(editMode);
   const [isSaving, setIsSaving] = useState(false);
+  const [showMoreOutbound, setShowMoreOutbound] = useState(false);
+  const [showReturnFlight, setShowReturnFlight] = useState(!!existingReturn?.airline);
   
   const [outboundFlight, setOutboundFlight] = useState<ManualFlightEntry>(
     existingOutbound || {
@@ -128,8 +131,9 @@ export function AddFlightInline({
   // Removed: Browse & Book flights - we're a "bring your own flight" platform
 
   const handleSaveManualFlight = async () => {
-    if (!outboundFlight.airline || !outboundFlight.flightNumber) {
-      toast.error('Please enter at least the outbound flight details');
+    // Only require arrival time for itinerary planning
+    if (!outboundFlight.arrivalTime) {
+      toast.error('Please enter your arrival time so we can plan Day 1');
       return;
     }
 
@@ -137,8 +141,8 @@ export function AddFlightInline({
     try {
       const flightSelection = {
         departure: {
-          airline: outboundFlight.airline,
-          flightNumber: outboundFlight.flightNumber,
+          airline: outboundFlight.airline || 'Unknown',
+          flightNumber: outboundFlight.flightNumber || '',
           departure: {
             airport: outboundFlight.departureAirport,
             time: outboundFlight.departureTime,
@@ -151,9 +155,9 @@ export function AddFlightInline({
           price: outboundFlight.price || 0,
           cabin: 'economy',
         },
-        return: returnFlight.airline ? {
-          airline: returnFlight.airline,
-          flightNumber: returnFlight.flightNumber,
+        return: (showReturnFlight && returnFlight.departureTime) ? {
+          airline: returnFlight.airline || 'Unknown',
+          flightNumber: returnFlight.flightNumber || '',
           departure: {
             airport: returnFlight.departureAirport,
             time: returnFlight.departureTime,
@@ -203,174 +207,184 @@ export function AddFlightInline({
         Add Flight Details
       </Button>
 
-      {/* Manual Entry Dialog */}
+      {/* Manual Entry Dialog - Simplified */}
       <Dialog open={showManualEntry} onOpenChange={setShowManualEntry}>
-        <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plane className="h-5 w-5 text-primary" />
-              Enter Your Flight Details
+              Add Your Flight Times
             </DialogTitle>
+            <DialogDescription>
+              We'll use this to plan activities around your arrival
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4">
-            {/* Outbound Flight */}
+          <div className="space-y-5 py-4">
+            {/* Outbound Flight - Essential fields only */}
             <div className="space-y-4">
-              <h4 className="font-medium text-sm flex items-center gap-2">
-                <ArrowRight className="h-4 w-4" />
-                Outbound Flight
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <ArrowRight className="h-4 w-4" />
+                  Outbound Flight
+                </h4>
+              </div>
+              
+              {/* Essential: Route */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Airline</Label>
-                  <Input
-                    placeholder="e.g. Delta"
-                    value={outboundFlight.airline}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, airline: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Flight Number</Label>
-                  <Input
-                    placeholder="e.g. DL123"
-                    value={outboundFlight.flightNumber}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, flightNumber: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">From (Airport)</Label>
+                  <Label className="text-xs text-muted-foreground">From</Label>
                   <AirportAutocomplete
                     value={outboundFlight.departureAirport}
                     onChange={(code) => setOutboundFlight(prev => ({ ...prev, departureAirport: code }))}
-                    placeholder="e.g. JFK"
+                    placeholder="ATL"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">To (Airport)</Label>
+                  <Label className="text-xs text-muted-foreground">To</Label>
                   <AirportAutocomplete
                     value={outboundFlight.arrivalAirport}
                     onChange={(code) => setOutboundFlight(prev => ({ ...prev, arrivalAirport: code }))}
-                    placeholder="e.g. CDG"
+                    placeholder="LIS"
                   />
                 </div>
+              </div>
+
+              {/* Essential: Dates and Times */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Departure Date</Label>
+                  <Label className="text-xs text-muted-foreground">Departure Date</Label>
                   <Input
                     type="date"
                     value={outboundFlight.departureDate}
                     onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureDate: e.target.value }))}
+                    className="text-sm"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Departure Time</Label>
-                  <Input
-                    type="time"
-                    value={outboundFlight.departureTime}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureTime: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Arrival Time (at destination)</Label>
+                  <Label className="text-xs text-muted-foreground">Arrival Time *</Label>
                   <Input
                     type="time"
                     value={outboundFlight.arrivalTime}
                     onChange={(e) => setOutboundFlight(prev => ({ ...prev, arrivalTime: e.target.value }))}
+                    className="text-sm"
+                    required
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    This helps us plan your Day 1 activities
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs">Price (USD)</Label>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 450"
-                    value={outboundFlight.price || ''}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    For budget tracking
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Plans Day 1 activities
                   </p>
                 </div>
               </div>
+
+              {/* Optional: More details */}
+              <Collapsible open={showMoreOutbound} onOpenChange={setShowMoreOutbound}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground w-full justify-start px-0">
+                    {showMoreOutbound ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                    {showMoreOutbound ? 'Less details' : 'Add more details (optional)'}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Airline</Label>
+                      <Input
+                        placeholder="e.g. Delta"
+                        value={outboundFlight.airline}
+                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, airline: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Flight #</Label>
+                      <Input
+                        placeholder="e.g. DL123"
+                        value={outboundFlight.flightNumber}
+                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, flightNumber: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Departure Time</Label>
+                      <Input
+                        type="time"
+                        value={outboundFlight.departureTime}
+                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureTime: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Price ($)</Label>
+                      <Input
+                        type="number"
+                        placeholder="450"
+                        value={outboundFlight.price || ''}
+                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
 
-            {/* Return Flight */}
-            <div className="space-y-4">
-              <h4 className="font-medium text-sm flex items-center gap-2 text-muted-foreground">
-                <ArrowRight className="h-4 w-4 rotate-180" />
-                Return Flight <span className="text-xs font-normal">(optional)</span>
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Airline</Label>
-                  <Input
-                    placeholder="e.g. Delta"
-                    value={returnFlight.airline}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, airline: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Flight Number</Label>
-                  <Input
-                    placeholder="e.g. DL456"
-                    value={returnFlight.flightNumber}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, flightNumber: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">From (Airport)</Label>
-                  <AirportAutocomplete
-                    value={returnFlight.departureAirport}
-                    onChange={(code) => setReturnFlight(prev => ({ ...prev, departureAirport: code }))}
-                    placeholder="e.g. CDG"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">To (Airport)</Label>
-                  <AirportAutocomplete
-                    value={returnFlight.arrivalAirport}
-                    onChange={(code) => setReturnFlight(prev => ({ ...prev, arrivalAirport: code }))}
-                    placeholder="e.g. JFK"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Departure Date</Label>
-                  <Input
-                    type="date"
-                    value={returnFlight.departureDate}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, departureDate: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Departure Time</Label>
-                  <Input
-                    type="time"
-                    value={returnFlight.departureTime}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, departureTime: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Arrival Time (at home)</Label>
-                  <Input
-                    type="time"
-                    value={returnFlight.arrivalTime}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, arrivalTime: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Price (USD)</Label>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 450"
-                    value={returnFlight.price || ''}
-                    onChange={(e) => setReturnFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    For budget tracking
-                  </p>
-                </div>
-              </div>
+            {/* Return Flight - Collapsed by default */}
+            <div className="border-t pt-4">
+              <Collapsible open={showReturnFlight} onOpenChange={setShowReturnFlight}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground w-full justify-start px-0">
+                    {showReturnFlight ? <ChevronUp className="h-4 w-4 mr-2" /> : <ChevronDown className="h-4 w-4 mr-2" />}
+                    <ArrowRight className="h-4 w-4 rotate-180 mr-2" />
+                    {showReturnFlight ? 'Return Flight' : 'Add return flight (optional)'}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Departure Date</Label>
+                      <Input
+                        type="date"
+                        value={returnFlight.departureDate}
+                        onChange={(e) => setReturnFlight(prev => ({ ...prev, departureDate: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Departure Time</Label>
+                      <Input
+                        type="time"
+                        value={returnFlight.departureTime}
+                        onChange={(e) => setReturnFlight(prev => ({ ...prev, departureTime: e.target.value }))}
+                        className="text-sm"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Plans last day activities
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Airline</Label>
+                      <Input
+                        placeholder="e.g. Delta"
+                        value={returnFlight.airline}
+                        onChange={(e) => setReturnFlight(prev => ({ ...prev, airline: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Price ($)</Label>
+                      <Input
+                        type="number"
+                        placeholder="450"
+                        value={returnFlight.price || ''}
+                        onChange={(e) => setReturnFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </div>
 
