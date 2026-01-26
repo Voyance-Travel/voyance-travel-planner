@@ -1104,6 +1104,15 @@ export function EditorialItinerary({
     setHasChanges(true);
   }, []);
 
+  // Handle drag-and-drop reorder of activities within a day
+  const handleActivityReorder = useCallback((dayIndex: number, reorderedActivities: EditorialActivity[]) => {
+    setDays(prev => prev.map((day, idx) => {
+      if (idx !== dayIndex) return day;
+      return { ...day, activities: reorderedActivities };
+    }));
+    setHasChanges(true);
+  }, []);
+
   // Move activity to a different day
   const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
     if (fromDayIndex === toDayIndex) return;
@@ -1691,6 +1700,7 @@ export function EditorialItinerary({
                 onActivitySwap={openSwapDrawer}
                 onActivityLock={handleActivityLock}
                 onActivityMove={handleActivityMove}
+                onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
                 onMoveToDay={handleMoveToDay}
                 onActivityRemove={handleActivityRemove}
                 onDayLock={handleDayLock}
