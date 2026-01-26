@@ -14,6 +14,10 @@ const SYSTEM_PREFIXES = [
   'SOLO_RETREAT:',
   'DEEP_CONTEXT:',
   'SPLURGE_EXPERIENCE:',
+  'VIP_EXPERIENCE:',
+  'COUPLES_MOMENT:',
+  'CONNECTIVITY_SPOT:',
+  'FAMILY_ACTIVITY:',
   // Also handle lowercase variants
   'edge_activity:',
   'signature_meal:',
@@ -24,6 +28,10 @@ const SYSTEM_PREFIXES = [
   'solo_retreat:',
   'deep_context:',
   'splurge_experience:',
+  'vip_experience:',
+  'couples_moment:',
+  'connectivity_spot:',
+  'family_activity:',
 ];
 
 /**

@@ -5080,9 +5080,32 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       const userInterests = normalizedContext?.preferences?.interests || prefs?.interests || [];
       
       // Derive forced slots (trait-based required activities per day)
-      const forcedSlots = deriveForcedSlots(traitScores, userInterests, 1, context.totalDays);
+      // Build slot derivation context for archetype-specific slots
+      const travelCompanions = prefs?.travel_companions || [];
+      const hasChildrenIndicators = travelCompanions.some((c: string) => 
+        c.toLowerCase().includes('family') || 
+        c.toLowerCase().includes('kid') || 
+        c.toLowerCase().includes('child')
+      ) || context.tripType === 'family';
+      
+      // Get archetype IDs from either normalized context or travel_dna_v2
+      const primaryArchetypeId = normalizedContext?.archetypes?.[0]?.id || 
+        travelDNA?.travel_dna_v2?.archetype_matches?.[0]?.archetype_id ||
+        travelDNA?.archetype_matches?.[0]?.archetype_id;
+      const secondaryArchetypeId = normalizedContext?.archetypes?.[1]?.id || 
+        travelDNA?.travel_dna_v2?.archetype_matches?.[1]?.archetype_id ||
+        travelDNA?.archetype_matches?.[1]?.archetype_id;
+      
+      const slotContext = {
+        tripType: context.tripType,
+        travelCompanions,
+        hasChildren: hasChildrenIndicators,
+        primaryArchetype: primaryArchetypeId,
+        secondaryArchetype: secondaryArchetypeId
+      };
+      const forcedSlots = deriveForcedSlots(traitScores, userInterests, 1, context.totalDays, slotContext);
       const forcedSlotsPrompt = buildForcedSlotsPrompt(forcedSlots);
-      console.log(`[Stage 1.96] ${forcedSlots.length} forced differentiator slots required per day`);
+      console.log(`[Stage 1.96] ${forcedSlots.length} forced differentiator slots required per day (context: tripType=${slotContext.tripType}, hasChildren=${slotContext.hasChildren}, archetype=${slotContext.primaryArchetype})`);
       
       // Derive schedule constraints (pace, walking, buffer times)
       const scheduleConstraints = deriveScheduleConstraints(
