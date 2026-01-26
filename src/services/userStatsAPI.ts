@@ -134,6 +134,8 @@ export async function getCountriesVisited(): Promise<CountriesResponse> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Authentication required');
   
+  const now = new Date();
+  
   const { data: trips, error } = await supabase
     .from('trips')
     .select('id, destination, destination_country, start_date, end_date, status')
@@ -144,7 +146,15 @@ export async function getCountriesVisited(): Promise<CountriesResponse> {
   
   const countryMap = new Map<string, CountryStats>();
   
+  // Only count trips that have ENDED (completed/past trips)
   (trips || []).forEach(trip => {
+    const endDate = trip.end_date ? new Date(trip.end_date) : null;
+    
+    // Skip if trip hasn't ended yet (upcoming trip)
+    if (!endDate || endDate > now) {
+      return;
+    }
+    
     const country = trip.destination_country || 'Unknown';
     const existing = countryMap.get(country) || {
       country,
@@ -155,7 +165,6 @@ export async function getCountriesVisited(): Promise<CountriesResponse> {
     };
     
     const startDate = trip.start_date ? new Date(trip.start_date) : null;
-    const endDate = trip.end_date ? new Date(trip.end_date) : null;
     const days = startDate && endDate 
       ? Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
