@@ -269,7 +269,7 @@ export default function PlannerBooking() {
         // ignore
       }
       
-      toast.success('Demo confirmation shown — sign in to run a real payment test.');
+      toast.success('Demo confirmation shown. Sign in to run a real payment test.');
       navigate(`/trips/${savedTripId || tripId}/confirmation`, {
         state: {
           tripId: savedTripId || tripId,

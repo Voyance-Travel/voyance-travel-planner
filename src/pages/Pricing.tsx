@@ -26,7 +26,7 @@ function TableCellContent({ value, highlight }: { value: string; highlight?: boo
     return <Check className={`w-4 h-4 mx-auto ${highlight ? 'text-primary' : 'text-green-600'}`} />;
   }
   if (value === '-') {
-    return <span className="text-muted-foreground/50">—</span>;
+    return <span className="text-muted-foreground/50">-</span>;
   }
   return <span className={highlight ? 'text-foreground font-medium' : 'text-muted-foreground'}>{value}</span>;
 }

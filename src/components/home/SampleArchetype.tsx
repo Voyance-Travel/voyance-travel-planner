@@ -59,7 +59,7 @@ export default function SampleArchetype() {
             See yourself in your <em className="font-normal">Travel DNA</em>
           </h2>
           <p className="text-muted-foreground max-w-lg mx-auto font-sans">
-            Here's what one of our 27 archetypes looks like — yours will be uniquely you.
+            Here's what one of our 27 archetypes looks like. Yours will be uniquely you.
           </p>
         </motion.div>
 

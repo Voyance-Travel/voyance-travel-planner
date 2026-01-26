@@ -321,7 +321,7 @@ export default function Archetypes() {
                   <h4 className="font-semibold text-foreground">Your Travel Agent</h4>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Eventually, you have a travel agent in your pocket—one that knows you and plans 
+                  Eventually, you have a travel agent in your pocket. One that knows you and plans 
                   trips for you, and only you...
                 </p>
               </div>
