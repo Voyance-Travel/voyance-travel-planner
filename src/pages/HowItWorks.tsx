@@ -1,41 +1,31 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { CheckCircle, Sparkles, Calendar, Plane, MapPin, Clock, Users, Star, ArrowRight, Compass, Heart, Shield, Dna, Leaf, Trophy, Gem } from 'lucide-react';
+import { CheckCircle, Sparkles, Calendar, MapPin, Clock, Users, ArrowRight, Compass, Heart, Shield, Dna, Sliders, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { ARCHETYPE_NARRATIVES, CATEGORY_COLORS, CATEGORY_DESCRIPTIONS } from '@/data/archetypeNarratives';
+import { ARCHETYPE_NARRATIVES } from '@/data/archetypeNarratives';
 
 const steps = [
   {
-    icon: Sparkles,
+    icon: Dna,
     title: 'Discover Your Travel DNA',
     description: 'Take our 2-minute quiz to uncover your unique travel personality from 27 distinct archetypes. We learn your pace, interests, and dream experiences.',
     image: 'https://images.unsplash.com/photo-1522199755839-a2bacb67c546?w=600&q=80',
-    color: 'from-violet-500 to-purple-600',
   },
   {
     icon: Compass,
-    title: 'Get Personalized Recommendations',
+    title: 'Get Matched Experiences',
     description: 'Our AI matches you with destinations and experiences that resonate with who you are. Every suggestion is tailored to your travel style.',
     image: 'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&q=80',
-    color: 'from-blue-500 to-cyan-600',
   },
   {
     icon: Calendar,
-    title: 'Craft Your Perfect Itinerary',
-    description: 'Watch as we build a day-by-day plan with the right mix of activities, dining, and downtime. Customize anything until it feels just right.',
+    title: 'Build Your Itinerary',
+    description: 'Watch as we craft a day-by-day plan with the right mix of activities, dining, and downtime. Customize anything until it feels just right.',
     image: 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?w=600&q=80',
-    color: 'from-emerald-500 to-teal-600',
-  },
-  {
-    icon: Plane,
-    title: 'We Build It Into Your Plan',
-    description: 'Share your flight details and we weave everything together—hotels, activities, and local experiences built around your schedule.',
-    image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&q=80',
-    color: 'from-orange-500 to-rose-600',
   },
 ];
 
@@ -67,7 +57,7 @@ const stats = [
   { value: '190+', label: 'Countries Covered', icon: MapPin },
 ];
 
-// Featured archetypes to showcase
+// Featured archetypes to showcase (curated for variety)
 const FEATURED_ARCHETYPES = [
   'slow_traveler',
   'cultural_anthropologist',
@@ -76,15 +66,6 @@ const FEATURED_ARCHETYPES = [
   'family_architect',
   'luxury_luminary',
 ];
-
-const CATEGORY_ICONS = {
-  EXPLORER: Compass,
-  CONNECTOR: Users,
-  ACHIEVER: Trophy,
-  RESTORER: Leaf,
-  CURATOR: Gem,
-  TRANSFORMER: Sparkles,
-};
 
 export default function HowItWorks() {
   return (
@@ -177,7 +158,7 @@ export default function HowItWorks() {
             className="text-center mb-16"
           >
             <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-              Four Simple Steps to Your Perfect Trip
+              Three Steps to Your Perfect Trip
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               From dream to departure in less time than it takes to scroll through travel blogs
@@ -197,7 +178,7 @@ export default function HowItWorks() {
                 }`}
               >
                 <div className={index % 2 === 1 ? 'lg:order-2' : ''}>
-                  <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br ${step.color} text-white mb-6`}>
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-6">
                     <step.icon className="h-7 w-7" />
                   </div>
                   <div className="text-sm font-semibold text-primary mb-2">Step {index + 1}</div>
@@ -205,7 +186,7 @@ export default function HowItWorks() {
                   <p className="text-lg text-muted-foreground leading-relaxed">{step.description}</p>
                 </div>
                 <div className={`relative ${index % 2 === 1 ? 'lg:order-1' : ''}`}>
-                  <div className={`absolute inset-0 bg-gradient-to-br ${step.color} rounded-3xl blur-2xl opacity-20 -m-4`} />
+                  <div className="absolute inset-0 bg-primary/10 rounded-3xl blur-2xl opacity-50 -m-4" />
                   <img
                     src={step.image}
                     alt={step.title}
@@ -218,70 +199,104 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* Travel DNA Archetypes Section */}
+      {/* Travel DNA Deep Dive */}
       <section className="py-20 bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4">
+        <div className="max-w-5xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-12"
+            className="text-center mb-14"
           >
             <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
               <Dna className="w-3 h-3 mr-1" />
-              27 Unique Types
+              The Science of Travel
             </Badge>
             <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-              Meet the Travel DNA Archetypes
+              How Travel DNA Works
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Everyone travels differently. Our system identifies your unique style from 27 distinct personalities.
+              We match you to one of 27 distinct traveler personalities through a blend of psychology and data.
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
-            {FEATURED_ARCHETYPES.map((id, index) => {
-              const archetype = ARCHETYPE_NARRATIVES[id];
-              if (!archetype) return null;
-              const categoryStyle = CATEGORY_COLORS[archetype.category];
-              const CategoryIcon = CATEGORY_ICONS[archetype.category];
-              
-              return (
-                <motion.div
-                  key={id}
-                  initial={{ opacity: 0, y: 16 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.05 }}
-                  className={`rounded-xl border p-5 ${categoryStyle.border} ${categoryStyle.bg}`}
-                >
-                  <div className="flex items-start gap-3 mb-3">
-                    <span className="text-2xl">{archetype.emoji}</span>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">{archetype.name}</h3>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <CategoryIcon className={`w-3 h-3 ${categoryStyle.text}`} />
-                        <span className={`text-xs ${categoryStyle.text}`}>
-                          {CATEGORY_DESCRIPTIONS[archetype.category].name}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-sm font-medium text-foreground italic mb-2">
-                    "{archetype.hookLine}"
-                  </p>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {archetype.coreDescription}
-                  </p>
-                </motion.div>
-              );
-            })}
+          {/* DNA Process Steps */}
+          <div className="grid md:grid-cols-3 gap-8 mb-14">
+            {[
+              {
+                icon: Sparkles,
+                title: 'Profile Your Style',
+                description: 'Our quiz measures 8 core travel traits—from planning style to social energy to adventure tolerance. Each answer helps paint your travel portrait.',
+              },
+              {
+                icon: Sliders,
+                title: 'Match & Rank',
+                description: 'We compare your trait profile against 27 archetypes, finding the personality that best captures how you actually travel—not how you think you travel.',
+              },
+              {
+                icon: RefreshCw,
+                title: 'Evolve Over Time',
+                description: 'Your DNA isn\'t static. Rate activities, adjust preferences, and your profile refines—so recommendations get smarter with every trip.',
+              },
+            ].map((item, index) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-card border border-border rounded-xl p-6"
+              >
+                <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <item.icon className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+              </motion.div>
+            ))}
           </div>
+
+          {/* Sample Archetypes Preview */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mb-10"
+          >
+            <h3 className="text-center text-lg font-medium text-foreground mb-6">
+              A glimpse at some archetypes
+            </h3>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {FEATURED_ARCHETYPES.map((id, index) => {
+                const archetype = ARCHETYPE_NARRATIVES[id];
+                if (!archetype) return null;
+                
+                return (
+                  <motion.div
+                    key={id}
+                    initial={{ opacity: 0, y: 12 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.05 }}
+                    className="bg-card border border-border rounded-lg p-4 hover:border-primary/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-xl">{archetype.emoji}</span>
+                      <h4 className="font-medium text-foreground text-sm">{archetype.name}</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground italic line-clamp-2">
+                      "{archetype.hookLine}"
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
 
           <div className="text-center">
             <Button asChild variant="outline" size="lg">
               <Link to={ROUTES.ARCHETYPES}>
-                View All 27 Archetypes
+                Explore All 27 Archetypes
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
