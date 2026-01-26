@@ -232,9 +232,9 @@ export function useLovableItinerary(tripId: string | null) {
     }));
 
     try {
-      // Pre-generation phases for better UX
+      // Pre-generation phases for better UX - shorter delays with engaging animation
       // Phase 1: Gathering DNA (visual delay)
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      await new Promise(resolve => setTimeout(resolve, 800));
       if (!isMounted.current) return;
       
       setState(prev => ({
@@ -245,7 +245,7 @@ export function useLovableItinerary(tripId: string | null) {
       }));
       
       // Phase 2: Personalizing (visual delay)
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      await new Promise(resolve => setTimeout(resolve, 800));
       if (!isMounted.current) return;
       
       setState(prev => ({
@@ -256,7 +256,7 @@ export function useLovableItinerary(tripId: string | null) {
       }));
       
       // Phase 3: Preparing (visual delay)
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 600));
       if (!isMounted.current) return;
       
       setState(prev => ({
