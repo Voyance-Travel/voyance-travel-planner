@@ -2,6 +2,7 @@
 export const ROUTES = {
   // Public routes
   HOME: '/',
+  DEMO: '/demo',
   EXPLORE: '/explore',
   DESTINATIONS: '/destinations',
   DESTINATION_DETAIL: '/destination/:slug',

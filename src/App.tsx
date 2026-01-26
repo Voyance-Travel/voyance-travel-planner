@@ -62,6 +62,7 @@ import TripConfirmation from "./pages/TripConfirmation";
 // Pages - Itinerary
 import ItineraryView from "./pages/ItineraryView";
 import SampleItinerary from "./pages/SampleItinerary";
+import Demo from "./pages/Demo";
 
 // Pages - Legal
 import Privacy from "./pages/Privacy";
@@ -112,22 +113,23 @@ const App = () => (
             <BrowserRouter>
               <ScrollToTop />
               <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<Home />} />
-                <Route path="/explore" element={<Explore />} />
-                <Route path="/destinations" element={<Destinations />} />
-                <Route path="/destination/:slug" element={<DestinationDetail />} />
-                <Route path="/guides" element={<Guides />} />
-                <Route path="/guides/:slug" element={<GuideDetail />} />
-                <Route path="/about" element={<About />} />
-                <Route path="/how-it-works" element={<HowItWorks />} />
-                <Route path="/careers" element={<Careers />} />
-                <Route path="/press" element={<Press />} />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="/faq" element={<FAQ />} />
-                <Route path="/help" element={<HelpCenter />} />
-                <Route path="/sample-itinerary" element={<SampleItinerary />} />
-                
+              {/* Public Routes */}
+              <Route path="/" element={<Home />} />
+              <Route path="/demo" element={<Demo />} />
+              <Route path="/explore" element={<Explore />} />
+              <Route path="/destinations" element={<Destinations />} />
+              <Route path="/destination/:slug" element={<DestinationDetail />} />
+              <Route path="/guides" element={<Guides />} />
+              <Route path="/guides/:slug" element={<GuideDetail />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/how-it-works" element={<HowItWorks />} />
+              <Route path="/careers" element={<Careers />} />
+              <Route path="/press" element={<Press />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/faq" element={<FAQ />} />
+              <Route path="/help" element={<HelpCenter />} />
+              <Route path="/sample-itinerary" element={<SampleItinerary />} />
+              
                 {/* Public Share Routes */}
                 <Route path="/share/:shareToken" element={<TripShare />} />
                 <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
