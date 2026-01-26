@@ -538,7 +538,6 @@ export default function Planner() {
             tripSummary={calculateTripSummary()}
             onBook={handleBook}
             onSave={handleSave}
-            onBuildItinerary={handleBuildItinerary}
             onBack={handleBack}
             isLoading={isLoading}
           />

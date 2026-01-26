@@ -168,22 +168,12 @@ export default function PlannerSummary() {
               if (activitiesBudget > 0) {
                 params.set('activitiesBudget', String(activitiesBudget));
               }
-              navigate(`/planner/itinerary?${params.toString()}`);
-            }}
-            onBuildItinerary={async () => {
-              const tripId = await ensureTripId();
-              if (!tripId) return;
-              const params = new URLSearchParams(searchParams);
-              params.set('tripId', tripId);
-              if (activitiesBudget > 0) {
-                params.set('activitiesBudget', String(activitiesBudget));
-              }
-              navigate(`/planner/itinerary?${params.toString()}`);
+              navigate(`/trip/${tripId}`);
             }}
             onBook={async () => {
               const tripId = await ensureTripId();
               if (!tripId) return;
-              navigate(`/planner/booking?tripId=${tripId}`);
+              navigate(`/trip/${tripId}`);
             }}
           />
         </div>
