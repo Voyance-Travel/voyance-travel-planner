@@ -193,7 +193,7 @@ export default function AgentClients() {
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
+                          <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100" aria-label="Client options">
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>

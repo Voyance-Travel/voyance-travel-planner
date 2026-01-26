@@ -118,7 +118,7 @@ export default function IntakeLinkCard({ account, onUpdate }: IntakeLinkCardProp
                   readOnly 
                   className="font-mono text-sm"
                 />
-                <Button variant="outline" size="icon" onClick={handleCopy}>
+                <Button variant="outline" size="icon" onClick={handleCopy} aria-label={copied ? "Link copied" : "Copy link"}>
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
                 <Button 
@@ -126,6 +126,7 @@ export default function IntakeLinkCard({ account, onUpdate }: IntakeLinkCardProp
                   size="icon" 
                   onClick={() => window.open(intakeUrl!, '_blank')}
                   disabled={!account.intake_enabled}
+                  aria-label="Open intake link in new tab"
                 >
                   <ExternalLink className="h-4 w-4" />
                 </Button>

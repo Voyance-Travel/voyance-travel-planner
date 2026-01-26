@@ -180,7 +180,7 @@ export default function ClientForm() {
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/agent')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/agent')} aria-label="Go back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -357,6 +357,7 @@ export default function ClientForm() {
                         type="button"
                         onClick={() => setTags(tags.filter(t => t !== tag))}
                         className="ml-1 hover:text-destructive"
+                        aria-label={`Remove ${tag} tag`}
                       >
                         ×
                       </button>

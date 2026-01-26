@@ -52,6 +52,7 @@ export default function ProfileEdit() {
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate(ROUTES.PROFILE.VIEW)}
+                aria-label="Go back to profile"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
@@ -66,7 +67,10 @@ export default function ProfileEdit() {
                 <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
                   <User className="h-12 w-12 text-primary" />
                 </div>
-                <button className="absolute bottom-0 right-0 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors">
+                <button 
+                  className="absolute bottom-0 right-0 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+                  aria-label="Change profile photo"
+                >
                   <Camera className="h-4 w-4" />
                 </button>
               </div>

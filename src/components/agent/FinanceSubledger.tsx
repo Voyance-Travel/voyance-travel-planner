@@ -211,7 +211,7 @@ export default function FinanceSubledger({ tripId }: FinanceSubledgerProps) {
                       <SelectItem value="import">Import</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" size="icon" onClick={() => refetchEntries()}>
+                  <Button variant="outline" size="icon" onClick={() => refetchEntries()} aria-label="Refresh entries">
                     <RefreshCw className="h-4 w-4" />
                   </Button>
                 </div>

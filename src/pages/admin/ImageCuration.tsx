@@ -182,7 +182,7 @@ export default function ImageCuration() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/profile">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" aria-label="Go back to profile">
                 <ChevronLeft className="h-5 w-5" />
               </Button>
             </Link>
@@ -206,7 +206,7 @@ export default function ImageCuration() {
               </SelectContent>
             </Select>
             
-            <Button variant="outline" size="icon" onClick={fetchImages}>
+            <Button variant="outline" size="icon" onClick={fetchImages} aria-label="Refresh images">
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>

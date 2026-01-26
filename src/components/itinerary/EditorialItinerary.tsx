@@ -4527,7 +4527,7 @@ function ActivityRow({
                     <DropdownMenuTrigger asChild>
                       <button
                         className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
-                        title="More actions"
+                        aria-label="More actions"
                         data-tour="more-actions"
                       >
                         <MoreHorizontal className="h-3.5 w-3.5" />

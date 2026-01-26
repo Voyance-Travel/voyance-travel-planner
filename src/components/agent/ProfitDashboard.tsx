@@ -269,7 +269,7 @@ export default function ProfitDashboard({
               Import Payouts
             </Button>
           )}
-          <Button variant="ghost" size="icon" onClick={loadMetrics}>
+          <Button variant="ghost" size="icon" onClick={loadMetrics} aria-label="Refresh metrics">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
