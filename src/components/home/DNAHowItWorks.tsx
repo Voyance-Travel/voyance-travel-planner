@@ -23,7 +23,7 @@ const STEPS = [
     number: '3',
     icon: MapPin,
     title: 'Get matched trips',
-    description: 'We build itineraries designed around your DNA—not generic templates. Every recommendation fits your pace, style, and interests.',
+    description: 'We build itineraries designed around your DNA - not generic templates. Every recommendation fits your pace, style, and interests.',
     highlight: 'Custom itineraries',
   },
   {

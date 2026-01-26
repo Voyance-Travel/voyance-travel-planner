@@ -506,7 +506,7 @@ export default function ItineraryPreview({
           <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 mb-6 text-sm">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
             <p className="text-muted-foreground">
-              Generic itinerary — <a href="/quiz" className="text-primary hover:underline">take the quiz</a> for personalized recommendations
+              Generic itinerary - <a href="/quiz" className="text-primary hover:underline">take the quiz</a> for personalized recommendations
             </p>
           </div>
         )}
