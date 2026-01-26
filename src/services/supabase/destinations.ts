@@ -94,6 +94,7 @@ export async function getDestinationById(
 
 /**
  * Fetch destination by city name (case-insensitive)
+ * Uses limit(1) instead of maybeSingle() to handle potential duplicates gracefully
  */
 export async function getDestinationByCity(
   city: string
@@ -103,31 +104,31 @@ export async function getDestinationByCity(
     .from("destinations")
     .select("*")
     .ilike("city", city.trim())
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.error("Error fetching destination by city:", error);
     throw error;
   }
 
-  // If no exact match, try fuzzy search
-  if (!data) {
-    const { data: fuzzyData, error: fuzzyError } = await supabase
-      .from("destinations")
-      .select("*")
-      .ilike("city", `%${city.trim()}%`)
-      .limit(1)
-      .maybeSingle();
-    
-    if (fuzzyError) {
-      console.error("Error in fuzzy destination search:", fuzzyError);
-      return null;
-    }
-    
-    return fuzzyData;
+  // If exact match found, return first result
+  if (data && data.length > 0) {
+    return data[0];
   }
 
-  return data;
+  // If no exact match, try fuzzy search
+  const { data: fuzzyData, error: fuzzyError } = await supabase
+    .from("destinations")
+    .select("*")
+    .ilike("city", `%${city.trim()}%`)
+    .limit(1);
+  
+  if (fuzzyError) {
+    console.error("Error in fuzzy destination search:", fuzzyError);
+    return null;
+  }
+  
+  return fuzzyData && fuzzyData.length > 0 ? fuzzyData[0] : null;
 }
 
 /**
