@@ -118,23 +118,32 @@ export function VendorBookingLink({
     : null;
 
   // Determine label based on whether we have a direct URL or are searching
+  // Use shorter labels on mobile
   const linkLabel = hasDirectUrl 
     ? `View on ${vendorName}` 
     : `Find on ${vendorName}`;
+  
+  // Mobile-friendly short labels
+  const shortLabel = hasDirectUrl ? 'View' : 'Find';
 
   return (
     <Button
       variant={variant}
       size={size}
       onClick={handleClick}
-      className={cn("gap-1.5", className)}
+      className={cn(
+        "gap-1 sm:gap-1.5 text-xs px-2 sm:px-3 h-7 sm:h-8",
+        className
+      )}
       {...props}
     >
-      <ExternalLink className="h-3.5 w-3.5" />
+      <ExternalLink className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
       {children || (
         <>
-          {linkLabel}
-          {formattedPrice && <span className="text-muted-foreground">~{formattedPrice}</span>}
+          {/* Short label on mobile, full label on desktop */}
+          <span className="sm:hidden">{shortLabel}</span>
+          <span className="hidden sm:inline">{linkLabel}</span>
+          {formattedPrice && <span className="hidden sm:inline text-muted-foreground">~{formattedPrice}</span>}
         </>
       )}
     </Button>
