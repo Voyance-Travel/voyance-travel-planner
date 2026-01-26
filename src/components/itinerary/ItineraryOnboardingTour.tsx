@@ -102,23 +102,74 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
     }
   }, [tripId]);
 
-  // Update highlight position when step changes
+  // Update highlight position when step changes or window resizes/scrolls
   useEffect(() => {
+    const updateHighlight = () => {
+      const step = TOUR_STEPS[currentStep];
+      if (step?.selector) {
+        const element = document.querySelector(step.selector);
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          setHighlightRect(rect);
+        } else {
+          setHighlightRect(null);
+        }
+      } else {
+        setHighlightRect(null);
+      }
+    };
+
+    // Initial update with small delay to allow scroll to settle
     const step = TOUR_STEPS[currentStep];
     if (step?.selector) {
       const element = document.querySelector(step.selector);
       if (element) {
-        const rect = element.getBoundingClientRect();
-        setHighlightRect(rect);
-        // Scroll element into view if needed
+        // Scroll element into view first
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-        setHighlightRect(null);
+        
+        // Wait for scroll to complete, then update position
+        const scrollTimer = setTimeout(() => {
+          updateHighlight();
+        }, 400);
+        
+        // Add listeners for dynamic updates
+        window.addEventListener('resize', updateHighlight);
+        window.addEventListener('scroll', updateHighlight, true);
+        
+        return () => {
+          clearTimeout(scrollTimer);
+          window.removeEventListener('resize', updateHighlight);
+          window.removeEventListener('scroll', updateHighlight, true);
+        };
       }
-    } else {
-      setHighlightRect(null);
     }
+    
+    updateHighlight();
   }, [currentStep]);
+
+  // Continuously update highlight position while tour is active
+  useEffect(() => {
+    if (!isVisible) return;
+    
+    const interval = setInterval(() => {
+      const step = TOUR_STEPS[currentStep];
+      if (step?.selector) {
+        const element = document.querySelector(step.selector);
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          // Only update if position changed significantly
+          setHighlightRect(prev => {
+            if (!prev) return rect;
+            const hasChanged = Math.abs(prev.top - rect.top) > 2 || 
+                               Math.abs(prev.left - rect.left) > 2;
+            return hasChanged ? rect : prev;
+          });
+        }
+      }
+    }, 100);
+    
+    return () => clearInterval(interval);
+  }, [isVisible, currentStep]);
 
   const handleNext = useCallback(() => {
     if (currentStep < TOUR_STEPS.length - 1) {
