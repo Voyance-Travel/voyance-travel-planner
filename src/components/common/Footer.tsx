@@ -146,33 +146,31 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Newsletter Signup - Only for non-users */}
-          {!user && (
-            <div className="col-span-2 md:col-span-4 lg:col-span-1">
-              <h4 className="text-sm font-medium mb-3">Get personalized travel tips</h4>
-              <form onSubmit={handleNewsletterSignup} className="flex gap-2">
-                <Input
-                  type="email"
-                  placeholder="Your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-9 text-sm flex-1"
-                  disabled={isSubmitting}
-                />
-                <Button 
-                  type="submit" 
-                  size="sm" 
-                  className="h-9 px-3"
-                  disabled={isSubmitting}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
-              <p className="text-xs text-muted-foreground mt-2">
-                Weekly inspiration, no spam
-              </p>
-            </div>
-          )}
+          {/* Newsletter Signup */}
+          <div className="col-span-2 md:col-span-4 lg:col-span-1">
+            <h4 className="text-sm font-medium mb-3">Get personalized travel tips</h4>
+            <form onSubmit={handleNewsletterSignup} className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="Your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-9 text-sm flex-1"
+                disabled={isSubmitting}
+              />
+              <Button 
+                type="submit" 
+                size="sm" 
+                className="h-9 px-3"
+                disabled={isSubmitting}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+            <p className="text-xs text-muted-foreground mt-2">
+              Weekly inspiration, no spam
+            </p>
+          </div>
         </div>
 
         {/* Bottom Bar */}
