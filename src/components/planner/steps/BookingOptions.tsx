@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Check, Bookmark, Calendar, Plane, Hotel, AlertCircle, Info } from 'lucide-react';
+import { Check, Bookmark, Plane, Hotel, AlertCircle, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface BookingOptionsProps {
@@ -13,7 +13,6 @@ interface BookingOptionsProps {
   };
   onBook: () => void;
   onSave: () => void;
-  onBuildItinerary: () => void;
   onBack: () => void;
   isLoading?: boolean;
 }
@@ -22,7 +21,6 @@ export default function BookingOptions({
   tripSummary,
   onBook,
   onSave,
-  onBuildItinerary,
   onBack,
   isLoading,
 }: BookingOptionsProps) {
@@ -41,7 +39,7 @@ export default function BookingOptions({
           Your trip is ready!
         </h1>
         <p className="text-slate-600">
-          Review your selections and choose how to proceed
+          Review your selections and book to see your full itinerary
         </p>
       </div>
 
@@ -52,21 +50,21 @@ export default function BookingOptions({
         <div className="grid md:grid-cols-2 gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-slate-600" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Dates</p>
-              <p className="font-medium text-slate-900">{tripSummary.dates}</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
               <Plane className="w-5 h-5 text-slate-600" />
             </div>
             <div>
               <p className="text-sm text-slate-500">Destination</p>
               <p className="font-medium text-slate-900">{tripSummary.destination}</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+              <Hotel className="w-5 h-5 text-slate-600" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Dates</p>
+              <p className="font-medium text-slate-900">{tripSummary.dates}</p>
             </div>
           </div>
         </div>
@@ -110,7 +108,7 @@ export default function BookingOptions({
               <div>
                 <h3 className="text-xl font-semibold mb-1">Book Now</h3>
                 <p className="text-primary-foreground/80 text-sm">
-                  Secure your flights and hotel at today's prices.
+                  Secure your trip and get your personalized itinerary
                 </p>
               </div>
             </div>
@@ -133,7 +131,7 @@ export default function BookingOptions({
             <div className="flex-1">
               <h3 className="text-xl font-semibold text-slate-900 mb-1">Save Trip</h3>
               <p className="text-slate-600 text-sm">
-                Save your search criteria to continue later.
+                Save your search criteria to continue later
               </p>
               <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
                 <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -143,28 +141,6 @@ export default function BookingOptions({
               </div>
             </div>
             <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">Free</span>
-          </div>
-        </motion.button>
-
-        {/* Option 3: Build Itinerary First */}
-        <motion.button
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
-          onClick={onBuildItinerary}
-          disabled={isLoading}
-          className="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white hover:border-slate-300 transition-colors text-left"
-        >
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
-              <Calendar className="w-6 h-6 text-slate-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold text-slate-900 mb-1">Build Itinerary First</h3>
-              <p className="text-slate-600 text-sm">
-                See your day-by-day plan before booking. You can still book after.
-              </p>
-            </div>
-            <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">Preview</span>
           </div>
         </motion.button>
       </div>
@@ -179,12 +155,9 @@ export default function BookingOptions({
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between">
+      <div className="flex justify-start">
         <Button variant="outline" onClick={onBack} className="h-12 px-6">
           Back to Hotels
-        </Button>
-        <Button variant="ghost" onClick={onBuildItinerary} className="h-12 px-6 text-muted-foreground">
-          Skip to Itinerary →
         </Button>
       </div>
     </motion.div>

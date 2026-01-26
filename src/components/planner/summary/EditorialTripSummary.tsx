@@ -80,7 +80,6 @@ interface EditorialTripSummaryProps {
   data: TripSummaryData;
   onBook: () => void;
   onSave: () => void;
-  onBuildItinerary: () => void;
   onBack: () => void;
   onActivitiesBudgetChange?: (budget: number) => void;
   isLoading?: boolean;
@@ -100,7 +99,6 @@ export default function EditorialTripSummary({
   data,
   onBook,
   onSave,
-  onBuildItinerary,
   onBack,
   onActivitiesBudgetChange,
   isLoading,
@@ -353,7 +351,7 @@ export default function EditorialTripSummary({
                         We're creating a personalized day-by-day plan for your {nights}-night trip to {destinationCity}. 
                         You can add your flight and hotel details anytime from your itinerary view.
                       </p>
-                      <Button onClick={onBuildItinerary} className="gap-2">
+                      <Button onClick={onSave} className="gap-2">
                         <Sparkles className="w-4 h-4" />
                         Generate My Itinerary
                       </Button>
