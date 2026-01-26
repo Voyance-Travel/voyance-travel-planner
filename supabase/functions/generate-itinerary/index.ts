@@ -2567,11 +2567,80 @@ function buildPreferenceContext(insights: any, prefs: any): string {
       coreItems.push(`Interests: ${prefs.interests.slice(0, 6).join(', ')}`);
     }
     if (prefs.travel_pace) {
-      coreItems.push(`Travel pace: ${prefs.travel_pace}`);
+      const paceInstructions: Record<string, string> = {
+        'relaxed': `RELAXED PACE: 
+   → Maximum 4-5 activities per day (including meals)
+   → Include 2+ hour downtime blocks for rest/exploration
+   → No back-to-back activities - allow 30+ min buffers
+   → Prioritize quality over quantity`,
+        'balanced': `BALANCED PACE:
+   → 5-6 activities per day (including meals)
+   → Include at least one 1-hour downtime block
+   → 15-20 min buffers between activities`,
+        'active': `ACTIVE PACE:
+   → Can handle 7-8 activities per day
+   → Minimal downtime needed - keep them moving
+   → Pack the day with experiences`,
+      };
+      coreItems.push(paceInstructions[prefs.travel_pace] || `Travel pace: ${prefs.travel_pace}`);
     }
     if (prefs.activity_level) {
-      coreItems.push(`Activity level: ${prefs.activity_level}`);
+      const activityInstructions: Record<string, string> = {
+        'light': 'LIGHT ACTIVITY: Avoid strenuous walking, hiking, or physically demanding activities',
+        'moderate': 'MODERATE ACTIVITY: Some walking is fine, but avoid exhausting activities',
+        'active': 'ACTIVE: Can handle hiking, long walks, and physically demanding activities',
+        'intense': 'INTENSE: Seeks challenging physical activities and adventure sports',
+      };
+      coreItems.push(activityInstructions[prefs.activity_level] || `Activity level: ${prefs.activity_level}`);
     }
+    
+    // TIMING PREFERENCES - Critical for when activities start!
+    if (prefs.sleep_schedule || prefs.daytime_bias) {
+      const timingItems: string[] = [];
+      
+      if (prefs.sleep_schedule) {
+        const sleepInstructions: Record<string, string> = {
+          'early_bird': `🌅 EARLY BIRD: 
+   → START day at 7:00-8:00 AM
+   → Schedule key attractions in morning when energy is highest
+   → Plan dinner for 6:00-7:00 PM, end activities by 8:30 PM`,
+          'night_owl': `🌙 NIGHT OWL:
+   → START day at 10:00-11:00 AM (late breakfast)
+   → Schedule key activities for afternoon/evening
+   → Include nightlife, late dinners (8:00+ PM), evening tours`,
+          'needs_day': `😴 NEEDS DAYTIME REST:
+   → START day at 9:00-10:00 AM
+   → Include a 2+ hour afternoon siesta/rest block (2-4 PM)
+   → Resume activities in late afternoon
+   → Plan dinner for 7:00-8:00 PM`,
+        };
+        timingItems.push(sleepInstructions[prefs.sleep_schedule] || `Sleep schedule: ${prefs.sleep_schedule}`);
+      }
+      
+      if (prefs.daytime_bias) {
+        const biasInstructions: Record<string, string> = {
+          'morning': '☀️ MORNING PERSON: Front-load the day with key activities before noon',
+          'afternoon': '🌤️ AFTERNOON PEAK: Schedule main attractions for 1:00-5:00 PM',
+          'evening': '🌆 EVENING FOCUS: Light mornings, ramp up activity in late afternoon/evening',
+        };
+        if (biasInstructions[prefs.daytime_bias]) {
+          timingItems.push(biasInstructions[prefs.daytime_bias]);
+        }
+      }
+      
+      if (timingItems.length > 0) {
+        sections.push({ title: '⏰ TIMING & SCHEDULE PREFERENCES', items: timingItems });
+      }
+    }
+    
+    // Activity density constraints
+    if (prefs.max_activities_per_day && prefs.max_activities_per_day < 8) {
+      coreItems.push(`📊 MAX ${prefs.max_activities_per_day} activities per day (user-set limit)`);
+    }
+    if (prefs.preferred_downtime_minutes && prefs.preferred_downtime_minutes > 15) {
+      coreItems.push(`⏳ Minimum ${prefs.preferred_downtime_minutes} minute buffers between activities`);
+    }
+    
     if (prefs.dining_style) {
       coreItems.push(`Dining style: ${prefs.dining_style}`);
     }
