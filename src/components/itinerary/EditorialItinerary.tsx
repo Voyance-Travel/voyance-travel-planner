@@ -3745,63 +3745,7 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Hotel Section */}
-        {hasHotel ? (
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-              <Hotel className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <p className="font-medium text-sm">Getting to {hotelSelection?.name}</p>
-                {isLoadingTransfer && (
-                  <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
-                )}
-                {transferData && !isLoadingTransfer && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/20">
-                    Live
-                  </Badge>
-                )}
-              </div>
-              {hasFlight && (
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                    <span className="font-medium">🚕 Taxi/Uber</span>
-                    <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
-                  </div>
-                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                    <span className="font-medium">🚆 Train/Metro</span>
-                    <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between gap-3 p-3 bg-amber-500/5 rounded-lg border border-amber-500/20">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                <Hotel className="h-4 w-4 text-amber-600" />
-              </div>
-              <div>
-                <p className="font-medium text-sm text-amber-700 dark:text-amber-400">Add Your Hotel</p>
-                <p className="text-xs text-muted-foreground">Get transfer times and check-in recommendations</p>
-              </div>
-            </div>
-            {onNavigateToBookings && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={onNavigateToBookings}
-                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
-              >
-                Add Hotel
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* Flight Section */}
+        {/* Flight Section - First */}
         {hasFlight ? (
           <>
             {/* Recommended Airport Arrival */}
@@ -3837,13 +3781,13 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
             )}
           </>
         ) : (
-          <div className="flex items-center justify-between gap-3 p-3 bg-amber-500/5 rounded-lg border border-amber-500/20">
+          <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                <Plane className="h-4 w-4 text-amber-600" />
+              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                <Plane className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
-                <p className="font-medium text-sm text-amber-700 dark:text-amber-400">Add Your Flight</p>
+                <p className="font-medium text-sm">Add Your Flight</p>
                 <p className="text-xs text-muted-foreground">We'll plan your arrival day around your landing time</p>
               </div>
             </div>
@@ -3852,9 +3796,65 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
                 variant="outline" 
                 size="sm" 
                 onClick={onNavigateToBookings}
-                className="shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                className="shrink-0"
               >
                 Add Flight
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Hotel Section - Second */}
+        {hasHotel ? (
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+              <Hotel className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-sm">Getting to {hotelSelection?.name}</p>
+                {isLoadingTransfer && (
+                  <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
+                )}
+                {transferData && !isLoadingTransfer && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/20">
+                    Live
+                  </Badge>
+                )}
+              </div>
+              {hasFlight && (
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                    <span className="font-medium">🚕 Taxi/Uber</span>
+                    <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
+                  </div>
+                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                    <span className="font-medium">🚆 Train/Metro</span>
+                    <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                <Hotel className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Add Your Hotel</p>
+                <p className="text-xs text-muted-foreground">Get transfer times and check-in recommendations</p>
+              </div>
+            </div>
+            {onNavigateToBookings && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onNavigateToBookings}
+                className="shrink-0"
+              >
+                Add Hotel
               </Button>
             )}
           </div>
