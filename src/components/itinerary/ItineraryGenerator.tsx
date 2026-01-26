@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { ROUTES } from '@/config/routes';
 
 interface ItineraryGeneratorProps {
   tripId: string;
@@ -83,10 +84,12 @@ export function ItineraryGenerator({
 
   const [hasStarted, setHasStarted] = useState(false);
   const [showNudgeCard, setShowNudgeCard] = useState(true);
+  const [showGenericWarning, setShowGenericWarning] = useState(false);
   const autoStartTriggered = useRef(false);
 
   const handleGenerate = async () => {
     setHasStarted(true);
+    setShowGenericWarning(false);
     try {
       const generatedDays = await generateItinerary({
         tripId,
@@ -107,12 +110,19 @@ export function ItineraryGenerator({
   };
 
   // Auto-start generation if prop is true and user has builds remaining AND is authenticated
+  // BUT if user has no personalization, show warning first
   useEffect(() => {
     if (autoStart && !autoStartTriggered.current && user && (isPaid || freeBuildsRemaining > 0)) {
       autoStartTriggered.current = true;
-      handleGenerate();
+      
+      // If user has no/basic personalization, show warning instead of auto-starting
+      if (showPreferenceNudge) {
+        setShowGenericWarning(true);
+      } else {
+        handleGenerate();
+      }
     }
-  }, [autoStart, isPaid, freeBuildsRemaining, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStart, isPaid, freeBuildsRemaining, user, showPreferenceNudge]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const handleRetry = () => {
@@ -180,6 +190,79 @@ export function ItineraryGenerator({
 
             <p className="text-xs text-muted-foreground mt-6">
               Free accounts get 1 itinerary build per month
+            </p>
+          </div>
+        </motion.div>
+      );
+    }
+
+    // Show generic itinerary warning for users without personalization
+    if (showGenericWarning || (showPreferenceNudge && showNudgeCard)) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center py-12"
+        >
+          <div className="max-w-lg mx-auto">
+            {/* Warning icon */}
+            <div className="w-20 h-20 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="h-10 w-10 text-amber-600" />
+            </div>
+            
+            <h2 className="text-2xl font-serif font-bold mb-3">
+              Your Itinerary Won't Be Personalized
+            </h2>
+            
+            <p className="text-muted-foreground mb-6">
+              Without completing your Travel DNA quiz, we can only generate a <strong className="text-foreground">generic itinerary</strong>. 
+              Take 2 minutes to tell us about your travel style and get recommendations that actually match <em>you</em>.
+            </p>
+
+            {/* What you're missing */}
+            <div className="bg-muted/50 rounded-xl p-4 mb-6 text-left">
+              <p className="text-sm font-medium text-foreground mb-3">With personalization, you'll get:</p>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <Sparkles className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                  <span>Restaurants that match your dietary needs & cuisine preferences</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Clock className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                  <span>A pace that fits your energy level (not too rushed, not too slow)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Star className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                  <span>Activities aligned with your interests and travel style</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Button 
+                size="lg" 
+                onClick={() => navigate(ROUTES.QUIZ)}
+                className="gap-2"
+              >
+                <Sparkles className="h-5 w-5" />
+                Take the Quiz (2 min)
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                onClick={() => {
+                  setShowGenericWarning(false);
+                  setShowNudgeCard(false);
+                  handleGenerate();
+                }}
+                className="text-muted-foreground"
+              >
+                Skip and generate generic itinerary
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground mt-6">
+              You can always retake the quiz later from your profile
             </p>
           </div>
         </motion.div>
