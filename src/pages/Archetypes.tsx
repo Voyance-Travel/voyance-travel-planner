@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Dna, Sparkles } from 'lucide-react';
+import { ArrowRight, Dna, Sparkles, Sliders, RefreshCw, MapPin } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
 import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
 import React from 'react';
@@ -213,6 +214,86 @@ export default function Archetypes() {
                 Discover Your Type
               </Link>
             </Button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* How It Works - The DNA Methodology */}
+      <section className="py-16 bg-muted/30 border-y border-border">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
+              <Sliders className="w-3 h-3 mr-1" />
+              The Science Behind It
+            </Badge>
+            <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-3">
+              How We Match You
+            </h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Your archetype isn't random—it's the result of a careful analysis of how you actually travel.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-4 gap-6 mb-10">
+            {[
+              {
+                icon: Sparkles,
+                title: '8 Core Traits',
+                description: 'We measure planning style, social energy, pace, adventure tolerance, budget mindset, and more.',
+              },
+              {
+                icon: Dna,
+                title: 'Quiz Analysis',
+                description: 'Your answers build a trait profile that captures your authentic travel personality.',
+              },
+              {
+                icon: Sliders,
+                title: 'Archetype Matching',
+                description: 'We score your profile against all 27 archetypes to find your best fit.',
+              },
+              {
+                icon: MapPin,
+                title: 'Personalized Trips',
+                description: 'Your archetype shapes every recommendation—destinations, pace, activities, dining.',
+              },
+            ].map((item, index) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                className="text-center"
+              >
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <item.icon className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Evolution callout */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="bg-card border border-border rounded-xl p-6 max-w-2xl mx-auto text-center"
+          >
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <RefreshCw className="w-5 h-5 text-primary" />
+              <h3 className="font-semibold text-foreground">Your DNA Evolves</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Rate activities, save favorites, adjust preferences—your profile refines over time. 
+              The more you use Voyance, the smarter your recommendations become.
+            </p>
           </motion.div>
         </div>
       </section>

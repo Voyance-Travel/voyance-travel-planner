@@ -273,7 +273,7 @@ export function DemoPlayground() {
           {/* Main itinerary */}
           <div>
             {/* Destination selector */}
-            <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
               {DESTINATIONS.map((dest) => (
                 <button
                   key={dest.slug}

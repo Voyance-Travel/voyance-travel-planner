@@ -17,8 +17,8 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
         <div className="absolute -bottom-1/4 -left-1/4 w-[500px] h-[500px] bg-accent/5 rounded-full blur-3xl" />
       </div>
       
-      {/* Floating destination cards */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {/* Floating destination cards - hidden on mobile, shown on larger screens */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none hidden lg:block">
         <motion.div
           initial={{ opacity: 0, y: 50, rotate: 3 }}
           animate={{ opacity: 1, y: 0, rotate: 3 }}
@@ -47,7 +47,7 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
           initial={{ opacity: 0, y: 50, rotate: 2 }}
           animate={{ opacity: 1, y: 0, rotate: 2 }}
           transition={{ duration: 0.8, delay: 0.8 }}
-          className="absolute right-[12%] bottom-[25%] hidden lg:block"
+          className="absolute right-[12%] bottom-[25%]"
         >
           <DestinationCard 
             image="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400"
@@ -68,7 +68,7 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
             A Travel Agent in Your Pocket
           </Badge>
           
-          <h1 className="text-4xl md:text-6xl font-serif font-bold mb-6 leading-tight text-foreground">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold mb-6 leading-tight text-foreground">
             See Your Perfect Trip
             <br />
             <span className="text-primary">Come to Life</span>
