@@ -551,6 +551,7 @@ export function EditorialItinerary({
   // Optimize preferences dialog state
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false);
   const [optimizePrefs, setOptimizePrefs] = useState<OptimizePreferences | null>(null);
+  const [showRouteUpgrade, setShowRouteUpgrade] = useState(false);
 
   // AI Swap (Activity Alternatives) state
   const [swapDrawerOpen, setSwapDrawerOpen] = useState(false);
@@ -1515,12 +1516,19 @@ export function EditorialItinerary({
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={openOptimizeDialog} 
+                  onClick={() => {
+                    if (entitlements?.can_optimize_routes) {
+                      openOptimizeDialog();
+                    } else {
+                      setShowRouteUpgrade(true);
+                    }
+                  }} 
                   disabled={isOptimizing || days.length === 0} 
                   className="gap-1.5 h-8 text-xs"
                 >
                   {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
                   {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                  {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
                 </Button>
                 <Button 
                   size="sm"
@@ -2485,6 +2493,14 @@ export function EditorialItinerary({
         onOpenChange={setShowOptimizeDialog}
         onConfirm={handleOptimize}
         isOptimizing={isOptimizing}
+      />
+
+      {/* Route Optimization Upgrade Prompt */}
+      <UpgradePrompt
+        isOpen={showRouteUpgrade}
+        onClose={() => setShowRouteUpgrade(false)}
+        featureName="route optimization"
+        context="route"
       />
     </div>
   );
