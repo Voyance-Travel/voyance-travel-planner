@@ -202,11 +202,9 @@ export async function getTripStats(): Promise<TripStats> {
   });
   
   const upcomingTrips = allTrips.filter(t => {
-    // Draft trips are not "upcoming" - they're saved/drafts
-    if (t.status === 'draft') return false;
     // Explicitly completed trips are not upcoming
     if (t.status === 'completed') return false;
-    // Trip hasn't ended yet (future or currently ongoing)
+    // Trip hasn't ended yet (future or currently ongoing) - includes drafts with future dates
     if (t.end_date && new Date(t.end_date) >= now) return true;
     // No end date but has future start date
     if (t.start_date && new Date(t.start_date) >= now) return true;
