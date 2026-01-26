@@ -113,8 +113,8 @@ const App = () => (
             <ImagePreloaderInit />
             <Toaster />
             <Sonner />
-            <CookieConsent />
             <BrowserRouter>
+              <CookieConsent />
               <ScrollToTop />
               <Routes>
               {/* Public Routes */}
