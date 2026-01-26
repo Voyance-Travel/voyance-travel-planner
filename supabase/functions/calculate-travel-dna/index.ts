@@ -1846,7 +1846,7 @@ async function generatePerfectTrip(
         messages: [
           {
             role: 'system',
-            content: `You are a luxury travel concierge. Write ONE short sentence (15-20 words max) describing this traveler's perfect trip. Be evocative but extremely concise. No dates, prices, or logistics. Second person ("you").`,
+            content: `You are a poetic travel writer. Write ONE sentence (12-15 words max) capturing this traveler's ideal trip FEELING. Be evocative and abstract—describe the experience, NOT specific places, activities, or destinations. Use "you" voice. Example: "You linger in hidden corners until they feel like home."`,
           },
           { role: 'user', content: prompt },
         ],
@@ -1926,28 +1926,28 @@ function buildPerfectTripPromptV2(
     parts.push(`Travels with: ${answers.travel_companions.join(', ')}`);
   }
   
-  parts.push('\nCraft their perfect trip vision in 2-3 evocative sentences.');
+  parts.push('\nDescribe the FEELING of their perfect trip in ONE short, evocative sentence. No specific places or activities.');
   
   return parts.join('\n');
 }
 
 function getFallbackPerfectTrip(archetypeId: string): string {
   const fallbacks: Record<string, string> = {
-    cultural_anthropologist: 'Morning markets, cooking with locals, and dinner invitations from new friends.',
-    urban_nomad: 'City-hopping through hidden neighborhoods, great coffee, and rooftop views.',
-    wilderness_pioneer: 'Earning your views on mountain trails, sleeping under stars.',
-    zen_seeker: 'Waking to birdsong, unhurried mornings, nowhere to be.',
-    culinary_cartographer: 'Eating your way through night markets and family-run restaurants.',
-    luxury_luminary: 'Impeccable hotels, memorable dining, every detail perfected.',
-    adrenaline_architect: 'Heart-racing adventures in stunning, wild settings.',
-    slow_traveler: 'One place, deeply known—your own favorite local café.',
-    family_architect: 'Adventures everyone loves, shared meals, lasting memories.',
-    story_seeker: 'Meaningful encounters and local celebrations that change you.',
-    escape_artist: 'Complete stillness in a beautiful setting, space to breathe.',
-    social_butterfly: 'Group adventures and new friends around every corner.',
+    cultural_anthropologist: 'You become part of the places you visit.',
+    urban_nomad: 'You find home in the rhythm of new cities.',
+    wilderness_pioneer: 'You earn your views and sleep under open skies.',
+    zen_seeker: 'You find stillness wherever you wander.',
+    culinary_cartographer: 'You taste your way to understanding.',
+    luxury_luminary: 'Every detail is exactly as it should be.',
+    adrenaline_architect: 'Your heart races in the most beautiful settings.',
+    slow_traveler: 'You stay long enough to have a favorite café.',
+    family_architect: 'You create stories everyone will retell.',
+    story_seeker: 'You collect moments that change you.',
+    escape_artist: 'You finally find the quiet you have been craving.',
+    social_butterfly: 'You make friends everywhere you go.',
   };
   
-  return fallbacks[archetypeId] || 'A trip perfectly matched to your style.';
+  return fallbacks[archetypeId] || 'You travel exactly the way you were meant to.';
 }
 
 // ============================================================================
