@@ -9,6 +9,7 @@ import DNAHowItWorks from '@/components/home/DNAHowItWorks';
 import WhatVoyanceDoes from '@/components/home/WhatVoyanceDoes';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
 import TravelQuote from '@/components/home/TravelQuote';
+import PricingPreview from '@/components/home/PricingPreview';
 import FinalCTA from '@/components/home/FinalCTA';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { scrollToTop } from '@/utils/scrollUtils';
@@ -55,6 +56,7 @@ export default function Home() {
         <ScrollTarget id="quote-section" className="scroll-mt-16">
           <TravelQuote />
         </ScrollTarget>
+        <PricingPreview />
         <ScrollTarget id="cta-section" className="scroll-mt-16">
           <FinalCTA />
         </ScrollTarget>
