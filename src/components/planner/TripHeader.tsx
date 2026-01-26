@@ -80,6 +80,7 @@ export const TripHeader: React.FC<TripHeaderProps> = ({
               {onCurrencyToggle && (
                 <button
                   onClick={onCurrencyToggle}
+                  data-tour="currency-toggle"
                   className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
                   title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
                 >
@@ -99,6 +100,7 @@ export const TripHeader: React.FC<TripHeaderProps> = ({
                   variant="outline" 
                   size="sm"
                   onClick={onShare}
+                  data-tour="share-button"
                   className="gap-1.5 h-8 text-xs"
                 >
                   <Share2 className="h-3.5 w-3.5" />
@@ -115,6 +117,7 @@ export const TripHeader: React.FC<TripHeaderProps> = ({
                       size="sm"
                       onClick={onOptimize}
                       disabled={isOptimizing || !canOptimize} 
+                      data-tour="optimize-button"
                       className="gap-1.5 h-8 text-xs"
                     >
                       {isOptimizing ? (
