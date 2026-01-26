@@ -539,6 +539,9 @@ export default function Start() {
   const [hotelSelection, setHotelSelection] = useState<HotelSelectionData | null>(null);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [showBudget, setShowBudget] = useState(!!plannerState.basics.budgetAmount);
+  // Flight times for itinerary-only mode
+  const [arrivalTime, setArrivalTime] = useState('');
+  const [departureTime, setDepartureTime] = useState('');
   const today = startOfToday();
 
   // Prefill origin city from user preferences (home_airport)
@@ -773,22 +776,40 @@ export default function Start() {
     if (itineraryOnlyMode) {
       const tripId = await saveTrip();
       if (tripId) {
-        // Save hotel selection to trip if provided
+        // Build update payload with hotel and flight times
+        const updatePayload: Record<string, unknown> = {};
+        
+        // Save hotel selection if provided
         if (hotelSelection) {
-          await supabase.from('trips').update({
-            hotel_selection: {
-              id: `manual-${Date.now()}`,
-              name: hotelSelection.name,
-              address: hotelSelection.address,
-              location: hotelSelection.address,
-              rating: hotelSelection.rating || 0,
-              website: hotelSelection.website,
-              googleMapsUrl: hotelSelection.googleMapsUrl,
-              placeId: hotelSelection.placeId,
-              isManualEntry: true,
-            },
-          }).eq('id', tripId);
+          updatePayload.hotel_selection = {
+            id: `manual-${Date.now()}`,
+            name: hotelSelection.name,
+            address: hotelSelection.address,
+            location: hotelSelection.address,
+            rating: hotelSelection.rating || 0,
+            website: hotelSelection.website,
+            googleMapsUrl: hotelSelection.googleMapsUrl,
+            placeId: hotelSelection.placeId,
+            isManualEntry: true,
+          };
         }
+        
+        // Save flight times to trip metadata for itinerary generation
+        if (arrivalTime || departureTime) {
+          updatePayload.flight_selection = {
+            outbound: arrivalTime ? {
+              arrival: { time: arrivalTime }
+            } : undefined,
+            return: departureTime ? {
+              departure: { time: departureTime }
+            } : undefined,
+          };
+        }
+        
+        if (Object.keys(updatePayload).length > 0) {
+          await supabase.from('trips').update(updatePayload).eq('id', tripId);
+        }
+        
         navigate(`/trip/${tripId}?generate=true`);
       }
       return;
@@ -932,6 +953,48 @@ export default function Start() {
                   />
                 )}
               </div>
+
+              {/* Flight Times - Only for itinerary-only mode */}
+              {itineraryOnlyMode && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
+                      <Plane className="h-3.5 w-3.5 rotate-[-45deg]" />
+                      Arrival time
+                    </label>
+                    <Input
+                      type="time"
+                      value={arrivalTime}
+                      onChange={(e) => setArrivalTime(e.target.value)}
+                      className="h-12"
+                      placeholder="When you land"
+                    />
+                    {startDate && (
+                      <p className="text-[10px] text-muted-foreground">
+                        When you land on {format(startDate, 'MMM d')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
+                      <Plane className="h-3.5 w-3.5 rotate-45" />
+                      Departure time
+                    </label>
+                    <Input
+                      type="time"
+                      value={departureTime}
+                      onChange={(e) => setDepartureTime(e.target.value)}
+                      className="h-12"
+                      placeholder="When you leave"
+                    />
+                    {endDate && (
+                      <p className="text-[10px] text-muted-foreground">
+                        When you leave on {format(endDate, 'MMM d')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Hotel Input - Only for itinerary-only mode */}
               {itineraryOnlyMode && (
