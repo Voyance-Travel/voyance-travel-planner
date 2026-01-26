@@ -451,7 +451,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Sanctuary Seeker',
     category: 'RESTORER',
     hookLine: "Travel is finding your perfect refuge.",
-    coreDescription: "You travel to create your ideal environment, not to be drained by crowds and chaos. Luxury isn't about showing off—it's about building the perfect cocoon where you can truly relax on your own terms.",
+    coreDescription: "You travel to create your ideal environment, not to be drained by crowds and chaos. Luxury isn't about showing off. It's about building the perfect cocoon where you can truly relax on your own terms.",
     whatThisMeans: [
       "You prefer private villas over bustling hotels",
       "Room service is preferable to crowded restaurants",
@@ -476,7 +476,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Digital Explorer',
     category: 'EXPLORER',
     hookLine: "Your laptop is your passport extension.",
-    coreDescription: "You've cracked the code of working from anywhere. Coffee shops in Lisbon, co-working spaces in Bali, beach cafés in Thailand—your office has the best views in the world.",
+    coreDescription: "You've cracked the code of working from anywhere. Coffee shops in Lisbon, co-working spaces in Bali, beach cafés in Thailand. Your office has the best views in the world.",
     whatThisMeans: [
       "You know which cafés have the best WiFi",
       "Time zones are puzzles you've mastered",
@@ -751,7 +751,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Midlife Explorer',
     category: 'TRANSFORMER',
     hookLine: "It's never too late to become who you were meant to be.",
-    coreDescription: "You're rewriting your travel story. Life experience has taught you what matters, and now you're going after it. These trips aren't escapes—they're homecomings to your true self.",
+    coreDescription: "You're rewriting your travel story. Life experience has taught you what matters, and now you're going after it. These trips aren't escapes. They're homecomings to your true self.",
     whatThisMeans: [
       "You travel with intention and appreciation",
       "Dreams deferred are now dreams pursued",

@@ -103,7 +103,7 @@ export const PLAN_FEATURES = {
     id: 'trip_pass',
     name: 'Trip Pass',
     headline: 'Unlock your DNA-powered trip.',
-    subheadline: 'Full access to your complete personalized itinerary — every day, every recommendation, tailored to you.',
+    subheadline: 'Full access to your complete personalized itinerary. Every day, every recommendation, tailored to you.',
     bestFor: 'Your next upcoming trip.',
     price: 24.99,
     priceDetail: 'one-time',
@@ -123,7 +123,7 @@ export const PLAN_FEATURES = {
       canExport: true,
       canShare: true,
     },
-    cta: 'Unlock Trip — $24.99',
+    cta: 'Unlock Trip - $24.99',
   },
   CREDITS_5: {
     id: 'credits_5',
@@ -144,7 +144,7 @@ export const PLAN_FEATURES = {
     limits: {
       credits: 5,
     },
-    cta: 'Buy 5 Credits — $79',
+    cta: 'Buy 5 Credits - $79',
   },
   CREDITS_10: {
     id: 'credits_10',
@@ -166,7 +166,7 @@ export const PLAN_FEATURES = {
     limits: {
       credits: 10,
     },
-    cta: 'Buy 10 Credits — $149',
+    cta: 'Buy 10 Credits - $149',
   },
   // ============================================
   // TRAVEL AGENT TIERS - Professional Plans
