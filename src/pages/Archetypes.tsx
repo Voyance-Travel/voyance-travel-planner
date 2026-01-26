@@ -347,6 +347,30 @@ export default function Archetypes() {
         />
       ))}
 
+      {/* Don't see yourself? - Edge case callout */}
+      <section className="py-12 px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="max-w-xl mx-auto text-center"
+        >
+          <h3 className="text-xl font-serif font-bold text-foreground mb-3">
+            Don't see yourself?
+          </h3>
+          <p className="text-muted-foreground mb-6 leading-relaxed">
+            Your Travel DNA is unique. Take the quiz—you might be a blend of multiple archetypes, 
+            with hints of personalities that make you one of a kind.
+          </p>
+          <Button asChild variant="outline" className="rounded-full px-6">
+            <Link to={ROUTES.QUIZ}>
+              Take the Quiz
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Link>
+          </Button>
+        </motion.div>
+      </section>
+
       {/* Bottom CTA */}
       <section className="py-20 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
