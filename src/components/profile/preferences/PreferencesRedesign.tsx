@@ -585,8 +585,6 @@ function FlightSection({ preferences, onChange }: SectionProps) {
   const flightPreferences: Partial<UserFlightPreferences> = {
     homeAirport: preferences.flight.home_airport,
     airportCode: preferences.flight.airport_code,
-    directFlightsOnly: preferences.flight.direct_flights_only,
-    preferredCabinClass: preferences.flight.preferred_cabin_class as UserFlightPreferences['preferredCabinClass'],
     seatPreference: preferences.flight.seat_preference as UserFlightPreferences['seatPreference'],
     preferredAirlines: preferences.flight.preferred_airlines,
   };
@@ -597,12 +595,6 @@ function FlightSection({ preferences, onChange }: SectionProps) {
     }
     if ('airportCode' in updatedPreferences) {
       onChange('flight', 'airport_code', updatedPreferences.airportCode || '');
-    }
-    if ('directFlightsOnly' in updatedPreferences) {
-      onChange('flight', 'direct_flights_only', updatedPreferences.directFlightsOnly || false);
-    }
-    if ('preferredCabinClass' in updatedPreferences) {
-      onChange('flight', 'preferred_cabin_class', (updatedPreferences.preferredCabinClass as string) || '');
     }
     if ('seatPreference' in updatedPreferences) {
       onChange('flight', 'seat_preference', (updatedPreferences.seatPreference as string) || '');

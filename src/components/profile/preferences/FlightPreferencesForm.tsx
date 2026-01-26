@@ -11,8 +11,6 @@ import AutoCompleteSelect from '@/components/common/AutoCompleteSelect';
 export interface UserFlightPreferences {
   homeAirport?: string | null;
   airportCode?: string | null;
-  directFlightsOnly?: boolean | null;
-  preferredCabinClass?: 'economy' | 'premium_economy' | 'business' | 'first' | null;
   seatPreference?: 'window' | 'aisle' | 'middle' | 'no_preference' | null;
   preferredAirlines?: string[] | null;
 }
@@ -146,30 +144,6 @@ export const FlightPreferencesForm: React.FC<FlightPreferencesFormProps> = ({
       </div>
 
       <div>
-        <label htmlFor="cabin-class" className="block text-sm font-medium text-foreground mb-2">
-          Preferred Cabin Class
-        </label>
-        <select
-          id="cabin-class"
-          value={preferences.preferredCabinClass || ''}
-          onChange={e =>
-            onChange({
-              ...preferences,
-              preferredCabinClass: e.target.value as UserFlightPreferences['preferredCabinClass'],
-            })
-          }
-          disabled={disabled}
-          className="w-full p-3 border border-border rounded-xl bg-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-        >
-          <option value="">Select a cabin class</option>
-          <option value="economy">Economy</option>
-          <option value="premium_economy">Premium Economy</option>
-          <option value="business">Business</option>
-          <option value="first">First</option>
-        </select>
-      </div>
-
-      <div>
         <label htmlFor="seat-preference" className="block text-sm font-medium text-foreground mb-2">
           Seat Preference
         </label>
@@ -191,20 +165,6 @@ export const FlightPreferencesForm: React.FC<FlightPreferencesFormProps> = ({
           <option value="middle">Middle</option>
           <option value="no_preference">No Preference</option>
         </select>
-      </div>
-
-      <div className="flex items-center">
-        <input
-          id="direct-flights"
-          type="checkbox"
-          checked={preferences.directFlightsOnly || false}
-          onChange={e => onChange({ ...preferences, directFlightsOnly: e.target.checked })}
-          disabled={disabled}
-          className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
-        />
-        <label htmlFor="direct-flights" className="ml-2 block text-sm text-foreground">
-          Prefer direct flights only
-        </label>
       </div>
     </div>
   );
