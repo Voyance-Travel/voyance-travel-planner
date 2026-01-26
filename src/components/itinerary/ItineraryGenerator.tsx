@@ -90,6 +90,15 @@ export function ItineraryGenerator({
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
 
+  // Keep the pre-generation experience on screen until the first day is ready,
+  // so we don't flash back to the generic spinner state.
+  useEffect(() => {
+    if (!prePhase) return;
+    if (days.length > 0) {
+      setPrePhase(null);
+    }
+  }, [prePhase, days.length]);
+
   const handleGenerate = async () => {
     setHasStarted(true);
     setShowGenericWarning(false);
@@ -101,7 +110,6 @@ export function ItineraryGenerator({
     await new Promise(resolve => setTimeout(resolve, 800));
     setPrePhase('preparing');
     await new Promise(resolve => setTimeout(resolve, 800));
-    setPrePhase(null);
 
     try {
       const generatedDays = await generateItinerary({
@@ -115,6 +123,10 @@ export function ItineraryGenerator({
         budgetTier,
         userId,
       });
+
+      // Ensure we exit the pre-generation screen even if we never received
+      // streamed days (e.g. if the hook fell back to the full pipeline).
+      setPrePhase(null);
 
       // Let the user see the completed formation state briefly before switching views.
       await new Promise(resolve => setTimeout(resolve, 900));
