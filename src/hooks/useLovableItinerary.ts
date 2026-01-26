@@ -16,6 +16,9 @@ import { convertBackendDay } from '@/types/itinerary';
 
 export type GenerationStep = 
   | 'idle' 
+  | 'gathering-dna'
+  | 'personalizing'
+  | 'preparing'
   | 'fetching-trip' 
   | 'generating' 
   | 'enriching' 
@@ -222,13 +225,47 @@ export function useLovableItinerary(tripId: string | null) {
       loading: true,
       progress: 0,
       error: null,
-      currentStep: 'fetching-trip',
-      message: 'Preparing your trip details...',
+      currentStep: 'gathering-dna',
+      message: 'Gathering your Travel DNA...',
       generationStartTime: startTime,
       days: [],
     }));
 
     try {
+      // Pre-generation phases for better UX
+      // Phase 1: Gathering DNA (visual delay)
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      if (!isMounted.current) return;
+      
+      setState(prev => ({
+        ...prev,
+        currentStep: 'personalizing',
+        message: 'Personalizing recommendations...',
+        progress: 2,
+      }));
+      
+      // Phase 2: Personalizing (visual delay)
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      if (!isMounted.current) return;
+      
+      setState(prev => ({
+        ...prev,
+        currentStep: 'preparing',
+        message: 'Building your perfect itinerary...',
+        progress: 4,
+      }));
+      
+      // Phase 3: Preparing (visual delay)
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!isMounted.current) return;
+      
+      setState(prev => ({
+        ...prev,
+        currentStep: 'fetching-trip',
+        message: 'Preparing your trip details...',
+        progress: 5,
+      }));
+
       // Step 1: Fetch trip details (5%)
       console.log('[useLovableItinerary] Fetching trip details...');
       const { data: tripResponse, error: tripError } = await supabase.functions.invoke('generate-itinerary', {
