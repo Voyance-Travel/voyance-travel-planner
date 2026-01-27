@@ -490,6 +490,42 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
     }
     lines.push('');
   }
+
+  // ============================================================================
+  // TRUST CONTRACT: Identity overrides
+  // If the user has explicitly selected a primary/secondary archetype, that identity
+  // must be obeyed even if trait scores or older days drifted in another direction.
+  // ============================================================================
+  if (dna.primaryArchetype) {
+    const primary = dna.primaryArchetype;
+    const secondary = dna.secondaryArchetype;
+    const budgetTier = (tripContext.budgetTier || '').toLowerCase();
+    const isPremiumTrip = ['premium', 'luxury'].includes(budgetTier);
+
+    const guardrails: string[] = [];
+    guardrails.push('1) The PRIMARY/SECONDARY identity above is the source of truth. Do not contradict it.');
+    guardrails.push('2) Do not mirror the “style” of previous days if they conflict with this identity.');
+    guardrails.push(
+      isPremiumTrip
+        ? '3) This is a premium/luxury trip tier, so elevated venues are acceptable—but still match the identity.'
+        : '3) This is NOT a premium/luxury trip tier. Avoid: “private tour”, Michelin-driven dining, Ritz-style spas, VIP/skip-the-line framing, and “splurge” language unless explicitly requested.'
+    );
+
+    // Archetype-specific guardrails (add only a few high-impact ones)
+    if (primary === 'flexible_wanderer' || secondary === 'flexible_wanderer') {
+      guardrails.push('4) FLEXIBLE WANDERER: Keep days loose and adaptable. Prefer self-guided neighborhood exploration, casual local spots, and value-forward picks. No private tours by default.');
+    }
+    if (primary === 'beach_therapist' || secondary === 'beach_therapist') {
+      guardrails.push('5) BEACH THERAPIST: Guarantee daily coastal/beach time + long restoration blocks. Choose relaxed waterfront walks, viewpoints, and casual seafood over formal fine dining.');
+    }
+
+    if (guardrails.length > 0) {
+      lines.push(`🧭 IDENTITY OVERRIDES (HIGHEST PRIORITY)`);
+      lines.push(`${'─'.repeat(50)}`);
+      for (const g of guardrails) lines.push(`   ${g}`);
+      lines.push('');
+    }
+  }
   
   // Full trait breakdown with behavioral implications
   lines.push(`📊 TRAIT PROFILE (Behavioral Guide)`);

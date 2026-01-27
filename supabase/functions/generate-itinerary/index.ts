@@ -1049,8 +1049,30 @@ function normalizeUserContext(
   
   // Get archetypes (from DNA or infer)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let archetypes: Array<{ name: string; pct: number; [key: string]: any }> = 
-    dna?.travel_dna_v2?.archetype_matches || dna?.archetype_matches || [];
+  let archetypes: Array<{ name: string; pct: number; [key: string]: any }> = [];
+
+  // TRUST CONTRACT: If the user has an explicit primary/secondary archetype (i.e. what the UI shows),
+  // we must use that and NEVER infer a conflicting archetype (like "Luxury Seeker").
+  // NOTE: This can live on canonical columns (travel_dna_profiles) OR inside profiles.travel_dna blob.
+  const explicitPrimary =
+    (dna as any)?.primary_archetype_name ||
+    (dna as any)?.travel_dna?.primary_archetype_name;
+  const explicitSecondary =
+    (dna as any)?.secondary_archetype_name ||
+    (dna as any)?.travel_dna?.secondary_archetype_name;
+
+  if (explicitPrimary && typeof explicitPrimary === 'string') {
+    archetypes = [
+      { name: explicitPrimary, pct: explicitSecondary ? 70 : 100, source: 'explicit' },
+      ...(explicitSecondary && typeof explicitSecondary === 'string'
+        ? [{ name: explicitSecondary, pct: 30, source: 'explicit' }]
+        : []),
+    ];
+    console.log(`[NormalizeUserContext] Explicit archetype override: primary=${explicitPrimary}, secondary=${explicitSecondary || 'none'}`);
+  } else {
+    archetypes = dna?.travel_dna_v2?.archetype_matches || dna?.archetype_matches || [];
+  }
+
   if (archetypes.length === 0 && hasQuiz) {
     // Convert blended traits to Record<string, number> for inferArchetypesFromTraits
     const traitsAsRecord: Record<string, number> = {
@@ -2390,9 +2412,27 @@ async function buildTravelDNAContext(
   
   sections.push(budgetSection);
   
-  // Archetype blend section - use existing or infer from trait scores
-  let archetypes: Array<{ name: string; pct: number }> | undefined = 
-    dna.travel_dna_v2?.archetype_matches || dna.archetype_matches;
+  // Archetype blend section
+  // TRUST CONTRACT: If explicit primary/secondary exist, do NOT infer.
+  const explicitPrimary =
+    (dna as any)?.primary_archetype_name ||
+    (dna as any)?.travel_dna?.primary_archetype_name;
+  const explicitSecondary =
+    (dna as any)?.secondary_archetype_name ||
+    (dna as any)?.travel_dna?.secondary_archetype_name;
+
+  let archetypes: Array<{ name: string; pct: number }> | undefined = undefined;
+  if (explicitPrimary && typeof explicitPrimary === 'string') {
+    archetypes = [
+      { name: explicitPrimary, pct: explicitSecondary ? 70 : 100 },
+      ...(explicitSecondary && typeof explicitSecondary === 'string'
+        ? [{ name: explicitSecondary, pct: 30 }]
+        : []),
+    ];
+    console.log(`[TravelDNA] Using explicit archetypes (no inference): primary=${explicitPrimary}, secondary=${explicitSecondary || 'none'}`);
+  } else {
+    archetypes = dna.travel_dna_v2?.archetype_matches || dna.archetype_matches;
+  }
   const confidence = dna.travel_dna_v2?.confidence ?? dna.confidence ?? 75;
   
   // If no archetypes but we have trait scores, infer archetypes from traits (v1 fallback)
@@ -2426,6 +2466,10 @@ async function buildTravelDNAContext(
       'Social Butterfly': 'Include group tours, communal dining, festivals, and opportunities to meet locals',
       'Slow Traveler': 'Fewer activities per day, longer experiences, cafe culture, and immersive local living',
       'Thrill Seeker': 'Adventure sports, extreme activities, adrenaline experiences, and unique challenges',
+
+      // New DNA archetypes (snake_case) - explicit user identity
+      'flexible_wanderer': 'Flexible, non-rigid days. Prioritize local, mid-range choices. Avoid private tours and overt luxury framing unless explicitly requested.',
+      'beach_therapist': 'Daily beach/coastal time, restorative pacing, long downtime blocks, casual local dining, sunset/sunrise moments. Avoid overly formal luxury unless requested.',
     };
     
     const topArchetype = archetypes[0]?.name?.replace(/_/g, ' ');
@@ -3513,6 +3557,7 @@ BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per pe
 PACE: ${context.pace || 'moderate'}
 
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
+NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style (e.g., if earlier days were too "luxury", you must still follow the Travel DNA identity + budget intent above).
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
 Generate activities for this day following ALL quality rules and DNA constraints above. The number of activities should match the maxActivities constraint from the DNA profile. Focus on VARIETY and PERSONALIZATION.`;
