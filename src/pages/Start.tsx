@@ -782,11 +782,8 @@ export default function Start() {
   }, [plannerState.basics]);
 
   const handleStart = async () => {
-    // For hotel search mode, we need airport codes for searching; for manual/skip modes just need cityName
-    const needsAirportCodes = hotelMode === 'search';
-    const hasValidDestination = needsAirportCodes 
-      ? (destinationSelection.cityName && destinationSelection.airportCodes?.length)
-      : !!destinationSelection.cityName;
+    // Only need a valid city name - hotel search works with city names via Google Places
+    const hasValidDestination = !!destinationSelection.cityName;
     
     if (!hasValidDestination || !startDate || !endDate) {
       if (!hasValidDestination && destinationSelection.display) {
@@ -1125,21 +1122,12 @@ export default function Start() {
                     Multiple cities?
                   </Link>
                 </div>
-                {/* Use AirportAutocomplete for hotel search mode, DestinationAutocomplete otherwise */}
-                {hotelMode === 'search' ? (
-                  <AirportAutocomplete
-                    value={destinationSelection.display}
-                    onChange={setDestinationSelection}
-                    placeholder="Where do you want to go?"
-                    icon={MapPin}
-                  />
-                ) : (
-                  <DestinationAutocomplete
-                    value={destinationSelection.display}
-                    onChange={setDestinationSelection}
-                    placeholder="Where are you going?"
-                  />
-                )}
+                {/* Always use DestinationAutocomplete - hotel search works with city names */}
+                <DestinationAutocomplete
+                  value={destinationSelection.display}
+                  onChange={setDestinationSelection}
+                  placeholder="Where do you want to go?"
+                />
               </div>
 
               {/* Flight Details - Always optional */}
