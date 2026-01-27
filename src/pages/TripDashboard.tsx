@@ -195,13 +195,28 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
   const status = statusConfig[displayStatus];
   const StatusIcon = status.icon;
   
-  // Use curated destination images with fallback chain
+  // Prefer trip-specific hero image when available (e.g., demo/seeded trips)
+  // Fallback to curated destination images with robust chain.
+  const seededHero = (trip.metadata && typeof trip.metadata === 'object')
+    ? (trip.metadata as Record<string, unknown>).hero_image
+    : null;
+  const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
+
   const allImages = getDestinationImages(trip.destination);
+  const [seededHeroFailed, setSeededHeroFailed] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const imageUrl = allImages[currentImageIndex] || getDestinationImage(trip.destination);
+  const imageUrl = (!seededHeroFailed && seededHeroUrl)
+    ? seededHeroUrl
+    : (allImages[currentImageIndex] || getDestinationImage(trip.destination));
   
   // Handle image load error - try next image in the list
   const onImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    // If a seeded hero exists but failed, disable it and let the curated chain render.
+    if (seededHeroUrl && !seededHeroFailed) {
+      setSeededHeroFailed(true);
+      return;
+    }
+
     // Try next image in the fallback chain
     if (currentImageIndex < allImages.length - 1) {
       setCurrentImageIndex(prev => prev + 1);
@@ -209,7 +224,7 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
       // All destination images failed, use generic fallback handler
       handleImageError(e, undefined, trip.destination);
     }
-  }, [currentImageIndex, allImages.length, trip.destination]);
+  }, [currentImageIndex, allImages.length, trip.destination, seededHeroUrl, seededHeroFailed]);
   
   // Check for booking status - use direct properties
   const hasItinerary = !!trip.hasItineraryData;

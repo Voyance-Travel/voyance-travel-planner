@@ -130,7 +130,12 @@ function transformTrip(trip: any): DisplayTrip {
     destination: trip.destination || 'Unknown Destination',
     dates,
     status,
-    image: getDestinationImage(trip.destination || ''),
+    image:
+      (typeof trip?.metadata?.hero_image === 'string' && trip.metadata.hero_image.length > 0)
+        ? trip.metadata.hero_image
+        : (typeof trip?.metadata?.imageUrl === 'string' && trip.metadata.imageUrl.length > 0)
+          ? trip.metadata.imageUrl
+          : getDestinationImage(trip.destination || ''),
     progress: status === 'upcoming' ? 75 : undefined,
     rating: status === 'completed' ? 4 : undefined,
   };
