@@ -1029,7 +1029,13 @@ export default function Start() {
           budgetAmount: budgetAmount,
         };
         
-        await supabase.from('trips').update(updatePayload).eq('id', tripId);
+        const { error: updateError } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
+        
+        if (updateError) {
+          console.error('[Start] Failed to update trip with full payload:', updateError);
+        } else {
+          console.log('[Start] Trip updated successfully with hotel_selection:', updatePayload.hotel_selection ? 'YES' : 'NO');
+        }
         
         navigate(`/trip/${tripId}?generate=true`);
       }
