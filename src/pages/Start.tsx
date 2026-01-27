@@ -506,6 +506,9 @@ const featuredDestinations = [
   { name: 'Reykjavik', country: 'Iceland', image: 'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=600' },
 ];
 
+// Hotel entry mode - unified approach
+type HotelMode = 'search' | 'manual' | 'skip';
+
 export default function Start() {
   const { state: plannerState, setBasics, saveTrip } = useTripPlanner();
   const { user } = useAuth();
@@ -514,9 +517,11 @@ export default function Start() {
   const { canCreateDraft, isFreeUser } = useDraftLimitCheck();
   const [showLimitBlocker, setShowLimitBlocker] = useState(false);
   
-  // Check for mode and destination from query params
+  // Check for destination from query params
   const destinationFromQuery = searchParams.get('destination');
-  const itineraryOnlyMode = searchParams.get('mode') === 'itinerary';
+  
+  // Hotel mode state - unified approach with 3 options
+  const [hotelMode, setHotelMode] = useState<HotelMode>('search');
   
   // Show blocker if at limit
   useEffect(() => {
@@ -560,7 +565,7 @@ export default function Start() {
   const [hotelSelection, setHotelSelection] = useState<HotelSelectionData | null>(null);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [showBudget, setShowBudget] = useState(!!plannerState.basics.budgetAmount);
-  // Flight details for itinerary-only mode
+  // Flight details - always optional
   const [flightDetails, setFlightDetails] = useState<FlightDetails | null>(null);
   const [showFlightDetailsModal, setShowFlightDetailsModal] = useState(false);
   const today = startOfToday();
@@ -763,10 +768,11 @@ export default function Start() {
   }, [plannerState.basics]);
 
   const handleStart = async () => {
-    // Validate: in itinerary mode, just need cityName; otherwise need airport codes too
-    const hasValidDestination = itineraryOnlyMode 
-      ? !!destinationSelection.cityName 
-      : (destinationSelection.cityName && destinationSelection.airportCodes?.length);
+    // For hotel search mode, we need airport codes for searching; for manual/skip modes just need cityName
+    const needsAirportCodes = hotelMode === 'search';
+    const hasValidDestination = needsAirportCodes 
+      ? (destinationSelection.cityName && destinationSelection.airportCodes?.length)
+      : !!destinationSelection.cityName;
     
     if (!hasValidDestination || !startDate || !endDate) {
       if (!hasValidDestination && destinationSelection.display) {
@@ -862,8 +868,8 @@ export default function Start() {
       params.set('budget', String(budgetAmount));
     }
 
-    // If in itinerary-only mode, skip to itinerary generation
-    if (itineraryOnlyMode) {
+    // If manual entry or skip mode, go directly to itinerary generation
+    if (hotelMode === 'manual' || hotelMode === 'skip') {
       // First update basics so saveTrip has correct context
       setBasics({
         destination: destinationSelection.cityName,
@@ -891,8 +897,8 @@ export default function Start() {
           trip_type: tripType || 'vacation',
         };
         
-        // Save hotel selection if provided (as array for multi-hotel support)
-        if (hotelSelection) {
+        // Save hotel selection if provided (manual mode only)
+        if (hotelMode === 'manual' && hotelSelection) {
           updatePayload.hotel_selection = [{
             id: `manual-${Date.now()}`,
             name: hotelSelection.name,
@@ -910,27 +916,21 @@ export default function Start() {
         }
         
         // Save flight times with origin/destination for itinerary generation
-        // Build flight selection from flightDetails or origin/destination
-        // IMPORTANT: Structure must match what getFlightHotelContext reads:
-        //   - departure.arrival.time for Day 1 arrival
-        //   - return.departure.time for last day departure
         const originAirport = flightDetails?.outbound?.departureAirport || originSelection.airportCodes?.[0] || originSelection.cityName;
         const destAirport = flightDetails?.outbound?.arrivalAirport || destinationSelection.airportCodes?.[0] || destinationSelection.cityName;
         const hasOriginInfo = originAirport || flightDetails?.outbound?.departureAirport;
         
         if (flightDetails || hasOriginInfo) {
           updatePayload.flight_selection = {
-            // Use 'departure' key (not 'outbound') to match backend reader
             departure: {
               departureAirport: originAirport,
               departureCity: originSelection.cityName || flightDetails?.outbound?.departureAirport,
               departureTime: flightDetails?.outbound?.departureTime,
-              departureDate: start, // Include date for persistence
+              departureDate: start,
               arrivalAirport: destAirport,
               arrivalCity: destinationSelection.cityName,
               arrivalTime: flightDetails?.outbound?.arrivalTime || undefined,
-              arrivalDate: start, // Same day arrival
-              // Nested structure for backend compatibility
+              arrivalDate: start,
               arrival: {
                 airport: destAirport,
                 city: destinationSelection.cityName,
@@ -944,17 +944,15 @@ export default function Start() {
                 arrivalTime: l.arrivalTime,
               })),
             },
-            // Use 'return' key to match backend reader
             return: flightDetails?.return ? {
               departureAirport: flightDetails.return.departureAirport || destAirport,
               departureCity: destinationSelection.cityName,
               departureTime: flightDetails.return.departureTime || undefined,
-              departureDate: end, // Include date for persistence
+              departureDate: end,
               arrivalAirport: flightDetails.return.arrivalAirport || originAirport,
               arrivalCity: originSelection.cityName || flightDetails.return.arrivalAirport,
               arrivalTime: flightDetails.return.arrivalTime,
               arrivalDate: end,
-              // Nested structure for backend compatibility
               departure: {
                 airport: flightDetails.return.departureAirport || destAirport,
                 city: destinationSelection.cityName,
@@ -968,12 +966,10 @@ export default function Start() {
                 arrivalTime: l.arrivalTime,
               })),
             } : undefined,
-            // Also keep flat format for legacy/display compatibility
             arrivalTime: flightDetails?.outbound?.arrivalTime,
             returnDepartureTime: flightDetails?.return?.departureTime,
             departureAirport: originAirport,
             arrivalAirport: destAirport,
-            // Multi-city transfers
             interCityTransfers: flightDetails?.interCityTransfers?.map(t => ({
               mode: t.mode,
               fromCity: t.fromCity,
@@ -1003,6 +999,7 @@ export default function Start() {
       return;
     }
 
+    // Hotel search mode - go to hotel search page
     navigate(`${ROUTES.PLANNER.HOTEL}?${params.toString()}`);
   };
 
@@ -1081,22 +1078,14 @@ export default function Start() {
             transition={{ duration: 0.6 }}
             className="text-center mb-10"
           >
-            <p className={`text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 drop-shadow-sm ${
-              itineraryOnlyMode ? 'text-amber-600' : 'text-sky-600'
-            }`}>
-              {itineraryOnlyMode ? 'Flight Booked' : 'Need Accommodation'}
+            <p className="text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 drop-shadow-sm text-primary">
+              Plan Your Trip
             </p>
             <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-foreground leading-tight drop-shadow-sm">
-              {itineraryOnlyMode ? (
-                <>Build My <em className="italic">Itinerary</em></>
-              ) : (
-                <>Find My <em className="italic">Hotel</em></>
-              )}
+              Start Your <em className="italic">Journey</em>
             </h1>
             <p className="mt-4 text-base sm:text-lg text-foreground/90 max-w-lg mx-auto px-4 sm:px-0 drop-shadow-sm">
-              {itineraryOnlyMode
-                ? "You've got your flights and hotel sorted. We'll craft the perfect daily activities."
-                : "Search and book through us, or add your existing reservation."}
+              Tell us where you're going, and we'll help with hotels and your perfect itinerary
             </p>
           </motion.div>
 
@@ -1108,7 +1097,7 @@ export default function Start() {
             className="bg-white/95 dark:bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 md:p-8"
           >
             <div className="space-y-5">
-              {/* Destination - Both flows */}
+              {/* Destination */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
@@ -1122,26 +1111,27 @@ export default function Start() {
                     Multiple cities?
                   </Link>
                 </div>
-                {itineraryOnlyMode ? (
-                  <DestinationAutocomplete
-                    value={destinationSelection.display}
-                    onChange={setDestinationSelection}
-                    placeholder="Where are you going?"
-                  />
-                ) : (
+                {/* Use AirportAutocomplete for hotel search mode, DestinationAutocomplete otherwise */}
+                {hotelMode === 'search' ? (
                   <AirportAutocomplete
                     value={destinationSelection.display}
                     onChange={setDestinationSelection}
                     placeholder="Where do you want to go?"
                     icon={MapPin}
                   />
+                ) : (
+                  <DestinationAutocomplete
+                    value={destinationSelection.display}
+                    onChange={setDestinationSelection}
+                    placeholder="Where are you going?"
+                  />
                 )}
               </div>
 
-              {/* Flight Details - Both flows */}
+              {/* Flight Details - Always optional */}
               <div className="space-y-3">
                 <span className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                  Flight Details {!itineraryOnlyMode && <span className="normal-case text-muted-foreground/70">(optional)</span>}
+                  Flight Details <span className="normal-case text-muted-foreground/70">(optional)</span>
                 </span>
                 
                 {flightDetails ? (
@@ -1227,40 +1217,104 @@ export default function Start() {
                     onClick={() => setShowFlightDetailsModal(true)}
                   >
                     <Plane className="h-4 w-4 mr-2 rotate-[-45deg]" />
-                    {itineraryOnlyMode ? 'Add flight details' : 'Add flight details (helps plan your trip)'}
+                    Add flight details (helps plan your itinerary)
                   </Button>
                 )}
                 
                 {startDate && !flightDetails && (
                   <p className="text-[10px] text-muted-foreground">
-                    {itineraryOnlyMode 
-                      ? 'Arrival time plans Day 1, departure time plans your last day'
-                      : 'Adding flights helps us find hotels near your arrival and plan your itinerary'}
+                    Arrival time plans Day 1, departure time plans your last day
                   </p>
                 )}
               </div>
 
-
-              {/* Hotel Input - Only for itinerary-only mode */}
-              {itineraryOnlyMode && (
-                <div className="space-y-2">
-                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    Staying at <span className="normal-case text-muted-foreground/70">(optional)</span>
-                  </label>
-                  <HotelAutocomplete
-                    value={hotelSelection}
-                    onChange={setHotelSelection}
-                    destination={destinationSelection.cityName}
-                    placeholder="Search your hotel..."
-                  />
+              {/* Hotel Options - Unified selector */}
+              <div className="space-y-3">
+                <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                  Accommodation
+                </label>
+                
+                {/* Hotel mode tabs */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setHotelMode('search')}
+                    className={cn(
+                      "p-3 rounded-lg border-2 transition-all text-center",
+                      hotelMode === 'search'
+                        ? "border-sky-500 bg-sky-50 dark:bg-sky-500/10"
+                        : "border-border hover:border-primary/30"
+                    )}
+                  >
+                    <Building2 className={cn("h-5 w-5 mx-auto mb-1", hotelMode === 'search' ? "text-sky-600" : "text-muted-foreground")} />
+                    <p className={cn("text-xs font-medium", hotelMode === 'search' ? "text-sky-700 dark:text-sky-400" : "text-muted-foreground")}>
+                      Search Hotels
+                    </p>
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setHotelMode('manual')}
+                    className={cn(
+                      "p-3 rounded-lg border-2 transition-all text-center",
+                      hotelMode === 'manual'
+                        ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10"
+                        : "border-border hover:border-primary/30"
+                    )}
+                  >
+                    <Star className={cn("h-5 w-5 mx-auto mb-1", hotelMode === 'manual' ? "text-amber-600" : "text-muted-foreground")} />
+                    <p className={cn("text-xs font-medium", hotelMode === 'manual' ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>
+                      I Have a Hotel
+                    </p>
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setHotelMode('skip')}
+                    className={cn(
+                      "p-3 rounded-lg border-2 transition-all text-center",
+                      hotelMode === 'skip'
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/30"
+                    )}
+                  >
+                    <Sparkles className={cn("h-5 w-5 mx-auto mb-1", hotelMode === 'skip' ? "text-primary" : "text-muted-foreground")} />
+                    <p className={cn("text-xs font-medium", hotelMode === 'skip' ? "text-primary" : "text-muted-foreground")}>
+                      Add Later
+                    </p>
+                  </button>
                 </div>
-              )}
+                
+                {/* Hotel manual entry - only show when manual mode */}
+                {hotelMode === 'manual' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <HotelAutocomplete
+                      value={hotelSelection}
+                      onChange={setHotelSelection}
+                      destination={destinationSelection.cityName}
+                      placeholder="Search your hotel..."
+                    />
+                  </motion.div>
+                )}
+                
+                {/* Mode description */}
+                <p className="text-[10px] text-muted-foreground">
+                  {hotelMode === 'search' && "We'll help you find and compare hotels at your destination"}
+                  {hotelMode === 'manual' && "Enter your booked hotel so we can plan activities near you"}
+                  {hotelMode === 'skip' && "Jump straight to building your itinerary, add hotel anytime"}
+                </p>
+              </div>
 
               {/* Dates - Side by side */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    {itineraryOnlyMode ? 'Arriving' : 'Depart'}
+                    Arriving
                   </label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -1297,7 +1351,7 @@ export default function Start() {
                 
                 <div className="space-y-2">
                   <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    {itineraryOnlyMode ? 'Leaving' : 'Return'}
+                    Leaving
                   </label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -1349,9 +1403,7 @@ export default function Start() {
                         className={cn(
                           "w-12 h-12 rounded-lg border-2 transition-all text-sm font-medium",
                           travelers === num
-                            ? itineraryOnlyMode 
-                              ? "bg-amber-500 text-white border-amber-500"
-                              : "bg-sky-500 text-white border-sky-500"
+                            ? "bg-primary text-primary-foreground border-primary"
                             : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                         )}
                       >
@@ -1426,9 +1478,7 @@ export default function Start() {
                       className={cn(
                         "px-3 py-1.5 rounded-full border transition-all text-sm",
                         tripType === occasion.id
-                          ? itineraryOnlyMode 
-                            ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
-                            : "bg-primary/10 border-primary text-primary font-medium"
+                          ? "bg-primary/10 border-primary text-primary font-medium"
                           : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       )}
                     >
@@ -1458,9 +1508,7 @@ export default function Start() {
                           className={cn(
                             "px-3 py-1.5 rounded-full border transition-all text-sm",
                             tripType === occasion.id
-                              ? itineraryOnlyMode 
-                                ? "bg-amber-500/10 border-amber-500 text-amber-700 font-medium"
-                                : "bg-primary/10 border-primary text-primary font-medium"
+                              ? "bg-primary/10 border-primary text-primary font-medium"
                               : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                           )}
                         >
@@ -1536,9 +1584,7 @@ export default function Start() {
                           className={cn(
                             "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
                             isInRange
-                              ? itineraryOnlyMode 
-                                ? "bg-amber-500 text-white border-amber-500"
-                                : "bg-sky-500 text-white border-sky-500"
+                              ? "bg-primary text-primary-foreground border-primary"
                               : "border-border text-muted-foreground hover:border-primary/50"
                           )}
                         >
@@ -1551,79 +1597,40 @@ export default function Start() {
               </Collapsible>
             </div>
 
-            {/* CTA Button */}
-            <div className="pt-6 space-y-4">
+            {/* CTA Button - adapts based on hotel mode */}
+            <div className="pt-6 space-y-3">
               <Button
                 onClick={handleStart}
                 disabled={!isFormValid}
                 className={cn(
                   "w-full h-14 text-base font-medium rounded-xl shadow-lg transition-all",
-                  itineraryOnlyMode 
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-amber-500/25' 
-                    : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25'
+                  hotelMode === 'search' 
+                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25' 
+                    : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-primary/25'
                 )}
                 size="lg"
               >
-                {itineraryOnlyMode ? (
+                {hotelMode === 'search' ? (
+                  <>
+                    <Building2 className="h-5 w-5 mr-2" />
+                    Find Hotels
+                  </>
+                ) : (
                   <>
                     <Sparkles className="h-5 w-5 mr-2" />
                     Build My Itinerary
                   </>
-                ) : (
-                  <>
-                    <Building2 className="h-5 w-5 mr-2" />
-                    Find My Hotel
-                  </>
                 )}
               </Button>
               
-              {/* Cross-sell to other flow */}
-              {!itineraryOnlyMode && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!destinationSelection.cityName) {
-                      toast.error('Please select a destination');
-                      return;
-                    }
-                    if (!startDate || !endDate) {
-                      toast.error('Please select your travel dates');
-                      return;
-                    }
-                    
-                    const start = format(startDate, 'yyyy-MM-dd');
-                    const end = format(endDate, 'yyyy-MM-dd');
-                    
-                    setBasics({
-                      destination: destinationSelection.cityName,
-                      startDate: start,
-                      endDate: end,
-                      travelers,
-                      originCity: originSelection.cityName,
-                      budgetTier: 'moderate',
-                    });
-                    
-                    const tripId = await saveTrip();
-                    if (tripId) {
-                      navigate(`/trip/${tripId}?generate=true`);
-                    } else {
-                      toast.error('Please sign in to generate an itinerary');
-                    }
-                  }}
-                  className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Already have your hotel? <span className="text-amber-600 font-medium hover:underline">Build itinerary only →</span>
-                </button>
-              )}
-              
-              {itineraryOnlyMode && (
-                <Link
-                  to="/start"
-                  className="block w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Need a hotel too? <span className="text-sky-600 font-medium hover:underline">Find accommodations →</span>
-                </Link>
-              )}
+              {/* Helper text */}
+              <p className="text-center text-xs text-muted-foreground">
+                {hotelMode === 'search' 
+                  ? "We'll show you hotel options, then build your itinerary"
+                  : hotelMode === 'manual' && hotelSelection
+                    ? `We'll create activities around ${hotelSelection.name}`
+                    : "We'll create your personalized day-by-day itinerary"}
+              </p>
             </div>
           </motion.div>
         </div>
