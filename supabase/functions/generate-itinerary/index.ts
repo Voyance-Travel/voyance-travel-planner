@@ -99,9 +99,11 @@ import {
 
 // =============================================================================
 // PHASE 10: DESTINATION ESSENTIALS - Non-Negotiable Landmarks & Hidden Gems
+// Now with DB-driven data + freshness-based Perplexity enrichment
 // =============================================================================
 import {
   buildDestinationEssentialsPrompt,
+  buildDestinationEssentialsPromptWithDB,
   getDestinationIntelligence,
   hasCuratedEssentials,
 } from './destination-essentials.ts';
@@ -3329,6 +3331,8 @@ async function generateSingleDayWithRetry(
   previousDays: StrictDay[],
   flightHotelContext: string,
   LOVABLE_API_KEY: string,
+  supabaseClient: any, // For DB-driven destination essentials
+  perplexityApiKey?: string,
   maxRetries: number = 3
 ): Promise<StrictDay> {
   const isFirstDay = dayNumber === 1;
@@ -3431,14 +3435,24 @@ async function generateSingleDayWithRetry(
       }
 
       // Build destination essentials prompt (non-negotiables + hidden gems)
+      // Now uses DB-driven data with freshness-based Perplexity enrichment
       const authenticityScore = context.travelerDNA?.traits?.authenticity || 0;
       const isFirstTimeVisitor = true; // TODO: Add first-time detection from trip form
-      const destinationEssentialsPrompt = buildDestinationEssentialsPrompt(
-        context.destination,
-        context.totalDays,
-        authenticityScore,
-        isFirstTimeVisitor
-      );
+      const destinationEssentialsPrompt = supabaseClient
+        ? await buildDestinationEssentialsPromptWithDB(
+            supabaseClient,
+            context.destination,
+            context.totalDays,
+            authenticityScore,
+            isFirstTimeVisitor,
+            perplexityApiKey
+          )
+        : buildDestinationEssentialsPrompt(
+            context.destination,
+            context.totalDays,
+            authenticityScore,
+            isFirstTimeVisitor
+          );
 
       // Build the system prompt with FULL DNA injection + Destination Essentials
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
@@ -3719,7 +3733,9 @@ async function generateItineraryAI(
   context: GenerationContext,
   preferenceContext: string,
   LOVABLE_API_KEY: string,
-  flightHotelContext: string = ''
+  flightHotelContext: string = '',
+  supabaseClient?: any, // For DB-driven destination essentials
+  perplexityApiKey?: string
 ): Promise<{ days: StrictDay[] } | null> {
   console.log(`[Stage 2] Starting batch generation for ${context.totalDays} days`);
 
@@ -3742,7 +3758,9 @@ async function generateItineraryAI(
           dayNum,
           days, // Pass already completed days for context
           flightHotelContext,
-          LOVABLE_API_KEY
+          LOVABLE_API_KEY,
+          supabaseClient,
+          perplexityApiKey
         )
       );
     }
@@ -5525,7 +5543,8 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
       try {
-        aiResult = await generateItineraryAI(context, preferenceContext, LOVABLE_API_KEY, flightHotelResult.context);
+        const perplexityApiKey = Deno.env.get("PERPLEXITY_API_KEY");
+        aiResult = await generateItineraryAI(context, preferenceContext, LOVABLE_API_KEY, flightHotelResult.context, supabase, perplexityApiKey);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Generation failed';
         const status = message.includes('Rate limit') ? 429 : message.includes('Credits') ? 402 : 500;
