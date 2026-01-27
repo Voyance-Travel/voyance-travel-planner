@@ -73,10 +73,15 @@ function AirportAutocomplete({
 
   const debouncedQuery = useDebounce(inputValue, 300);
 
+  // Sync with external value changes (e.g., from popular destinations)
   useEffect(() => {
-    if (value !== inputValue && value) {
+    if (value && value !== inputValue) {
       setInputValue(value);
       setHasValidSelection(true);
+    } else if (!value && inputValue) {
+      // Value was cleared externally
+      setInputValue('');
+      setHasValidSelection(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -244,10 +249,15 @@ function DestinationAutocomplete({
 
   const debouncedQuery = useDebounce(inputValue, 300);
 
+  // Sync with external value changes (e.g., from popular destinations)
   useEffect(() => {
-    if (value !== inputValue && value) {
+    if (value && value !== inputValue) {
       setInputValue(value);
       setHasValidSelection(true);
+    } else if (!value && inputValue) {
+      // Value was cleared externally
+      setInputValue('');
+      setHasValidSelection(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -1647,12 +1657,21 @@ export default function Start() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                onClick={() => setDestinationSelection({
-                  display: `${dest.name}, ${dest.country}`,
-                  cityName: dest.name,
-                  airportCodes: undefined,
-                  isMetroArea: false,
-                })}
+                onClick={() => {
+                  // Set destination and switch to manual/skip mode since popular destinations don't have airport codes
+                  setDestinationSelection({
+                    display: `${dest.name}, ${dest.country}`,
+                    cityName: dest.name,
+                    airportCodes: undefined,
+                    isMetroArea: false,
+                  });
+                  // If in search mode, switch to skip mode since no airport codes
+                  if (hotelMode === 'search') {
+                    setHotelMode('skip');
+                  }
+                  // Scroll to top of page so user can see their selection
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
                 className="group relative aspect-[4/5] rounded-xl overflow-hidden"
               >
                 <img
