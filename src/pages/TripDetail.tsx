@@ -776,71 +776,79 @@ export default function TripDetail() {
               onCancel={() => setShowGenerator(false)}
             />
           ) : !hasItinerary ? (
-            /* Empty Itinerary - Show Generate CTA */
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-3xl font-serif font-bold">{trip.name}</h1>
-                <div className="flex items-center gap-2 text-muted-foreground mt-2">
-                  <MapPin className="w-4 h-4" />
-                  <span>{trip.destination}</span>
-                  {trip.destination_country && (
-                    <span className="text-muted-foreground/60">• {trip.destination_country}</span>
-                  )}
-                </div>
+            /* Empty Itinerary - Auto-trigger generator if shouldAutoGenerate, otherwise show minimal loading */
+            shouldAutoGenerate ? (
+              // Show loading state while auto-trigger effect kicks in
+              <div className="flex flex-col items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground">Preparing your itinerary...</p>
               </div>
-
-              {/* Generate Itinerary CTA */}
-              <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/5 via-background to-accent/5 p-8 md:p-12">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-primary/10 to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                
-                <div className="relative max-w-lg">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-                    <Sparkles className="h-4 w-4" />
-                    AI-Powered
-                  </div>
-                  
-                  <h2 className="text-2xl md:text-3xl font-serif font-bold mb-3">
-                    Ready to plan your adventure?
-                  </h2>
-                  
-                  <p className="text-muted-foreground mb-6">
-                    Let our AI create a personalized {differenceInDays(parseISO(trip.end_date), parseISO(trip.start_date)) + 1}-day itinerary 
-                    for {trip.destination} based on your preferences.
-                  </p>
-                  
-                  <Button 
-                    size="lg" 
-                    onClick={() => handleShowGenerator(false)} 
-                    disabled={isSyncingTrip}
-                    className="gap-2 shadow-lg"
-                  >
-                    {isSyncingTrip ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-5 w-5" />
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <h1 className="text-3xl font-serif font-bold">{trip.name}</h1>
+                  <div className="flex items-center gap-2 text-muted-foreground mt-2">
+                    <MapPin className="w-4 h-4" />
+                    <span>{trip.destination}</span>
+                    {trip.destination_country && (
+                      <span className="text-muted-foreground/60">• {trip.destination_country}</span>
                     )}
-                    {isSyncingTrip ? 'Preparing...' : 'Generate Itinerary'}
-                  </Button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Empty Day Cards */}
-              <div className="space-y-3">
-                {itineraryDays.map((day) => (
-                  <div key={day.dayNumber} className="border border-dashed border-border rounded-xl p-4 opacity-60">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
-                        {day.dayNumber}
-                      </div>
-                      <div>
-                        <p className="font-medium">{format(parseISO(day.date), 'EEEE, MMM d')}</p>
-                        <p className="text-sm text-muted-foreground">No activities planned yet</p>
+                {/* Generate Itinerary CTA - only when user navigated here manually without ?generate=true */}
+                <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/5 via-background to-accent/5 p-8 md:p-12">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-primary/10 to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                  
+                  <div className="relative max-w-lg">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
+                      <Sparkles className="h-4 w-4" />
+                      AI-Powered
+                    </div>
+                    
+                    <h2 className="text-2xl md:text-3xl font-serif font-bold mb-3">
+                      Ready to plan your adventure?
+                    </h2>
+                    
+                    <p className="text-muted-foreground mb-6">
+                      Let our AI create a personalized {differenceInDays(parseISO(trip.end_date), parseISO(trip.start_date)) + 1}-day itinerary 
+                      for {trip.destination} based on your preferences.
+                    </p>
+                    
+                    <Button 
+                      size="lg" 
+                      onClick={() => handleShowGenerator(true)} 
+                      disabled={isSyncingTrip}
+                      className="gap-2 shadow-lg"
+                    >
+                      {isSyncingTrip ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-5 w-5" />
+                      )}
+                      {isSyncingTrip ? 'Preparing...' : 'Generate Itinerary'}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Empty Day Cards */}
+                <div className="space-y-3">
+                  {itineraryDays.map((day) => (
+                    <div key={day.dayNumber} className="border border-dashed border-border rounded-xl p-4 opacity-60">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+                          {day.dayNumber}
+                        </div>
+                        <div>
+                          <p className="font-medium">{format(parseISO(day.date), 'EEEE, MMM d')}</p>
+                          <p className="text-sm text-muted-foreground">No activities planned yet</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )
           ) : (
             /* Editorial Itinerary - Same design as SampleItinerary with editing */
             (() => {
