@@ -146,25 +146,14 @@ export default function TopNav() {
                   <NotificationBell />
                 </div>
 
-                {/* Find My Hotel - Need accommodation */}
+                {/* Plan Your Trip - Unified CTA */}
                 <Button
-                  variant="outline"
                   size="sm"
                   onClick={() => navigate(ROUTES.START)}
-                  className={`gap-2 ${isTransparent ? 'border-white/30 text-white hover:bg-white/10 hover:text-white' : ''}`}
-                >
-                  <Building2 className="h-3.5 w-3.5" />
-                  Find My Hotel
-                </Button>
-
-                {/* Build My Itinerary - Already have accommodation */}
-                <Button
-                  size="sm"
-                  onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
                   <Sparkles className="h-4 w-4" />
-                  Build My Itinerary
+                  Plan Your Trip
                 </Button>
 
                 {/* User Dropdown */}
@@ -386,21 +375,13 @@ export default function TopNav() {
                         </Link>
                       );
                     })}
-                    <div className="pt-2 space-y-2">
+                    <div className="pt-2">
                       <Button
-                        variant="outline"
                         className="w-full gap-2"
                         onClick={() => navigate(ROUTES.START)}
                       >
-                        <Building2 className="h-4 w-4" />
-                        Find My Hotel
-                      </Button>
-                      <Button
-                        className="w-full gap-2"
-                        onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
-                      >
                         <Sparkles className="h-4 w-4" />
-                        Build My Itinerary
+                        Plan Your Trip
                       </Button>
                     </div>
                     <button
