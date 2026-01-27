@@ -680,13 +680,6 @@ export default function PlannerHotelEnhanced() {
                     Continue to Trip Summary
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
-                  
-                  <button 
-                    onClick={handleSkipHotel}
-                    className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-                  >
-                    I'll add my hotel later
-                  </button>
                 </motion.div>
               </div>
             </div>
