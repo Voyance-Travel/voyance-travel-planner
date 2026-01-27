@@ -2457,6 +2457,9 @@ async function buildTravelDNAContext(
     personaSection += `\nConfidence: ${Math.round(confidence)}/100 (${confidenceLabel})`;
     
     // Add archetype descriptions for AI context
+    // NOTE: Archetype descriptions are no longer hardcoded. Guidance is derived
+    // dynamically from the canonical profile (primary_archetype_name, trait_scores, etc.)
+    // via buildPersonaManuscript() in prompt-library.ts.
     const archetypeDescriptions: Record<string, string> = {
       'Cultural Curator': 'Prioritize museums, historical sites, art galleries, architectural tours, and authentic local experiences',
       'Wellness Wanderer': 'Include spa visits, yoga sessions, meditation spots, thermal baths, and peaceful nature retreats',
@@ -2468,10 +2471,7 @@ async function buildTravelDNAContext(
       'Social Butterfly': 'Include group tours, communal dining, festivals, and opportunities to meet locals',
       'Slow Traveler': 'Fewer activities per day, longer experiences, cafe culture, and immersive local living',
       'Thrill Seeker': 'Adventure sports, extreme activities, adrenaline experiences, and unique challenges',
-
-      // New DNA archetypes (snake_case) - explicit user identity
-      'flexible_wanderer': 'Flexible, non-rigid days. Prioritize local, mid-range choices. Avoid private tours and overt luxury framing unless explicitly requested.',
-      'beach_therapist': 'Daily beach/coastal time, restorative pacing, long downtime blocks, casual local dining, sunset/sunrise moments. Avoid overly formal luxury unless requested.',
+      // All other DNA archetypes are handled via persona manuscript - no hardcoding.
     };
     
     const topArchetype = archetypes[0]?.name?.replace(/_/g, ' ');

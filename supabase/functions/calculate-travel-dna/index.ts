@@ -1481,59 +1481,16 @@ function matchArchetypesV2(
   archetypeScores.sort((a, b) => b.score - a.score);
   
   // ═══════════════════════════════════════
-  // FALLBACK LOGIC: Check for flat/weak profiles
+  // NO FALLBACK LOGIC
   // ═══════════════════════════════════════
-  const FALLBACK_THRESHOLD = 45;  // Top score must exceed this
-  const FLAT_PROFILE_MARGIN = 10; // If top 3 within this margin, profile is flat
-  
-  // Get non-fallback archetypes first
-  const nonFallbackScores = archetypeScores.filter(
-    a => !['balanced_story_collector', 'flexible_wanderer', 'explorer'].includes(a.archetype.id)
-  );
-  const fallbackScores = archetypeScores.filter(
-    a => ['balanced_story_collector', 'flexible_wanderer'].includes(a.archetype.id)
-  );
-  
-  const topScore = nonFallbackScores[0]?.score ?? 0;
-  const secondScore = nonFallbackScores[1]?.score ?? 0;
-  const thirdScore = nonFallbackScores[2]?.score ?? 0;
-  
-  // Check fallback trigger conditions
-  const isWeakProfile = topScore < FALLBACK_THRESHOLD;
-  const isFlatProfile = topScore - thirdScore < FLAT_PROFILE_MARGIN;
-  let finalScores = archetypeScores;
-  let fallbackUsed = false;
-  
-  if (isWeakProfile || isFlatProfile) {
-    // Find best fallback archetype
-    const balancedScore = fallbackScores.find(a => a.archetype.id === 'balanced_story_collector');
-    const flexibleScore = fallbackScores.find(a => a.archetype.id === 'flexible_wanderer');
-    
-    // Determine which fallback fits better
-    // Flexible Wanderer: for people who selected lots of "none" answers
-    // Balanced Story Collector: for people with moderate scores across the board
-    let bestFallback = balancedScore;
-    if (flexibleScore && (!balancedScore || flexibleScore.score > balancedScore.score)) {
-      bestFallback = flexibleScore;
-    }
-    
-    if (bestFallback) {
-      // Boost fallback score to be primary, keep original top as secondary
-      bestFallback.score = Math.max(topScore + 5, 50);
-      bestFallback.reasons.push({
-        trait: 'planning' as Trait,  // Arbitrary, just for documentation
-        effect: 'boost',
-        amount: 0,
-        note: isWeakProfile 
-          ? 'Fallback: weak signals (no strong archetype match)' 
-          : 'Fallback: flat profile (multiple archetypes equally matched)',
-      });
-      fallbackUsed = true;
-      
-      // Re-sort after boosting
-      archetypeScores.sort((a, b) => b.score - a.score);
-    }
-  }
+  // Previously, weak/flat profiles would get auto-assigned flexible_wanderer or 
+  // balanced_story_collector. This has been removed so that archetypes are ALWAYS
+  // determined purely by the user's actual quiz/preference data with no artificial
+  // boosting of generic archetypes.
+  //
+  // If the user has weak signals, their archetype confidence will simply be lower.
+  // ═══════════════════════════════════════
+  const _unused_fallbackUsed = false; // Preserved for downstream compat if referenced
   
   // Take top 5 for blend
   const topN = archetypeScores.slice(0, 5);
