@@ -572,7 +572,9 @@ function deriveBudgetIntent(
   comfortTrait: number | undefined // -10 (budget-conscious) to +10 (luxury-seeking)
 ): BudgetIntent {
   // Normalize inputs
-  const tier = (budgetTier?.toLowerCase() || 'standard') as BudgetTierLevel;
+  const rawTier = (budgetTier?.toLowerCase() || 'standard');
+  // UI/DB sometimes uses "moderate"; normalize to our canonical tier labels.
+  const tier = ((rawTier === 'moderate' ? 'standard' : rawTier) as BudgetTierLevel);
   const budget = budgetTrait ?? 0; // frugal positive, splurge negative
   const comfort = comfortTrait ?? 0; // luxury positive, budget-conscious negative
   
@@ -660,13 +662,13 @@ function deriveBudgetIntent(
   
   if (spendStyle === 'value_focused') {
     avoid.push('tourist traps', 'overpriced set menus', 'low-ROI experiences', 'expensive transport when cheaper options exist');
-    prioritize.push('high-value experiences', 'local favorites with quality', 'smart splurges on signature moments');
+    prioritize.push('high-value experiences', 'local favorites with quality', 'intentional upgrades on signature moments');
   } else if (spendStyle === 'splurge_forward') {
     avoid.push('budget options that compromise experience', 'overcrowded budget alternatives');
     prioritize.push('premium experiences', 'fine dining', 'skip-the-line tickets', 'private tours', 'exclusive access');
   } else {
     avoid.push('obvious tourist traps');
-    prioritize.push('balanced mix of splurges and value options', 'local recommendations at various price points');
+    prioritize.push('balanced mix of upgrades and value options', 'local recommendations at various price points');
   }
   
   // Add tier-specific refinements
@@ -683,13 +685,13 @@ function deriveBudgetIntent(
   let notes = `${tierLabel}, ${styleLabel}`;
   
   if (conflict && spendStyle === 'value_focused' && tierLevel >= 5) {
-    notes += ': willing to pay for top-tier comfort + 1-2 signature splurges; avoids tourist traps and low-ROI spend';
+    notes += ': willing to pay for top-tier comfort + 1-2 signature upgrades; avoids tourist traps and low-ROI spend';
   } else if (spendStyle === 'value_focused') {
-    notes += ': seeks best value at every price point; prioritizes quality over quantity; strategic splurges only';
+    notes += ': seeks best value at every price point; prioritizes quality over quantity; strategic upgrades only';
   } else if (spendStyle === 'splurge_forward') {
     notes += ': embraces premium experiences freely; prioritizes exclusivity and comfort over cost savings';
   } else {
-    notes += ': balanced approach to spending; open to both value finds and occasional splurges';
+    notes += ': balanced approach to spending; open to both value finds and occasional upgrades';
   }
   
   // Log conflict if detected
@@ -1147,7 +1149,7 @@ function buildNormalizedPromptContext(
     budgetSection += `\n🎯 ${budgetIntent.notes}`;
     budgetSection += `\n✅ PRIORITIZE: ${budgetIntent.prioritize.slice(0, 3).join('; ')}`;
     budgetSection += `\n❌ AVOID: ${budgetIntent.avoid.slice(0, 3).join('; ')}`;
-    budgetSection += `\n📊 Splurge cadence: ${budgetIntent.splurgeCadence.dinners} nice dinners, ${budgetIntent.splurgeCadence.experiences} premium experiences per trip`;
+    budgetSection += `\n📊 Upgrade cadence: ${budgetIntent.splurgeCadence.dinners} nicer dinners, ${budgetIntent.splurgeCadence.experiences} upgraded experiences per trip`;
     sections.push(budgetSection);
   }
   
@@ -2408,7 +2410,7 @@ async function buildTravelDNAContext(
   let budgetSection = `\n💰 BUDGET INTENT:\n🎯 ${budgetIntent.notes}`;
   budgetSection += `\n✅ PRIORITIZE: ${budgetIntent.prioritize.slice(0, 3).join('; ')}`;
   budgetSection += `\n❌ AVOID: ${budgetIntent.avoid.slice(0, 3).join('; ')}`;
-  budgetSection += `\n📊 Splurge cadence: ${budgetIntent.splurgeCadence.dinners} dinners, ${budgetIntent.splurgeCadence.experiences} experiences`;
+  budgetSection += `\n📊 Upgrade cadence: ${budgetIntent.splurgeCadence.dinners} dinners, ${budgetIntent.splurgeCadence.experiences} experiences`;
   
   sections.push(budgetSection);
   
@@ -5061,7 +5063,9 @@ serve(async (req) => {
       context.flightData = promptFlightData;
       context.hotelData = promptHotelData;
       
-      console.log(`[Stage 1.4.5] DNA injected: archetype=${promptTravelerDNA.primaryArchetype || 'none'}, pace=${promptTravelerDNA.traits.pace}, flight=${promptFlightData.hasOutboundFlight}, hotel=${promptHotelData.hasHotel}`);
+      console.log(
+        `[Stage 1.4.5] DNA injected: primary=${promptTravelerDNA.primaryArchetype || 'none'}, secondary=${promptTravelerDNA.secondaryArchetype || 'none'}, tripBudgetTier=${context.budgetTier || 'none'}, pace=${promptTravelerDNA.traits.pace}, flight=${promptFlightData.hasOutboundFlight}, hotel=${promptHotelData.hasHotel}`
+      );
       
       // =======================================================================
       // AIRPORT TRANSFER FARE - Dynamic pricing with Viator + database + Google Maps

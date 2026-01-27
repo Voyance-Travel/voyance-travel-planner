@@ -508,7 +508,7 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
     guardrails.push(
       isPremiumTrip
         ? '3) This is a premium/luxury trip tier, so elevated venues are acceptable—but still match the identity.'
-        : '3) This is NOT a premium/luxury trip tier. Avoid: “private tour”, Michelin-driven dining, Ritz-style spas, VIP/skip-the-line framing, and “splurge” language unless explicitly requested.'
+        : '3) This is NOT a premium/luxury trip tier. Avoid: “private tour”, VIP/skip-the-line framing, five-star hotel spa framing, and “luxury/splurge/premium/exclusive” wording unless explicitly requested. Do not put the word “Luxury” in activity titles.'
     );
 
     // Archetype-specific guardrails (add only a few high-impact ones)
@@ -517,6 +517,12 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
     }
     if (primary === 'beach_therapist' || secondary === 'beach_therapist') {
       guardrails.push('5) BEACH THERAPIST: Guarantee daily coastal/beach time + long restoration blocks. Choose relaxed waterfront walks, viewpoints, and casual seafood over formal fine dining.');
+    }
+
+    // Practical implementation note: if a restorative activity is needed on non-premium tiers,
+    // prefer local public baths/thermal pools/hammams over hotel-branded “luxury spa” experiences.
+    if (!isPremiumTrip) {
+      guardrails.push('6) If adding a spa/restoration block, prefer local public baths/thermal pools/hammams or simple massage studios—avoid five-star hotel spa branding by default.');
     }
 
     if (guardrails.length > 0) {
@@ -545,7 +551,7 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
       low: 'solo/intimate, values quiet',
       high: 'social butterfly, loves groups',
       implication: (s) => s <= -5
-        ? 'Avoid crowded venues, group tours. Prioritize solo experiences, quiet cafes, private tours.'
+        ? 'Avoid crowded venues and large group tours. Prefer self-guided walks, off-peak visits, and quieter cafes.'
         : s >= 5
         ? 'Include group activities, communal dining, social experiences, meeting locals.'
         : 'Mix of solo and social experiences.'
@@ -575,7 +581,7 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
         ? 'Budget options are preferred. Don\'t prioritize comfort over cost.'
         : s >= 5
         ? 'Premium experiences, fine dining, luxury venues, skip-the-line, private access.'
-        : 'Balance of splurges and value options.'
+        : 'Balance of occasional upgrades and value options (avoid “luxury/splurge” framing unless asked).'
     },
     planning: {
       low: 'spontaneous, go-with-flow',
