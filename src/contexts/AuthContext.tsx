@@ -194,55 +194,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    // Get initial session
-
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        // First, claim any locally-saved trips into this account
-        await migrateLocalTripsToAccount(session.user);
-
-        const { profile, preferences } = await loadUserData(session.user);
-        setUser(transformProfile(session.user, profile, preferences));
-      }
-      setSession(session);
-      setIsLoading(false);
-    });
-
-    // Listen for auth changes
+    // CRITICAL: Set up listener BEFORE getSession() per Supabase docs
+    // This prevents race conditions on page refresh where session exists
+    // but listener hasn't been registered yet
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log('[Auth] Auth state changed:', event);
       
       // Handle synchronous state updates first
-      setSession(session);
+      setSession(newSession);
       
-      if (session?.user) {
+      // INITIAL_SESSION fires on page load when session exists in storage
+      // SIGNED_IN fires on explicit login
+      if (newSession?.user) {
         // CRITICAL: Set loading true IMMEDIATELY to prevent false redirects
         // This ensures ProtectedRoute shows spinner until user data is ready
         setIsLoading(true);
         
-        // Defer async operations with setTimeout to avoid deadlock
+        // Defer async operations with setTimeout to avoid deadlock with Supabase internals
         setTimeout(async () => {
-          // On sign in, sync profile and claim any locally-saved trips
-          if (event === 'SIGNED_IN') {
-            await syncProfile(session.user);
-            await migrateLocalTripsToAccount(session.user);
-            
-            // Log OAuth logins (email/password logins are logged in login())
-            const provider = session.user.app_metadata?.provider;
-            if (provider && provider !== 'email') {
-              logOAuthLogin(provider).catch(console.error);
+          try {
+            // On explicit sign in, sync profile and claim any locally-saved trips
+            if (event === 'SIGNED_IN') {
+              await syncProfile(newSession.user);
+              await migrateLocalTripsToAccount(newSession.user);
+              
+              // Log OAuth logins (email/password logins are logged in login())
+              const provider = newSession.user.app_metadata?.provider;
+              if (provider && provider !== 'email') {
+                logOAuthLogin(provider).catch(console.error);
+              }
             }
-          }
 
-          const { profile, preferences } = await loadUserData(session.user);
-          setUser(transformProfile(session.user, profile, preferences));
-          setIsLoading(false);
+            const { profile, preferences } = await loadUserData(newSession.user);
+            setUser(transformProfile(newSession.user, profile, preferences));
+          } catch (error) {
+            console.error('[Auth] Error loading user data:', error);
+          } finally {
+            setIsLoading(false);
+          }
         }, 0);
       } else {
         setUser(null);
+        setIsLoading(false);
+      }
+    });
+
+    // Get initial session - listener above will handle the INITIAL_SESSION event
+    // This ensures we don't miss the session if it's already in localStorage
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      // If no session and no pending auth state change, we can stop loading
+      // The onAuthStateChange callback handles the case where session exists
+      if (!initialSession) {
         setIsLoading(false);
       }
     });
