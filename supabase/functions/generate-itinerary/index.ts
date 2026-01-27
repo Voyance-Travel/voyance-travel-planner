@@ -1808,6 +1808,9 @@ async function getAirportTransferFare(supabase: any, city: string, airportCode?:
 }
 
 async function getFlightHotelContext(supabase: any, tripId: string): Promise<FlightHotelContextResult> {
+  console.log(`[FlightHotel] ============ CHECKING FLIGHT & HOTEL DATA ============`);
+  console.log(`[FlightHotel] Trip ID: ${tripId}`);
+  
   try {
     const { data: trip, error } = await supabase
       .from('trips')
@@ -1815,7 +1818,13 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       .eq('id', tripId)
       .maybeSingle();
 
-    if (error || !trip) return { context: '' };
+    if (error || !trip) {
+      console.log(`[FlightHotel] ❌ Failed to fetch trip data:`, error?.message || 'No trip found');
+      return { context: '' };
+    }
+    
+    console.log(`[FlightHotel] flight_selection present: ${!!trip.flight_selection}`);
+    console.log(`[FlightHotel] hotel_selection present: ${!!trip.hotel_selection}`);
 
     const sections: string[] = [];
     let arrivalTimeStr: string | undefined;
@@ -1965,7 +1974,8 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
         sections.push(`\n${'='.repeat(40)}\n🏨 ACCOMMODATION (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the hotel area and end nearby for easy return.\n⚠️ CRITICAL: Day 1 activities must NOT begin before hotel check-in is complete. Standard check-in is 3:00 PM - do not schedule sightseeing before this unless arrival is very early.`);
       }
     } else {
-      console.log(`[FlightHotel] No hotel data found in trip`);
+      console.log(`[FlightHotel] ⚠️ NO HOTEL DATA FOUND - hotel_selection is empty or missing`);
+      console.log(`[FlightHotel] Raw hotel_selection value:`, JSON.stringify(hotelRaw));
     }
 
     return {
@@ -5891,102 +5901,320 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
         console.log(`[generate-day] Return departure: ${flightContext.returnDepartureTime}, latest activity: ${flightContext.latestLastActivityTime}`);
       }
 
-      // Build day-specific constraints
-       let dayConstraints = '';
-       if (isFirstDay) {
-         // Check if we have flight data
-         const hasFlightData = flightContext.arrivalTime24 || flightContext.arrivalTime;
-         
-         if (hasFlightData) {
-           // User provided flight times - use their arrival
-           const arrival24 = flightContext.arrivalTime24 || (flightContext.arrivalTime ? normalizeTo24h(flightContext.arrivalTime) : null) || '18:00';
-           const arrivalMins = parseTimeToMinutes(arrival24) ?? (18 * 60);
-           const transferStart = addMinutesToHHMM(arrival24, 45);
-           const transferEnd = addMinutesToHHMM(transferStart, 60);
-           const checkInStart = transferEnd;
-           const checkInEnd = addMinutesToHHMM(checkInStart, 30);
-           const earliestAfterArrival = flightContext.earliestFirstActivityTime || addMinutesToHHMM(arrival24, 240);
-           const isLateArrival = arrivalMins >= (18 * 60);
+      // =========================================================================
+      // SYSTEMATIC DECISION TREE FOR DAY CONSTRAINTS
+      // Rule 1: Check Flight → Rule 2: Check Hotel → Rule 3: Apply TravelDNA
+      // =========================================================================
+      let dayConstraints = '';
+      
+      if (isFirstDay) {
+        // ===== RULE 1: CHECK FLIGHT =====
+        const hasFlightData = !!(flightContext.arrivalTime24 || flightContext.arrivalTime);
+        
+        // ===== RULE 2: CHECK HOTEL =====
+        const hasHotelData = !!(flightContext.hotelName || flightContext.hotelAddress);
+        
+        console.log(`[Day1-Decision] Flight data: ${hasFlightData ? 'YES' : 'NO'}, Hotel data: ${hasHotelData ? 'YES' : 'NO'}`);
+        
+        if (hasFlightData) {
+          // ===== FLIGHT PROVIDED: Use arrival time =====
+          const arrival24 = flightContext.arrivalTime24 || normalizeTo24h(flightContext.arrivalTime!) || '18:00';
+          const arrivalMins = parseTimeToMinutes(arrival24) ?? (18 * 60);
+          
+          // Categorize arrival time
+          const isMorningArrival = arrivalMins < (12 * 60);      // Before noon
+          const isAfternoonArrival = arrivalMins >= (12 * 60) && arrivalMins < (18 * 60); // Noon - 6 PM
+          const isEveningArrival = arrivalMins >= (18 * 60);     // 6 PM or later
+          
+          // Calculate key times
+          const customsClearance = addMinutesToHHMM(arrival24, 60);    // 1 hour for customs
+          const transferStart = addMinutesToHHMM(arrival24, 75);      // After customs
+          const transferEnd = addMinutesToHHMM(transferStart, 60);    // 1 hour transfer
+          const hotelCheckIn = transferEnd;
+          const settleInEnd = addMinutesToHHMM(hotelCheckIn, 30);     // 30 min to settle
+          const earliestSightseeing = addMinutesToHHMM(settleInEnd, 30); // 30 min buffer
+          
+          // Hotel context for prompts
+          const hotelNameDisplay = flightContext.hotelName || 'Selected Hotel';
+          const hotelAddressDisplay = flightContext.hotelAddress || 'Hotel Address';
+          
+          console.log(`[Day1-Decision] Arrival at ${arrival24}: morning=${isMorningArrival}, afternoon=${isAfternoonArrival}, evening=${isEveningArrival}`);
+          console.log(`[Day1-Decision] Timeline: customs=${customsClearance}, transfer=${transferStart}-${transferEnd}, checkin=${hotelCheckIn}, earliest activity=${earliestSightseeing}`);
+          
+          if (isMorningArrival) {
+            // ===== MORNING ARRIVAL (before noon) =====
+            // Consider: customs, jet lag, traveler profile (breakfast preference, rest needs)
+            dayConstraints = `
+THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
+This is a MORNING ARRIVAL - the traveler has likely been traveling overnight.
 
-          dayConstraints = `
-THE FLIGHT LANDS AT ${arrival24} (that's ${flightContext.arrivalTime || arrival24}).
-The traveler is NOT in the destination before this time. They are on a plane.
+TRAVELER CONTEXT:
+- The traveler has been on a long flight and may have jet lag
+- They need to clear customs/immigration (estimate: 1 hour)
+- Consider their energy level when planning activities
 
-REQUIRED ACTIVITY SEQUENCE (in this exact order):
-1. Activity 1: "Arrival at Airport" 
+REQUIRED ACTIVITY SEQUENCE (in exact order):
+1. "Arrival at Airport" 
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
-   - location: { name: "Airport", address: "Rome Fiumicino Airport (FCO)" }
-   
-2. Activity 2: "Airport Transfer to Hotel"
-   - startTime: "${transferStart}", endTime: "${transferEnd}" 
+   - description: "Clear customs and collect luggage"
+
+2. "Airport Transfer to Hotel"
+   - startTime: "${transferStart}", endTime: "${transferEnd}"
    - category: "transport"
-   
-3. Activity 3: "Hotel Check-in"
-   - startTime: "${checkInStart}", endTime: "${checkInEnd}"
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+
+3. "Hotel Check-in & Refresh"
+   - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
-   - location: { name: "${flightContext.hotelName || 'Hotel'}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
+   - description: "Check in, freshen up, and get oriented to the area"
 
-${isLateArrival ? `
-Since arrival is after 6 PM, Day 1 should ONLY have:
-- The 3 activities above (Arrival, Transfer, Check-in)
-- OPTIONALLY: One late dinner activity near the hotel (starting around ${addMinutesToHHMM(checkInEnd, 60)})
-- NO other activities. The traveler needs rest after a long flight.
-` : `
-After check-in, the earliest any sightseeing/dining can start is ${earliestAfterArrival}.
-`}
+MORNING ARRIVAL GUIDELINES:
+- After checking in (${settleInEnd}), the traveler may want a light breakfast or brunch near the hotel
+- Consider their Travel DNA for pace preference - some may want to rest first, others to explore
+- Start with LOW-ENERGY activities: a café, a leisurely neighborhood walk, or a nearby park
+- Build energy throughout the day - save more intensive sightseeing for afternoon
+- The traveler has a FULL DAY ahead - pace activities appropriately
+- Earliest sightseeing/exploration: ${earliestSightseeing}
 
-DO NOT include any activities that happen BEFORE ${arrival24} - no breakfast, no morning sightseeing.
-The day starts when the plane lands, not at 9 AM.`;
-         } else {
-           // NO flight data - apply safe defaults (assume 3 PM check-in)
-           // User hasn't told us when they arrive, so we can't plan morning activities
-           const defaultCheckIn = '15:00';
-           const checkInEnd = addMinutesToHHMM(defaultCheckIn, 30);
-           const earliestActivity = addMinutesToHHMM(checkInEnd, 30); // 4 PM earliest
-           
-           console.log(`[generate-day] No flight data provided - applying default Day 1 constraints (check-in at ${defaultCheckIn})`);
+DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
+          } else if (isAfternoonArrival) {
+            // ===== AFTERNOON ARRIVAL (noon to 6 PM) =====
+            // Moderate energy, can do some light exploration
+            dayConstraints = `
+THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
+This is an AFTERNOON ARRIVAL.
 
+REQUIRED ACTIVITY SEQUENCE (in exact order):
+1. "Arrival at Airport"
+   - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
+   - category: "transport"
+   - description: "Clear customs and collect luggage"
+
+2. "Airport Transfer to Hotel"
+   - startTime: "${transferStart}", endTime: "${transferEnd}"
+   - category: "transport"
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+
+3. "Hotel Check-in"
+   - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
+   - category: "accommodation"
+   - description: "Check in and freshen up"
+
+AFTERNOON ARRIVAL GUIDELINES:
+- After check-in (${settleInEnd}), plan 1-2 light activities
+- Focus on the hotel neighborhood - nearby exploration, a café, or a walk
+- End the day with a nice dinner near the hotel
+- Earliest exploration: ${earliestSightseeing}
+- Save major attractions for full days
+
+DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
+          } else {
+            // ===== EVENING ARRIVAL (6 PM or later) =====
+            // Limited time, focus on logistics and rest
+            dayConstraints = `
+THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
+This is an EVENING ARRIVAL - limited time for activities today.
+
+REQUIRED ACTIVITY SEQUENCE (in exact order):
+1. "Arrival at Airport"
+   - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
+   - category: "transport"
+
+2. "Airport Transfer to Hotel"
+   - startTime: "${transferStart}", endTime: "${transferEnd}"
+   - category: "transport"
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+
+3. "Hotel Check-in"
+   - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
+   - category: "accommodation"
+
+EVENING ARRIVAL GUIDELINES:
+- Day 1 should ONLY include:
+  * The 3 arrival activities above
+  * OPTIONALLY: One dinner near the hotel (if time permits and traveler isn't exhausted)
+- The traveler needs rest after a long journey
+- NO intensive sightseeing on an evening arrival
+- Maximum 4 activities total including the required sequence
+
+DO NOT plan activities before ${arrival24}.`;
+          }
+        } else if (hasHotelData) {
+          // ===== NO FLIGHT, BUT HOTEL PROVIDED =====
+          // We know WHERE they're staying but not WHEN they arrive
+          // Apply conservative assumptions based on standard check-in
+          const defaultCheckIn = '15:00'; // Standard hotel check-in
+          const settleInEnd = addMinutesToHHMM(defaultCheckIn, 30);
+          const earliestActivity = addMinutesToHHMM(settleInEnd, 30);
+          
+          console.log(`[Day1-Decision] Hotel provided but no flight - using standard check-in (${defaultCheckIn})`);
+          
           dayConstraints = `
-IMPORTANT: The traveler has NOT provided flight arrival times.
-We don't know when they will arrive at the destination.
+HOTEL PROVIDED BUT ARRIVAL TIME UNKNOWN:
+- Hotel: ${flightContext.hotelName}
+- Address: ${flightContext.hotelAddress || 'Address on file'}
 
-SAFE DAY 1 ASSUMPTIONS:
-- Standard hotel check-in is 3:00 PM (15:00)
-- The traveler may be arriving, clearing customs, and getting to their hotel in the morning/afternoon
-- DO NOT schedule any morning or early afternoon activities (no breakfast spots, no 9 AM tours)
+The traveler has a hotel but has NOT provided flight/arrival details.
+We cannot assume morning availability.
+
+SAFE ASSUMPTIONS:
+- Standard hotel check-in: 3:00 PM (15:00)
+- The traveler may be traveling to the destination during morning/early afternoon
+- DO NOT schedule activities before 15:00
 
 REQUIRED FIRST ACTIVITY:
-1. Activity 1: "Hotel Check-in & Settle In"
-   - startTime: "${defaultCheckIn}", endTime: "${checkInEnd}"
+1. "Hotel Check-in & Settle In"
+   - startTime: "${defaultCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
-   - location: { name: "${flightContext.hotelName || 'Hotel'}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
+   - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
-After check-in, you may plan activities starting from ${earliestActivity}.
-Focus Day 1 on:
-- A light afternoon walk or nearby exploration (after 4 PM)
-- An early dinner near the hotel
-- Getting oriented to the neighborhood
+DAY 1 GUIDELINES:
+- After check-in (${settleInEnd}), plan light afternoon activities
+- Earliest sightseeing: ${earliestActivity}
+- Focus on the hotel neighborhood
+- End with dinner nearby
+- This is an orientation day, not a full exploration day
 
-DO NOT plan activities before ${defaultCheckIn}.
-The traveler may still be traveling to the destination during the morning.`;
-         }
-       } else if (isLastDay && flightContext.returnDepartureTime) {
-         const departure24 = flightContext.returnDepartureTime24 || normalizeTo24h(flightContext.returnDepartureTime) || '12:00';
-         const latestActivity = flightContext.latestLastActivityTime || addMinutesToHHMM(departure24, -180);
-         
-         dayConstraints = `
-THE RETURN FLIGHT DEPARTS AT ${departure24} (that's ${flightContext.returnDepartureTime}).
-The traveler must be at the airport 3 hours before departure.
+DO NOT plan activities before ${defaultCheckIn}.`;
+        } else {
+          // ===== NO FLIGHT AND NO HOTEL =====
+          // Apply most conservative "safe day one" assumptions
+          console.log(`[Day1-Decision] No flight AND no hotel data - applying conservative defaults`);
+          
+          dayConstraints = `
+⚠️ NO ARRIVAL OR HOTEL INFORMATION PROVIDED
 
-REQUIRED ENDING SEQUENCE (activities must end with):
-1. "Hotel Checkout" (category: accommodation) - around ${addMinutesToHHMM(departure24, -210)}
-2. "Transfer to Airport" (category: transport) 
-3. "Departure from Airport" (category: transport) - endTime should be ${departure24}
+The traveler has not specified:
+- Flight arrival time
+- Hotel/accommodation details
 
-ALL sightseeing/activities must END by ${latestActivity}.
-Plan only morning activities and leave afternoon clear for airport.`;
-       }
+CONSERVATIVE DAY 1 APPROACH:
+- We cannot assume the traveler is available in the morning
+- We cannot assume a specific location to start from
+- Apply maximum flexibility
+
+SAFE ASSUMPTIONS:
+- Assume arrival/check-in around 3:00 PM (15:00)
+- DO NOT schedule any morning activities
+- Start planning from 15:30 onwards
+- Focus on flexible, central activities
+- Plan activities that can be reached from any hotel location
+
+STRUCTURE:
+1. Activity 1 should start at 15:30 (allows for hotel check-in + settling)
+2. Plan 2-3 light afternoon activities in central/accessible areas
+3. End with dinner
+
+DO NOT plan activities before 15:30 on Day 1.
+The traveler may still be in transit during the morning.`;
+        }
+      } else if (isLastDay) {
+        // ===== LAST DAY: DEPARTURE LOGIC =====
+        const hasReturnFlight = !!(flightContext.returnDepartureTime || flightContext.returnDepartureTime24);
+        const hasHotelData = !!(flightContext.hotelName || flightContext.hotelAddress);
+        
+        console.log(`[LastDay-Decision] Return flight: ${hasReturnFlight ? 'YES' : 'NO'}, Hotel: ${hasHotelData ? 'YES' : 'NO'}`);
+        
+        if (hasReturnFlight) {
+          // ===== RETURN FLIGHT PROVIDED =====
+          const departure24 = flightContext.returnDepartureTime24 || normalizeTo24h(flightContext.returnDepartureTime!) || '12:00';
+          const departureMins = parseTimeToMinutes(departure24) ?? (12 * 60);
+          
+          // Calculate departure timeline
+          const airportArrival = addMinutesToHHMM(departure24, -180);  // 3 hours before flight
+          const transferStart = addMinutesToHHMM(airportArrival, -60); // 1 hour transfer
+          const hotelCheckout = addMinutesToHHMM(transferStart, -30);  // 30 min to checkout
+          const latestSightseeing = addMinutesToHHMM(hotelCheckout, -60); // 1 hour buffer for return
+          
+          const hotelNameDisplay = flightContext.hotelName || 'Hotel';
+          
+          // Determine if early or late departure
+          const isEarlyDeparture = departureMins < (12 * 60); // Before noon
+          const isMidDayDeparture = departureMins >= (12 * 60) && departureMins < (17 * 60); // Noon - 5 PM
+          
+          console.log(`[LastDay-Decision] Departure at ${departure24}: early=${isEarlyDeparture}, midday=${isMidDayDeparture}`);
+          console.log(`[LastDay-Decision] Timeline: latestActivity=${latestSightseeing}, checkout=${hotelCheckout}, transfer=${transferStart}, airport=${airportArrival}`);
+          
+          dayConstraints = `
+THE RETURN FLIGHT DEPARTS AT ${departure24} (${flightContext.returnDepartureTime || departure24}).
+This is the LAST DAY - departure logistics are MANDATORY.
+
+DEPARTURE TIMELINE (ENFORCED):
+- Latest sightseeing must END by: ${latestSightseeing}
+- Hotel checkout: ${hotelCheckout}
+- Transfer to airport: ${transferStart}
+- Arrive at airport: ${airportArrival} (3 hours before international flight)
+- Flight departs: ${departure24}
+
+${isEarlyDeparture ? `
+EARLY DEPARTURE (before noon):
+- Very limited time for activities
+- Plan at MOST: breakfast near hotel, then checkout
+- Focus on smooth departure, not sightseeing
+` : isMidDayDeparture ? `
+MID-DAY DEPARTURE:
+- Plan 1-2 morning activities maximum
+- Keep activities NEAR the hotel for easy return
+- Leave buffer time for unexpected delays
+` : `
+AFTERNOON/EVENING DEPARTURE:
+- Can include morning sightseeing and brunch
+- All activities must end by ${latestSightseeing}
+- Return to hotel with time to spare
+`}
+
+REQUIRED ENDING SEQUENCE (MUST appear in this order):
+1. "Hotel Checkout"
+   - startTime: "${hotelCheckout}", endTime: "${addMinutesToHHMM(hotelCheckout, 20)}"
+   - category: "accommodation"
+   - location: { name: "${hotelNameDisplay}" }
+
+2. "Transfer to Airport"
+   - startTime: "${transferStart}", endTime: "${airportArrival}"
+   - category: "transport"
+
+3. "Departure from Airport"
+   - startTime: "${airportArrival}", endTime: "${departure24}"
+   - category: "transport"
+   - description: "Check-in, security, and boarding"
+
+⚠️ DO NOT schedule ANY activities after ${latestSightseeing}.
+⚠️ The departure sequence is NON-NEGOTIABLE.`;
+        } else if (hasHotelData) {
+          // ===== NO RETURN FLIGHT BUT HOTEL PROVIDED =====
+          // Assume midday checkout, no airport constraints
+          const defaultCheckout = '11:00'; // Standard checkout
+          
+          dayConstraints = `
+LAST DAY - NO DEPARTURE TIME PROVIDED
+
+The traveler has a hotel but hasn't specified a return flight.
+Assume standard hotel checkout.
+
+CHECKOUT GUIDELINES:
+- Standard checkout time: ${defaultCheckout}
+- Plan morning activities that return to hotel by ${addMinutesToHHMM(defaultCheckout, -60)}
+- Include "Hotel Checkout" as an activity around ${defaultCheckout}
+- After checkout, the traveler's plans are unknown
+
+STRUCTURE:
+1. Light morning activity (if time permits)
+2. Return to hotel
+3. "Hotel Checkout" at ${defaultCheckout}
+4. You may suggest 1-2 activities after checkout, but keep them flexible`;
+        } else {
+          // ===== NO FLIGHT AND NO HOTEL =====
+          dayConstraints = `
+LAST DAY - NO DEPARTURE OR HOTEL INFORMATION
+
+Plan a flexible last day:
+- Start with morning activities
+- Assume checkout around 11:00 AM
+- Keep afternoon light and flexible
+- The traveler may need to depart at any time`;
+        }
+      }
 
       // Build system prompt with day-specific timing constraints EMBEDDED
       let timingInstructions = '';
