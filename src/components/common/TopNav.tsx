@@ -272,25 +272,14 @@ export default function TopNav() {
               </>
             ) : (
               <>
-                {/* Book Hotel Button */}
+                {/* Plan Your Trip Button */}
                 <Button
                   size="sm"
-                  variant="outline"
                   onClick={() => navigate(ROUTES.START)}
-                  className={`gap-2 ${isTransparent ? 'bg-white/10 border-white/30 text-white hover:bg-white/20' : ''}`}
-                >
-                  <Building2 className="h-4 w-4" />
-                  Book Hotel
-                </Button>
-
-                {/* Build Itinerary Button */}
-                <Button
-                  size="sm"
-                  onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
                   <Sparkles className="h-4 w-4" />
-                  Build Itinerary
+                  Plan Your Trip
                 </Button>
 
                 <Link
@@ -424,21 +413,13 @@ export default function TopNav() {
                   </>
                 ) : (
                   <>
-                    <div className="space-y-2 mb-4">
+                    <div className="mb-4">
                       <Button
-                        variant="outline"
                         className="w-full gap-2"
                         onClick={() => navigate(ROUTES.START)}
                       >
-                        <Building2 className="h-4 w-4" />
-                        Book Hotel
-                      </Button>
-                      <Button
-                        className="w-full gap-2"
-                        onClick={() => navigate(`${ROUTES.START}?mode=itinerary`)}
-                      >
                         <Sparkles className="h-4 w-4" />
-                        Build Itinerary
+                        Plan Your Trip
                       </Button>
                     </div>
                     <Link
