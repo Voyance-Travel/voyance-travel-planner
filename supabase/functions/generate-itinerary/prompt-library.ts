@@ -595,9 +595,48 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
     lines.push(`   ${scheduleMap[dna.sleepSchedule] || dna.sleepSchedule}`);
   }
   
+  // ENERGY PEAK SCHEDULING - Critical for activity intensity mapping
   if (dna.energyPeak) {
-    lines.push(`   Energy peak: ${dna.energyPeak} - schedule key activities during this window`);
+    lines.push('');
+    lines.push(`   ⚡ ENERGY PEAK: ${dna.energyPeak.toUpperCase()}`);
+    
+    const peakSchedulingRules: Record<string, {
+      peakWindow: string;
+      highIntensity: string;
+      lowIntensity: string;
+      examples: string;
+    }> = {
+      'morning': {
+        peakWindow: '8 AM - 12 PM',
+        highIntensity: 'Schedule museums, hiking, walking tours, markets, adventure activities during MORNING',
+        lowIntensity: 'Afternoon/evening: cafés, light dining, scenic sits, relaxed neighborhood strolls',
+        examples: 'E.g., Hike at 9 AM → Lunch → Café → Light evening stroll'
+      },
+      'afternoon': {
+        peakWindow: '12 PM - 5 PM',
+        highIntensity: 'Schedule key attractions, active tours, major sights during AFTERNOON',
+        lowIntensity: 'Morning: leisurely breakfast, café. Evening: fine dining, sunset spots',
+        examples: 'E.g., Slow breakfast → Museum at 1 PM → Walking tour at 3 PM → Sunset dinner'
+      },
+      'evening': {
+        peakWindow: '5 PM - 10 PM',
+        highIntensity: 'Schedule active experiences, nightlife, vibrant neighborhoods during EVENING',
+        lowIntensity: 'Morning/afternoon: rest, spa, casual exploration, work-from-café',
+        examples: 'E.g., Late breakfast → Rest → Light afternoon → Food tour at 6 PM → Nightlife'
+      }
+    };
+    
+    const peakRules = peakSchedulingRules[dna.energyPeak];
+    if (peakRules) {
+      lines.push(`      Peak window: ${peakRules.peakWindow}`);
+      lines.push(`      ✅ HIGH-INTENSITY: ${peakRules.highIntensity}`);
+      lines.push(`      ⬇️ LOW-INTENSITY: ${peakRules.lowIntensity}`);
+      lines.push(`      ${peakRules.examples}`);
+    }
+  } else {
+    lines.push(`   ⚡ ENERGY PEAK: Not specified - use balanced distribution`);
   }
+  lines.push('');
   
   if (dna.jetLagSensitivity) {
     const jetLagMap: Record<string, string> = {
