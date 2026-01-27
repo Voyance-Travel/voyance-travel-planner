@@ -444,3 +444,51 @@ export function hasCuratedEssentials(destination: string): boolean {
 export function getSupportedDestinations(): string[] {
   return Object.values(DESTINATION_INTELLIGENCE).map(d => `${d.city}, ${d.country}`);
 }
+
+// =============================================================================
+// RE-EXPORT DB-DRIVEN ENRICHMENT FOR UNIFIED API
+// =============================================================================
+
+export {
+  getDestinationWithEssentials,
+  buildDBEssentialsPrompt,
+  type DestinationData,
+  type EnrichedEssential,
+  type EnrichedGem,
+} from './destination-enrichment.ts';
+
+/**
+ * Build essentials prompt - prefers DB data, falls back to curated data
+ * This is the unified entry point for the generation flow
+ */
+export async function buildDestinationEssentialsPromptWithDB(
+  supabase: unknown, // SupabaseClient but avoiding import issues
+  destinationName: string,
+  tripDays: number,
+  authenticityScore: number,
+  isFirstTimeVisitor: boolean = true,
+  perplexityApiKey?: string
+): Promise<string> {
+  // Import dynamically to avoid circular deps
+  const { getDestinationWithEssentials, buildDBEssentialsPrompt } = await import('./destination-enrichment.ts');
+  
+  try {
+    // Try DB-driven data first
+    const dbData = await getDestinationWithEssentials(
+      supabase as any,
+      destinationName,
+      perplexityApiKey
+    );
+    
+    if (dbData && dbData.pointsOfInterest.length > 0) {
+      console.log(`[Essentials] Using DB data for ${dbData.city}: ${dbData.pointsOfInterest.length} POIs`);
+      return buildDBEssentialsPrompt(dbData, tripDays, authenticityScore, isFirstTimeVisitor);
+    }
+  } catch (err) {
+    console.warn('[Essentials] DB fetch failed, falling back to curated:', err);
+  }
+  
+  // Fall back to hardcoded curated data
+  console.log(`[Essentials] Using curated data for ${destinationName}`);
+  return buildDestinationEssentialsPrompt(destinationName, tripDays, authenticityScore, isFirstTimeVisitor);
+}
