@@ -511,13 +511,8 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
         : '3) This is NOT a premium/luxury trip tier. Avoid: “private tour”, VIP/skip-the-line framing, five-star hotel spa framing, and “luxury/splurge/premium/exclusive” wording unless explicitly requested. Do not put the word “Luxury” in activity titles.'
     );
 
-    // Archetype-specific guardrails (add only a few high-impact ones)
-    if (primary === 'flexible_wanderer' || secondary === 'flexible_wanderer') {
-      guardrails.push('4) FLEXIBLE WANDERER: Keep days loose and adaptable. Prefer self-guided neighborhood exploration, casual local spots, and value-forward picks. No private tours by default.');
-    }
-    if (primary === 'beach_therapist' || secondary === 'beach_therapist') {
-      guardrails.push('5) BEACH THERAPIST: Guarantee daily coastal/beach time + long restoration blocks. Choose relaxed waterfront walks, viewpoints, and casual seafood over formal fine dining.');
-    }
+    // NOTE: No hardcoded archetype-specific guardrails here.
+    // All archetypes derive behavior from canonical profile columns and trait scores.
 
     // Practical implementation note: if a restorative activity is needed on non-premium tiers,
     // prefer local public baths/thermal pools/hammams over hotel-branded “luxury spa” experiences.
