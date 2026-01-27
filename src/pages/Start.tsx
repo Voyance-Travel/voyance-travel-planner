@@ -1293,7 +1293,9 @@ export default function Start() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
+                    // Important: allow the autocomplete dropdown (absolute positioned) to render outside
+                    // this animated container.
+                    className="overflow-visible"
                   >
                     <HotelAutocomplete
                       value={hotelSelection}
