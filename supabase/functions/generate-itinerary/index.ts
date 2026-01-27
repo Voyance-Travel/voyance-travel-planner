@@ -1506,6 +1506,9 @@ interface TravelDNAProfile {
   // Some legacy rows also used this
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   confidence_score?: any;
+  
+  // Full travel_dna blob from profiles table (contains primary_archetype_name, etc.)
+  travel_dna?: Record<string, unknown>;
 }
 
 interface PreferenceProfile {
@@ -2219,6 +2222,7 @@ async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAP
     }
 
     // Also check profiles.travel_dna for legacy data - ALWAYS needs polarity normalization
+    // CRITICAL: This is where updated archetypes like "flexible_wanderer" are stored!
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('travel_dna, travel_dna_overrides')
@@ -2227,7 +2231,13 @@ async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAP
 
     if (profile?.travel_dna) {
       const dna = profile.travel_dna as Record<string, unknown>;
-      console.log('[TravelDNA] Found legacy profile data - normalizing budget polarity');
+      console.log('[TravelDNA] Found profile.travel_dna blob');
+      
+      // Log the archetype to confirm it's being read
+      const primaryArchetype = dna.primary_archetype_name;
+      const secondaryArchetype = dna.secondary_archetype_name;
+      console.log(`[TravelDNA] Archetype from profile: primary=${primaryArchetype}, secondary=${secondaryArchetype}`);
+      
       let traitScores = dna.trait_scores as Record<string, number>;
       
       // Legacy profiles always have inverted polarity
@@ -2238,9 +2248,11 @@ async function getTravelDNAV2(supabase: any, userId: string): Promise<TravelDNAP
         };
       }
       
+      // CRITICAL FIX: Return the FULL travel_dna blob so buildTravelerDNA can extract archetypes
       return {
         user_id: userId,
         trait_scores: traitScores,
+        travel_dna: dna, // Pass the full blob containing primary_archetype_name
         dna_version: 1,
       };
     }

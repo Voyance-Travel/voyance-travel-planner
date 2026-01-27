@@ -1262,15 +1262,75 @@ export function extractHotelData(hotelSelection: unknown): HotelData {
 
 /**
  * Build TravelerDNA from multiple database sources
+ * 
+ * CRITICAL: Checks ALL archetype sources in priority order:
+ * 1. Canonical columns (primary_archetype_name) - highest priority
+ * 2. profiles.travel_dna blob (primary_archetype_name inside JSON)
+ * 3. v2 archetype_matches array
+ * 4. v1 archetype_matches array - legacy fallback
  */
 export function buildTravelerDNA(
   dnaProfile: Record<string, unknown> | null,
   preferences: Record<string, unknown> | null,
   overrides: Record<string, number> | null
 ): TravelerDNA {
-  const traitScores = dnaProfile?.trait_scores as Record<string, number> | undefined;
+  // Extract nested structures
   const v2Data = dnaProfile?.travel_dna_v2 as Record<string, unknown> | undefined;
-  const archetypes = v2Data?.archetype_matches as Array<{ name: string; pct: number }> | undefined;
+  const profileTravelDna = dnaProfile?.travel_dna as Record<string, unknown> | undefined;
+  const archetypeMatchesV2 = v2Data?.archetype_matches as Array<{ name: string; pct: number }> | undefined;
+  const archetypeMatchesV1 = dnaProfile?.archetype_matches as Array<{ name: string; pct: number }> | undefined;
+  
+  // ==========================================================================
+  // ARCHETYPE EXTRACTION - Check ALL sources in priority order
+  // This ensures users who update their quiz get their new archetype used
+  // ==========================================================================
+  let primaryArchetype: string | undefined;
+  let secondaryArchetype: string | undefined;
+  let archetypeConfidence: number | undefined;
+  let archetypeSource = 'none';
+  
+  // Priority 1: Canonical columns on dnaProfile (from travel_dna_profiles table)
+  if (dnaProfile?.primary_archetype_name && typeof dnaProfile.primary_archetype_name === 'string') {
+    primaryArchetype = dnaProfile.primary_archetype_name as string;
+    secondaryArchetype = dnaProfile.secondary_archetype_name as string | undefined;
+    archetypeConfidence = dnaProfile.confidence as number | undefined;
+    archetypeSource = 'canonical_columns';
+  }
+  // Priority 2: profiles.travel_dna blob (stores primary_archetype_name inside JSON)
+  else if (profileTravelDna?.primary_archetype_name && typeof profileTravelDna.primary_archetype_name === 'string') {
+    primaryArchetype = profileTravelDna.primary_archetype_name as string;
+    secondaryArchetype = profileTravelDna.secondary_archetype_name as string | undefined;
+    archetypeConfidence = profileTravelDna.dna_confidence_score as number | undefined;
+    archetypeSource = 'profiles_travel_dna_blob';
+  }
+  // Priority 3: v2 archetype_matches array
+  else if (archetypeMatchesV2 && archetypeMatchesV2.length > 0) {
+    primaryArchetype = archetypeMatchesV2[0]?.name;
+    secondaryArchetype = archetypeMatchesV2[1]?.name;
+    archetypeConfidence = v2Data?.confidence as number | undefined;
+    archetypeSource = 'v2_archetype_matches';
+  }
+  // Priority 4: v1 archetype_matches array
+  else if (archetypeMatchesV1 && archetypeMatchesV1.length > 0) {
+    primaryArchetype = archetypeMatchesV1[0]?.name;
+    secondaryArchetype = archetypeMatchesV1[1]?.name;
+    archetypeSource = 'v1_archetype_matches';
+  }
+  
+  console.log(`[buildTravelerDNA] Archetype source: ${archetypeSource}, primary: ${primaryArchetype || 'none'}, secondary: ${secondaryArchetype || 'none'}`);
+  
+  // ==========================================================================
+  // TRAIT EXTRACTION - Also check multiple sources
+  // ==========================================================================
+  let traitScores = dnaProfile?.trait_scores as Record<string, number> | undefined;
+  
+  // If not at top level, check inside v2 or profiles.travel_dna
+  if (!traitScores || Object.keys(traitScores).length === 0) {
+    traitScores = v2Data?.trait_scores as Record<string, number> | undefined;
+  }
+  if (!traitScores || Object.keys(traitScores).length === 0) {
+    traitScores = profileTravelDna?.trait_scores as Record<string, number> | undefined;
+  }
   
   // Default traits
   const defaultTraits = {
@@ -1303,10 +1363,33 @@ export function buildTravelerDNA(
     }
   }
   
+  console.log(`[buildTravelerDNA] Traits: pace=${traits.pace}, comfort=${traits.comfort}, adventure=${traits.adventure}, budget=${traits.budget}`);
+  
+  // Extract additional preferences from multiple sources
+  const emotionalDrivers = (
+    (preferences?.emotional_drivers as string[]) ||
+    (v2Data?.emotional_drivers as string[]) ||
+    (profileTravelDna?.emotional_drivers as string[]) ||
+    []
+  ).filter(Boolean);
+  
+  const interests = (
+    (preferences?.interests as string[]) ||
+    (v2Data?.interests as string[]) ||
+    []
+  ).filter(Boolean);
+  
+  const travelVibes = (
+    (preferences?.travel_vibes as string[]) ||
+    (v2Data?.travel_vibes as string[]) ||
+    (profileTravelDna?.tone_tags as string[]) ||
+    []
+  ).filter(Boolean);
+  
   return {
-    primaryArchetype: archetypes?.[0]?.name,
-    secondaryArchetype: archetypes?.[1]?.name,
-    archetypeConfidence: v2Data?.confidence as number | undefined,
+    primaryArchetype,
+    secondaryArchetype,
+    archetypeConfidence,
     traits,
     sleepSchedule: (preferences?.sleep_schedule || v2Data?.sleep_schedule) as TravelerDNA['sleepSchedule'],
     energyPeak: (preferences?.daytime_bias || v2Data?.energy_peak) as TravelerDNA['energyPeak'],
@@ -1316,9 +1399,9 @@ export function buildTravelerDNA(
     accessibilityNeeds: ((preferences?.accessibility_needs || []) as string[]).filter(Boolean),
     foodLikes: ((preferences?.food_likes || []) as string[]).filter(Boolean),
     foodDislikes: ((preferences?.food_dislikes || []) as string[]).filter(Boolean),
-    interests: ((preferences?.interests || v2Data?.interests || []) as string[]).filter(Boolean),
-    emotionalDrivers: ((preferences?.emotional_drivers || v2Data?.emotional_drivers || []) as string[]).filter(Boolean),
-    travelVibes: ((preferences?.travel_vibes || v2Data?.travel_vibes || []) as string[]).filter(Boolean),
+    interests,
+    emotionalDrivers,
+    travelVibes,
     companions: (Array.isArray(preferences?.travel_companions) ? preferences.travel_companions[0] : preferences?.companion_type) as TravelerDNA['companions'],
     childrenCount: preferences?.children_count as number | undefined,
   };
