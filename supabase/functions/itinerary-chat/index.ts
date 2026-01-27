@@ -11,6 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { fetchTravelerDNA, buildPersonaManuscript } from "../_shared/traveler-dna.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -304,6 +305,22 @@ serve(async (req) => {
       userId,
     });
 
+    // ==========================================================================
+    // PHASE 9: Fetch and inject Traveler DNA for personalized responses
+    // ==========================================================================
+    let personaPrompt = '';
+    if (userId) {
+      try {
+        const dnaResult = await fetchTravelerDNA(supabase, userId);
+        if (dnaResult.hasData) {
+          personaPrompt = buildPersonaManuscript(dnaResult.dna, itineraryContext.destination);
+          log("DNA injected", { confidence: dnaResult.confidence, archetype: dnaResult.dna.primaryArchetype });
+        }
+      } catch (dnaError) {
+        log("DNA fetch failed, continuing without", { error: String(dnaError) });
+      }
+    }
+
     // Build context string from itinerary
     const itineraryDescription = itineraryContext.days.map(day => {
       const activities = day.activities.map(a => 
@@ -318,9 +335,14 @@ Dates: ${itineraryContext.startDate} to ${itineraryContext.endDate}
 
 ${itineraryDescription}`;
 
+    // Build full system prompt with DNA injection
+    const fullSystemPrompt = personaPrompt 
+      ? `${SYSTEM_PROMPT}\n\n## TRAVELER PROFILE\n${personaPrompt}\n\nIMPORTANT: All suggestions, swaps, and recommendations MUST align with this traveler's DNA profile above.`
+      : SYSTEM_PROMPT;
+
     // Prepare messages for API
     const apiMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: fullSystemPrompt },
       { role: "system", content: contextMessage },
       ...messages,
     ];
