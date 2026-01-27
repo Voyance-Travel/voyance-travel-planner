@@ -81,6 +81,22 @@ import {
   type ActivityWithLocation
 } from './geographic-coherence.ts';
 
+// =============================================================================
+// PHASE 9: MODULAR PROMPT LIBRARY - Full DNA-Driven Personalization
+// =============================================================================
+import {
+  buildDayPrompt,
+  buildPersonaManuscript,
+  extractFlightData,
+  extractHotelData,
+  buildTravelerDNA,
+  type FlightData as PromptFlightData,
+  type HotelData as PromptHotelData,
+  type TravelerDNA,
+  type TripContext as PromptTripContext,
+  type DayConstraints
+} from './prompt-library.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -106,6 +122,10 @@ interface GenerationContext {
   interests?: string[];
   dailyBudget?: number;
   currency?: string;
+  // Phase 9: Full DNA injection for prompt library
+  travelerDNA?: TravelerDNA;
+  flightData?: PromptFlightData;
+  hotelData?: PromptHotelData;
 }
 
 interface StrictActivity {
@@ -3305,6 +3325,47 @@ async function generateSingleDayWithRetry(
     d.activities.map(a => a.title).filter(Boolean)
   );
 
+  // ==========================================================================
+  // PHASE 9: Use modular prompt library for DNA-driven personalization
+  // The library builds prompts based on:
+  // 1. Flight data → Hotel data → DNA (interdependent decision tree)
+  // 2. Full persona manuscript injection
+  // 3. Day-specific constraints based on arrival/departure
+  // ==========================================================================
+  
+  let dnaPromptSection = '';
+  let dayConstraintsSection = '';
+  
+  if (context.travelerDNA && (context.flightData || context.hotelData)) {
+    const tripCtx: PromptTripContext = {
+      destination: context.destination,
+      destinationCountry: context.destinationCountry,
+      startDate: context.startDate,
+      endDate: context.endDate,
+      totalDays: context.totalDays,
+      travelers: context.travelers,
+      tripType: context.tripType,
+      budgetTier: context.budgetTier,
+      currency: context.currency,
+    };
+    
+    const flightData = context.flightData || { hasOutboundFlight: false, hasReturnFlight: false };
+    const hotelData = context.hotelData || { hasHotel: false };
+    
+    const { personaPrompt, dayConstraints } = buildDayPrompt(
+      flightData,
+      hotelData,
+      context.travelerDNA,
+      tripCtx,
+      dayNumber
+    );
+    
+    dnaPromptSection = personaPrompt;
+    dayConstraintsSection = dayConstraints.constraints;
+    
+    console.log(`[Stage 2] Day ${dayNumber}: Using prompt library - energy=${dayConstraints.energyLevel}, maxActivities=${dayConstraints.maxActivities}, earliest=${dayConstraints.earliestStartTime}`);
+  }
+
   // Quality enforcement rules that get stricter with retries
   const qualityRules = [
     'QUALITY RULES (STRICTLY ENFORCED):',
@@ -3314,9 +3375,9 @@ async function generateSingleDayWithRetry(
     '4. Airport transfers: bookingRequired=false (user arranges transport)',
     '5. Free time/leisure: bookingRequired=false, cost.amount=0',
     '6. Only tours, museums, and ticketed attractions should have bookingRequired=true',
-    '7. NO DUPLICATE ACTIVITIES: NEVER schedule the same type of activity back-to-back (e.g., two cooking classes, two wine tastings, two walking tours). Each consecutive activity must be a DIFFERENT experience type.',
-    '8. **TRIP-WIDE UNIQUENESS (CRITICAL)**: Each unique experience (cooking class, wine tasting, baking class, etc.) should appear AT MOST ONCE in the ENTIRE trip. If a cooking class was on Day 1, do NOT include another cooking class on Day 2, 3, or any other day. Diversify across completely DIFFERENT experience types each day.',
-    '9. VARIETY PER DAY: Include diverse activities - mix sightseeing, cultural sites, museums, outdoor activities, local markets, viewpoints, and dining. Avoid multiple activities of the same type per day.',
+    '7. NO DUPLICATE ACTIVITIES: NEVER schedule the same type of activity back-to-back',
+    '8. **TRIP-WIDE UNIQUENESS**: Each unique experience (cooking class, wine tasting, etc.) should appear AT MOST ONCE in the ENTIRE trip',
+    '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     isFirstDay ? '10. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
     isLastDay && context.totalDays > 1 ? '10. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
@@ -3354,11 +3415,22 @@ async function generateSingleDayWithRetry(
         }
       }
 
+      // Build the system prompt with FULL DNA injection
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
 
 ${qualityRules}
 
-PERSONALIZATION:
+${dnaPromptSection ? `${'='.repeat(70)}
+TRAVELER DNA PROFILE (CRITICAL - Customize EVERYTHING to this person)
+${'='.repeat(70)}
+${dnaPromptSection}` : ''}
+
+${dayConstraintsSection ? `${'='.repeat(70)}
+DAY-SPECIFIC CONSTRAINTS (Flight/Hotel/DNA driven)
+${'='.repeat(70)}
+${dayConstraintsSection}` : ''}
+
+ADDITIONAL CONTEXT:
 ${preferenceContext}
 
 ${flightHotelContext}${retryPrompt}`;
@@ -3382,7 +3454,7 @@ PACE: ${context.pace || 'moderate'}
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
-Generate 4-6 activities for this day following ALL quality rules above. Focus on VARIETY - explore different types of experiences each day.`;
+Generate activities for this day following ALL quality rules and DNA constraints above. The number of activities should match the maxActivities constraint from the DNA profile. Focus on VARIETY and PERSONALIZATION.`;
 
       let data: any = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
@@ -4856,6 +4928,30 @@ serve(async (req) => {
           console.log(`[Stage 1.4] Last day latest activity: ${flightHotelResult.latestLastActivityTime}`);
         }
       }
+      
+      // =======================================================================
+      // PHASE 9: Build TravelerDNA and Flight/Hotel data for prompt library
+      // This enables the modular decision tree: Flight → Hotel → DNA
+      // =======================================================================
+      console.log("[Stage 1.4.5] Building DNA/Flight/Hotel data for prompt library...");
+      
+      // Extract flight data using prompt-library extractors
+      const promptFlightData = extractFlightData(flightHotelResult.rawFlightSelection || null);
+      const promptHotelData = extractHotelData(flightHotelResult.rawHotelSelection || null);
+      
+      // Build TravelerDNA from existing data
+      const promptTravelerDNA = buildTravelerDNA(
+        travelDNA as Record<string, unknown> | null,
+        prefs as Record<string, unknown> | null,
+        traitOverrides
+      );
+      
+      // Inject into context for use in generateSingleDayWithRetry
+      context.travelerDNA = promptTravelerDNA;
+      context.flightData = promptFlightData;
+      context.hotelData = promptHotelData;
+      
+      console.log(`[Stage 1.4.5] DNA injected: archetype=${promptTravelerDNA.primaryArchetype || 'none'}, pace=${promptTravelerDNA.traits.pace}, flight=${promptFlightData.hasOutboundFlight}, hotel=${promptHotelData.hasHotel}`);
       
       // =======================================================================
       // AIRPORT TRANSFER FARE - Dynamic pricing with Viator + database + Google Maps
