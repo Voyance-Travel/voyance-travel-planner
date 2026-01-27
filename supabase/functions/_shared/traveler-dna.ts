@@ -164,6 +164,12 @@ export async function fetchTravelerDNA(
       // Sleep schedule
       dna.sleepSchedule = prefs.sleep_schedule;
       
+      // Energy peak - critical for activity scheduling
+      if (prefs.daytime_bias) {
+        dna.energyPeak = prefs.daytime_bias as 'morning' | 'afternoon' | 'evening';
+        dataPoints += 1;
+      }
+      
       // Map travel pace to hint at pace trait if not set from DNA
       if (prefs.travel_pace && dna.traits.pace === 0) {
         const paceMap: Record<string, number> = { 'relaxed': -5, 'balanced': 0, 'packed': 5, 'intensive': 7 };
@@ -272,7 +278,13 @@ export function buildPersonaManuscript(dna: TravelerDNA, destination?: string): 
       lines.push(`   ${scheduleMap[dna.sleepSchedule] || dna.sleepSchedule}`);
     }
     if (dna.energyPeak) {
-      lines.push(`   Peak energy: ${dna.energyPeak} - schedule key activities then`);
+      lines.push(`   ⚡ ENERGY PEAK: ${dna.energyPeak.toUpperCase()}`);
+      const peakGuidance: Record<string, string> = {
+        'morning': 'HIGH-INTENSITY activities 8AM-12PM (museums, hikes). LOW-INTENSITY after 3PM.',
+        'afternoon': 'HIGH-INTENSITY activities 12PM-5PM (tours, attractions). Easy mornings & evenings.',
+        'evening': 'HIGH-INTENSITY activities 5PM-10PM (food tours, nightlife). Light mornings.'
+      };
+      lines.push(`      ${peakGuidance[dna.energyPeak] || 'Schedule key activities during peak'}`);
     }
     lines.push('');
   }

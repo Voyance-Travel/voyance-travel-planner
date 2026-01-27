@@ -299,6 +299,76 @@ export function deriveForcedSlots(
     });
   }
   
+  // ==========================================================================
+  // FORCED INTEREST SLOTS - Guarantee user interests appear in itinerary
+  // ==========================================================================
+  
+  // Map interests to forced slots (not every day, use cadence)
+  const interestSlotMap: Record<string, { 
+    tags: string[]; 
+    description: string; 
+    cadence: number; // Every N days
+  }> = {
+    // Art & Culture
+    'art': { tags: ['art', 'gallery', 'museum', 'street-art', 'exhibition'], description: 'Art-focused experience (gallery, museum, street art)', cadence: 2 },
+    'museums': { tags: ['museum', 'exhibition', 'cultural', 'collection'], description: 'Museum visit', cadence: 2 },
+    'theater': { tags: ['theater', 'performance', 'show', 'live', 'concert'], description: 'Live performance or show', cadence: 3 },
+    'music': { tags: ['music', 'concert', 'live-music', 'jazz', 'venue'], description: 'Music venue or live performance', cadence: 3 },
+    
+    // Nature & Outdoors
+    'nature': { tags: ['nature', 'park', 'garden', 'scenic', 'outdoor', 'green-space'], description: 'Nature experience (park, garden, scenic viewpoint)', cadence: 2 },
+    'hiking': { tags: ['hiking', 'trail', 'trekking', 'walk', 'outdoor'], description: 'Hiking or nature walk', cadence: 2 },
+    'beach': { tags: ['beach', 'coastal', 'waterfront', 'seaside', 'ocean'], description: 'Beach or coastal activity', cadence: 2 },
+    'wildlife': { tags: ['wildlife', 'animals', 'zoo', 'sanctuary', 'nature'], description: 'Wildlife encounter', cadence: 3 },
+    
+    // Active & Sports
+    'sports': { tags: ['sports', 'active', 'game', 'athletic', 'stadium'], description: 'Sports-related activity', cadence: 3 },
+    'fitness': { tags: ['fitness', 'active', 'workout', 'gym', 'exercise'], description: 'Fitness activity', cadence: 2 },
+    'water sports': { tags: ['water-sports', 'kayak', 'surf', 'swim', 'diving', 'snorkel'], description: 'Water sports activity', cadence: 2 },
+    
+    // Shopping & Markets
+    'shopping': { tags: ['shopping', 'market', 'boutique', 'mall', 'retail'], description: 'Shopping experience', cadence: 3 },
+    'markets': { tags: ['market', 'bazaar', 'flea-market', 'local-market', 'street-market'], description: 'Local market visit', cadence: 2 },
+    
+    // Photography & Sightseeing
+    'photography': { tags: ['photography', 'scenic', 'viewpoint', 'instagram', 'photo-spot'], description: 'Photo-worthy location', cadence: 1 },
+    'sightseeing': { tags: ['sightseeing', 'landmark', 'monument', 'attraction', 'must-see'], description: 'Key landmark or attraction', cadence: 1 },
+    
+    // Wellness & Relaxation
+    'wellness': { tags: ['wellness', 'spa', 'massage', 'relaxation', 'self-care'], description: 'Wellness experience', cadence: 3 },
+    'yoga': { tags: ['yoga', 'meditation', 'mindfulness', 'wellness', 'retreat'], description: 'Yoga or meditation session', cadence: 2 },
+    
+    // Learning & Experiences
+    'cooking': { tags: ['cooking', 'culinary', 'class', 'workshop', 'food-experience'], description: 'Cooking class or food workshop', cadence: 4 },
+    'wine': { tags: ['wine', 'vineyard', 'tasting', 'winery', 'sommelier'], description: 'Wine tasting experience', cadence: 3 },
+    'craft': { tags: ['craft', 'workshop', 'artisan', 'handmade', 'diy'], description: 'Craft or artisan workshop', cadence: 4 },
+    
+    // Nightlife & Entertainment
+    'nightlife': { tags: ['nightlife', 'bar', 'club', 'night', 'evening'], description: 'Nightlife experience', cadence: 2 },
+    'bars': { tags: ['bar', 'cocktail', 'pub', 'drinks', 'speakeasy'], description: 'Bar or cocktail experience', cadence: 2 },
+  };
+  
+  for (const interest of interests) {
+    const normalizedInterest = interest.toLowerCase().trim();
+    const slotConfig = interestSlotMap[normalizedInterest];
+    
+    if (slotConfig) {
+      // Check if this day should have this interest based on cadence
+      const shouldInclude = (dayNumber === 1) || (dayNumber % slotConfig.cadence === 0);
+      
+      if (shouldInclude) {
+        // Create a unique slot type for tracking (using 'context' as traitSource for interest-based)
+        slots.push({
+          type: 'authentic_encounter' as ForcedSlotType, // Reuse type, validation is via tags
+          traitSource: 'context',
+          traitValue: 0,
+          description: `INTEREST SLOT: ${slotConfig.description} (user loves: ${interest})`,
+          validationTags: slotConfig.tags
+        });
+      }
+    }
+  }
+  
   return slots;
 }
 
