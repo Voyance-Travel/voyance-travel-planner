@@ -1670,6 +1670,9 @@ interface FlightHotelContextResult {
   latestLastActivityTime?: string;
   hotelName?: string;
   hotelAddress?: string;
+  // Phase 9: Raw data for prompt library extractors
+  rawFlightSelection?: unknown;
+  rawHotelSelection?: unknown;
 }
 
 // Airport transfer fare data from database
@@ -2008,6 +2011,9 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       latestLastActivityTime: latestLastActivity,
       hotelName,
       hotelAddress,
+      // Phase 9: Pass raw data for prompt library extractors
+      rawFlightSelection: trip.flight_selection,
+      rawHotelSelection: trip.hotel_selection,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
@@ -4936,8 +4942,8 @@ serve(async (req) => {
       console.log("[Stage 1.4.5] Building DNA/Flight/Hotel data for prompt library...");
       
       // Extract flight data using prompt-library extractors
-      const promptFlightData = extractFlightData(flightHotelResult.rawFlightSelection || null);
-      const promptHotelData = extractHotelData(flightHotelResult.rawHotelSelection || null);
+      const promptFlightData = extractFlightData(flightHotelResult.rawFlightSelection);
+      const promptHotelData = extractHotelData(flightHotelResult.rawHotelSelection);
       
       // Build TravelerDNA from existing data
       const promptTravelerDNA = buildTravelerDNA(

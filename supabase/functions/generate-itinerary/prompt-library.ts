@@ -1143,11 +1143,12 @@ export function buildDayPrompt(
 /**
  * Extract flight data from trip database record
  */
-export function extractFlightData(flightSelection: Record<string, unknown> | null): FlightData {
-  if (!flightSelection) {
+export function extractFlightData(rawFlightSelection: unknown): FlightData {
+  if (!rawFlightSelection || typeof rawFlightSelection !== 'object') {
     return { hasOutboundFlight: false, hasReturnFlight: false };
   }
   
+  const flightSelection = rawFlightSelection as Record<string, unknown>;
   const result: FlightData = { hasOutboundFlight: false, hasReturnFlight: false };
   
   // Handle multiple payload structures
