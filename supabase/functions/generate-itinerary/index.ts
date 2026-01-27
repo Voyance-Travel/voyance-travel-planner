@@ -1498,6 +1498,14 @@ interface TravelDNAProfile {
   archetype_matches?: TravelDNAV2['archetype_matches'];
   confidence?: number;
   dna_version?: number;
+
+  // Canonical travel_dna_profiles columns (v1+)
+  primary_archetype_name?: string | null;
+  secondary_archetype_name?: string | null;
+  dna_confidence_score?: number | null;
+  // Some legacy rows also used this
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  confidence_score?: any;
 }
 
 interface PreferenceProfile {

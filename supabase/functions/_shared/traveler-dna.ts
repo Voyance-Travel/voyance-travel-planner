@@ -100,9 +100,21 @@ export async function fetchTravelerDNA(
 
     // Extract from travel_dna_profiles
     if (dnaProfile) {
-      dna.primaryArchetype = dnaProfile.primary_archetype || dnaProfile.archetype_name;
-      dna.secondaryArchetype = dnaProfile.secondary_archetype;
-      dna.archetypeConfidence = dnaProfile.score || dnaProfile.confidence_score;
+      // NOTE: The canonical columns in travel_dna_profiles are snake_case with *_name suffix.
+      // Older/legacy flows used primary_archetype/archetype_name.
+      dna.primaryArchetype =
+        dnaProfile.primary_archetype_name ||
+        dnaProfile.primary_archetype ||
+        dnaProfile.archetype_name;
+
+      dna.secondaryArchetype =
+        dnaProfile.secondary_archetype_name ||
+        dnaProfile.secondary_archetype;
+
+      dna.archetypeConfidence =
+        dnaProfile.dna_confidence_score ||
+        dnaProfile.confidence_score ||
+        dnaProfile.score;
       
       // Trait scores
       const traits = dnaProfile.trait_scores as Record<string, number> | null;
