@@ -444,14 +444,14 @@ function HotelAutocomplete({
         value={inputValue}
         onChange={(e) => { setInputValue(e.target.value); if (!e.target.value) onChange(null); setIsOpen(true); }}
         onFocus={() => { if (inputValue.length >= 2 && destination) setIsOpen(true); }}
-        onBlur={() => setTimeout(() => { if (!loading) setIsOpen(false); }, 200)}
+        onBlur={() => setTimeout(() => setIsOpen(false), 300)}
         disabled={!destination}
         className={cn(
           "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
           !destination ? "opacity-50 cursor-not-allowed" : "border-border focus:border-primary"
         )}
       />
-      {isOpen && inputValue.length >= 2 && destination && (
+      {(isOpen || loading) && inputValue.length >= 2 && destination && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -468,7 +468,7 @@ function HotelAutocomplete({
                 key={hotel.placeId}
                 type="button"
                 className={cn("w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3", idx < hotels.length - 1 && "border-b border-border/50")}
-                onMouseDown={() => handleSelect(hotel)}
+                onPointerDown={(e) => { e.preventDefault(); handleSelect(hotel); }}
               >
                 <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
                 <div className="min-w-0 flex-1">
