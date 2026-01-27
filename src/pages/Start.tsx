@@ -524,7 +524,7 @@ const featuredDestinations = [
 type HotelMode = 'search' | 'manual' | 'skip';
 
 export default function Start() {
-  const { state: plannerState, setBasics, saveTrip } = useTripPlanner();
+  const { state: plannerState, setBasics, setHotel, saveTrip } = useTripPlanner();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -891,6 +891,32 @@ export default function Start() {
         budgetTier: getBudgetTier(budgetAmount),
         budgetAmount,
       });
+
+      // IMPORTANT: Persist manual hotel into TripPlannerContext *before* saveTrip.
+      // This ensures:
+      // - anonymous users store hotel_selection in localStorage
+      // - authenticated users include hotel_selection on initial insert
+      // The DB update below will still run (and may normalize to array format).
+      if (hotelMode === 'manual' && hotelSelection) {
+        setHotel({
+          id: `manual-${Date.now()}`,
+          name: hotelSelection.name,
+          location: hotelSelection.address,
+          address: hotelSelection.address,
+          neighborhood: undefined,
+          rating: hotelSelection.rating || 0,
+          pricePerNight: 0,
+          roomType: 'Hotel',
+          amenities: [],
+          imageUrl: undefined,
+          images: undefined,
+          website: hotelSelection.website,
+          googleMapsUrl: hotelSelection.googleMapsUrl,
+          checkIn: start,
+          checkOut: end,
+          placeId: hotelSelection.placeId,
+        });
+      }
       
       const tripId = await saveTrip();
       if (tripId) {
