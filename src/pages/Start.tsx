@@ -407,8 +407,12 @@ function HotelAutocomplete({
   useEffect(() => {
     if (debouncedQuery.length >= 2 && destination) {
       setLoading(true);
+      setIsOpen(true); // Keep dropdown open while loading
       searchHotelsByName(debouncedQuery, destination)
-        .then(setHotels)
+        .then((results) => {
+          setHotels(results);
+          if (results.length > 0) setIsOpen(true); // Ensure open when results arrive
+        })
         .finally(() => setLoading(false));
     } else {
       setHotels([]);
@@ -440,7 +444,7 @@ function HotelAutocomplete({
         value={inputValue}
         onChange={(e) => { setInputValue(e.target.value); if (!e.target.value) onChange(null); setIsOpen(true); }}
         onFocus={() => { if (inputValue.length >= 2 && destination) setIsOpen(true); }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+        onBlur={() => setTimeout(() => { if (!loading) setIsOpen(false); }, 200)}
         disabled={!destination}
         className={cn(
           "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
