@@ -97,6 +97,15 @@ import {
   type DayConstraints
 } from './prompt-library.ts';
 
+// =============================================================================
+// PHASE 10: DESTINATION ESSENTIALS - Non-Negotiable Landmarks & Hidden Gems
+// =============================================================================
+import {
+  buildDestinationEssentialsPrompt,
+  getDestinationIntelligence,
+  hasCuratedEssentials,
+} from './destination-essentials.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -3421,12 +3430,24 @@ async function generateSingleDayWithRetry(
         }
       }
 
-      // Build the system prompt with FULL DNA injection
+      // Build destination essentials prompt (non-negotiables + hidden gems)
+      const authenticityScore = context.travelerDNA?.traits?.authenticity || 0;
+      const isFirstTimeVisitor = true; // TODO: Add first-time detection from trip form
+      const destinationEssentialsPrompt = buildDestinationEssentialsPrompt(
+        context.destination,
+        context.totalDays,
+        authenticityScore,
+        isFirstTimeVisitor
+      );
+
+      // Build the system prompt with FULL DNA injection + Destination Essentials
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
 
 ${qualityRules}
 
-${dnaPromptSection ? `${'='.repeat(70)}
+${destinationEssentialsPrompt ? `${destinationEssentialsPrompt}
+
+` : ''}${dnaPromptSection ? `${'='.repeat(70)}
 TRAVELER DNA PROFILE (CRITICAL - Customize EVERYTHING to this person)
 ${'='.repeat(70)}
 ${dnaPromptSection}` : ''}
