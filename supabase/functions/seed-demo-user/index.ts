@@ -33,7 +33,7 @@ serve(async (req) => {
         email_confirm: true,
         user_metadata: {
           full_name: "Maya Chen",
-          avatar_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=face"
+          avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=400&fit=crop&crop=face"
         }
       });
       
@@ -52,7 +52,7 @@ serve(async (req) => {
         display_name: "Maya Chen",
         first_name: "Maya",
         last_name: "Chen",
-        avatar_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=face",
+        avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=400&fit=crop&crop=face",
         bio: "✈️ Digital nomad & wellness enthusiast | 32 countries explored | Seeking hidden temples, authentic cuisine & mountain sunrises | SF → World",
         home_airport: "SFO",
         preferred_currency: "USD",
@@ -201,10 +201,10 @@ serve(async (req) => {
           pricePerNight: 420,
           totalPrice: 2520,
           amenities: ["Private Pool", "Personal Butler", "Spa", "Airport Transfer"],
-          imageUrl: "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=600"
+          imageUrl: "https://images.unsplash.com/photo-1602002418816-5c0aeef426aa?w=600"
         },
         metadata: {
-          hero_image: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1200",
+          hero_image: "https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=1200",
           trip_vibe: ["peaceful", "spiritual", "luxurious"],
           highlights: ["Tanah Lot Temple", "Ubud Rice Terraces", "Traditional Spa"]
         },
@@ -240,7 +240,7 @@ serve(async (req) => {
           { city: "Kyoto", country: "Japan", nights: 5 }
         ],
         metadata: {
-          hero_image: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200",
+          hero_image: "https://images.unsplash.com/photo-1522383225653-ed111181a951?w=1200",
           trip_vibe: ["cultural", "serene", "photogenic"],
           highlights: ["Cherry Blossoms", "Fushimi Inari", "Teamlab Borderless"]
         },
@@ -291,7 +291,7 @@ serve(async (req) => {
           totalPrice: 1120
         },
         metadata: {
-          hero_image: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=1200",
+          hero_image: "https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=1200",
           trip_vibe: ["romantic", "historic", "foodie"],
           highlights: ["Sintra Palaces", "Port Wine Cellars", "Pastel de Nata"]
         },
@@ -322,7 +322,7 @@ serve(async (req) => {
         status: "draft",
         itinerary_status: "not_started",
         metadata: {
-          hero_image: "https://images.unsplash.com/photo-1518259102261-b40117eabbc9?w=1200",
+          hero_image: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200",
           trip_vibe: ["adventurous", "eco-friendly", "wildlife"]
         },
         updated_at: new Date().toISOString()
@@ -417,7 +417,7 @@ serve(async (req) => {
               cost: 0,
               currency: "USD",
               rating_value: 4.9,
-              photos: ["https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=400"],
+              photos: ["https://images.unsplash.com/photo-1602002418816-5c0aeef426aa?w=400"],
               tags: ["luxury", "villa", "pool"]
             },
             {
@@ -436,7 +436,7 @@ serve(async (req) => {
               currency: "USD",
               rating_value: 4.6,
               rating_count: 2340,
-              photos: ["https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400"],
+              photos: ["https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=400"],
               tags: ["famous", "local-cuisine", "must-try"]
             },
             {
@@ -453,7 +453,7 @@ serve(async (req) => {
               cost: 85,
               currency: "USD",
               rating_value: 5.0,
-              photos: ["https://images.unsplash.com/photo-1545389336-cf090694435e?w=400"],
+              photos: ["https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400"],
               tags: ["wellness", "sunset", "private"]
             },
             {
@@ -473,7 +473,7 @@ serve(async (req) => {
               rating_value: 4.9,
               rating_count: 892,
               booking_required: true,
-              photos: ["https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400"],
+              photos: ["https://images.unsplash.com/photo-1544025162-d76978e8e23d?w=400"],
               tags: ["fine-dining", "award-winner", "tasting-menu"]
             }
           );
@@ -514,7 +514,7 @@ serve(async (req) => {
               currency: "USD",
               rating_value: 4.9,
               rating_count: 5621,
-              photos: ["https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400"],
+              photos: ["https://images.unsplash.com/photo-1604999333679-b86d54738315?w=400"],
               tags: ["temple", "iconic", "ocean-views"]
             },
             {
@@ -532,7 +532,7 @@ serve(async (req) => {
               cost: 55,
               currency: "USD",
               rating_value: 5.0,
-              photos: ["https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=400"],
+              photos: ["https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=400"],
               tags: ["sacred", "spiritual", "unique-experience"]
             },
             {
@@ -584,7 +584,7 @@ serve(async (req) => {
               currency: "USD",
               rating_value: 4.9,
               booking_required: true,
-              photos: ["https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400"],
+              photos: ["https://images.unsplash.com/photo-1559339352-11d035aa65de?w=400"],
               tags: ["fine-dining", "fusion", "romantic"]
             }
           );
