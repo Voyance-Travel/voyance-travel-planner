@@ -1602,25 +1602,11 @@ export default function Start() {
               <Button
                 onClick={handleStart}
                 disabled={!isFormValid}
-                className={cn(
-                  "w-full h-14 text-base font-medium rounded-xl shadow-lg transition-all",
-                  hotelMode === 'search' 
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25' 
-                    : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-primary/25'
-                )}
+                className="w-full h-14 text-base font-medium rounded-xl shadow-lg transition-all bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-primary/25"
                 size="lg"
               >
-                {hotelMode === 'search' ? (
-                  <>
-                    <Building2 className="h-5 w-5 mr-2" />
-                    Find Hotels
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-5 w-5 mr-2" />
-                    Build My Itinerary
-                  </>
-                )}
+                <Sparkles className="h-5 w-5 mr-2" />
+                {hotelMode === 'search' ? 'Find Hotels & Build Itinerary' : 'Build My Itinerary'}
               </Button>
               
               {/* Helper text */}
