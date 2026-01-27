@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { fetchTravelerDNA, buildCompactDNASummary, type TravelerDNA } from "../_shared/traveler-dna.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +19,7 @@ interface RequestBody {
   searchQuery?: string;
   excludeActivities?: string[];
   suggestionMode?: 'similar' | 'different' | 'filter';
+  tripId?: string; // Used to fetch trip owner's DNA
 }
 
 interface AlternativeActivity {
@@ -39,15 +42,62 @@ serve(async (req) => {
 
   try {
     const body: RequestBody = await req.json();
-    const { currentActivity, destination, searchQuery, excludeActivities, suggestionMode } = body;
+    const { currentActivity, destination, searchQuery, excludeActivities, suggestionMode, tripId } = body;
 
     console.log('[get-activity-alternatives] Request:', {
       activity: currentActivity.name,
       destination,
       searchQuery,
       suggestionMode,
+      tripId,
       excludeCount: excludeActivities?.length || 0,
     });
+
+    // ==========================================================================
+    // PHASE 9: Fetch Traveler DNA for personalized alternatives
+    // ==========================================================================
+    let travelerDNA: TravelerDNA | null = null;
+    
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    );
+
+    // Get user from auth header
+    const authHeader = req.headers.get("Authorization");
+    let userId: string | null = null;
+    
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user } } = await supabase.auth.getUser(token);
+      userId = user?.id || null;
+    }
+
+    // If we have a tripId but no userId, try to get trip owner
+    if (!userId && tripId) {
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('user_id')
+        .eq('id', tripId)
+        .maybeSingle();
+      userId = trip?.user_id || null;
+    }
+
+    // Fetch DNA if we have a user
+    if (userId) {
+      try {
+        const dnaResult = await fetchTravelerDNA(supabase, userId);
+        if (dnaResult.hasData) {
+          travelerDNA = dnaResult.dna;
+          console.log('[get-activity-alternatives] DNA loaded:', {
+            archetype: dnaResult.dna.primaryArchetype,
+            confidence: dnaResult.confidence,
+          });
+        }
+      } catch (dnaError) {
+        console.warn('[get-activity-alternatives] DNA fetch failed:', dnaError);
+      }
+    }
 
     let alternatives: AlternativeActivity[];
     
@@ -61,7 +111,8 @@ serve(async (req) => {
           searchQuery, 
           LOVABLE_API_KEY, 
           excludeActivities,
-          suggestionMode
+          suggestionMode,
+          travelerDNA
         );
       } catch (aiError) {
         console.error('[get-activity-alternatives] AI fallback to templates:', aiError);
@@ -110,7 +161,8 @@ async function getAIAlternatives(
   searchQuery?: string,
   apiKey?: string,
   excludeActivities?: string[],
-  suggestionMode?: string
+  suggestionMode?: string,
+  travelerDNA?: TravelerDNA | null
 ): Promise<AlternativeActivity[]> {
   const locationName = destination || 'the destination';
   const activityType = activity.type || 'activity';
@@ -118,6 +170,48 @@ async function getAIAlternatives(
   const exclusionNote = excludeActivities && excludeActivities.length > 0
     ? `\n\nIMPORTANT: Do NOT suggest any of these places (already in the traveler's itinerary):\n- ${excludeActivities.join('\n- ')}`
     : '';
+
+  // ==========================================================================
+  // PHASE 9: Build DNA context for personalized suggestions
+  // ==========================================================================
+  let dnaContext = '';
+  if (travelerDNA) {
+    const dnaSummary = buildCompactDNASummary(travelerDNA);
+    dnaContext = `\n\n## TRAVELER PROFILE\n${dnaSummary}\n\nALL suggestions must align with this traveler's preferences and style.`;
+    
+    // Add specific guidance based on traits
+    const guidelines: string[] = [];
+    if (Math.abs(travelerDNA.traits.adventure) >= 4) {
+      guidelines.push(travelerDNA.traits.adventure < 0 
+        ? 'Suggest safe, comfortable, well-reviewed options' 
+        : 'Include adventurous, unique, off-beaten-path options');
+    }
+    if (Math.abs(travelerDNA.traits.authenticity) >= 4) {
+      guidelines.push(travelerDNA.traits.authenticity < 0 
+        ? 'Tourist-friendly locations are fine' 
+        : 'Prioritize local favorites over tourist spots');
+    }
+    if (Math.abs(travelerDNA.traits.comfort) >= 4) {
+      guidelines.push(travelerDNA.traits.comfort < 0 
+        ? 'Prioritize budget-friendly options' 
+        : 'Include premium/luxury options');
+    }
+    if (Math.abs(travelerDNA.traits.social) >= 4) {
+      guidelines.push(travelerDNA.traits.social < 0 
+        ? 'Prefer quieter, intimate venues' 
+        : 'Include social, lively venues');
+    }
+    if (travelerDNA.dietaryRestrictions.length > 0) {
+      guidelines.push(`Dietary: ${travelerDNA.dietaryRestrictions.join(', ')}`);
+    }
+    if (travelerDNA.interests.length > 0) {
+      guidelines.push(`Interests: ${travelerDNA.interests.slice(0, 4).join(', ')}`);
+    }
+    
+    if (guidelines.length > 0) {
+      dnaContext += `\n\nKey preferences:\n- ${guidelines.join('\n- ')}`;
+    }
+  }
 
   let userPrompt: string;
   let systemPrompt: string;
@@ -132,22 +226,22 @@ Suggest 4 activities in ${locationName} that are:
 - Variety of price points
 - Mix of popular and hidden gems
 
-Do NOT suggest anything similar to ${activity.name}.${exclusionNote}`;
+Do NOT suggest anything similar to ${activity.name}.${exclusionNote}${dnaContext}`;
 
     systemPrompt = `You are a creative travel expert who helps travelers discover unexpected experiences.
 Generate 4 diverse activity alternatives that break from the traveler's current choice.
 Think outside the box - if they have a museum, suggest a food tour. If they have hiking, suggest a spa.
-Each suggestion should feel like a fresh, exciting alternative.`;
+Each suggestion should feel like a fresh, exciting alternative that matches the traveler's profile.`;
 
   } else if (searchQuery && searchQuery !== 'completely_different') {
     // User has a specific filter/category in mind
     userPrompt = `Find 4 activities matching: "${searchQuery}" in ${locationName}.
 
 The traveler is replacing "${activity.name}" and looking for something specific.
-Focus on real, bookable experiences that match their search.${exclusionNote}`;
+Focus on real, bookable experiences that match their search.${exclusionNote}${dnaContext}`;
 
     systemPrompt = `You are a travel activity recommendation expert for ${locationName}.
-Generate 4 activities that match the user's search criteria.
+Generate 4 activities that match the user's search criteria AND their profile.
 Include a mix of:
 - Popular well-reviewed options
 - Hidden gems and local favorites
@@ -162,10 +256,10 @@ Suggest activities that:
 - Are the same general category/type
 - Offer a similar experience level
 - Vary in price (budget, mid-range, premium options)
-- Include both popular and lesser-known alternatives${exclusionNote}`;
+- Include both popular and lesser-known alternatives${exclusionNote}${dnaContext}`;
 
     systemPrompt = `You are a travel activity recommendation expert for ${locationName}.
-Generate 4 alternatives similar to the current activity but offering variety.
+Generate 4 alternatives similar to the current activity but offering variety that matches the traveler's style.
 Include:
 - A premium/upgraded version of the experience
 - A budget-friendly alternative
