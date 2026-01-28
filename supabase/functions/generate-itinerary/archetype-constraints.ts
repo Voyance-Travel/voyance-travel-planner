@@ -2,62 +2,280 @@
 // ARCHETYPE CONSTRAINTS - What Each Archetype ACTUALLY Means
 // =============================================================================
 // This module defines explicit behaviors, restrictions, and day structures
-// for each archetype. The AI MUST obey these rules.
+// for ALL 27 archetypes. The AI MUST obey these rules.
 // =============================================================================
 
 export interface ArchetypeDefinition {
   identity: string;
+  category: 'Explorer' | 'Connector' | 'Achiever' | 'Restorer' | 'Curator' | 'Transformer';
   meaning: string;
   avoid: string[];
   prefer?: string[];
   dayStructure: {
     maxScheduledActivities: number;
+    minScheduledActivities?: number;
     requiredUnscheduledBlocks?: number;
     unscheduledBlockMinHours?: number;
     minMealDuration?: number;
     minBuffer?: number;
     startTime: string;
-    endTime: string;
+    endTime?: string;
+    spaOK?: boolean;
+    michelinOK?: boolean;
+    vipExpected?: boolean;
+    nightlifeExpected?: boolean;
+    beachTimeMin?: string;
+    sunsetRequired?: boolean;
+    walkingExpected?: boolean;
   };
 }
 
-export const ARCHETYPE_DEFINITIONS: Record<string, ArchetypeDefinition> = {
+// =============================================================================
+// CATEGORY 1: EXPLORERS (Discovery-Driven)
+// =============================================================================
+
+const EXPLORER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
+  cultural_anthropologist: {
+    identity: "The Cultural Anthropologist",
+    category: "Explorer",
+    meaning: `
+This traveler wants to UNDERSTAND a place, not just see it.
+
+They want:
+- Local customs and traditions explained
+- Historical context for everything
+- Conversations with locals
+- Authentic neighborhoods, not tourist zones
+- Museums with depth, not gift shops
+- Understanding WHY things are the way they are
+
+Their ideal day:
+- Morning at a meaningful historical/cultural site
+- Lunch where locals eat, chance to observe daily life
+- Afternoon in a neighborhood tourists skip
+- Evening: local performance, lecture, or home dining experience
+
+WHAT "CULTURAL" MEANS FOR THEM:
+- Depth over breadth
+- Context over photo ops
+- Learning over consuming
+- Authentic over staged
+
+VIOLATIONS:
+- Tourist trap restaurants = VIOLATION
+- Photo-op-only stops = VIOLATION
+- Surface-level experiences = VIOLATION
+- "See 10 sites in one day" = VIOLATION
+`,
+    avoid: [
+      'Tourist trap restaurants',
+      'Photo-op-only attractions',
+      'Surface-level tours',
+      'Crowded hotspots at peak times',
+      'Staged "cultural" performances for tourists',
+      'Shopping districts',
+      'Luxury experiences (not the point)'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '09:00',
+      spaOK: false
+    }
+  },
+
+  urban_nomad: {
+    identity: "The Urban Nomad",
+    category: "Explorer",
+    meaning: `
+This traveler treats cities as living organisms to explore.
+
+They want:
+- Neighborhood hopping
+- Street life and people watching
+- Urban architecture and design
+- Local cafés as home bases
+- Walking, walking, walking
+- The vibe of a city, not just its landmarks
+
+Their ideal day:
+- Start in one neighborhood with coffee
+- Walk to another neighborhood (no taxi/metro)
+- Discover things en route
+- Lunch at a spot they stumble upon
+- Afternoon in yet another area
+- Evening: rooftop bar or neighborhood haunt
+
+WHAT "URBAN" MEANS FOR THEM:
+- Cities are for walking
+- Getting lost is good
+- Every neighborhood has character
+- Street food > sit-down restaurants
+
+VIOLATIONS:
+- Driving/taxi between close locations = VIOLATION
+- Only visiting "must-see" landmarks = VIOLATION
+- Staying in one area all day = VIOLATION
+- Nature activities (wrong traveler) = VIOLATION
+`,
+    avoid: [
+      'Organized tours',
+      'Taxis for short distances',
+      'Nature/outdoor experiences',
+      'Staying in one area all day',
+      'Generic tourist restaurants',
+      'Suburban attractions'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 5,
+      walkingExpected: true,
+      startTime: '09:00',
+      endTime: '23:00',
+      spaOK: false
+    }
+  },
+
+  wilderness_pioneer: {
+    identity: "The Wilderness Pioneer",
+    category: "Explorer",
+    meaning: `
+This traveler seeks nature, outdoors, and adventure.
+
+They want:
+- Hiking, trekking, trail exploration
+- National parks and natural wonders
+- Wildlife encounters
+- Physical challenges
+- Remote locations
+- Camping or eco-lodges over hotels
+
+Their ideal day:
+- Early start (sunrise if possible)
+- Full-day outdoor activity
+- Packed lunch on the trail
+- Nature photography
+- Simple dinner, early bed
+
+WHAT "WILDERNESS" MEANS FOR THEM:
+- Cities are for transit, not staying
+- Physical exertion is enjoyment
+- Remote > accessible
+- Nature > culture
+
+VIOLATIONS:
+- City-based itineraries = VIOLATION
+- Museums and indoor attractions = VIOLATION
+- Fancy restaurants = VIOLATION
+- Spa/wellness = VIOLATION (they recover outdoors)
+- Shopping of any kind = VIOLATION
+`,
+    avoid: [
+      'City attractions',
+      'Museums',
+      'Fine dining',
+      'Spa/wellness',
+      'Shopping',
+      'Luxury hotels',
+      'Crowded tourist sites'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 2,
+      startTime: '06:00',
+      endTime: '20:00',
+      spaOK: false
+    }
+  },
+
+  digital_explorer: {
+    identity: "The Digital Explorer",
+    category: "Explorer",
+    meaning: `
+This traveler blends technology, gaming culture, and modern experiences.
+
+They want:
+- Tech districts and innovation hubs
+- Gaming cafés and arcades
+- Digital art experiences (teamLab, etc.)
+- Unique photo opportunities for social media
+- Modern architecture
+- Connectivity (reliable WiFi matters)
+
+Their ideal day:
+- Sleep in (night owl tendencies)
+- Afternoon at a tech/gaming experience
+- Instagram-worthy stops
+- Evening: gaming café, VR experience, or tech event
+- Late night exploration
+
+WHAT "DIGITAL" MEANS FOR THEM:
+- Modern over historical
+- Experiences that photograph well
+- Tech-forward venues
+- Gaming culture is legitimate culture
+
+VIOLATIONS:
+- Ancient ruins focus = VIOLATION (unless unique angle)
+- Traditional museums = VIOLATION
+- Areas with poor connectivity = VIOLATION
+- "Unplugged" experiences = VIOLATION
+`,
+    avoid: [
+      'Traditional museums',
+      'History-focused tours',
+      'Remote areas without WiFi',
+      'Early morning activities',
+      'Unplugged/digital detox experiences',
+      'Traditional fine dining'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '11:00',
+      endTime: '24:00',
+      spaOK: false
+    }
+  },
+
   flexible_wanderer: {
     identity: "The Flexible Wanderer",
+    category: "Explorer",
     meaning: `
-This traveler HATES rigid schedules. They want:
+This traveler HATES rigid schedules. They want freedom.
+
+They want:
 - Large blocks of UNSCHEDULED time (2-3 hours with no plan)
 - Permission to wander and discover
 - Options, not obligations
 - The freedom to skip anything
+- Spontaneous decisions
+- No reservations
 
 Their ideal day:
 - Wake up whenever
-- One anchor activity (museum, landmark)
-- Hours of "wander this neighborhood" with no specific destination
-- Stumble upon lunch, don't schedule it
-- Evening: "explore the area around X" not "dinner at Y at 7pm"
+- One anchor activity (maybe)
+- Hours of "wander this neighborhood" with no destination
+- Stumble upon lunch
+- Evening: "explore the area" not "dinner at Y at 7pm"
 
 WHAT FLEXIBLE ACTUALLY MEANS:
 - 50% of daylight hours should be UNSCHEDULED
-- Use phrases like "explore the area" not specific venues
-- Give neighborhoods to wander, not addresses to visit
-- Meals should be "find a spot in X neighborhood" not reservations
+- Use "explore [neighborhood]" not specific venues
+- Meals: "find a spot" not reservations
+- They may skip everything and that's OK
 
 VIOLATIONS:
-- More than 3 scheduled activities = VIOLATION
+- More than 2-3 scheduled activities = VIOLATION
 - Back-to-back anything = VIOLATION
-- Specific restaurant reservations = VIOLATION (unless they requested)
-- Hourly schedule = VIOLATION
+- Specific restaurant reservations = VIOLATION
+- Hourly scheduling = VIOLATION
+- No unscheduled blocks = VIOLATION
 `,
     avoid: [
       'Rigid time slots',
       'Back-to-back activities',
       'Restaurant reservations',
       'Guided tours',
-      'Anything requiring advance booking',
+      'Advance booking requirements',
       'Packed itineraries',
-      'Luxury experiences (not their vibe)',
+      'Luxury experiences',
       'Spa treatments',
       'Fine dining',
       'VIP experiences',
@@ -68,12 +286,533 @@ VIOLATIONS:
       requiredUnscheduledBlocks: 2,
       unscheduledBlockMinHours: 2,
       startTime: '10:00',
-      endTime: '20:00'
+      endTime: '20:00',
+      spaOK: false,
+      michelinOK: false
+    }
+  }
+};
+
+// =============================================================================
+// CATEGORY 2: CONNECTORS (Relationship-Driven)
+// =============================================================================
+
+const CONNECTOR_ARCHETYPES: Record<string, ArchetypeDefinition> = {
+  social_butterfly: {
+    identity: "The Social Butterfly",
+    category: "Connector",
+    meaning: `
+This traveler wants to MEET PEOPLE, not just see places.
+
+They want:
+- Group tours and activities
+- Social dining experiences
+- Pub crawls and nightlife
+- Cooking classes with others
+- Hostel common areas or social hotels
+- Meeting locals and other travelers
+
+Their ideal day:
+- Group breakfast or morning activity
+- Shared experience (class, tour)
+- Lunch with people they just met
+- Social afternoon activity
+- Group dinner
+- Nightlife
+
+WHAT "SOCIAL" MEANS FOR THEM:
+- Alone time is wasted time
+- Group activities over solo
+- Conversations over contemplation
+- Party hostels over boutique hotels
+
+VIOLATIONS:
+- Solo activities = VIOLATION
+- Quiet, contemplative experiences = VIOLATION
+- Private tours = VIOLATION
+- "Hidden gems" that are empty = VIOLATION
+`,
+    avoid: [
+      'Solo activities',
+      'Private tours',
+      'Quiet/contemplative experiences',
+      'Empty "hidden gems"',
+      'Meditation/wellness',
+      'Museums without guides',
+      'Self-guided anything'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 5,
+      startTime: '09:00',
+      nightlifeExpected: true,
+      spaOK: false
+    }
+  },
+
+  family_architect: {
+    identity: "The Family Architect",
+    category: "Connector",
+    meaning: `
+This traveler is building family memories.
+
+They want:
+- Kid-friendly activities
+- Manageable pacing for children
+- Family-friendly restaurants
+- Mix of education and fun
+- Nap time / rest time built in
+- Safe, accessible locations
+
+Their ideal day:
+- Start after kids wake (not too early)
+- Morning activity (zoo, aquarium, kid museum)
+- Early lunch (kids get hungry)
+- Rest time / pool time / nap
+- Afternoon light activity
+- Early dinner
+- Maybe one evening activity (gelato walk)
+
+WHAT "FAMILY" MEANS:
+- Kids' needs come first
+- Energy management matters
+- Not every moment needs activities
+- Pool time counts as an activity
+
+VIOLATIONS:
+- Adult-only venues = VIOLATION
+- Fine dining = VIOLATION
+- Late-night activities = VIOLATION
+- Long walks without breaks = VIOLATION
+- "Must-see" that requires 2hr queue = VIOLATION
+`,
+    avoid: [
+      'Adult-only venues',
+      'Fine dining',
+      'Late-night activities',
+      'Long queues',
+      'Activities requiring silence',
+      'Dangerous/risky experiences',
+      'Alcohol-focused venues'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 3,
+      startTime: '09:00',
+      endTime: '19:00',
+      spaOK: false,
+      michelinOK: false
+    }
+  },
+
+  romantic_curator: {
+    identity: "The Romantic Curator",
+    category: "Connector",
+    meaning: `
+This traveler is creating romantic moments with a partner.
+
+They want:
+- Intimate experiences for two
+- Sunset spots
+- Candlelit dinners
+- Scenic walks
+- Couple-focused activities
+- Privacy over crowds
+
+Their ideal day:
+- Leisurely morning together
+- Shared cultural experience
+- Romantic lunch with a view
+- Afternoon: spa, beach, or scenic spot
+- Sunset moment (planned)
+- Intimate dinner
+
+WHAT "ROMANTIC" MEANS:
+- Atmosphere matters
+- Crowds kill the mood
+- Sunset is non-negotiable
+- One special dinner per trip
+
+VIOLATIONS:
+- Group activities = VIOLATION
+- Family-focused venues = VIOLATION
+- Crowded tourist spots = VIOLATION
+- Fast-paced itineraries = VIOLATION
+`,
+    avoid: [
+      'Group tours',
+      'Family-focused venues',
+      'Crowded attractions at peak times',
+      'Fast food',
+      'Hostel/budget accommodations',
+      'Nightclubs (unless requested)',
+      'Solo activities'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      sunsetRequired: true,
+      startTime: '09:30',
+      spaOK: true
+    }
+  },
+
+  community_builder: {
+    identity: "The Community Builder",
+    category: "Connector",
+    meaning: `
+This traveler wants to give back and connect meaningfully.
+
+They want:
+- Volunteer opportunities
+- Community-based tourism
+- Local NGO visits
+- Social enterprise support
+- Meaningful local connections
+- Experiences that help others
+
+Their ideal day:
+- Morning volunteer activity
+- Lunch with community members
+- Afternoon learning about local issues
+- Evening: social enterprise dinner or local gathering
+
+WHAT "COMMUNITY" MEANS:
+- Impact over entertainment
+- Giving over taking
+- Learning about real challenges
+- Supporting local economies directly
+
+VIOLATIONS:
+- Luxury experiences = VIOLATION
+- Tourist bubbles = VIOLATION
+- Chain restaurants/hotels = VIOLATION
+- Passive sightseeing = VIOLATION
+`,
+    avoid: [
+      'Luxury experiences',
+      'Tourist bubbles',
+      'Chain businesses',
+      'Passive sightseeing',
+      'Exploitative "poverty tourism"',
+      'Staged authenticity'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 3,
+      startTime: '08:00',
+      spaOK: false,
+      michelinOK: false
+    }
+  }
+};
+
+// =============================================================================
+// CATEGORY 3: ACHIEVERS (Goal-Driven)
+// =============================================================================
+
+const ACHIEVER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
+  bucket_list_conqueror: {
+    identity: "The Bucket List Conqueror",
+    category: "Achiever",
+    meaning: `
+This traveler wants to CHECK THINGS OFF. The iconic experiences.
+
+They want:
+- The famous landmarks
+- The must-sees
+- The "I was there" moments
+- Photo proof of achievements
+- Efficient routing to maximize coverage
+- Skip-the-line everything
+
+Their ideal day:
+- Early start to beat crowds
+- Major landmark #1
+- Major landmark #2
+- Quick lunch (not the focus)
+- Major landmark #3
+- Sunset at famous viewpoint
+- Dinner wherever
+
+WHAT "BUCKET LIST" MEANS:
+- Famous things exist for a reason
+- Missing the Colosseum in Rome is failure
+- Quantity has quality
+- Efficiency is valued
+
+VIOLATIONS:
+- Skipping major landmarks = VIOLATION
+- "Hidden gems" instead of famous sites = VIOLATION
+- Too much downtime = VIOLATION
+- Missing the iconic photo = VIOLATION
+`,
+    avoid: [
+      'Skipping major landmarks',
+      'Too much relaxation time',
+      'Obscure attractions over famous ones',
+      'Slow pacing',
+      'Long meals'
+    ],
+    dayStructure: {
+      minScheduledActivities: 4,
+      maxScheduledActivities: 7,
+      startTime: '08:00',
+      spaOK: false
+    }
+  },
+
+  adrenaline_architect: {
+    identity: "The Adrenaline Architect",
+    category: "Achiever",
+    meaning: `
+This traveler chases thrills and physical challenges.
+
+They want:
+- Adventure activities (skydiving, bungee, etc.)
+- Extreme sports
+- Physical challenges
+- Unique adrenaline experiences
+- Active exploration
+- Stories to tell
+
+Their ideal day:
+- Very early start
+- Morning: major adrenaline activity
+- Recovery lunch
+- Afternoon: secondary active experience
+- Evening: recharge for tomorrow
+
+WHAT "ADRENALINE" MEANS:
+- If it's not a little scary, it's not enough
+- Physical exertion is the point
+- Passive sightseeing is boring
+- Comfort is not the goal
+
+VIOLATIONS:
+- Museums = VIOLATION
+- Spa/relaxation = VIOLATION
+- Shopping = VIOLATION
+- "Leisurely" anything = VIOLATION
+- No active experiences = VIOLATION
+`,
+    avoid: [
+      'Museums',
+      'Spa/relaxation',
+      'Shopping',
+      'Leisurely pacing',
+      'Passive sightseeing',
+      'Fine dining (takes too long)',
+      'Cultural performances'
+    ],
+    dayStructure: {
+      minScheduledActivities: 2,
+      maxScheduledActivities: 6,
+      startTime: '07:00',
+      spaOK: false
+    }
+  },
+
+  collection_curator: {
+    identity: "The Collection Curator",
+    category: "Achiever",
+    meaning: `
+This traveler has specific interests they collect experiences in.
+
+They want:
+- Deep dives into their passion (art, architecture, wine, etc.)
+- Specialized tours and access
+- Expert guides
+- Behind-the-scenes experiences
+- Building knowledge in their area
+
+Their ideal day:
+- Focused on their collection interest
+- Multiple related experiences
+- Expert-led where possible
+- Deep over broad
+
+WHAT "COLLECTION" MEANS:
+- One interest, explored deeply
+- Would rather see 3 great galleries than 10 sites
+- Quality of experience over variety
+- Building expertise, not checking boxes
+
+VIOLATIONS:
+- Generic tourist itinerary = VIOLATION
+- Breadth over depth = VIOLATION
+- Ignoring their stated interests = VIOLATION
+`,
+    avoid: [
+      'Generic sightseeing',
+      'Experiences outside their interest area (unless essential)',
+      'Surface-level tours',
+      'Rushed visits'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '09:00',
+      spaOK: false
+    }
+  },
+
+  status_seeker: {
+    identity: "The Status Seeker",
+    category: "Achiever",
+    meaning: `
+This traveler wants exclusive, impressive, shareable experiences.
+
+They want:
+- VIP access
+- Exclusive experiences
+- Impressive venues
+- Instagram-worthy moments
+- Luxury touches
+- Stories that impress others
+
+Their ideal day:
+- Exclusive breakfast spot
+- VIP tour or private access
+- Lunch at "the" restaurant
+- Impressive afternoon experience
+- Sunset at the best viewpoint
+- Dinner at hard-to-book restaurant
+
+WHAT "STATUS" MEANS:
+- If everyone can do it, it's not special
+- Access matters
+- The story matters
+- Luxury is expected
+
+VIOLATIONS:
+- Budget options = VIOLATION
+- Crowded tourist experiences = VIOLATION
+- Anything "basic" = VIOLATION
+`,
+    avoid: [
+      'Budget restaurants',
+      'Crowded tourist lines',
+      'Basic experiences',
+      'Hostels/budget hotels',
+      'Public transit (unless iconic)',
+      'Chain anything'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 5,
+      startTime: '09:00',
+      spaOK: true,
+      michelinOK: true,
+      vipExpected: true
+    }
+  }
+};
+
+// =============================================================================
+// CATEGORY 4: RESTORERS (Wellness-Driven)
+// =============================================================================
+
+const RESTORER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
+  zen_seeker: {
+    identity: "The Zen Seeker",
+    category: "Restorer",
+    meaning: `
+This traveler seeks spiritual and mindfulness experiences.
+
+They want:
+- Meditation retreats
+- Temples and sacred sites
+- Yoga classes
+- Mindfulness experiences
+- Quiet contemplation
+- Spiritual connection
+
+Their ideal day:
+- Early morning meditation or yoga
+- Visit sacred/spiritual site
+- Quiet, mindful lunch
+- Afternoon contemplation or practice
+- Evening reflection
+
+WHAT "ZEN" MEANS:
+- Silence is golden
+- Spiritual depth over sightseeing
+- Practice over tourism
+- Inner journey over outer
+
+VIOLATIONS:
+- Nightlife = VIOLATION
+- Crowded tourist sites = VIOLATION
+- Fast pacing = VIOLATION
+- Noise and chaos = VIOLATION
+`,
+    avoid: [
+      'Nightlife',
+      'Crowded attractions',
+      'Fast-paced itineraries',
+      'Noisy venues',
+      'Alcohol-focused experiences',
+      'Shopping',
+      'Adrenaline activities'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 3,
+      startTime: '06:00',
+      endTime: '21:00',
+      spaOK: true
+    }
+  },
+
+  retreat_regular: {
+    identity: "The Retreat Regular",
+    category: "Restorer",
+    meaning: `
+This traveler wants structured wellness programs.
+
+They want:
+- Wellness retreat experiences
+- Spa treatments (YES, this IS the spa person)
+- Health-focused dining
+- Structured relaxation
+- Detox/cleanse options
+- Professional wellness guidance
+
+Their ideal day:
+- Morning wellness activity
+- Spa treatment
+- Healthy lunch
+- Afternoon treatment or class
+- Evening: gentle yoga, healthy dinner
+
+WHAT "RETREAT" MEANS:
+- Professional wellness, not DIY
+- Structured programs welcome
+- Health is the priority
+- This IS the spa traveler
+
+THIS traveler gets spa. Others don't.
+
+VIOLATIONS:
+- Adventure activities = VIOLATION
+- Unhealthy food = VIOLATION
+- Late nights = VIOLATION
+- Alcohol = VIOLATION
+- City sightseeing focus = VIOLATION
+`,
+    avoid: [
+      'Adventure activities',
+      'Unhealthy dining',
+      'Late nights',
+      'Alcohol-focused experiences',
+      'City sightseeing',
+      'Crowded attractions'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '07:00',
+      endTime: '21:00',
+      spaOK: true
     }
   },
 
   beach_therapist: {
     identity: "The Beach Therapist",
+    category: "Restorer",
     meaning: `
 This traveler finds peace at the BEACH, not the SPA.
 
@@ -82,53 +821,57 @@ They want:
 - Sunset watching
 - Casual seafood meals
 - Hammock time
-- Ocean sounds, not spa music
+- Ocean sounds
+- Simple, natural restoration
 
-THIS IS NOT A SPA PERSON. "Therapist" means the BEACH is their therapy.
+THIS IS NOT A SPA PERSON. The BEACH is their therapy.
 
 Their ideal day:
 - Late morning start
-- Beach by 11am, stay until 3-4pm
+- Beach by 11am, stay until 4pm
 - Casual lunch near water
-- Rest/nap
+- Rest
 - Sunset somewhere scenic
 - Simple dinner, feet in sand if possible
 
-WHAT RESTORATION MEANS FOR THEM:
-- Beach, ocean, water, waves
-- NOT spa, NOT massage, NOT wellness center
-- NOT luxury resort amenities
-- Simple, natural, elemental
+WHAT "BEACH THERAPIST" MEANS:
+- Beach = spa for them
+- Simple > fancy
+- Natural > manufactured
+- Ocean > treatment room
 
 VIOLATIONS:
 - Spa treatments = VIOLATION
 - Wellness centers = VIOLATION
-- Luxury hotel experiences = VIOLATION
-- Packed schedules = VIOLATION
+- Luxury hotel amenities = VIOLATION
 - Being far from water = VIOLATION
+- Packed schedules = VIOLATION
 `,
     avoid: [
       'Spa treatments',
       'Wellness centers',
       'Massage',
-      'Luxury resorts',
+      'Luxury resort amenities',
       'Fine dining',
-      'Anything indoors when beach is available',
-      'Structured activities',
-      'Reservations',
+      'City activities',
+      'Anything far from water',
       'Hotel spas',
       'Hammams',
       'Thermal baths (unless natural hot springs)'
     ],
     dayStructure: {
       maxScheduledActivities: 2,
+      beachTimeMin: '3 hours',
       startTime: '10:00',
-      endTime: '21:00'
+      sunsetRequired: true,
+      spaOK: false,
+      michelinOK: false
     }
   },
 
   slow_traveler: {
     identity: "The Slow Traveler",
+    category: "Restorer",
     meaning: `
 This traveler savors. They don't collect.
 
@@ -138,94 +881,206 @@ They want:
 - Long meals (90+ minutes)
 - Time to sit and watch the world
 - Coffee that lasts an hour
-- No rushing
+- No rushing ever
 
 Their ideal day:
-- Wake naturally, no alarm
+- Wake naturally
 - Leisurely breakfast (1 hour)
 - ONE meaningful morning activity
 - Long lunch (90 min)
 - Afternoon wandering or rest
 - Evening: one thing OR nothing
 
-WHAT SLOW ACTUALLY MEANS:
-- If choosing between 2 good things, choose 1
-- Always less, never more
+WHAT "SLOW" MEANS:
+- If choosing between 2 things, choose 1
+- Less is always more
 - Buffer time is not wasted time
 - Sitting in a piazza IS the activity
 
 VIOLATIONS:
 - More than 3 activities = VIOLATION
-- Meals under 60 minutes = VIOLATION
+- Meals under 60 min = VIOLATION
 - "Quick" anything = VIOLATION
-- Rushing between sites = VIOLATION
-- Back-to-back activities = VIOLATION
+- Rushing = VIOLATION
+- Back-to-back = VIOLATION
 `,
     avoid: [
       'Packed schedules',
       'Quick meals',
       'Rushing',
       'Must-see lists',
-      'FOMO-driven planning',
       'Back-to-back activities',
-      'Tight time slots'
+      'Early morning starts',
+      'Tour groups'
     ],
     dayStructure: {
       maxScheduledActivities: 3,
       minMealDuration: 90,
       minBuffer: 60,
       startTime: '09:30',
-      endTime: '21:00'
+      spaOK: false,
+      requiredUnscheduledBlocks: 2
     }
   },
 
-  cultural_anthropologist: {
-    identity: "The Cultural Anthropologist",
+  sanctuary_seeker: {
+    identity: "The Sanctuary Seeker",
+    category: "Restorer",
     meaning: `
-This traveler studies culture, not just visits.
+This traveler needs peace, quiet, and escape from crowds.
 
 They want:
-- Local interactions, not tourist experiences
-- Markets, neighborhoods, daily life
-- Understanding how locals live
-- Language practice opportunities
-- Non-touristy dining
+- Quiet, uncrowded places
+- Nature over cities
+- Private spaces
+- Minimal interaction required
+- Refuge from overstimulation
+- Solitude as a feature, not a bug
 
 Their ideal day:
-- Morning at a local market or café
-- Wandering neighborhoods locals frequent
-- Lunch where workers eat
-- Afternoon: museum OR craft workshop OR local event
-- Evening: neighborhood bar, not tourist area
+- Wake when ready
+- Quiet breakfast alone
+- Visit uncrowded natural or cultural site
+- Solo lunch at peaceful spot
+- Afternoon: reading, nature, solitude
+- Quiet dinner
 
-WHAT CULTURAL IMMERSION MEANS:
-- Avoid tourist centers and famous restaurants
-- Seek ordinary life, not curated experiences
-- Value conversations over sightseeing
+WHAT "SANCTUARY" MEANS:
+- Crowds = stress
+- Quiet = comfort
+- Alone time is required
+- Introvert-friendly everything
 
 VIOLATIONS:
-- Tourist trap restaurants = VIOLATION
-- Hop-on-hop-off tours = VIOLATION
-- Chain restaurants = VIOLATION
-- Only visiting landmarks = VIOLATION
+- Group tours = VIOLATION
+- Crowded tourist sites = VIOLATION
+- Social activities = VIOLATION
+- Nightlife = VIOLATION
+- Forced interaction = VIOLATION
+`,
+    avoid: [
+      'Group tours',
+      'Crowded attractions',
+      'Social/group activities',
+      'Nightlife',
+      'Noisy restaurants',
+      'Popular tourist times',
+      'Shared tables'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 3,
+      startTime: '09:00',
+      endTime: '20:00',
+      spaOK: false,
+      requiredUnscheduledBlocks: 1
+    }
+  }
+};
+
+// =============================================================================
+// CATEGORY 5: CURATORS (Passion-Driven)
+// =============================================================================
+
+const CURATOR_ARCHETYPES: Record<string, ArchetypeDefinition> = {
+  culinary_cartographer: {
+    identity: "The Culinary Cartographer",
+    category: "Curator",
+    meaning: `
+This traveler plans trips around FOOD.
+
+They want:
+- Food markets and local specialties
+- Cooking classes
+- Restaurant reservations at the best spots
+- Food tours
+- Understanding local food culture
+- Eating where locals eat
+
+Their ideal day:
+- Morning: market visit or food tour
+- Lunch: local specialty
+- Afternoon: cooking class or food exploration
+- Dinner: researched restaurant (one splurge per trip OK)
+
+WHAT "CULINARY" MEANS:
+- Every meal matters
+- Food IS the sightseeing
+- Markets > museums
+- Local > international
+
+One signature_meal splurge per trip is expected.
+
+VIOLATIONS:
+- Generic tourist restaurants = VIOLATION
+- Skipping local specialties = VIOLATION
+- Fast food = VIOLATION
+- Hotel breakfast = VIOLATION (unless exceptional)
 `,
     avoid: [
       'Tourist trap restaurants',
-      'Hop-on-hop-off tours',
       'Chain restaurants',
-      'Crowded landmark-only itineraries',
-      'Pre-packaged tours',
-      'Tourist menus'
+      'Skipping meals',
+      'Hotel breakfast (usually)',
+      'International cuisine in a local destination',
+      'Fast food'
     ],
     dayStructure: {
       maxScheduledActivities: 4,
+      minMealDuration: 75,
       startTime: '09:00',
-      endTime: '22:00'
+      spaOK: false,
+      michelinOK: true
+    }
+  },
+
+  art_aficionado: {
+    identity: "The Art Aficionado",
+    category: "Curator",
+    meaning: `
+This traveler lives for art and design.
+
+They want:
+- Major museums with depth
+- Gallery hopping
+- Architecture tours
+- Public art and street art
+- Design districts
+- Art-focused experiences
+
+Their ideal day:
+- Morning: major museum (2-3 hours, not rushed)
+- Lunch near the art district
+- Afternoon: galleries or architecture walk
+- Evening: design-focused dining or performance
+
+WHAT "ART" MEANS:
+- Quality time in museums, not rushed
+- Lesser-known galleries matter
+- Architecture counts
+- Design is art
+
+VIOLATIONS:
+- Rushing through museums = VIOLATION
+- Skipping the main art museum = VIOLATION
+- No art experiences in a day = VIOLATION
+`,
+    avoid: [
+      'Rushing through museums',
+      'Nature-focused activities',
+      'Adventure activities',
+      'Sports',
+      'Beach time (unless art-related)'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '09:30',
+      spaOK: false
     }
   },
 
   luxury_luminary: {
     identity: "The Luxury Luminary",
+    category: "Curator",
     meaning: `
 THIS is the traveler who wants spa, Michelin, VIP.
 
@@ -235,310 +1090,462 @@ They expect:
 - Spa treatments
 - VIP access
 - Private tours
-- Luxury hotels
+- Five-star hotels
+- First-class service
 
-For THIS archetype only:
+For THIS archetype:
 - Spa daily is acceptable
 - Fine dining every meal is expected
 - Price is not mentioned
 - "Exclusive" is a feature
+
+Their ideal day:
+- Leisurely morning, room service
+- Late breakfast at hotel
+- Private tour or VIP experience
+- Lunch at acclaimed restaurant
+- Afternoon spa
+- Sunset at exclusive venue
+- Michelin dinner
+
+VIOLATIONS:
+- Budget options = VIOLATION
+- Public transit = VIOLATION
+- Crowded attractions = VIOLATION
+- "Value" language = VIOLATION
 `,
-    prefer: [
-      'Michelin restaurants',
-      'Spa treatments',
-      'VIP access',
-      'Private tours',
-      'Luxury hotels',
-      'Premium everything',
-      'Exclusive experiences'
-    ],
     avoid: [
       'Budget options',
-      'Street food',
-      'Hostels',
       'Public transit',
-      'Crowded tourist spots',
-      'Queue waiting'
+      'Crowded attractions',
+      'Casual dining',
+      'Hostels/budget hotels',
+      'Waiting in lines',
+      'Value-focused language'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 5,
+      startTime: '10:00',
+      spaOK: true,
+      michelinOK: true,
+      vipExpected: true
+    }
+  },
+
+  history_hunter: {
+    identity: "The History Hunter",
+    category: "Curator",
+    meaning: `
+This traveler wants to walk through history.
+
+They want:
+- Historical sites with context
+- Museums with depth
+- Guided tours from expert historians
+- Understanding the past
+- Layers of history in a place
+- Archaeological sites
+
+Their ideal day:
+- Morning: major historical site with guide
+- Lunch in historic setting
+- Afternoon: museum or secondary site
+- Evening: historic neighborhood walk
+
+WHAT "HISTORY" MEANS:
+- Context matters
+- Chronology helps
+- Expert guides preferred
+- Depth over breadth
+
+VIOLATIONS:
+- Modern attractions only = VIOLATION
+- Skipping major historical sites = VIOLATION
+- Surface-level visits = VIOLATION
+`,
+    avoid: [
+      'Modern-only attractions',
+      'Adventure activities',
+      'Beach time',
+      'Shopping',
+      'Nightlife'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '09:00',
+      spaOK: false
+    }
+  }
+};
+
+// =============================================================================
+// CATEGORY 6: TRANSFORMERS (Life-Stage Driven)
+// =============================================================================
+
+const TRANSFORMER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
+  eco_ethicist: {
+    identity: "The Eco Ethicist",
+    category: "Transformer",
+    meaning: `
+This traveler prioritizes sustainability and ethics.
+
+They want:
+- Eco-friendly accommodations
+- Sustainable experiences
+- Low carbon footprint
+- Supporting local/ethical businesses
+- Nature conservation experiences
+- Avoiding over-tourism
+
+Their ideal day:
+- Local, sustainable breakfast
+- Eco-tour or conservation activity
+- Lunch at farm-to-table
+- Afternoon nature experience
+- Evening at locally-owned restaurant
+
+WHAT "ECO" MEANS:
+- Environmental impact matters
+- Local businesses over chains
+- Quality over convenience
+- Would rather skip than harm
+
+VIOLATIONS:
+- Chain hotels/restaurants = VIOLATION
+- High-carbon activities = VIOLATION
+- Over-touristed sites without purpose = VIOLATION
+- Single-use plastic = VIOLATION
+`,
+    avoid: [
+      'Chain hotels/restaurants',
+      'High-carbon activities',
+      'Over-touristed sites',
+      'Single-use plastic venues',
+      'Exploitative tourism',
+      'Cruise ships'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '08:00',
+      spaOK: false
+    }
+  },
+
+  gap_year_graduate: {
+    identity: "The Gap Year Graduate",
+    category: "Transformer",
+    meaning: `
+This traveler is young, budget-conscious, and experience-hungry.
+
+They want:
+- Backpacker vibes
+- Budget accommodations (hostels OK)
+- Street food and cheap eats
+- Meeting other travelers
+- Authentic experiences over comfort
+- Stories over luxury
+
+Their ideal day:
+- Hostel breakfast
+- Free walking tour
+- Street food lunch
+- Afternoon exploration
+- Sunset beers with travelers
+- Night out
+
+WHAT "GAP YEAR" MEANS:
+- Budget is tight
+- Social is important
+- Comfort is not priority
+- Experience over everything
+
+VIOLATIONS:
+- Expensive restaurants = VIOLATION
+- Private tours = VIOLATION
+- Luxury anything = VIOLATION
+- Solo/isolated experiences = VIOLATION
+`,
+    avoid: [
+      'Expensive restaurants',
+      'Private tours',
+      'Luxury hotels',
+      'High-cost activities',
+      'Isolated experiences',
+      'Fine dining'
     ],
     dayStructure: {
       maxScheduledActivities: 5,
       startTime: '09:00',
-      endTime: '23:00'
+      nightlifeExpected: true,
+      spaOK: false,
+      michelinOK: false
     }
   },
 
-  zen_seeker: {
-    identity: "The Zen Seeker",
+  midlife_explorer: {
+    identity: "The Midlife Explorer",
+    category: "Transformer",
     meaning: `
-This traveler seeks inner peace through travel.
+This traveler is rediscovering themselves through travel.
 
 They want:
-- Meditation spots (temples, gardens, nature)
-- Quiet environments
-- Wellness (yoga, meditation, spas OK for this archetype)
-- Minimal stimulation
-- Reflective time
+- Meaningful experiences
+- Comfortable but not excessive
+- New challenges (manageable ones)
+- Cultural enrichment
+- Self-reflection time
+- Balance of activity and rest
 
 Their ideal day:
-- Sunrise yoga or meditation
-- Quiet temple or garden visit
-- Light, healthy lunch
-- Spa or wellness treatment
-- Sunset contemplation
-- Early, simple dinner
+- Comfortable morning start
+- Meaningful cultural experience
+- Good lunch (quality matters)
+- Afternoon: new experience or reflection
+- Evening: nice dinner, not rushed
 
-WHAT ZEN MEANS:
-- Silence over noise
-- Nature over city
-- Wellness over activity
-- Presence over productivity
+WHAT "MIDLIFE" MEANS:
+- Quality over quantity
+- Meaning over checking boxes
+- Comfort is reasonable
+- Still adventurous, but smart
 
-This archetype DOES want spa/wellness, unlike Beach Therapist.
+VIOLATIONS:
+- Backpacker hostels = VIOLATION
+- Extreme activities = VIOLATION
+- Party focus = VIOLATION
+- Rushed itineraries = VIOLATION
 `,
-    prefer: [
-      'Spa treatments',
-      'Meditation spaces',
-      'Gardens and temples',
-      'Yoga',
-      'Nature walks',
-      'Wellness retreats'
-    ],
     avoid: [
-      'Crowded attractions',
+      'Backpacker accommodations',
+      'Extreme/dangerous activities',
+      'Party/nightclub focus',
+      'Rushed itineraries',
+      'Youth-focused venues'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '09:00',
+      spaOK: true
+    }
+  },
+
+  sabbatical_scholar: {
+    identity: "The Sabbatical Scholar",
+    category: "Transformer",
+    meaning: `
+This traveler is using travel for intellectual growth.
+
+They want:
+- Learning experiences
+- Lectures, courses, workshops
+- Historical and cultural depth
+- Time to read and reflect
+- Academic or intellectual tourism
+- Libraries, universities, bookshops
+
+Their ideal day:
+- Morning learning experience or tour
+- Lunch with a book
+- Afternoon: museum, lecture, or course
+- Evening: reading, writing, reflecting
+
+WHAT "SCHOLAR" MEANS:
+- Learning is the purpose
+- Depth over breadth
+- Would take a class over see a beach
+- Intellectual stimulation required
+
+VIOLATIONS:
+- Beach resort = VIOLATION
+- Adventure activities = VIOLATION
+- Party focus = VIOLATION
+- Surface-level tourism = VIOLATION
+`,
+    avoid: [
+      'Beach/resort focus',
+      'Adventure activities',
       'Nightlife',
-      'Noisy restaurants',
-      'Packed schedules',
-      'High-energy activities'
-    ],
-    dayStructure: {
-      maxScheduledActivities: 3,
-      startTime: '07:00',
-      endTime: '20:00'
-    }
-  },
-
-  adrenaline_architect: {
-    identity: "The Adrenaline Architect",
-    meaning: `
-This traveler lives for the rush.
-
-They want:
-- Adventure sports
-- Physical challenges
-- Unique experiences
-- Story-worthy activities
-- Pushing limits
-
-Their ideal day:
-- Early start for maximum activity time
-- Morning: main adventure (hiking, diving, etc.)
-- Active lunch spot
-- Afternoon: secondary adventure
-- Evening: celebrating the day
-
-Pack it full of action!
-`,
-    prefer: [
-      'Adventure sports',
-      'Hiking',
-      'Diving/water sports',
-      'Extreme activities',
-      'Physical challenges',
-      'Off-the-beaten-path'
-    ],
-    avoid: [
-      'Spa treatments',
-      'Long leisurely meals',
-      'Shopping',
-      'Sedentary activities',
-      'Touristy bus tours'
-    ],
-    dayStructure: {
-      maxScheduledActivities: 6,
-      startTime: '07:00',
-      endTime: '22:00'
-    }
-  },
-
-  culinary_cartographer: {
-    identity: "The Culinary Cartographer",
-    meaning: `
-This traveler experiences destinations through food.
-
-They want:
-- Food markets and local specialties
-- Cooking classes
-- Restaurant exploration
-- Food history and culture
-- Tasting experiences
-
-Their ideal day:
-- Breakfast at beloved local spot
-- Morning market visit
-- Long, exploratory lunch
-- Afternoon cooking class or food tour
-- Evening: carefully researched dinner
-
-Food IS the activity.
-`,
-    prefer: [
-      'Food markets',
-      'Cooking classes',
-      'Local restaurants',
-      'Food tours',
-      'Wine/beer tastings',
-      'Specialty food shops'
-    ],
-    avoid: [
-      'Chain restaurants',
-      'Tourist-menu restaurants',
-      'Fast food',
-      'Non-food-focused activities taking up meal times'
+      'Surface-level sightseeing',
+      'Rushed visits to museums'
     ],
     dayStructure: {
       maxScheduledActivities: 4,
-      minMealDuration: 75,
       startTime: '09:00',
-      endTime: '23:00'
+      spaOK: false
     }
   },
 
-  bucket_list_conqueror: {
-    identity: "The Bucket List Conqueror",
+  healing_journeyer: {
+    identity: "The Healing Journeyer",
+    category: "Transformer",
     meaning: `
-This traveler wants to see the highlights.
+This traveler is processing something — grief, change, recovery.
 
 They want:
-- Major landmarks
-- Famous attractions
-- Photo opportunities
-- Checking things off the list
-- Efficiency
+- Gentle, restorative experiences
+- Meaningful solitude
+- Nature and beauty
+- Safe spaces
+- No pressure
+- Permission to feel
 
 Their ideal day:
-- Early start to beat crowds
-- Hit the major sights
-- Efficient routing
-- Famous restaurant for lunch
-- More sights afternoon
-- Sunset at iconic spot
+- Slow morning, no rush
+- Gentle walk in nature or beautiful space
+- Quiet lunch
+- Afternoon: journaling, reflection, or gentle activity
+- Evening: peaceful dinner
 
-This is the ONE archetype where packed schedules are OK.
+WHAT "HEALING" MEANS:
+- Gentleness is required
+- No pressure to "see everything"
+- Solitude is OK
+- Beauty helps healing
+- Space to feel
+
+VIOLATIONS:
+- Packed itineraries = VIOLATION
+- Party/nightlife = VIOLATION
+- Forced social interaction = VIOLATION
+- Adrenaline activities = VIOLATION
+- "Must-see" pressure = VIOLATION
 `,
-    prefer: [
-      'Major landmarks',
-      'Famous museums',
-      'Iconic viewpoints',
-      'Well-known restaurants',
-      'Skip-the-line access'
-    ],
     avoid: [
-      'Obscure local spots (unless also famous)',
-      'Too much downtime',
-      'Missing major attractions'
+      'Packed itineraries',
+      'Nightlife',
+      'Forced social activities',
+      'Adrenaline/extreme experiences',
+      'Crowds',
+      'Pressure'
     ],
     dayStructure: {
-      maxScheduledActivities: 7,
-      startTime: '08:00',
-      endTime: '22:00'
-    }
-  },
-
-  romantic_curator: {
-    identity: "The Romantic Curator",
-    meaning: `
-This traveler is creating couple moments.
-
-They want:
-- Intimate settings
-- Sunset views
-- Romantic dinners
-- Couple activities
-- Privacy
-
-Their ideal day:
-- Late, leisurely breakfast
-- One morning activity together
-- Long romantic lunch
-- Afternoon rest or spa (as couple)
-- Sunset somewhere special
-- Candlelit dinner
-
-Romance > efficiency.
-`,
-    prefer: [
-      'Rooftop restaurants',
-      'Sunset spots',
-      'Couples spa',
-      'Wine tastings',
-      'Scenic walks',
-      'Intimate venues'
-    ],
-    avoid: [
-      'Family-oriented activities',
-      'Crowded tourist traps',
-      'Group tours',
-      'Rushed schedules'
-    ],
-    dayStructure: {
-      maxScheduledActivities: 4,
+      maxScheduledActivities: 2,
       startTime: '10:00',
-      endTime: '23:00'
+      spaOK: false,
+      requiredUnscheduledBlocks: 2
     }
   },
 
-  family_architect: {
-    identity: "The Family Architect",
+  retirement_ranger: {
+    identity: "The Retirement Ranger",
+    category: "Transformer",
     meaning: `
-This traveler is managing a family experience.
+This traveler has time and is enjoying it.
 
 They want:
-- Kid-friendly activities
-- Manageable pacing (kids tire)
-- Family-appropriate dining
-- Flexibility for meltdowns
-- Educational but fun
+- Comfortable pacing
+- Accessible activities
+- Quality experiences
+- Good food
+- Interesting but not exhausting
+- Time to enjoy
 
 Their ideal day:
-- Morning: one family activity
-- Early lunch (kids are hungry)
-- Afternoon: flexible, maybe rest
-- Easy dinner early (6pm)
-- Back to hotel reasonable hour
+- Leisurely breakfast
+- One morning activity (not too much walking)
+- Nice lunch
+- Afternoon rest or light activity
+- Early dinner
+- Early evening (not late nights)
 
-Build in flexibility for family chaos!
+WHAT "RETIREMENT" MEANS:
+- Comfort matters
+- Accessibility matters
+- No rushing ever
+- Quality over quantity
+- Early dinners are fine
+
+VIOLATIONS:
+- Extreme walking = VIOLATION
+- Late-night activities = VIOLATION
+- Budget/hostel focus = VIOLATION
+- Physically demanding activities = VIOLATION
+- Youth-focused venues = VIOLATION
 `,
-    prefer: [
-      'Kid-friendly attractions',
-      'Parks and playgrounds',
-      'Interactive museums',
-      'Early dinner reservations',
-      'Flexible timing'
-    ],
     avoid: [
-      'Fine dining',
-      'Late activities',
-      'Adult-only venues',
-      'Very long walking days',
-      'Tight schedules'
+      'Extreme walking distances',
+      'Late-night activities',
+      'Budget accommodations',
+      'Physically demanding experiences',
+      'Youth-focused venues',
+      'Nightclubs',
+      'Rushed itineraries'
     ],
     dayStructure: {
       maxScheduledActivities: 3,
       startTime: '09:00',
-      endTime: '19:00'
+      endTime: '20:00',
+      spaOK: true
+    }
+  },
+
+  balanced_story_collector: {
+    identity: "The Balanced Story Collector",
+    category: "Transformer",
+    meaning: `
+This is the fallback / balanced traveler.
+
+They want:
+- A bit of everything
+- Mix of iconic and local
+- Balanced pacing
+- Good value
+- Flexibility
+- Memorable moments
+
+Their ideal day:
+- Morning: one significant experience
+- Lunch: local spot
+- Afternoon: exploration or second activity
+- Evening: nice dinner
+
+WHAT "BALANCED" MEANS:
+- No strong extremes
+- Mix of experiences
+- Adaptable
+- Open to suggestions
+
+This is the default when no strong archetype emerges.
+`,
+    avoid: [
+      'Extreme luxury',
+      'Extreme budget',
+      'Extreme pacing (too slow or fast)',
+      'Over-specialization'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 4,
+      startTime: '09:00',
+      spaOK: false,
+      michelinOK: false
     }
   }
+};
+
+// =============================================================================
+// COMBINED DEFINITIONS
+// =============================================================================
+
+export const ARCHETYPE_DEFINITIONS: Record<string, ArchetypeDefinition> = {
+  ...EXPLORER_ARCHETYPES,
+  ...CONNECTOR_ARCHETYPES,
+  ...ACHIEVER_ARCHETYPES,
+  ...RESTORER_ARCHETYPES,
+  ...CURATOR_ARCHETYPES,
+  ...TRANSFORMER_ARCHETYPES
 };
 
 // Default for archetypes not explicitly defined
 const DEFAULT_DEFINITION: ArchetypeDefinition = {
   identity: "Balanced Traveler",
+  category: "Transformer",
   meaning: "A balanced approach to travel with no extreme preferences.",
   avoid: [],
   dayStructure: {
-    maxScheduledActivities: 5,
+    maxScheduledActivities: 4,
     startTime: '09:00',
-    endTime: '21:00'
+    spaOK: false,
+    michelinOK: false
   }
 };
 
@@ -548,9 +1555,37 @@ const DEFAULT_DEFINITION: ArchetypeDefinition = {
 export function getArchetypeDefinition(archetype: string | undefined): ArchetypeDefinition {
   if (!archetype) return DEFAULT_DEFINITION;
   
-  const normalized = archetype.toLowerCase().replace(/\s+/g, '_');
+  const normalized = archetype.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
   return ARCHETYPE_DEFINITIONS[normalized] || DEFAULT_DEFINITION;
 }
+
+// =============================================================================
+// WHO GETS WHAT - Quick Reference for Prompt Building
+// =============================================================================
+
+export function canHaveSpa(archetype: string | undefined): boolean {
+  const def = getArchetypeDefinition(archetype);
+  return def.dayStructure.spaOK === true;
+}
+
+export function canHaveMichelin(archetype: string | undefined): boolean {
+  const def = getArchetypeDefinition(archetype);
+  return def.dayStructure.michelinOK === true;
+}
+
+export function needsUnscheduledBlocks(archetype: string | undefined): boolean {
+  const def = getArchetypeDefinition(archetype);
+  return (def.dayStructure.requiredUnscheduledBlocks ?? 0) > 0;
+}
+
+export function getMaxActivities(archetype: string | undefined): number {
+  const def = getArchetypeDefinition(archetype);
+  return def.dayStructure.maxScheduledActivities;
+}
+
+// =============================================================================
+// PROMPT BUILDING FUNCTIONS
+// =============================================================================
 
 /**
  * Build archetype constraints block for prompt
@@ -565,6 +1600,7 @@ export function buildArchetypeConstraintsBlock(archetype: string | undefined): s
   const lines: string[] = [];
   lines.push(`${'='.repeat(60)}`);
   lines.push(`🎭 ARCHETYPE IDENTITY: ${definition.identity}`);
+  lines.push(`   Category: ${definition.category}`);
   lines.push(`${'='.repeat(60)}`);
   lines.push('');
   lines.push(definition.meaning.trim());
@@ -577,7 +1613,7 @@ export function buildArchetypeConstraintsBlock(archetype: string | undefined): s
       lines.push(`   - ${item}`);
     }
     lines.push('');
-    lines.push(`   These are NOT suggestions. Violating these = failed itinerary.`);
+    lines.push(`   These are NOT suggestions. Violating these = FAILED itinerary.`);
     lines.push('');
   }
   
@@ -593,11 +1629,16 @@ export function buildArchetypeConstraintsBlock(archetype: string | undefined): s
   lines.push(`📐 DAY STRUCTURE RULES:`);
   lines.push(`${'─'.repeat(40)}`);
   lines.push(`   Max scheduled activities: ${definition.dayStructure.maxScheduledActivities}`);
+  if (definition.dayStructure.minScheduledActivities) {
+    lines.push(`   Min scheduled activities: ${definition.dayStructure.minScheduledActivities}`);
+  }
   lines.push(`   Day starts: ${definition.dayStructure.startTime}`);
-  lines.push(`   Day ends: ${definition.dayStructure.endTime}`);
+  if (definition.dayStructure.endTime) {
+    lines.push(`   Day ends: ${definition.dayStructure.endTime}`);
+  }
   
   if (definition.dayStructure.requiredUnscheduledBlocks) {
-    lines.push(`   Required unscheduled blocks: ${definition.dayStructure.requiredUnscheduledBlocks} (min ${definition.dayStructure.unscheduledBlockMinHours}h each)`);
+    lines.push(`   ⚠️ Required unscheduled blocks: ${definition.dayStructure.requiredUnscheduledBlocks} (min ${definition.dayStructure.unscheduledBlockMinHours || 2}h each)`);
   }
   if (definition.dayStructure.minMealDuration) {
     lines.push(`   Minimum meal duration: ${definition.dayStructure.minMealDuration} minutes`);
@@ -605,6 +1646,19 @@ export function buildArchetypeConstraintsBlock(archetype: string | undefined): s
   if (definition.dayStructure.minBuffer) {
     lines.push(`   Minimum buffer between activities: ${definition.dayStructure.minBuffer} minutes`);
   }
+  if (definition.dayStructure.sunsetRequired) {
+    lines.push(`   ⚠️ Sunset moment: REQUIRED`);
+  }
+  if (definition.dayStructure.beachTimeMin) {
+    lines.push(`   ⚠️ Beach time: minimum ${definition.dayStructure.beachTimeMin}`);
+  }
+  
+  // SPA/MICHELIN/VIP permissions
+  lines.push('');
+  lines.push(`🚦 PERMISSIONS FOR THIS ARCHETYPE:`);
+  lines.push(`   Spa treatments: ${definition.dayStructure.spaOK ? '✅ ALLOWED' : '❌ NOT ALLOWED'}`);
+  lines.push(`   Michelin dining: ${definition.dayStructure.michelinOK ? '✅ ALLOWED' : '❌ NOT ALLOWED'}`);
+  lines.push(`   VIP/Private tours: ${definition.dayStructure.vipExpected ? '✅ EXPECTED' : '⚪ Only if requested'}`);
   lines.push('');
   
   return lines.join('\n');
@@ -615,8 +1669,8 @@ export function buildArchetypeConstraintsBlock(archetype: string | undefined): s
 // =============================================================================
 
 export function buildTripWideVarietyRules(archetype: string | undefined): string {
-  const isLuxury = archetype?.toLowerCase().includes('luxury') || 
-                   archetype?.toLowerCase().includes('luminary');
+  const definition = getArchetypeDefinition(archetype);
+  const isLuxury = definition.dayStructure.spaOK && definition.dayStructure.michelinOK;
   
   if (isLuxury) {
     return `
@@ -630,8 +1684,8 @@ Still ensure variety in experiences (not just spa + dinner repeat).
 === TRIP-WIDE VARIETY RULES (ENFORCED) ===
 
 NO REPETITION:
-- Maximum 1 spa/wellness experience PER TRIP (unless Luxury Luminary/Zen Seeker)
-- Maximum 1 Michelin restaurant PER TRIP (unless Luxury Luminary)
+- Maximum 1 spa/wellness experience PER TRIP (unless Luxury Luminary/Retreat Regular/Zen Seeker)
+- Maximum 1 Michelin restaurant PER TRIP (unless Luxury Luminary/Culinary Cartographer)
 - Maximum 1 cooking class PER TRIP
 - Maximum 1 wine/cocktail "experience" PER TRIP (casual drinks don't count)
 - Maximum 3 museums PER TRIP (for trips under 7 days)
@@ -659,12 +1713,10 @@ If any rule is violated, replace the duplicate with something different.
 // =============================================================================
 
 export function buildUnscheduledTimeRules(archetype: string | undefined, pace: number): string {
-  const normalized = archetype?.toLowerCase().replace(/\s+/g, '_') || '';
-  const needsUnscheduledTime = normalized === 'flexible_wanderer' || 
-                                normalized === 'slow_traveler' ||
-                                pace <= -3;
+  const definition = getArchetypeDefinition(archetype);
+  const needsUnscheduled = (definition.dayStructure.requiredUnscheduledBlocks ?? 0) > 0 || pace <= -3;
   
-  if (!needsUnscheduledTime) {
+  if (!needsUnscheduled) {
     return '';
   }
   
@@ -674,7 +1726,7 @@ export function buildUnscheduledTimeRules(archetype: string | undefined, pace: n
 This traveler needs FREEDOM. Your itinerary must include:
 
 UNSCHEDULED BLOCKS:
-- Minimum 2 blocks of 2+ hours with NO specific activity
+- Minimum ${definition.dayStructure.requiredUnscheduledBlocks || 2} blocks of ${definition.dayStructure.unscheduledBlockMinHours || 2}+ hours with NO specific activity
 - Label these as "Free time to explore [neighborhood]"
 - Do NOT fill this with suggestions
 - Do NOT schedule a backup plan
@@ -713,12 +1765,14 @@ WRONG:
 - "Slow Traveler Coffee Moment"  
 - "Beach Therapist Sunset Session"
 - "Cultural Anthropologist Market Tour"
+- "Zen Seeker Meditation Walk"
 
 RIGHT:
 - "Browse vintage shops in Monti"
 - "Coffee at Sant'Eustachio"
 - "Sunset at Piazzale Michelangelo"
 - "Explore Campo de' Fiori Market"
+- "Morning meditation at the temple"
 
 The archetype shapes WHAT you choose, not what you CALL it.
 
@@ -906,11 +1960,13 @@ export function buildAllConstraints(
 Check every activity against:
 1. Does this violate the archetype's avoid list? → REMOVE IT
 2. Does this violate budget limits? → REMOVE IT
-3. Does this repeat something from another day? (spa, Michelin, etc.) → REMOVE IT
-4. Is the pacing too packed for this traveler? → REMOVE activities
-5. Is there required unscheduled time? → ADD IT
-6. Is the archetype name in the activity title? → RENAME IT
-7. Are there "luxury/premium/exclusive" words for a non-luxury traveler? → REMOVE them
+3. Is spa included but spaOK = false? → REMOVE IT
+4. Is Michelin included but michelinOK = false? → REMOVE IT
+5. Does this repeat something from another day? (spa, Michelin, etc.) → REMOVE IT
+6. Is the pacing too packed for this traveler? → REMOVE activities
+7. Is there required unscheduled time? → ADD IT
+8. Is the archetype name in the activity title? → RENAME IT
+9. Are there "luxury/premium/exclusive" words for a non-luxury traveler? → REMOVE them
 
 If ANY violation exists, fix it before returning.
 
