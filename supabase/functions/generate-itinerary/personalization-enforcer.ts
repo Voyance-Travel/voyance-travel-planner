@@ -128,19 +128,37 @@ export function deriveForcedSlots(
   context?: SlotDerivationContext
 ): ForcedSlot[] {
   const slots: ForcedSlot[] = [];
+
+  const normalizedInterests = interests.map(i => i.toLowerCase().trim());
   
-  // Foodie detection (from interests or food-related traits)
-  const isFoodie = interests.some(i => 
-    ['food', 'culinary', 'wine', 'gastronomy', 'cooking', 'restaurants', 'foodie'].includes(i.toLowerCase())
+  // Foodie detection (from interests)
+  const isFoodie = normalizedInterests.some(i =>
+    ['food', 'culinary', 'wine', 'gastronomy', 'cooking', 'restaurants', 'foodie'].includes(i)
   );
+
+  // If the user literally says “one special meal per trip”, enforce that as truth.
+  const wantsOneSpecialMealPerTrip = normalizedInterests.some(i =>
+    i.includes('one special meal per trip') || i.includes('special meal per trip')
+  );
+
   if (isFoodie) {
-    slots.push({
-      type: 'signature_meal',
-      traitSource: 'authenticity', // Food lovers care about authentic experiences
-      traitValue: traits.authenticity || 0,
-      description: 'One signature meal experience (specific cuisine + vibe + price level)',
-      validationTags: ['signature-dining', 'culinary', 'foodie', 'local-cuisine', 'must-try', 'renowned']
-    });
+    // Default: do NOT force a signature meal every day (this was causing repetitive fine dining).
+    // Schedule it once per trip (or roughly once every 3 days if not explicitly “one per trip”).
+    const signatureMealDay = Math.max(1, Math.min(totalDays, totalDays >= 3 ? 2 : 1));
+    const shouldIncludeSignatureMeal = wantsOneSpecialMealPerTrip
+      ? dayNumber === signatureMealDay
+      : (dayNumber === signatureMealDay || (totalDays >= 5 && dayNumber % 3 === 0));
+
+    if (shouldIncludeSignatureMeal) {
+      slots.push({
+        type: 'signature_meal',
+        traitSource: 'authenticity', // Food lovers care about authentic experiences
+        traitValue: traits.authenticity || 0,
+        description: 'One signature meal (local favorite + signature dish; not necessarily fine dining)',
+        // Important: do not default to “renowned/must-try” language (often pushes Michelin / luxury).
+        validationTags: ['signature-dining', 'culinary', 'local-cuisine', 'local-favorite', 'great-food']
+      });
+    }
   }
   
   // History buff detection
@@ -159,12 +177,14 @@ export function deriveForcedSlots(
   
   // Relaxed pace (trait <= -3 means relaxed)
   if ((traits.pace ?? 0) <= -3) {
+    // IMPORTANT: A relaxed pace should not automatically mean “spa”.
+    // This was the primary source of “spa every day” suggestions.
     slots.push({
       type: 'linger_block',
       traitSource: 'pace',
       traitValue: traits.pace || 0,
-      description: 'One linger block (café, spa, scenic sit - min 90 minutes)',
-      validationTags: ['relaxation', 'café', 'spa', 'scenic', 'leisure', 'slow-pace', 'unwind']
+      description: 'One linger block (café, scenic sit, park, slow lunch - min 90 minutes)',
+      validationTags: ['relaxation', 'café', 'scenic', 'leisure', 'slow-pace', 'unwind', 'park', 'people-watching']
     });
   }
   
