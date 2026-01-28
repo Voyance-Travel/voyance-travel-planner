@@ -2456,29 +2456,8 @@ async function buildTravelDNAContext(
     personaSection += `\nArchetype Blend: ${blendParts.join(' + ')}`;
     personaSection += `\nConfidence: ${Math.round(confidence)}/100 (${confidenceLabel})`;
     
-    // Add archetype descriptions for AI context
-    // NOTE: Archetype descriptions are no longer hardcoded. Guidance is derived
-    // dynamically from the canonical profile (primary_archetype_name, trait_scores, etc.)
-    // via buildPersonaManuscript() in prompt-library.ts.
-    const archetypeDescriptions: Record<string, string> = {
-      'Cultural Curator': 'Prioritize museums, historical sites, art galleries, architectural tours, and authentic local experiences',
-      'Wellness Wanderer': 'Include spa visits, yoga sessions, meditation spots, thermal baths, and peaceful nature retreats',
-      'Wilderness Pioneer': 'Focus on hiking, nature reserves, outdoor adventures, wildlife, and scenic viewpoints',
-      'Urban Explorer': 'Emphasize city walks, street art, local neighborhoods, rooftop bars, and vibrant nightlife',
-      'Culinary Voyager': 'Center activities around food markets, cooking classes, wine tastings, and renowned restaurants',
-      'Luxury Seeker': 'Recommend premium experiences, fine dining, exclusive tours, and high-end establishments',
-      'Budget Adventurer': 'Focus on free attractions, street food, walking tours, and value experiences',
-      'Social Butterfly': 'Include group tours, communal dining, festivals, and opportunities to meet locals',
-      'Slow Traveler': 'Fewer activities per day, longer experiences, cafe culture, and immersive local living',
-      'Thrill Seeker': 'Adventure sports, extreme activities, adrenaline experiences, and unique challenges',
-      // All other DNA archetypes are handled via persona manuscript - no hardcoding.
-    };
-    
-    const topArchetype = archetypes[0]?.name?.replace(/_/g, ' ');
-    if (topArchetype && archetypeDescriptions[topArchetype]) {
-      personaSection += `\n\n🎯 PRIMARY ARCHETYPE GUIDANCE:`;
-      personaSection += `\n   ${archetypeDescriptions[topArchetype]}`;
-    }
+    // Archetype guidance is provided via buildPersonaManuscript() (prompt-library.ts)
+    // using canonical profile columns + traits, not hardcoded maps here.
     
     // Add guidance based on confidence
     if (confidence < 60) {
