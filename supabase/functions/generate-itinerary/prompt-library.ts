@@ -599,11 +599,13 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
     budget: {
       low: 'splurge-forward, money is no object',
       high: 'value-focused, strategic spending',
-      implication: (s) => s <= -5
-        ? 'Premium everything. Don\'t mention prices or "value".'
-        : s >= 5
-        ? 'Highlight value. Avoid overpriced tourist traps. Smart splurges only.'
-        : 'Balance quality and value.'
+      implication: (s) => {
+        if (s <= -5) return 'Premium everything. Money is no object. Michelin and luxury expected.';
+        if (s <= -2) return 'Willing to splurge. High-end options welcome but not required.';
+        if (s <= 2)  return 'Balance quality and value. Occasional splurge OK, but justify it.';
+        if (s <= 5)  return 'Value-conscious. Avoid luxury unless exceptional value. No Michelin unless signature meal.';
+        return 'Strict budget. Best value only. No luxury. No overpriced tourist spots.';
+      }
     }
   };
   
