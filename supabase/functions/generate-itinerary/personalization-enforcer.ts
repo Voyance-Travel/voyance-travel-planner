@@ -184,7 +184,8 @@ export function deriveForcedSlots(
       traitSource: 'pace',
       traitValue: traits.pace || 0,
       description: 'One linger block (café, scenic sit, park, slow lunch - min 90 minutes)',
-      validationTags: ['relaxation', 'café', 'scenic', 'leisure', 'slow-pace', 'unwind', 'park', 'people-watching']
+      // Avoid spa-adjacent words like “relaxation/unwind” which were repeatedly fulfilled as baths/spas.
+      validationTags: ['café', 'scenic', 'leisure', 'slow-pace', 'park', 'people-watching', 'slow-lunch', 'gelato']
     });
   }
   
@@ -208,8 +209,9 @@ export function deriveForcedSlots(
       type: 'wellness_moment',
       traitSource: 'transformation',
       traitValue: traits.transformation || 0,
-      description: 'One wellness or growth-focused moment',
-      validationTags: ['wellness', 'meditation', 'yoga', 'spa', 'reflection', 'nature', 'mindfulness']
+      description: 'One mindful reset / growth-focused moment (quiet, nature, reflection)',
+      // Do NOT include spa/baths/hammams as a default “wellness” fulfillment.
+      validationTags: ['mindfulness', 'meditation', 'reflection', 'nature', 'quiet', 'journaling', 'sunrise', 'garden']
     });
   }
   
@@ -259,8 +261,9 @@ export function deriveForcedSlots(
         type: 'vip_experience',
         traitSource: 'comfort',
         traitValue: traits.comfort || 0,
-        description: 'One VIP/exclusive access experience (priority entry, private tour, luxury venue)',
-        validationTags: ['vip', 'exclusive', 'luxury', 'private', 'premium', 'priority', 'upscale', 'high-end']
+        // Avoid forcing VIP/private/luxury language; keep it “high-comfort” instead.
+        description: 'One high-comfort highlight (well-reviewed, convenient, low-hassle; not necessarily VIP)',
+        validationTags: ['high-comfort', 'well-reviewed', 'convenient', 'skip-hassle', 'easy-logistics', 'premium-feel']
       });
     }
   }
@@ -277,7 +280,8 @@ export function deriveForcedSlots(
       traitSource: 'context',
       traitValue: 0,
       description: 'One romantic/intimate experience (sunset spot, couples activity, special dinner)',
-      validationTags: ['romantic', 'couples', 'intimate', 'sunset', 'scenic', 'candlelit', 'private', 'date-night']
+      // Remove “private” tag to avoid nudging the model toward “private tours”.
+      validationTags: ['romantic', 'couples', 'intimate', 'sunset', 'scenic', 'candlelit', 'date-night', 'cozy']
     });
   }
   

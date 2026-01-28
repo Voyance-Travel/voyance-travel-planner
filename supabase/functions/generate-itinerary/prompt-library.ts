@@ -508,17 +508,17 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
     guardrails.push(
       isPremiumTrip
         ? '3) This is a premium/luxury trip tier, so elevated venues are acceptable—but still match the identity.'
-        : '3) This is NOT a premium/luxury trip tier. Avoid: “private tour”, VIP/skip-the-line framing, five-star hotel spa framing, and “luxury/splurge/premium/exclusive” wording unless explicitly requested. Do not put the word “Luxury” in activity titles.'
+        : '3) This is NOT a premium/luxury trip tier. STRICTLY AVOID: “private tour”, VIP/skip-the-line framing, five-star hotel spa framing, and “luxury/splurge/premium/exclusive” wording unless explicitly requested. NEVER put “Luxury”, “VIP”, or “Private” in activity titles.'
     );
+
+    if (!isPremiumTrip) {
+      guardrails.push('4) DEFAULT TOUR STYLE: self-guided or small-group. Do NOT recommend private tours by default.');
+      guardrails.push('5) VENUE RULE: Do not anchor activities at 5-star hotel venues (Waldorf/Westin/Four Seasons style) unless the traveler explicitly selected that hotel.');
+      guardrails.push('6) RESTORATION RULE: If you need downtime, use parks, gardens, riverside walks, scenic viewpoints, cafés, slow lunches, bookshops. Avoid spa/baths/hammams/massage unless explicitly requested.');
+    }
 
     // NOTE: No hardcoded archetype-specific guardrails here.
     // All archetypes derive behavior from canonical profile columns and trait scores.
-
-    // Practical implementation note: if a restorative activity is needed on non-premium tiers,
-    // prefer local public baths/thermal pools/hammams over hotel-branded “luxury spa” experiences.
-    if (!isPremiumTrip) {
-      guardrails.push('6) If adding a spa/restoration block, prefer local public baths/thermal pools/hammams or simple massage studios—avoid five-star hotel spa branding by default.');
-    }
 
     if (guardrails.length > 0) {
       lines.push(`🧭 IDENTITY OVERRIDES (HIGHEST PRIORITY)`);
@@ -575,7 +575,7 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
       implication: (s) => s <= -5
         ? 'Budget options are preferred. Don\'t prioritize comfort over cost.'
         : s >= 5
-        ? 'Premium experiences, fine dining, luxury venues, skip-the-line, private access.'
+        ? 'High comfort focus: well-reviewed, convenient, low-hassle experiences. Avoid “luxury/private/VIP” framing unless explicitly requested.'
         : 'Balance of occasional upgrades and value options (avoid “luxury/splurge” framing unless asked).'
     },
     planning: {
