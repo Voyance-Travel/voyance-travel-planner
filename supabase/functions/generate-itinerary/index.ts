@@ -714,9 +714,265 @@ function deriveBudgetIntent(
 }
 
 // =============================================================================
-// UNIFIED USER CONTEXT NORMALIZATION
-// Merges Quiz (DNA), Preferences, and Adjustments (Overrides) into single context
+// EXPLICIT BUDGET CONSTRAINTS BLOCK WITH "DO NOT" RULES
 // =============================================================================
+
+function buildBudgetConstraintsBlock(budgetTier: string, budgetScore: number): string {
+  const tier = (budgetTier || 'moderate').toLowerCase();
+  
+  // Map "moderate" to "standard" for consistency
+  const normalizedTier = tier === 'moderate' ? 'standard' : tier;
+  
+  const constraints: Record<string, string> = {
+    budget: `
+${'='.repeat(70)}
+🚫 BUDGET CONSTRAINTS (STRICT - BUDGET TIER)
+${'='.repeat(70)}
+
+DO NOT INCLUDE:
+- Michelin-starred restaurants
+- Hotel restaurants or rooftop bars at luxury hotels (Hassler, Waldorf, Four Seasons, etc.)
+- Private tours or VIP experiences
+- Spa treatments or wellness packages
+- Anything described as "luxury", "exclusive", or "premium"
+- Restaurants over €40 per person
+- Activities over €30 per person
+- Wine pairings or tasting menus
+
+DO INCLUDE:
+- Local trattorias and osterias
+- Street food and markets
+- Free attractions and landmarks
+- Self-guided walks and neighborhood exploration
+- Restaurants where locals eat (not tourist hotspots)
+- Aperitivo spots with free snacks
+
+Price is a feature, not a constraint to work around.
+`,
+    economy: `
+${'='.repeat(70)}
+💰 BUDGET CONSTRAINTS (ECONOMY TIER)
+${'='.repeat(70)}
+
+AVOID:
+- Michelin-starred restaurants
+- Private tours
+- VIP/skip-the-line packages
+- Hotel restaurants at luxury properties
+- Anything over €50 per person for dining
+- Activities over €40 per person
+
+PREFER:
+- Well-reviewed local restaurants (€15-35 per person)
+- Free and low-cost attractions
+- Self-guided exploration
+- Markets and street food
+`,
+    standard: `
+${'='.repeat(70)}
+💰 BUDGET CONSTRAINTS (MODERATE/STANDARD TIER)
+${'='.repeat(70)}
+
+LIMIT:
+- Maximum 1 "splurge" meal per trip (€80+ per person)
+- No Michelin-starred restaurants unless it's the designated signature_meal slot
+- No hotel restaurants at 5-star properties (Hassler, St. Regis, Four Seasons, etc.)
+- No private tours unless specifically requested
+- No spa treatments unless specifically requested
+
+PREFER:
+- Well-reviewed local restaurants (€25-50 per person)
+- Highly-rated affordable experiences
+- Quality over flash
+- Local favorites over tourist magnets
+
+WORD CHOICE:
+- Do NOT use "luxury" in activity titles or descriptions
+- Do NOT use "exclusive" or "VIP" framing
+- Do NOT describe as "splurge-forward" - this user is value-conscious
+`,
+    comfort: `
+${'='.repeat(70)}
+💰 BUDGET CONSTRAINTS (COMFORT TIER)
+${'='.repeat(70)}
+
+ALLOWED:
+- Higher-end restaurants (€50-80 per person)
+- 1-2 "special occasion" meals per trip
+- Quality-focused experiences
+- Skip-the-line tickets (not VIP, just convenience)
+
+AVOID:
+- Private tours (prefer small group)
+- Hotel spa packages at ultra-luxury properties
+- Michelin 2-3 star (1 star OK if booked as signature meal)
+`,
+    premium: `
+${'='.repeat(70)}
+💫 BUDGET TIER: PREMIUM
+${'='.repeat(70)}
+
+ALLOWED:
+- Elevated dining experiences
+- Private tours for special interests
+- VIP access where it adds value
+- Michelin-starred restaurants (1 per trip max unless requested)
+
+MAINTAIN BALANCE:
+- Still mix high-end with authentic local spots
+- Not every meal needs to be expensive
+`,
+    luxury: `
+${'='.repeat(70)}
+👑 BUDGET TIER: LUXURY
+${'='.repeat(70)}
+
+Premium experiences expected. Michelin dining, VIP access, and exclusive experiences are appropriate.
+Prioritize exclusivity and unique access over price considerations.
+`
+  };
+  
+  return constraints[normalizedTier] || constraints.standard;
+}
+
+// =============================================================================
+// ARCHETYPE-SPECIFIC CONSTRAINTS
+// =============================================================================
+
+function buildArchetypeConstraintsBlock(archetype?: string): string {
+  if (!archetype) return '';
+  
+  const normalizedArchetype = archetype.toLowerCase().replace(/\s+/g, '_');
+  
+  const archetypeAvoid: Record<string, string[]> = {
+    'flexible_wanderer': [
+      'structured group tours',
+      'luxury dining establishments',
+      'spa treatments or wellness packages',
+      'VIP or exclusive experiences',
+      'hotel restaurants at luxury properties',
+      'anything requiring reservations weeks in advance',
+      'Michelin-starred restaurants',
+      'private tours'
+    ],
+    'beach_therapist': [
+      'spa packages (they want beach relaxation, not spa treatments)',
+      'luxury resorts dining',
+      'fine dining with dress codes',
+      'packed itineraries',
+      'early morning activities',
+      'high-energy adventure sports'
+    ],
+    'slow_traveler': [
+      'rushed experiences',
+      'tourist hotspots at peak times',
+      'back-to-back activities',
+      'anything described as "must-see"',
+      'group tours',
+      'activities before 10am'
+    ],
+    'cultural_curator': [
+      'tourist traps',
+      'chain restaurants',
+      'generic shopping malls',
+      'beach lounging',
+      'nightclub activities'
+    ],
+    'culinary_cartographer': [
+      'chain restaurants',
+      'hotel buffets',
+      'tourist-trap restaurants',
+      'fast food',
+      'meals without local character'
+    ],
+    'adrenaline_architect': [
+      'spa and relaxation',
+      'slow-paced activities',
+      'museum-heavy itineraries',
+      'shopping trips',
+      'leisurely lunches'
+    ],
+    'luxury_luminary': [
+      'budget options',
+      'street food as main meals',
+      'hostels',
+      'public transit',
+      'self-guided tours'
+    ],
+    'mindful_explorer': [
+      'crowded tourist spots',
+      'loud nightlife',
+      'rushed activities',
+      'group tours over 8 people',
+      'aggressive shopping areas'
+    ],
+    'sanctuary_seeker': [
+      'group activities',
+      'social dining experiences',
+      'crowded attractions',
+      'nightlife',
+      'high-energy activities'
+    ],
+  };
+  
+  const archetypeInclude: Record<string, string[]> = {
+    'flexible_wanderer': [
+      'self-guided neighborhood walks',
+      'local cafés and bakeries',
+      'hidden viewpoints',
+      'afternoon lingering spots',
+      'authentic local restaurants (not tourist-facing)'
+    ],
+    'beach_therapist': [
+      'beach time',
+      'sunset viewing spots',
+      'waterfront cafés',
+      'relaxed outdoor dining',
+      'coastal walks'
+    ],
+    'slow_traveler': [
+      'extended café breaks',
+      'park visits',
+      'local markets',
+      'long leisurely lunches',
+      'neighborhood exploration'
+    ],
+  };
+  
+  const avoid = archetypeAvoid[normalizedArchetype];
+  const include = archetypeInclude[normalizedArchetype];
+  
+  if (!avoid && !include) return '';
+  
+  const formattedArchetype = archetype.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  
+  let block = `
+${'='.repeat(70)}
+🎭 ARCHETYPE CONSTRAINTS: ${formattedArchetype}
+${'='.repeat(70)}
+`;
+  
+  if (avoid && avoid.length > 0) {
+    block += `
+This traveler specifically DOES NOT want:
+${avoid.map(a => `  ❌ ${a}`).join('\n')}
+`;
+  }
+  
+  if (include && include.length > 0) {
+    block += `
+This traveler LOVES:
+${include.map(a => `  ✅ ${a}`).join('\n')}
+`;
+  }
+  
+  block += `
+Respect their travel identity. These are not suggestions — they are requirements.
+`;
+  
+  return block;
+}
+
 
 interface NormalizedTraits {
   planning: number;    // -10 to +10
@@ -3501,6 +3757,12 @@ async function generateSingleDayWithRetry(
 
       // Build the system prompt with FULL DNA injection + Destination Essentials
       // The GENERATION HIERARCHY establishes clear conflict resolution priorities
+      // Build explicit budget constraints block with "DO NOT" rules
+      const budgetConstraintsBlock = buildBudgetConstraintsBlock(context.budgetTier || 'moderate', context.travelerDNA?.traits?.budget || 0);
+      
+      // Build archetype-specific constraints
+      const archetypeConstraintsBlock = buildArchetypeConstraintsBlock(context.travelerDNA?.primaryArchetype);
+      
       const generationHierarchy = `
 ${'='.repeat(70)}
 ⚖️ GENERATION HIERARCHY — CONFLICT RESOLUTION RULES
@@ -3537,6 +3799,10 @@ When rules conflict, follow this priority order (1 = highest):
 
 CRITICAL: If in doubt, favor the ARCHETYPE IDENTITY over trait scores.
 ${'='.repeat(70)}
+
+${budgetConstraintsBlock}
+
+${archetypeConstraintsBlock}
 `;
 
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
