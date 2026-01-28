@@ -112,6 +112,26 @@ import {
 } from './archetype-constraints.ts';
 
 // =============================================================================
+// PHASE 12: EXPERIENCE AFFINITY - What Each Archetype PRIORITIZES (the "pull" side)
+// =============================================================================
+import {
+  buildExperienceGuidancePrompt,
+  getExperienceAffinity,
+  getTimePreferences,
+  getEnvironmentPreferences,
+  getPhysicalIntensity,
+} from './experience-affinity.ts';
+
+// =============================================================================
+// PHASE 12B: DESTINATION × ARCHETYPE GUIDES - City-specific recommendations
+// =============================================================================
+import {
+  buildDestinationGuidancePrompt,
+  hasDestinationGuide,
+  getArchetypeDestinationGuide,
+} from './destination-guides.ts';
+
+// =============================================================================
 // PHASE 10: DESTINATION ESSENTIALS - Non-Negotiable Landmarks & Hidden Gems
 // Now with DB-driven data + freshness-based Perplexity enrichment
 // =============================================================================
@@ -3795,6 +3815,21 @@ async function generateSingleDayWithRetry(
       const archetypeDefinition = getArchetypeDefinition(context.travelerDNA?.primaryArchetype);
       const maxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
       
+      // =========================================================================
+      // PHASE 12: Experience Affinity - What TO prioritize (the "pull" side)
+      // =========================================================================
+      const experienceGuidancePrompt = buildExperienceGuidancePrompt(
+        context.travelerDNA?.primaryArchetype
+      );
+      
+      // =========================================================================
+      // PHASE 12B: Destination × Archetype Guide - City-specific recommendations
+      // =========================================================================
+      const destinationGuidancePrompt = buildDestinationGuidancePrompt(
+        context.destination,
+        context.travelerDNA?.primaryArchetype || 'balanced_story_collector'
+      );
+      
       const generationHierarchy = `
 ${'='.repeat(70)}
 ⚖️ GENERATION HIERARCHY — CONFLICT RESOLUTION RULES
@@ -3812,30 +3847,43 @@ When rules conflict, follow this priority order (1 = highest):
    → "Beach Therapist" = beach-focused, NOT spa-focused. No spa treatments.
    → If an activity violates the archetype's avoid list, DO NOT INCLUDE IT
 
-3. BUDGET CONSTRAINTS
+3. EXPERIENCE AFFINITY (what TO prioritize - the "pull" side)
+   → Each archetype has HIGH/MEDIUM/LOW/NEVER experience categories
+   → PRIORITIZE experiences from HIGH categories
+   → AVOID experiences from NEVER categories (hard block)
+
+4. DESTINATION-SPECIFIC GUIDE (city × archetype recommendations)
+   → When available, use mustDo/perfectFor/hiddenGems specific to this destination
+   → These are CURATED for this archetype in THIS city
+
+5. BUDGET CONSTRAINTS
    → Budget tier + budget trait score determine price limits
    → Value-focused travelers: NO Michelin, NO hotel bars, NO €100+ experiences
    → When archetype conflicts with budget, budget wins on COST, archetype wins on STYLE
 
-4. PACING CONSTRAINTS
+6. PACING CONSTRAINTS
    → Pace trait determines activity density and timing
    → Pace -5 = max 2-3 activities, start at 10am, 60min buffers, unscheduled blocks
    → These are HARD LIMITS, not suggestions
 
-5. VARIETY RULES
-   → Max 1 spa per trip (unless Zen Seeker)
-   → Max 1 Michelin per trip (unless Luxury Luminary)
+7. VARIETY RULES
+   → Max 1 spa per trip (unless Retreat Regular or Luxury Luminary)
+   → Max 1 Michelin per trip (unless Luxury Luminary or Culinary Cartographer)
    → No same-category activities back-to-back
 
-6. TRAIT MODIFIERS (lowest priority — fine-tuning only)
+8. TRAIT MODIFIERS (lowest priority — fine-tuning only)
    → Traits adjust timing and intensity within the above constraints
    → Traits do NOT override archetype identity, budget, or pacing constraints
 
-CRITICAL: The archetype's "avoid" list is NON-NEGOTIABLE. If "Flexible Wanderer" avoids spa treatments, there are ZERO spa treatments.
+CRITICAL: The archetype's "NEVER" experience categories and "avoid" list are NON-NEGOTIABLE.
 
 ${'='.repeat(70)}
 
 ${comprehensiveConstraints}
+
+${experienceGuidancePrompt}
+
+${destinationGuidancePrompt}
 `;
 
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
