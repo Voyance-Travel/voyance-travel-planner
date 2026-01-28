@@ -98,6 +98,20 @@ import {
 } from './prompt-library.ts';
 
 // =============================================================================
+// PHASE 11: COMPREHENSIVE ARCHETYPE CONSTRAINTS - What Archetypes ACTUALLY Mean
+// =============================================================================
+import {
+  buildAllConstraints,
+  buildArchetypeConstraintsBlock as buildArchetypeConstraintsBlockNew,
+  buildBudgetConstraints as buildBudgetConstraintsNew,
+  buildTripWideVarietyRules,
+  buildUnscheduledTimeRules,
+  buildPacingRules,
+  buildNamingRules,
+  getArchetypeDefinition,
+} from './archetype-constraints.ts';
+
+// =============================================================================
 // PHASE 10: DESTINATION ESSENTIALS - Non-Negotiable Landmarks & Hidden Gems
 // Now with DB-driven data + freshness-based Perplexity enrichment
 // =============================================================================
@@ -3757,11 +3771,29 @@ async function generateSingleDayWithRetry(
 
       // Build the system prompt with FULL DNA injection + Destination Essentials
       // The GENERATION HIERARCHY establishes clear conflict resolution priorities
-      // Build explicit budget constraints block with "DO NOT" rules
-      const budgetConstraintsBlock = buildBudgetConstraintsBlock(context.budgetTier || 'moderate', context.travelerDNA?.traits?.budget || 0);
       
-      // Build archetype-specific constraints
-      const archetypeConstraintsBlock = buildArchetypeConstraintsBlock(context.travelerDNA?.primaryArchetype);
+      // ==========================================================================
+      // PHASE 11: COMPREHENSIVE CONSTRAINTS - What Archetypes ACTUALLY Mean
+      // ==========================================================================
+      // Use the new comprehensive constraint system that includes:
+      // 1. Full archetype definitions with meanings, violations, and day structure
+      // 2. Trip-wide variety rules (no spa every day, no Michelin every day)
+      // 3. Unscheduled time requirements for flexible archetypes
+      // 4. Pacing enforcement based on pace trait
+      // 5. Budget reality constraints with explicit price limits
+      // 6. Anti-gaming naming rules
+      const comprehensiveConstraints = buildAllConstraints(
+        context.travelerDNA?.primaryArchetype,
+        context.budgetTier,
+        {
+          pace: context.travelerDNA?.traits?.pace || 0,
+          budget: context.travelerDNA?.traits?.budget || 0
+        }
+      );
+      
+      // Get archetype day structure for activity limits
+      const archetypeDefinition = getArchetypeDefinition(context.travelerDNA?.primaryArchetype);
+      const maxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
       
       const generationHierarchy = `
 ${'='.repeat(70)}
@@ -3774,35 +3806,36 @@ When rules conflict, follow this priority order (1 = highest):
    → First-time visitors MUST see iconic landmarks (Colosseum in Rome, Eiffel Tower in Paris)
    → These are non-negotiable unless user explicitly says "skip"
 
-2. ARCHETYPE IDENTITY
-   → The PRIMARY/SECONDARY archetype defines WHO the traveler is
-   → "Flexible Wanderer" = loose pacing, self-guided, mid-range, NO luxury framing
-   → "Culinary Cartographer" = food-focused, market visits, cooking experiences
-   → The archetype identity ALWAYS wins over individual trait scores
+2. ARCHETYPE IDENTITY (critical - defines WHO the traveler is)
+   → The PRIMARY archetype's meaning, avoid list, and day structure are LAW
+   → "Flexible Wanderer" = unscheduled blocks, max 2 activities, NO luxury/spa/fine dining
+   → "Beach Therapist" = beach-focused, NOT spa-focused. No spa treatments.
+   → If an activity violates the archetype's avoid list, DO NOT INCLUDE IT
 
 3. BUDGET CONSTRAINTS
-   → Budget tier determines what's acceptable:
-     • "budget/mid-range" = NO private tours, NO VIP, NO "luxury" in titles
-     • "premium/luxury" = elevated venues acceptable
+   → Budget tier + budget trait score determine price limits
+   → Value-focused travelers: NO Michelin, NO hotel bars, NO €100+ experiences
    → When archetype conflicts with budget, budget wins on COST, archetype wins on STYLE
 
-4. FORCED SLOTS (archetype-driven experiences)
-   → These are guaranteed experiences based on archetype (not traits)
-   → E.g., Flexible Wanderer gets "linger_block" (café, park, slow moment)
-   → They are STYLE-appropriate to the archetype, not generic luxury
+4. PACING CONSTRAINTS
+   → Pace trait determines activity density and timing
+   → Pace -5 = max 2-3 activities, start at 10am, 60min buffers, unscheduled blocks
+   → These are HARD LIMITS, not suggestions
 
-5. TRAIT MODIFIERS (lowest priority — fine-tuning only)
-   → Traits adjust TIMING and INTENSITY, not CONTENT type
-   → Pace affects start time (relaxed = 10am, packed = 8am)
-   → Pace affects activity count (relaxed = 4-5, packed = 7-8)
-   → Traits do NOT override archetype identity or budget constraints
+5. VARIETY RULES
+   → Max 1 spa per trip (unless Zen Seeker)
+   → Max 1 Michelin per trip (unless Luxury Luminary)
+   → No same-category activities back-to-back
 
-CRITICAL: If in doubt, favor the ARCHETYPE IDENTITY over trait scores.
+6. TRAIT MODIFIERS (lowest priority — fine-tuning only)
+   → Traits adjust timing and intensity within the above constraints
+   → Traits do NOT override archetype identity, budget, or pacing constraints
+
+CRITICAL: The archetype's "avoid" list is NON-NEGOTIABLE. If "Flexible Wanderer" avoids spa treatments, there are ZERO spa treatments.
+
 ${'='.repeat(70)}
 
-${budgetConstraintsBlock}
-
-${archetypeConstraintsBlock}
+${comprehensiveConstraints}
 `;
 
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
@@ -3842,13 +3875,20 @@ ${flightHotelContext}${retryPrompt}`;
 DATE: ${date}
 TRAVELERS: ${context.travelers}
 BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)
-PACE: ${context.pace || 'moderate'}
+ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
+MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - this is a HARD LIMIT)
 
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
-NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style (e.g., if earlier days were too "luxury", you must still follow the Travel DNA identity + budget intent above).
+NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
-Generate activities for this day following ALL quality rules and DNA constraints above. The number of activities should match the maxActivities constraint from the DNA profile. Focus on VARIETY and PERSONALIZATION.`;
+CRITICAL REMINDERS:
+1. Maximum ${maxActivitiesFromArchetype} scheduled activities. Going over = FAILURE.
+2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
+3. Check the budget constraints. If value-focused, no €100+ experiences.
+4. ${context.travelerDNA?.primaryArchetype === 'flexible_wanderer' || context.travelerDNA?.primaryArchetype === 'slow_traveler' || (context.travelerDNA?.traits?.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
+
+Generate activities for this day following ALL constraints above.`;
 
       let data: any = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
