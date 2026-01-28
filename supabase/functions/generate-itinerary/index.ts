@@ -3500,7 +3500,48 @@ async function generateSingleDayWithRetry(
           );
 
       // Build the system prompt with FULL DNA injection + Destination Essentials
+      // The GENERATION HIERARCHY establishes clear conflict resolution priorities
+      const generationHierarchy = `
+${'='.repeat(70)}
+⚖️ GENERATION HIERARCHY — CONFLICT RESOLUTION RULES
+${'='.repeat(70)}
+
+When rules conflict, follow this priority order (1 = highest):
+
+1. DESTINATION ESSENTIALS (highest priority)
+   → First-time visitors MUST see iconic landmarks (Colosseum in Rome, Eiffel Tower in Paris)
+   → These are non-negotiable unless user explicitly says "skip"
+
+2. ARCHETYPE IDENTITY
+   → The PRIMARY/SECONDARY archetype defines WHO the traveler is
+   → "Flexible Wanderer" = loose pacing, self-guided, mid-range, NO luxury framing
+   → "Culinary Cartographer" = food-focused, market visits, cooking experiences
+   → The archetype identity ALWAYS wins over individual trait scores
+
+3. BUDGET CONSTRAINTS
+   → Budget tier determines what's acceptable:
+     • "budget/mid-range" = NO private tours, NO VIP, NO "luxury" in titles
+     • "premium/luxury" = elevated venues acceptable
+   → When archetype conflicts with budget, budget wins on COST, archetype wins on STYLE
+
+4. FORCED SLOTS (archetype-driven experiences)
+   → These are guaranteed experiences based on archetype (not traits)
+   → E.g., Flexible Wanderer gets "linger_block" (café, park, slow moment)
+   → They are STYLE-appropriate to the archetype, not generic luxury
+
+5. TRAIT MODIFIERS (lowest priority — fine-tuning only)
+   → Traits adjust TIMING and INTENSITY, not CONTENT type
+   → Pace affects start time (relaxed = 10am, packed = 8am)
+   → Pace affects activity count (relaxed = 4-5, packed = 7-8)
+   → Traits do NOT override archetype identity or budget constraints
+
+CRITICAL: If in doubt, favor the ARCHETYPE IDENTITY over trait scores.
+${'='.repeat(70)}
+`;
+
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
+
+${generationHierarchy}
 
 ${qualityRules}
 
