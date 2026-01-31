@@ -1,246 +1,252 @@
 
 
-# Deep Audit: Why Itinerary Generation Produces Identical Outputs
+# Simplifying the Itinerary Generation System
 
-## Summary of Findings
+## The Problem: 14 Modules, 8,000+ Lines, Multiple Failure Points
 
-After a comprehensive code audit, the situation is **more nuanced than a simple missing import**. The constraint system IS wired correctly, but there are **multiple potential failure points** that could cause the AI to ignore the constraints.
+The current system has grown organically into an overly complex architecture with:
+
+| Module | Lines | Purpose | Status |
+|--------|-------|---------|--------|
+| `index.ts` | 8,220 | Main orchestrator + duplicate logic | BLOATED |
+| `archetype-constraints.ts` | 1,984 | 27 archetype definitions + avoid lists | OK |
+| `experience-affinity.ts` | 501 | What to prioritize per archetype | OK |
+| `destination-guides.ts` | 463 | City × archetype recommendations | OK |
+| `personalization-enforcer.ts` | 957 | Forced slots, schedule math | REDUNDANT |
+| `prompt-library.ts` | 1,466 | Another prompt builder | REDUNDANT |
+| `truth-anchors.ts` | ??? | Venue verification | RARELY USED |
+| `explainability.ts` | ??? | Why explanations | OPTIONAL |
+| `cold-start.ts` | ??? | Fallback handling | REDUNDANT |
+| `feedback-instrumentation.ts` | ??? | Learning from swaps | UNUSED |
+| `geographic-coherence.ts` | ??? | Zone optimization | OPTIONAL |
+| `destination-essentials.ts` | ??? | Must-see landmarks | PARTIAL |
+| `destination-enrichment.ts` | ??? | DB enrichment | UNUSED |
+| `golden-personas.ts` | ??? | Test personas | DEV ONLY |
+
+**Root causes of failure:**
+1. **Two code paths** (generate-day vs generateSingleDayWithRetry) that drifted apart
+2. **14 imports** that create a fragile chain - one broken link = generic output
+3. **4 different places** to look for archetype (all with different priorities)
+4. **3 different trait score formats** (trait_scores, travel_dna.trait_scores, travel_dna_v2.trait_scores)
+5. **Validation happening too late** (after generation, not during prompt building)
 
 ---
 
-## Architecture Overview
+## Proposed Solution: "Single Source of Truth" Architecture
+
+### Core Principle
+**One unified prompt builder. One data fetcher. One archetype resolver. Zero redundancy.**
+
+### New Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          FRONTEND FLOW                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  /start → /trip/:id?generate=true → ItineraryGenerator                      │
-│            ↓                                                                │
-│  useItineraryGeneration.generateItinerary()                                 │
-│            ↓                                                                │
-│  generateItineraryProgressive() ←── TRIES FIRST (always)                    │
-│            ↓                                                                │
-│  supabase.functions.invoke('generate-itinerary', {action: 'generate-day'})  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                   ↓
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      EDGE FUNCTION FLOW                                     │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  1. Load Travel DNA (getTravelDNAV2)                                        │
-│  2. Build Travel DNA Context (buildTravelDNAContext)                        │
-│  3. Extract archetype (lines 6828-6831)                                     │
-│  4. Build constraints:                                                      │
-│     - buildAllConstraints()                                                 │
-│     - buildExperienceGuidancePrompt()                                       │
-│     - buildDestinationGuidancePrompt()                                      │
-│  5. Assemble generationHierarchy (lines 6856-6904)                          │
-│  6. Build systemPrompt + userPrompt                                         │
-│  7. Call Lovable AI Gateway (google/gemini-3-flash-preview)                 │
-│  8. Parse and return day                                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    generate-itinerary/index.ts                  │
+├─────────────────────────────────────────────────────────────────┤
+│  1. loadTravelerProfile()  ← SINGLE function, returns unified   │
+│                               object or fails with clear error  │
+│                                                                 │
+│  2. buildPrompt()          ← SINGLE function, takes profile +   │
+│                               trip, returns system + user       │
+│                                                                 │
+│  3. generateDay()          ← SINGLE AI call, no retries needed  │
+│                               if prompt is correctly built      │
+└─────────────────────────────────────────────────────────────────┘
+
+                              ↓ imports only
+
+┌─────────────────────────────────────────────────────────────────┐
+│              archetype-data.ts (MERGED MODULE)                  │
+├─────────────────────────────────────────────────────────────────┤
+│  - ARCHETYPE_DEFINITIONS (identity, meaning, avoid, dayStructure)
+│  - EXPERIENCE_AFFINITY (high/medium/low/never per archetype)    │
+│  - TIME_PREFERENCES (start/end times)                           │
+│  - ENVIRONMENT_PREFERENCES (indoor/outdoor, crowds)             │
+│  - PHYSICAL_INTENSITY (walking hours)                           │
+│  - DESTINATION_GUIDES (city × archetype, lazily loaded)         │
+│                                                                 │
+│  One function: getFullArchetypeContext(archetype, destination)  │
+│  Returns: EVERYTHING needed for prompt in one object            │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Issue #1: No Logging Confirms Constraints Are Sent
+## Technical Implementation Plan
 
-**Problem**: There is no log statement that confirms the full constraint block is actually being injected into the prompt sent to the AI.
+### Phase 1: Create Unified Traveler Profile Loader
 
-**Evidence**:
-- Line 6833 logs: `[generate-day] Building constraints for archetype: ${primaryArchetype}`
-- But there's **no log of the actual constraints built** or their length
-- We cannot verify from logs if `buildAllConstraints()` returned empty or full content
-
-**Fix**: Add diagnostic logging to confirm the constraint content.
-
----
-
-## Issue #2: Archetype Extraction May Fail Silently
-
-**Problem**: If Travel DNA is missing or the archetype path fails, it falls back to `'balanced_story_collector'` without explicit warning.
-
-**Code at lines 6828-6830**:
-```typescript
-const archetypeMatches = travelDNA?.archetype_matches || travelDNA?.travel_dna_v2?.archetype_matches;
-const primaryArchetype = Array.isArray(archetypeMatches) ? archetypeMatches[0]?.name : 'balanced_story_collector';
-```
-
-**Problem Details**:
-- This doesn't check `travelDNA?.travel_dna?.primary_archetype_name` (the canonical column)
-- Database shows `primary_archetype_name = 'flexible_wanderer'` directly on the row, but this code looks for `archetype_matches` which is NULL for many users
-- Result: Falls back to `balanced_story_collector` which has **no strong constraints**
-
-**Database Evidence**:
-```
-user_id: 2c87e477-... 
-primary_archetype_name: flexible_wanderer    ← CORRECT VALUE
-archetype_matches_json: <nil>                 ← NULL!
-v2_archetypes: <nil>                          ← NULL!
-```
-
-**This is the root cause.** The code looks in the wrong place for the archetype.
-
----
-
-## Issue #3: `getArchetypeDefinition` Has a Permissive Fallback
-
-**Problem**: If archetype is undefined or not in the dictionary, it returns `DEFAULT_DEFINITION` which is very permissive.
+Create a single function that resolves all data sources into one canonical object:
 
 ```typescript
-// archetype-constraints.ts - DEFAULT_DEFINITION
-const DEFAULT_DEFINITION: ArchetypeDefinition = {
-  identity: "The Balanced Story Collector",
-  category: "Transformer",
-  meaning: `A balanced traveler with no strong extremes...`,
-  avoid: ['Extreme luxury', 'Extreme budget', 'Extreme pacing'],
-  dayStructure: {
-    maxScheduledActivities: 5,  // ← High limit
-    spaOK: true,                // ← Spa allowed
-    michelinOK: false,          // ← But Michelin not blocked
-    // ...
-  }
-};
-```
+// profile-loader.ts (NEW - ~150 lines)
 
-This explains why spa and Michelin keep appearing - if the archetype extraction fails, it falls back to a profile that permits luxury.
+interface TravelerProfile {
+  // Canonical fields - ONE source of truth
+  archetype: string;              // NEVER null, always resolved
+  archetypeDefinition: {...};     // Full definition, pre-fetched
+  traitScores: {
+    pace: number;
+    budget: number;
+    // ... all traits with defaults of 0
+  };
+  budgetTier: 'budget' | 'moderate' | 'premium' | 'luxury';
+  interests: string[];
+  dietaryRestrictions: string[];
+  avoidList: string[];
+  mobilityNeeds: string;
+  
+  // Resolution metadata
+  dataCompleteness: number;       // 0-100, for logging
+  resolvedFrom: string;           // For debugging
+}
 
----
-
-## Issue #4: `buildTravelDNAContext` Returns Empty Context
-
-**Problem at line 6415**:
-```typescript
-const dnaResult = await buildTravelDNAContext(travelDNA, null, budgetTier, supabase, userId);
-const travelDNAContext = dnaResult.context;
-```
-
-If `travelDNA` is null (user not logged in, or DNA not found), `buildTravelDNAContext` returns `{ context: '', budgetIntent: null }` at line 2659.
-
-**Downstream Impact**: The `preferenceContext` at line 6428 becomes just `basicPreferenceContext`, which doesn't include archetype constraints.
-
----
-
-## Issue #5: `itinerary_activities` Table Has Zero Rows
-
-**Database Query Results**:
-```
-total: 0, locked_true: 0, locked_false: 0
-```
-
-The `itinerary_activities` table is EMPTY. This means:
-1. Activities are being saved only to `trips.itinerary_data` (JSON blob)
-2. The normalized table isn't being populated
-3. Locked activity detection may be broken for regeneration
-
----
-
-## Issue #6: Budget Trait Score Not Being Normalized Correctly
-
-**Database shows**:
-```
-user_id: 2c87e477-...
-trait_scores_json: {"pace": -5.7, "budget": 0, ...}
-```
-
-A budget score of `0` lands in the "moderate" zone per `buildBudgetConstraints`:
-```typescript
-if (tier === 'budget' || budgetScore >= 3) { // VALUE-FOCUSED
-  return `DOES NOT WANT: Michelin, Spa...`
+async function loadTravelerProfile(userId: string, tripId: string): Promise<TravelerProfile> {
+  // 1. Load travel_dna_profiles row
+  // 2. Load trip row for budget tier
+  // 3. Resolve archetype with CLEAR priority:
+  //    a. profile.primary_archetype_name (canonical)
+  //    b. profile.travel_dna.primary_archetype_name
+  //    c. 'balanced_story_collector' + log warning
+  // 4. Resolve traits with defaults
+  // 5. Return unified object
+  // 
+  // NO FALLBACKS IN THE REST OF THE CODE - this function handles ALL resolution
 }
 ```
 
-With `budgetScore: 0`, this condition is FALSE, so the user gets moderate budget constraints (allows splurges).
+### Phase 2: Merge Archetype Data Modules
 
----
-
-## Technical Solution
-
-### Fix 1: Correct Archetype Extraction in `generate-day`
-
-Update lines 6828-6831 to check the canonical column FIRST:
+Combine `archetype-constraints.ts`, `experience-affinity.ts`, and `destination-guides.ts` into one:
 
 ```typescript
-// Current (BROKEN):
-const archetypeMatches = travelDNA?.archetype_matches || travelDNA?.travel_dna_v2?.archetype_matches;
-const primaryArchetype = Array.isArray(archetypeMatches) ? archetypeMatches[0]?.name : 'balanced_story_collector';
+// archetype-data.ts (MERGED - ~2500 lines, was 3000 across 3 files)
 
-// Fixed:
-const primaryArchetype = 
-  // 1. Check canonical column directly on profile
-  travelDNA?.primary_archetype_name ||
-  // 2. Check travel_dna blob (where quiz results are stored)
-  (travelDNA?.travel_dna as any)?.primary_archetype_name ||
-  // 3. Check v2 structure
-  (Array.isArray(travelDNA?.travel_dna_v2?.archetype_matches) 
-    ? travelDNA.travel_dna_v2.archetype_matches[0]?.name 
-    : null) ||
-  // 4. Check legacy archetype_matches
-  (Array.isArray(travelDNA?.archetype_matches) 
-    ? travelDNA.archetype_matches[0]?.name 
-    : null) ||
-  // 5. Fallback
-  'balanced_story_collector';
-
-console.log(`[generate-day] Resolved archetype: ${primaryArchetype} from DNA sources`);
-```
-
-### Fix 2: Add Diagnostic Logging
-
-Add logging after building constraints to verify they're populated:
-
-```typescript
-const comprehensiveConstraints = buildAllConstraints(primaryArchetype, budgetTier, {...});
-console.log(`[generate-day] Constraints built: ${comprehensiveConstraints.length} chars, archetype=${primaryArchetype}`);
-console.log(`[generate-day] Constraint preview: ${comprehensiveConstraints.substring(0, 200)}...`);
-```
-
-### Fix 3: Log Full Prompt Length
-
-Before calling the AI, log the total prompt size:
-
-```typescript
-console.log(`[generate-day] System prompt: ${systemPrompt.length} chars, User prompt: ${userPrompt.length} chars`);
-```
-
-### Fix 4: Use Trip's Budget Tier from DB
-
-The frontend passes `budgetTier` from the trip, but verify it's being read correctly:
-
-```typescript
-// After loading trip data
-console.log(`[generate-day] Trip budget tier from params: ${budgetTier}`);
-```
-
-### Fix 5: Fail-Safe Archetype Validation
-
-If archetype is still balanced_story_collector after all checks, log a warning:
-
-```typescript
-if (primaryArchetype === 'balanced_story_collector') {
-  console.warn(`[generate-day] ⚠️ Using fallback archetype. Travel DNA may be missing or incomplete for user ${userId}`);
+export function getFullArchetypeContext(
+  archetype: string,
+  destination?: string
+): ArchetypeContext {
+  return {
+    definition: ARCHETYPE_DEFINITIONS[archetype],
+    affinity: EXPERIENCE_AFFINITY[archetype],
+    timePrefs: TIME_PREFERENCES[archetype],
+    envPrefs: ENVIRONMENT_PREFERENCES[archetype],
+    intensity: PHYSICAL_INTENSITY[archetype],
+    destinationGuide: destination ? getDestinationGuide(destination, archetype) : null,
+    
+    // Pre-built prompt blocks (cached)
+    promptBlocks: {
+      identity: buildIdentityBlock(archetype),
+      constraints: buildConstraintsBlock(archetype),
+      affinity: buildAffinityBlock(archetype),
+      destinationGuide: destination ? buildDestinationBlock(destination, archetype) : ''
+    }
+  };
 }
 ```
 
+### Phase 3: Simplify the Main Handler
+
+Replace the 500+ line `generate-day` action with:
+
+```typescript
+// In index.ts (reduced from 8220 lines to ~3000)
+
+case 'generate-day': {
+  // 1. Load profile (ONE function, never fails silently)
+  const profile = await loadTravelerProfile(userId, tripId);
+  console.log(`[generate-day] Profile loaded: archetype=${profile.archetype}, completeness=${profile.dataCompleteness}%`);
+  
+  // 2. Get archetype context (ONE function, all data)
+  const archetypeContext = getFullArchetypeContext(profile.archetype, destination);
+  
+  // 3. Build prompt (ONE function, uses profile + context)
+  const { systemPrompt, userPrompt } = buildDayPrompt({
+    profile,
+    archetypeContext,
+    dayNumber,
+    totalDays,
+    date,
+    destination,
+    previousActivities,
+    flightData,
+    hotelData
+  });
+  
+  // 4. Generate (ONE AI call)
+  const day = await callAI(systemPrompt, userPrompt);
+  
+  return { day };
+}
+```
+
+### Phase 4: Delete Redundant Modules
+
+**DELETE entirely:**
+- `personalization-enforcer.ts` - Absorbed into profile loader
+- `cold-start.ts` - Handled in profile loader
+- `feedback-instrumentation.ts` - Unused
+- `destination-enrichment.ts` - Unused
+
+**KEEP but simplify:**
+- `destination-essentials.ts` - Keep for must-see landmarks
+- `geographic-coherence.ts` - Optional, run after generation
+- `truth-anchors.ts` - Optional, for venue verification
+
+**MERGE:**
+- `archetype-constraints.ts` + `experience-affinity.ts` + `destination-guides.ts` → `archetype-data.ts`
+- `prompt-library.ts` - Absorb useful parts into main index.ts
+
 ---
 
-## Files to Modify
+## What This Solves
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/generate-itinerary/index.ts` | Fix archetype extraction at lines 6828-6831, add diagnostic logging |
+| Problem | Solution |
+|---------|----------|
+| Archetype extracted from wrong field | ONE resolution function with clear priority |
+| Constraints not applied | Prompt built from unified context, never missing |
+| Two code paths diverging | ONE generation function for all cases |
+| Silent fallbacks | Explicit logging at profile load time |
+| 14 imports with fragile chain | 3 imports: profile-loader, archetype-data, AI caller |
+| 8000+ lines in main file | ~3000 lines with clear sections |
+| Redundant modules | Deleted or merged |
 
 ---
 
-## Verification Steps
+## Migration Strategy
 
-After deployment:
-1. Create a NEW trip (to avoid cached data)
-2. Check edge function logs for:
-   - `[generate-day] Resolved archetype: flexible_wanderer from DNA sources`
-   - `[generate-day] Constraints built: XXXX chars`
-   - `[generate-day] Constraint preview: === ARCHETYPE IDENTITY: The Flexible Wanderer...`
-3. Verify generated itinerary has:
-   - Max 2-3 activities
-   - No spa, no Michelin
-   - Unscheduled exploration blocks
+1. **Create new modules** alongside old ones (no breaking changes)
+2. **Add feature flag** `USE_SIMPLIFIED_PIPELINE=true`
+3. **Test with one user** - compare outputs
+4. **Gradual rollout** - 10% → 50% → 100%
+5. **Delete old code** once new pipeline is proven
+
+---
+
+## Estimated Effort
+
+| Task | Time |
+|------|------|
+| Create `profile-loader.ts` | 2-3 hours |
+| Create merged `archetype-data.ts` | 3-4 hours |
+| Refactor `generate-day` action | 3-4 hours |
+| Delete redundant modules | 1 hour |
+| Testing | 2-3 hours |
+| **Total** | **12-15 hours** |
+
+---
+
+## Before/After Comparison
+
+**Before (current):**
+```
+14 modules → Complex import chain → Multiple resolution paths → Silent failures → Generic output
+```
+
+**After (simplified):**
+```
+3 modules → Single profile loader → Single archetype context → Explicit errors → Personalized output
+```
+
+**The key insight:** Customization doesn't require complexity. It requires **a single source of truth** that never fails silently.
 
