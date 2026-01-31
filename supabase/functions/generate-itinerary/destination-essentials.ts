@@ -448,47 +448,23 @@ export function getSupportedDestinations(): string[] {
 // =============================================================================
 // RE-EXPORT DB-DRIVEN ENRICHMENT FOR UNIFIED API
 // =============================================================================
-
-export {
-  getDestinationWithEssentials,
-  buildDBEssentialsPrompt,
-  type DestinationData,
-  type EnrichedEssential,
-  type EnrichedGem,
-} from './destination-enrichment.ts';
+// NOTE: destination-enrichment.ts was removed in cleanup phase.
+// DB-driven enrichment is no longer used - curated data is sufficient.
+// =============================================================================
 
 /**
- * Build essentials prompt - prefers DB data, falls back to curated data
+ * Build essentials prompt - uses curated data only (simplified)
  * This is the unified entry point for the generation flow
  */
 export async function buildDestinationEssentialsPromptWithDB(
-  supabase: unknown, // SupabaseClient but avoiding import issues
+  _supabase: unknown,
   destinationName: string,
   tripDays: number,
   authenticityScore: number,
   isFirstTimeVisitor: boolean = true,
-  perplexityApiKey?: string
+  _perplexityApiKey?: string
 ): Promise<string> {
-  // Import dynamically to avoid circular deps
-  const { getDestinationWithEssentials, buildDBEssentialsPrompt } = await import('./destination-enrichment.ts');
-  
-  try {
-    // Try DB-driven data first
-    const dbData = await getDestinationWithEssentials(
-      supabase as any,
-      destinationName,
-      perplexityApiKey
-    );
-    
-    if (dbData && dbData.pointsOfInterest.length > 0) {
-      console.log(`[Essentials] Using DB data for ${dbData.city}: ${dbData.pointsOfInterest.length} POIs`);
-      return buildDBEssentialsPrompt(dbData, tripDays, authenticityScore, isFirstTimeVisitor);
-    }
-  } catch (err) {
-    console.warn('[Essentials] DB fetch failed, falling back to curated:', err);
-  }
-  
-  // Fall back to hardcoded curated data
+  // Use curated data only (destination-enrichment.ts was removed)
   console.log(`[Essentials] Using curated data for ${destinationName}`);
   return buildDestinationEssentialsPrompt(destinationName, tripDays, authenticityScore, isFirstTimeVisitor);
 }

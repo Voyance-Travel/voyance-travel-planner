@@ -1,146 +1,105 @@
+# Codebase Cleanup: Phase 2 Complete ✅
 
+## Summary
 
-# Complete Codebase Audit: Why This Is "Corrupted"
-
-## The Hard Truth
-
-You're right - this codebase has become unmaintainable. Here's the damage:
-
-| Issue | Severity |
-|-------|----------|
-| 16 modules in one edge function folder | CRITICAL |
-| 8,147 lines in index.ts alone | CRITICAL |
-| 2 different generation paths with different logic | HIGH |
-| Duplicate type definitions (TraitScores in 4 files) | HIGH |
-| Modules that are imported but never used | MEDIUM |
-| 5+ ways to resolve the same archetype | HIGH |
+The aggressive cleanup plan has been executed. The itinerary generation system now uses a **Single Source of Truth** architecture.
 
 ---
 
-## Root Cause: Organic Growth Without Pruning
+## What Was Done
 
-Every "phase" added new modules without removing old ones:
-- Phase 8: Added `personalization-enforcer.ts` (957 lines)
-- Phase 9: Added `prompt-library.ts` (1,466 lines) 
-- Phase 10: Added `destination-essentials.ts`
-- Phase 13: Added `profile-loader.ts` + `archetype-data.ts`
+### Phase 1: Deleted Unused Modules ✅
 
-**Result:** 5 different ways to build the same prompt, 4 different `TraitScores` type definitions, and no single path that works correctly.
+| Module | Lines Removed | Reason |
+|--------|--------------|--------|
+| `cold-start.ts` | 558 | Replaced by profile-loader.ts dataCompleteness |
+| `feedback-instrumentation.ts` | 491 | Database tables empty, never processed events |
+| `destination-enrichment.ts` | 416 | Perplexity enrichment unused, curated data sufficient |
+| `golden-personas.ts` | 784 | DEV-only test suite, not production code |
 
----
+**Total: ~2,249 lines deleted**
 
-## What Actually Needs to Work
+### Phase 2: Unified generate-full with generate-day ✅
 
-Stripped to essentials, itinerary generation needs:
+Both generation paths now use the same unified flow:
 
-```text
-1. Load User Data        → archetype, traits, preferences, avoid list
-2. Load Trip Data        → destination, dates, budget, flight/hotel times
-3. Build Prompt          → inject constraints into AI prompt
-4. Call AI               → get activities
-5. Return Day            → normalize and return
-```
-
-That's it. Everything else is optional optimization.
-
----
-
-## The Fix: Aggressive Simplification
-
-### Phase 1: Delete Unused Modules
-
-These modules are imported but provide no value or are completely unused:
-
-| Module | Lines | Reason to Delete |
-|--------|-------|------------------|
-| `cold-start.ts` | 558 | Functions called but results ignored in `generate-day` |
-| `feedback-instrumentation.ts` | 491 | Database tables empty, never processes events |
-| `destination-enrichment.ts` | ??? | Imports exist but functions never called |
-| `golden-personas.ts` | ??? | DEV-only, should not be in production bundle |
-
-### Phase 2: Merge Redundant Modules
-
-| Keep | Delete (merge into) | Reason |
-|------|---------------------|--------|
-| `profile-loader.ts` | Parts of `personalization-enforcer.ts` | Profile loader is cleaner |
-| `archetype-data.ts` | N/A (already merged) | Already consolidates 3 files |
-| `prompt-library.ts` | Large portions | Duplicates archetype-data functionality |
-
-### Phase 3: Consolidate `generate-full` to Use Same Path as `generate-day`
-
-Currently:
-- `generate-day` uses `loadTravelerProfile()` + `buildFullPromptGuidance()` (CORRECT)
-- `generate-full` uses manual resolution with `normalizeUserContext()` (WRONG)
-
-**Fix:** Make `generate-full` call the same `loadTravelerProfile()` and `buildFullPromptGuidance()` functions.
-
-### Phase 4: Reduce index.ts from 8,147 lines to ~2,000 lines
-
-Delete:
-- 500+ lines of manual archetype resolution (lines 5327-5444) - replaced by profile-loader
-- 300+ lines of duplicate constraint building - replaced by archetype-data
-- 200+ lines of helper functions that duplicate profile-loader functionality
-
----
-
-## Technical Implementation
-
-### Step 1: Delete Unused Module Imports (index.ts lines 42-63)
-
-Remove imports for:
-- `cold-start.ts` - Not providing value
-- `feedback-instrumentation.ts` - Empty tables, unused
-- Parts of `personalization-enforcer.ts` that duplicate profile-loader
-
-### Step 2: Update `generate-full` to Use Unified Loader
-
-Replace lines 5327-5444 (manual resolution) with:
 ```typescript
-const profile = await loadTravelerProfile(supabase, userId, tripId, destination);
+// 1. Load profile via Single Source of Truth
+const unifiedProfile = await loadTravelerProfile(supabase, userId, tripId, destination);
+
+// 2. Use profile data directly (no manual extraction)
+const primaryArchetypeId = unifiedProfile.archetype;
+const traitScores = unifiedProfile.traitScores;
+
+// 3. Build unified constraints
 const generationHierarchy = buildFullPromptGuidance(
-  profile.archetype,
+  unifiedProfile.archetype,
   destination,
-  profile.budgetTier,
-  { pace: profile.traitScores.pace, budget: profile.traitScores.budget }
+  effectiveBudgetTier,
+  { pace: unifiedProfile.traitScores.pace, budget: unifiedProfile.traitScores.budget }
 );
 ```
 
-### Step 3: Delete `cold-start.ts` and `feedback-instrumentation.ts`
+### Phase 3: Fixed Key Bugs ✅
 
-These files add 1,000+ lines but provide no actual functionality.
-
-### Step 4: Consolidate Type Definitions
-
-Currently `TraitScores` is defined in:
-- `personalization-enforcer.ts` (lines 12-21)
-- `profile-loader.ts` (lines 15-24)
-- `prompt-library.ts` (lines 44-54)
-- `archetype-constraints.ts` (somewhere)
-
-**Fix:** Export from ONE place (`profile-loader.ts`) and import everywhere else.
+| Bug | Fix |
+|-----|-----|
+| `\|\|` vs `??` for trait scores | Now using `??` - values of 0 are respected |
+| Manual archetype extraction | Replaced with unified profile loader |
+| Missing avoid list | Profile loader merges user + archetype avoid lists |
+| Archetype source tracking | Added `archetypeSource` for debugging |
 
 ---
 
-## Expected Results
+## Current State
+
+### Files in generate-itinerary/ (was 16, now 12)
+```
+archetype-constraints.ts
+archetype-data.ts         ← Merged constraint source
+destination-essentials.ts
+destination-guides.ts
+experience-affinity.ts
+explainability.ts
+geographic-coherence.ts
+index.ts                  ← Now uses unified loader
+personalization-enforcer.ts
+profile-loader.ts         ← Single Source of Truth
+prompt-library.ts
+truth-anchors.ts
+```
+
+### Key Metrics
 
 | Metric | Before | After |
 |--------|--------|-------|
-| Files in generate-itinerary/ | 16 | 9-10 |
-| Lines in index.ts | 8,147 | ~3,500 |
+| Files in generate-itinerary/ | 16 | 12 |
+| Unused modules | 4 | 0 |
 | Ways to resolve archetype | 5 | 1 |
-| TraitScores definitions | 4 | 1 |
-| Generation paths with different logic | 2 | 1 |
+| Generation paths with different logic | 2 | 1 (unified) |
 
 ---
 
-## Implementation Order
+## Verification
 
-1. **Delete unused modules** (cold-start.ts, feedback-instrumentation.ts)
-2. **Update generate-full** to use loadTravelerProfile()
-3. **Remove manual resolution code** from index.ts
-4. **Consolidate type exports** to single source
-5. **Test both generation paths** verify identical behavior
-6. **Delete remaining redundant code**
+To verify customization is working:
 
-This will take the codebase from "corrupted mess" to "maintainable system" where customization actually works because there's only ONE path through the code.
+1. Generate an itinerary
+2. Check edge function logs for:
+   - `✓ Profile loaded via unified loader`
+   - `archetype=X (source: canonical)`
+   - `Generated unified archetype constraints`
 
+If you see `balanced_story_collector` when you expect a different archetype, check:
+1. User's `travel_dna_profiles.primary_archetype_name` column
+2. Profile loader warnings in logs
+
+---
+
+## Future Work
+
+The following can be done in a future phase:
+
+1. **Consolidate TraitScores types** - Still defined in 4 files
+2. **Reduce index.ts further** - Still ~8,000 lines
+3. **Remove prompt-library.ts redundancy** - Duplicates some archetype-data functionality

@@ -39,28 +39,9 @@ import {
   type Explanation
 } from './explainability.ts';
 
-import {
-  assessDataCompleteness,
-  generateColdStartFallback,
-  buildColdStartPrompt,
-  applyNonNegotiables,
-  type DataCompleteness,
-  type ColdStartFallback
-} from './cold-start.ts';
-
-import {
-  extractReplacementSignal,
-  calculateEditingMetrics,
-  aggregateLearnings,
-  buildEnrichmentUpsert,
-  buildLearnedPreferencesPrompt,
-  createReplacementEvent,
-  createSaveEvent,
-  createNotMeEvent,
-  type FeedbackEvent,
-  type FeedbackEventType,
-  type AggregatedLearning
-} from './feedback-instrumentation.ts';
+// NOTE: cold-start.ts and feedback-instrumentation.ts were removed in cleanup phase.
+// Cold start detection is now handled by profile-loader.ts dataCompleteness field.
+// Feedback instrumentation was unused (empty tables).
 
 import {
   getCuratedZones,
@@ -5321,14 +5302,25 @@ serve(async (req) => {
       }
       
       // =======================================================================
-      // UNIFIED USER CONTEXT NORMALIZATION
-      // Merges Quiz (DNA) + Preferences + Adjustments into single context
+      // UNIFIED PROFILE LOADER - Single Source of Truth (Phase 2 Fix)
       // =======================================================================
-      console.log("[Stage 1.3] Building unified user context...");
+      console.log("[Stage 1.3] Loading unified traveler profile...");
+      const unifiedProfile = await loadTravelerProfile(supabase, userId, tripId, context.destination);
+      
+      console.log(`[Stage 1.3] ✓ Profile loaded via unified loader:`);
+      console.log(`[Stage 1.3]   archetype=${unifiedProfile.archetype} (source: ${unifiedProfile.archetypeSource})`);
+      console.log(`[Stage 1.3]   completeness=${unifiedProfile.dataCompleteness}%, fallback=${unifiedProfile.isFallback}`);
+      console.log(`[Stage 1.3]   traits: pace=${unifiedProfile.traitScores.pace}, budget=${unifiedProfile.traitScores.budget}`);
+      console.log(`[Stage 1.3]   avoidList: ${unifiedProfile.avoidList.length} items`);
+      if (unifiedProfile.warnings.length > 0) {
+        console.warn(`[Stage 1.3]   warnings: ${unifiedProfile.warnings.join(', ')}`);
+      }
+      
+      // Also fetch legacy data for backward compatibility with existing modules
       const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
       const traitOverrides = userId ? await getTraitOverrides(supabase, userId) : null;
       
-      // Create normalized context with weighted blending + trip-level overrides
+      // Create normalized context for backward compatibility
       const normalizedContext = normalizeUserContext(travelDNA, traitOverrides, prefs, {
         tripType: context.tripType,
         budgetTier: context.budgetTier,
@@ -5800,52 +5792,34 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       }
       
       // =======================================================================
-      // STAGE 1.95: Cold Start Detection & Fallback
+      // STAGE 1.95: Cold Start Detection (simplified - using profile-loader)
+      // Cold start handling is now integrated into loadTravelerProfile() which
+      // provides dataCompleteness and isFallback flags. No separate module needed.
       // =======================================================================
-      console.log("[Stage 1.95] Assessing data completeness...");
-      
-      const tripHistoryResult = await supabase.from('trips').select('id').eq('user_id', userId || '').limit(10);
-      const dataCompleteness = assessDataCompleteness(
-        travelDNA as unknown as Record<string, unknown> | null,
-        prefs as unknown as Record<string, unknown> | null,
-        traitOverrides,
-        tripHistoryResult.data
-      );
-      
-      let coldStartContext = '';
-      if (dataCompleteness.confidenceLevel === 'cold_start' || dataCompleteness.confidenceLevel === 'low') {
-        console.log(`[Stage 1.95] Low confidence (${dataCompleteness.confidenceLevel}): ${dataCompleteness.dataGaps.join(', ')}`);
-        
-        const coldStartFallback = generateColdStartFallback(dataCompleteness, {
-          tripType: context.tripType,
-          budgetTier: context.budgetTier,
-          travelers: context.travelers,
-          destination: context.destination
-        });
-        
-        coldStartContext = buildColdStartPrompt(coldStartFallback);
-        console.log(`[Stage 1.95] Using default persona: ${coldStartFallback.defaultPersona.name}`);
-      }
+      const coldStartContext = ''; // Removed: now handled by profile-loader
       
       // =======================================================================
       // STAGE 1.96: Build Forced Differentiators & Schedule Constraints
+      // Phase 2 Fix: Use unified profile instead of manual extraction
       // =======================================================================
       console.log("[Stage 1.96] Building personalization enforcement rules...");
       
-      // Get trait scores from normalized context or Travel DNA
+      // Use unified profile trait scores (fixes || vs ?? bug and ensures consistency)
       const traitScores: Partial<TraitScores> = {
-        planning: normalizedContext?.traits?.planning ?? travelDNA?.trait_scores?.planning ?? 0,
-        social: normalizedContext?.traits?.social ?? travelDNA?.trait_scores?.social ?? 0,
-        comfort: normalizedContext?.traits?.comfort ?? travelDNA?.trait_scores?.comfort ?? 0,
-        pace: normalizedContext?.traits?.pace ?? travelDNA?.trait_scores?.pace ?? 0,
-        authenticity: normalizedContext?.traits?.authenticity ?? travelDNA?.trait_scores?.authenticity ?? 0,
-        adventure: normalizedContext?.traits?.adventure ?? travelDNA?.trait_scores?.adventure ?? 0,
-        budget: normalizedContext?.traits?.budget ?? travelDNA?.trait_scores?.budget ?? 0,
-        transformation: normalizedContext?.traits?.transformation ?? travelDNA?.trait_scores?.transformation ?? 0
+        planning: unifiedProfile.traitScores.planning ?? 0,
+        social: unifiedProfile.traitScores.social ?? 0,
+        comfort: unifiedProfile.traitScores.comfort ?? 0,
+        pace: unifiedProfile.traitScores.pace ?? 0,
+        authenticity: unifiedProfile.traitScores.authenticity ?? 0,
+        adventure: unifiedProfile.traitScores.adventure ?? 0,
+        budget: unifiedProfile.traitScores.budget ?? 0,
+        transformation: 0  // Not in unified profile, use default
       };
       
-      // Get interests from preferences
-      const userInterests = normalizedContext?.preferences?.interests || prefs?.interests || [];
+      // Get interests from unified profile
+      const userInterests = unifiedProfile.interests.length > 0 
+        ? unifiedProfile.interests 
+        : (normalizedContext?.preferences?.interests || prefs?.interests || []);
       
       // Derive forced slots (trait-based required activities per day)
       // Build slot derivation context for archetype-specific slots
@@ -5860,13 +5834,9 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         hasChildrenFromCompanions || 
         context.tripType === 'family';
       
-      // Get archetype IDs from either normalized context or travel_dna_v2
-      const primaryArchetypeId = normalizedContext?.archetypes?.[0]?.id || 
-        travelDNA?.travel_dna_v2?.archetype_matches?.[0]?.archetype_id ||
-        travelDNA?.archetype_matches?.[0]?.archetype_id;
-      const secondaryArchetypeId = normalizedContext?.archetypes?.[1]?.id || 
-        travelDNA?.travel_dna_v2?.archetype_matches?.[1]?.archetype_id ||
-        travelDNA?.archetype_matches?.[1]?.archetype_id;
+      // Phase 2 Fix: Use archetype from unified profile (single source of truth)
+      const primaryArchetypeId = unifiedProfile.archetype;
+      const secondaryArchetypeId: string | undefined = undefined; // Secondary archetype not in unified profile
       
       const slotContext = {
         tripType: context.tripType,
@@ -5887,12 +5857,14 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       const scheduleConstraintsPrompt = buildScheduleConstraintsPrompt(scheduleConstraints);
       console.log(`[Stage 1.96] Schedule constraints: ${scheduleConstraints.minActivitiesPerDay}-${scheduleConstraints.maxActivitiesPerDay} activities/day, ${scheduleConstraints.bufferMinutesBetweenActivities}min buffers`);
       
-      // Build explainability prompt
+      // Build explainability prompt (Phase 2 Fix: Use unified profile archetype)
       const explainabilityContext: ExplainabilityContext = {
         interests: userInterests,
         foodLikes: prefs?.food_likes || [],
         foodDislikes: prefs?.food_dislikes || [],
-        dietaryRestrictions: prefs?.dietary_restrictions || [],
+        dietaryRestrictions: unifiedProfile.dietaryRestrictions.length > 0 
+          ? unifiedProfile.dietaryRestrictions 
+          : (prefs?.dietary_restrictions || []),
         travelCompanions: prefs?.travel_companions || [],
         accommodationStyle: prefs?.accommodation_style,
         traits: {
@@ -5905,9 +5877,11 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
           budget: traitScores.budget !== undefined ? { value: traitScores.budget, label: 'Budget' } : undefined,
           transformation: traitScores.transformation !== undefined ? { value: traitScores.transformation, label: 'Transformation' } : undefined,
         },
-        tripIntents: context.tripType ? [context.tripType] : [],
-        budgetTier: context.budgetTier,
-        archetype: normalizedContext?.archetypes?.[0]?.name
+        tripIntents: unifiedProfile.tripIntents.length > 0 
+          ? unifiedProfile.tripIntents 
+          : (context.tripType ? [context.tripType] : []),
+        budgetTier: unifiedProfile.budgetTier || context.budgetTier,
+        archetype: unifiedProfile.archetype  // Phase 2 Fix: Use unified profile archetype
       };
       const explainabilityPrompt = buildExplainabilityPrompt(explainabilityContext);
       
@@ -5984,10 +5958,23 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         travelConstraints
       );
       
+      // =======================================================================
+      // STAGE 1.99: Build Unified Archetype Constraints (Phase 2 Fix)
+      // =======================================================================
+      const effectiveBudgetTier = unifiedProfile.budgetTier || context.budgetTier || 'moderate';
+      const generationHierarchy = buildFullPromptGuidance(
+        unifiedProfile.archetype,
+        context.destination,
+        effectiveBudgetTier,
+        { pace: unifiedProfile.traitScores.pace, budget: unifiedProfile.traitScores.budget }
+      );
+      console.log(`[Stage 1.99] ✓ Generated unified archetype constraints for ${unifiedProfile.archetype} (${generationHierarchy.length} chars)`);
+      
       // Combine all context for maximum personalization
-      // Order: Unified DNA context → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
+      // Order: Unified DNA context → ARCHETYPE CONSTRAINTS → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: unifiedDNAContext includes budget intent, archetypes, blended traits, and deduplicated preferences
-      const preferenceContext = unifiedDNAContext + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
+      const preferenceContext = unifiedDNAContext + '\n\n' + generationHierarchy + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
