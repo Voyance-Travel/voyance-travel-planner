@@ -1,105 +1,125 @@
-# Codebase Cleanup: Phase 2 Complete ✅
 
-## Summary
 
-The aggressive cleanup plan has been executed. The itinerary generation system now uses a **Single Source of Truth** architecture.
+# Fix Itinerary Customization - Complete the Integration
+
+## Problem Summary
+
+The "Single Source of Truth" architecture was created but not fully wired up. Three bugs prevent customization from working:
+
+| Bug | Location | Impact |
+|-----|----------|--------|
+| Dead column reference | `profile-loader.ts` lines 197, 315, 343, 371, 406 | Priority 2 fallback fails silently |
+| Dual path conflict | `generate-day` action | System prompt and user prompt may give AI conflicting archetypes |
+| Redundant legacy path | `generate-full` action | Two different resolution systems run in parallel |
 
 ---
 
-## What Was Done
+## Root Cause Analysis
 
-### Phase 1: Deleted Unused Modules ✅
+### Bug 1: Column `travel_dna` Does Not Exist
 
-| Module | Lines Removed | Reason |
-|--------|--------------|--------|
-| `cold-start.ts` | 558 | Replaced by profile-loader.ts dataCompleteness |
-| `feedback-instrumentation.ts` | 491 | Database tables empty, never processed events |
-| `destination-enrichment.ts` | 416 | Perplexity enrichment unused, curated data sufficient |
-| `golden-personas.ts` | 784 | DEV-only test suite, not production code |
+The `profile-loader.ts` references `travelDNA.travel_dna` in multiple places:
+- Line 197: `(travelDNA.travel_dna as any)?.primary_archetype_name`
+- Line 315: `(travelDNA.travel_dna as any)?.trait_scores`
+- Line 343: `(travelDNA?.travel_dna as any)?.interests`
+- Line 371: `(travelDNA?.travel_dna as any)?.dietary_restrictions`
+- Line 406: `(travelDNA?.travel_dna as any)?.mobility_needs`
 
-**Total: ~2,249 lines deleted**
+But the actual database columns in `travel_dna_profiles` are:
+- `primary_archetype_name` (canonical, used by Priority 1)
+- `trait_scores` (direct column)
+- `travel_dna_v2` (JSON blob, NOT `travel_dna`)
 
-### Phase 2: Unified generate-full with generate-day ✅
+**Fix**: Replace all `travel_dna` references with `travel_dna_v2`.
 
-Both generation paths now use the same unified flow:
+### Bug 2: Dual Path in generate-day
+
+The `generate-day` handler does this:
+
+```text
+1. Line 6400-6421: Call getTravelDNAV2() → buildTravelDNAContext() → preferenceContext
+2. Line 6821: Call loadTravelerProfile() → profile object
+3. Line 6844: Use profile.archetype for generationHierarchy
+4. Line 6889: Use preferenceContext (from step 1) in user prompt
+```
+
+The problem: `buildTravelDNAContext()` at line 6408 extracts archetypes using its own priority system which includes `inferArchetypesFromTraits()` fallback that doesn't exist in `loadTravelerProfile()`.
+
+**Fix**: Remove the legacy `getTravelDNAV2()` + `buildTravelDNAContext()` path. Build `preferenceContext` from the unified profile instead.
+
+### Bug 3: Redundant Path in generate-full
+
+Similar pattern: both `loadTravelerProfile()` (line 5308) and `getTravelDNAV2()` (line 5320) are called, creating two parallel data sources.
+
+**Fix**: Remove the legacy path. Use unified profile for all data.
+
+---
+
+## Technical Fix Plan
+
+### Step 1: Fix profile-loader.ts Column Reference
+
+Replace `travel_dna` with `travel_dna_v2` in all fallback paths:
 
 ```typescript
-// 1. Load profile via Single Source of Truth
-const unifiedProfile = await loadTravelerProfile(supabase, userId, tripId, destination);
-
-// 2. Use profile data directly (no manual extraction)
-const primaryArchetypeId = unifiedProfile.archetype;
-const traitScores = unifiedProfile.traitScores;
-
-// 3. Build unified constraints
-const generationHierarchy = buildFullPromptGuidance(
-  unifiedProfile.archetype,
-  destination,
-  effectiveBudgetTier,
-  { pace: unifiedProfile.traitScores.pace, budget: unifiedProfile.traitScores.budget }
-);
+// Priority 2: travel_dna_v2 blob (was incorrectly referencing travel_dna)
+else if ((travelDNA.travel_dna_v2 as any)?.primary_archetype_name) {
+  archetype = (travelDNA.travel_dna_v2 as any).primary_archetype_name;
+  archetypeSource = 'travel_dna_blob';
+  dataCompleteness += 15;
+}
 ```
 
-### Phase 3: Fixed Key Bugs ✅
+Same fix for trait scores, interests, dietary restrictions, and mobility needs.
 
-| Bug | Fix |
-|-----|-----|
-| `\|\|` vs `??` for trait scores | Now using `??` - values of 0 are respected |
-| Manual archetype extraction | Replaced with unified profile loader |
-| Missing avoid list | Profile loader merges user + archetype avoid lists |
-| Archetype source tracking | Added `archetypeSource` for debugging |
+### Step 2: Remove Dual Path in generate-day
+
+Remove lines 6400-6421 (legacy path) and replace `preferenceContext` usage with profile data:
+
+```typescript
+// Before (REMOVE):
+const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
+const dnaResult = await buildTravelDNAContext(travelDNA, null, budgetTier, ...);
+const preferenceContext = dnaResult.context + '\n' + basicPreferenceContext;
+
+// After (USE PROFILE):
+// preferenceContext is already handled by generationHierarchy from unified profile
+// Just keep basicPreferenceContext for interests/restrictions from userPrefs
+```
+
+### Step 3: Remove Redundant Path in generate-full
+
+Remove the legacy `getTravelDNAV2()` + `normalizeUserContext()` path at lines 5320-5340 and use `unifiedProfile` data directly.
 
 ---
 
-## Current State
+## Files to Modify
 
-### Files in generate-itinerary/ (was 16, now 12)
-```
-archetype-constraints.ts
-archetype-data.ts         ← Merged constraint source
-destination-essentials.ts
-destination-guides.ts
-experience-affinity.ts
-explainability.ts
-geographic-coherence.ts
-index.ts                  ← Now uses unified loader
-personalization-enforcer.ts
-profile-loader.ts         ← Single Source of Truth
-prompt-library.ts
-truth-anchors.ts
-```
+| File | Changes |
+|------|---------|
+| `profile-loader.ts` | Fix 6 `travel_dna` → `travel_dna_v2` references |
+| `index.ts` (generate-day) | Remove ~25 lines of legacy path, use unified profile |
+| `index.ts` (generate-full) | Remove ~25 lines of legacy path, use unified profile |
 
-### Key Metrics
+---
+
+## Expected Results
+
+After these fixes:
 
 | Metric | Before | After |
 |--------|--------|-------|
-| Files in generate-itinerary/ | 16 | 12 |
-| Unused modules | 4 | 0 |
-| Ways to resolve archetype | 5 | 1 |
-| Generation paths with different logic | 2 | 1 (unified) |
+| Ways to resolve archetype | 3+ (profile loader, buildTravelDNAContext, inferFromTraits) | 1 (profile loader only) |
+| Column reference bugs | 6 | 0 |
+| Conflicting prompt data | Possible | Impossible |
+| Data completeness score accuracy | Low (fails at Priority 2) | High |
 
 ---
 
 ## Verification
 
-To verify customization is working:
+After implementation, check edge function logs for:
+1. `[profile-loader] ✓ Resolved archetype: X (source: canonical)` - confirms Priority 1 works
+2. No `balanced_story_collector` fallbacks for users with quiz data
+3. Single archetype name appearing in both system and user prompts
 
-1. Generate an itinerary
-2. Check edge function logs for:
-   - `✓ Profile loaded via unified loader`
-   - `archetype=X (source: canonical)`
-   - `Generated unified archetype constraints`
-
-If you see `balanced_story_collector` when you expect a different archetype, check:
-1. User's `travel_dna_profiles.primary_archetype_name` column
-2. Profile loader warnings in logs
-
----
-
-## Future Work
-
-The following can be done in a future phase:
-
-1. **Consolidate TraitScores types** - Still defined in 4 files
-2. **Reduce index.ts further** - Still ~8,000 lines
-3. **Remove prompt-library.ts redundancy** - Duplicates some archetype-data functionality
