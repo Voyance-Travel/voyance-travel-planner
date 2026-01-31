@@ -98,9 +98,17 @@ import {
 } from './prompt-library.ts';
 
 // =============================================================================
-// PHASE 11: COMPREHENSIVE ARCHETYPE CONSTRAINTS - What Archetypes ACTUALLY Mean
+// PHASE 13: UNIFIED ARCHETYPE DATA - Single Source of Truth for All Archetype Info
+// Merges: archetype-constraints.ts + experience-affinity.ts + destination-guides.ts
 // =============================================================================
 import {
+  getFullArchetypeContext,
+  buildFullPromptGuidance,
+  getMaxActivities,
+  isSpaOK,
+  isMichelinOK,
+  needsUnscheduledTime,
+  // Re-exports for backward compatibility during migration
   buildAllConstraints,
   buildArchetypeConstraintsBlock as buildArchetypeConstraintsBlockNew,
   buildBudgetConstraints as buildBudgetConstraintsNew,
@@ -109,27 +117,25 @@ import {
   buildPacingRules,
   buildNamingRules,
   getArchetypeDefinition,
-} from './archetype-constraints.ts';
-
-// =============================================================================
-// PHASE 12: EXPERIENCE AFFINITY - What Each Archetype PRIORITIZES (the "pull" side)
-// =============================================================================
-import {
   buildExperienceGuidancePrompt,
   getExperienceAffinity,
   getTimePreferences,
   getEnvironmentPreferences,
   getPhysicalIntensity,
-} from './experience-affinity.ts';
-
-// =============================================================================
-// PHASE 12B: DESTINATION × ARCHETYPE GUIDES - City-specific recommendations
-// =============================================================================
-import {
   buildDestinationGuidancePrompt,
   hasDestinationGuide,
   getArchetypeDestinationGuide,
-} from './destination-guides.ts';
+} from './archetype-data.ts';
+
+// =============================================================================
+// PHASE 13B: UNIFIED PROFILE LOADER - Single Source of Truth for Traveler Data
+// =============================================================================
+import {
+  loadTravelerProfile,
+  type TravelerProfile as UnifiedTravelerProfile,
+  type TraitScores as UnifiedTraitScores,
+  type BudgetTier,
+} from './profile-loader.ts';
 
 // =============================================================================
 // PHASE 10: DESTINATION ESSENTIALS - Non-Negotiable Landmarks & Hidden Gems
