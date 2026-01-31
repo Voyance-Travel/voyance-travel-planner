@@ -6820,7 +6820,92 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
         timingInstructions = '- Start around 9:00 AM, end by 9:00-10:00 PM';
       }
 
+      // ==========================================================================
+      // PHASE 11/12 FIX: Use FULL constraint stack (matching generateSingleDayWithRetry)
+      // This was the root cause of "identical output" - generate-day was missing ALL constraints
+      // ==========================================================================
+      
+      // Extract primary archetype from Travel DNA
+      const archetypeMatches = travelDNA?.archetype_matches || travelDNA?.travel_dna_v2?.archetype_matches;
+      const primaryArchetype = Array.isArray(archetypeMatches) ? archetypeMatches[0]?.name : 'balanced_story_collector';
+      const traitScores = travelDNA?.trait_scores || travelDNA?.travel_dna_v2?.trait_scores || {};
+      
+      console.log(`[generate-day] Building constraints for archetype: ${primaryArchetype}`);
+      
+      // Build comprehensive constraints (archetype identity, avoid lists, day structure)
+      const comprehensiveConstraints = buildAllConstraints(
+        primaryArchetype,
+        budgetTier,
+        {
+          pace: traitScores.pace || traitScores.travel_pace || 0,
+          budget: traitScores.budget || traitScores.value_focus || 0
+        }
+      );
+      
+      // Get archetype day structure for activity limits
+      const archetypeDefinition = getArchetypeDefinition(primaryArchetype);
+      const maxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
+      
+      // Build experience affinity guidance (what TO prioritize - the "pull" side)
+      const experienceGuidancePrompt = buildExperienceGuidancePrompt(primaryArchetype);
+      
+      // Build destination-specific recommendations if available
+      const destinationGuidancePrompt = buildDestinationGuidancePrompt(destination, primaryArchetype);
+      
+      // Build the generation hierarchy (conflict resolution rules)
+      const generationHierarchy = `
+${'='.repeat(70)}
+⚖️ GENERATION HIERARCHY — CONFLICT RESOLUTION RULES
+${'='.repeat(70)}
+
+When rules conflict, follow this priority order (1 = highest):
+
+1. DESTINATION ESSENTIALS (highest priority)
+   → First-time visitors MUST see iconic landmarks
+   → These are non-negotiable unless user explicitly says "skip"
+
+2. ARCHETYPE IDENTITY (critical - defines WHO the traveler is)
+   → The PRIMARY archetype's meaning, avoid list, and day structure are LAW
+   → "Flexible Wanderer" = unscheduled blocks, max 2 activities, NO luxury/spa/fine dining
+   → "Beach Therapist" = beach-focused, NOT spa-focused. No spa treatments.
+   → If an activity violates the archetype's avoid list, DO NOT INCLUDE IT
+
+3. EXPERIENCE AFFINITY (what TO prioritize - the "pull" side)
+   → Each archetype has HIGH/MEDIUM/LOW/NEVER experience categories
+   → PRIORITIZE experiences from HIGH categories
+   → AVOID experiences from NEVER categories (hard block)
+
+4. DESTINATION-SPECIFIC GUIDE (city × archetype recommendations)
+   → When available, use mustDo/perfectFor/hiddenGems specific to this destination
+   → These are CURATED for this archetype in THIS city
+
+5. BUDGET CONSTRAINTS
+   → Budget tier + budget trait score determine price limits
+   → Value-focused travelers: NO Michelin, NO hotel bars, NO €100+ experiences
+
+6. PACING CONSTRAINTS
+   → Pace trait determines activity density and timing
+   → Pace -5 = max 2-3 activities, start at 10am, 60min buffers
+
+7. VARIETY RULES
+   → Max 1 spa per trip (unless Retreat Regular or Luxury Luminary)
+   → Max 1 Michelin per trip (unless Luxury Luminary or Culinary Cartographer)
+
+8. TRAIT MODIFIERS (lowest priority — fine-tuning only)
+   → Traits adjust timing and intensity within the above constraints
+
+${'='.repeat(70)}
+
+${comprehensiveConstraints}
+
+${experienceGuidancePrompt}
+
+${destinationGuidancePrompt}
+`;
+
       const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
+
+${generationHierarchy}
 
 ${timingInstructions}
 ${lockedSlotsInstruction}
@@ -6833,6 +6918,7 @@ General Requirements:
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 - Every activity MUST have a "title" field (the display name)
 - All times MUST be in 24-hour HH:MM format
+- MAX ${maxActivitiesFromArchetype} scheduled activities (from archetype day structure - HARD LIMIT)
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}`;
 
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
@@ -6840,13 +6926,21 @@ ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time sl
 Date: ${date}
 Travelers: ${travelers}
 Budget: ${budgetTier || 'standard'}
+ARCHETYPE: ${primaryArchetype}
+MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - HARD LIMIT)
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
 ${preferenceContext}
 ${tripIntentsContext}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
-Generate activities following the timing constraints specified in the system prompt.
+CRITICAL REMINDERS:
+1. Maximum ${maxActivitiesFromArchetype} scheduled activities. Going over = FAILURE.
+2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
+3. Check the budget constraints. If value-focused, no €100+ experiences.
+4. ${primaryArchetype === 'flexible_wanderer' || primaryArchetype === 'slow_traveler' || (traitScores.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
+
+Generate activities following ALL constraints above.
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
       try {
