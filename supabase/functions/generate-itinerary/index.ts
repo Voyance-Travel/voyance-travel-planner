@@ -5316,31 +5316,23 @@ serve(async (req) => {
         console.warn(`[Stage 1.3]   warnings: ${unifiedProfile.warnings.join(', ')}`);
       }
       
-      // Also fetch legacy data for backward compatibility with existing modules
-      const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
-      const traitOverrides = userId ? await getTraitOverrides(supabase, userId) : null;
+      // =======================================================================
+      // PHASE 2 FIX: Removed legacy getTravelDNAV2 + normalizeUserContext dual path
+      // All traveler data now comes from unifiedProfile (single source of truth)
+      // =======================================================================
       
-      // Create normalized context for backward compatibility
-      const normalizedContext = normalizeUserContext(travelDNA, traitOverrides, prefs, {
-        tripType: context.tripType,
-        budgetTier: context.budgetTier,
-        pace: context.pace,
-        travelers: context.travelers,
-        interests: context.interests,
-      });
-      
-      // Derive budget intent from normalized traits (reconciles tier + traits)
+      // Derive budget intent directly from unified profile (no redundant normalization)
       const budgetIntent = deriveBudgetIntent(
         context.budgetTier,
-        normalizedContext.traits.budget,
-        normalizedContext.traits.comfort
+        unifiedProfile.traitScores.budget,
+        unifiedProfile.traitScores.comfort
       );
       
-      // Build unified prompt context from normalized data
-      const unifiedDNAContext = buildNormalizedPromptContext(normalizedContext, budgetIntent);
-      
-      // Log normalization summary
-      console.log(`[Stage 1.3] Unified context: confidence=${normalizedContext.confidence}, tripType=${context.tripType}, tripOverrides=${normalizedContext.sources.tripOverrides.join(', ') || 'none'}`);
+      // Log budget conflict if detected
+      if (budgetIntent?.conflict) {
+        console.log(`[Stage 1.3] 🚨 BUDGET CONFLICT: ${budgetIntent.conflictDetails}`);
+        console.log(`[Stage 1.3] Reconciled to: ${budgetIntent.notes}`);
+      }
       
       // Log budget conflict if detected
       if (budgetIntent?.conflict) {
@@ -5354,11 +5346,11 @@ serve(async (req) => {
             event_type: 'budget_intent_conflict',
             properties: {
               budget_tier: context.budgetTier,
-              budget_trait: normalizedContext.traits.budget,
-              comfort_trait: normalizedContext.traits.comfort,
+              budget_trait: unifiedProfile.traitScores.budget,
+              comfort_trait: unifiedProfile.traitScores.comfort,
               resolved_tier: budgetIntent.tier,
               resolved_spend_style: budgetIntent.spendStyle,
-              confidence: normalizedContext.confidence,
+              confidence: unifiedProfile.dataCompleteness,
             },
           });
         } catch (logErr) {
@@ -5423,11 +5415,15 @@ serve(async (req) => {
       const promptFlightData = extractFlightData(flightHotelResult.rawFlightSelection);
       const promptHotelData = extractHotelData(flightHotelResult.rawHotelSelection);
       
-      // Build TravelerDNA from existing data
+      // Build TravelerDNA from unified profile (Phase 2 Fix: no legacy travelDNA/traitOverrides)
       const promptTravelerDNA = buildTravelerDNA(
-        travelDNA as Record<string, unknown> | null,
+        { 
+          primary_archetype_name: unifiedProfile.archetype,
+          trait_scores: unifiedProfile.traitScores,
+          archetype_matches: [{ name: unifiedProfile.archetype }]
+        } as Record<string, unknown>,
         prefs as Record<string, unknown> | null,
-        traitOverrides
+        unifiedProfile.traitScores as unknown as Record<string, number>
       );
       
       // Inject into context for use in generateSingleDayWithRetry
@@ -5816,10 +5812,10 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         transformation: 0  // Not in unified profile, use default
       };
       
-      // Get interests from unified profile
+      // Get interests from unified profile (Phase 2 Fix: removed normalizedContext reference)
       const userInterests = unifiedProfile.interests.length > 0 
         ? unifiedProfile.interests 
-        : (normalizedContext?.preferences?.interests || prefs?.interests || []);
+        : (prefs?.interests || []);
       
       // Derive forced slots (trait-based required activities per day)
       // Build slot derivation context for archetype-specific slots
@@ -5849,10 +5845,10 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       const forcedSlotsPrompt = buildForcedSlotsPrompt(forcedSlots);
       console.log(`[Stage 1.96] ${forcedSlots.length} forced differentiator slots required per day (context: tripType=${slotContext.tripType}, hasChildren=${slotContext.hasChildren}, archetype=${slotContext.primaryArchetype})`);
       
-      // Derive schedule constraints (pace, walking, buffer times)
+      // Derive schedule constraints (pace, walking, buffer times) - Phase 2 Fix: use unified profile
       const scheduleConstraints = deriveScheduleConstraints(
         traitScores,
-        normalizedContext?.preferences?.mobilityNeeds || prefs?.mobility_needs
+        unifiedProfile.mobilityNeeds || prefs?.mobility_needs
       );
       const scheduleConstraintsPrompt = buildScheduleConstraintsPrompt(scheduleConstraints);
       console.log(`[Stage 1.96] Schedule constraints: ${scheduleConstraints.minActivitiesPerDay}-${scheduleConstraints.maxActivitiesPerDay} activities/day, ${scheduleConstraints.bufferMinutesBetweenActivities}min buffers`);
@@ -5971,10 +5967,10 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       console.log(`[Stage 1.99] ✓ Generated unified archetype constraints for ${unifiedProfile.archetype} (${generationHierarchy.length} chars)`);
       
       // Combine all context for maximum personalization
-      // Order: Unified DNA context → ARCHETYPE CONSTRAINTS → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
-      // NOTE: unifiedDNAContext includes budget intent, archetypes, blended traits, and deduplicated preferences
+      // Order: ARCHETYPE CONSTRAINTS → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
-      const preferenceContext = unifiedDNAContext + '\n\n' + generationHierarchy + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
+      const preferenceContext = generationHierarchy + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
@@ -6090,11 +6086,11 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       // =======================================================================
       console.log("[Stage 2.6] Validating personalization compliance...");
       
-      // Build validation context from available preferences
+      // Build validation context from available preferences (Phase 2 Fix: use unified profile)
       const validationCtx = buildValidationContext(
         prefs || {},
         budgetIntent,
-        travelDNA?.trait_scores || traitOverrides || {},
+        unifiedProfile.traitScores as unknown as Record<string, number>,
         [] // Trip intents loaded separately for full generation
       );
       
@@ -6396,29 +6392,23 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
         console.log(`[generate-day] Added ${lockedActivities.length} locked slots to AI prompt`);
       }
 
-      // Get user preferences AND Travel DNA for personalization
+      // ==========================================================================
+      // PHASE 2 FIX: Removed legacy getTravelDNAV2 + buildTravelDNAContext dual path
+      // All traveler data now comes from loadTravelerProfile (single source of truth)
+      // This eliminates conflicting archetype/trait resolution between prompts
+      // ==========================================================================
+      
+      // Get user preferences for basic interests/restrictions (NOT for archetype/traits)
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
       const userPrefs = userId ? await getUserPreferences(supabase, userId) : null;
-      const travelDNA = userId ? await getTravelDNAV2(supabase, userId) : null;
       
-      // Build preference context (basic preferences)
+      // Build basic preference context (interests, restrictions only - no archetype/traits)
       const basicPreferenceContext = buildPreferenceContext(insights, userPrefs);
       
-      // Build Travel DNA context (archetypes, traits, budget intent) - CRITICAL for personalization
-      const dnaResult = await buildTravelDNAContext(travelDNA, null, budgetTier, supabase, userId);
-      const travelDNAContext = dnaResult.context;
-      
-      // Log personalization data for debugging
-      if (travelDNA) {
-        const archetypes = travelDNA.archetype_matches || travelDNA.travel_dna_v2?.archetype_matches;
-        const primaryArchetype = Array.isArray(archetypes) ? archetypes[0]?.name : null;
-        console.log(`[generate-day] Travel DNA loaded: archetype=${primaryArchetype}, traits=${JSON.stringify(travelDNA.trait_scores)}`);
-      } else {
-        console.log(`[generate-day] No Travel DNA profile found for user ${userId}`);
-      }
-      
-      // Combine contexts: DNA context (archetypes, traits) + basic preferences
-      const preferenceContext = travelDNAContext + '\n' + basicPreferenceContext;
+      // NOTE: preferenceContext is now built from unified profile in the prompt below
+      // The archetype, traits, budget, and avoid list all come from loadTravelerProfile()
+      // This ensures system prompt and user prompt use the SAME data source
+      const preferenceContext = basicPreferenceContext;
 
       // Load trip-specific intents (e.g. "romantic", "mom is coming")
       let tripIntentsContext = '';

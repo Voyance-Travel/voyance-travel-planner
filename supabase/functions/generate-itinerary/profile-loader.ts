@@ -193,9 +193,9 @@ export async function loadTravelerProfile(
       archetypeSource = 'canonical';
       dataCompleteness += 20;
     }
-    // Priority 2: travel_dna blob
-    else if ((travelDNA.travel_dna as any)?.primary_archetype_name) {
-      archetype = (travelDNA.travel_dna as any).primary_archetype_name;
+    // Priority 2: travel_dna_v2 blob (fixed: was incorrectly referencing travel_dna)
+    else if ((travelDNA.travel_dna_v2 as any)?.primary_archetype_name) {
+      archetype = (travelDNA.travel_dna_v2 as any).primary_archetype_name;
       archetypeSource = 'travel_dna_blob';
       dataCompleteness += 15;
     }
@@ -308,11 +308,10 @@ function normalizeBudgetTier(tier: string | undefined | null): BudgetTier {
 function resolveTraitScores(travelDNA: any): TraitScores {
   if (!travelDNA) return { ...DEFAULT_TRAIT_SCORES };
   
-  // Try multiple locations for trait scores
+  // Try multiple locations for trait scores (fixed: removed dead travel_dna reference)
   const rawScores = 
     travelDNA.trait_scores ||
     travelDNA.travel_dna_v2?.trait_scores ||
-    (travelDNA.travel_dna as any)?.trait_scores ||
     {};
   
   // Normalize field names (some are named differently)
@@ -339,9 +338,9 @@ function extractInterests(travelDNA: any, tripData: any): string[] {
     dnaInterests.forEach((i: string) => interests.add(i));
   }
   
-  // From travel_dna blob
-  if ((travelDNA?.travel_dna as any)?.interests) {
-    const blobInterests = (travelDNA.travel_dna as any).interests;
+  // From travel_dna_v2 blob (fixed: was incorrectly referencing travel_dna)
+  if ((travelDNA?.travel_dna_v2 as any)?.interests) {
+    const blobInterests = (travelDNA.travel_dna_v2 as any).interests;
     if (Array.isArray(blobInterests)) {
       blobInterests.forEach((i: string) => interests.add(i));
     }
@@ -368,8 +367,9 @@ function extractDietaryRestrictions(travelDNA: any): string[] {
     items.forEach((r: string) => restrictions.add(r));
   }
   
-  if ((travelDNA?.travel_dna as any)?.dietary_restrictions) {
-    const items = (travelDNA.travel_dna as any).dietary_restrictions;
+  // From travel_dna_v2 blob (fixed: was incorrectly referencing travel_dna)
+  if ((travelDNA?.travel_dna_v2 as any)?.dietary_restrictions) {
+    const items = (travelDNA.travel_dna_v2 as any).dietary_restrictions;
     if (Array.isArray(items)) {
       items.forEach((r: string) => restrictions.add(r));
     }
@@ -403,8 +403,9 @@ function extractMobilityNeeds(travelDNA: any): string {
     return travelDNA.mobility_needs;
   }
   
-  if ((travelDNA?.travel_dna as any)?.mobility_needs) {
-    return (travelDNA.travel_dna as any).mobility_needs;
+  // From travel_dna_v2 blob (fixed: was incorrectly referencing travel_dna)
+  if ((travelDNA?.travel_dna_v2 as any)?.mobility_needs) {
+    return (travelDNA.travel_dna_v2 as any).mobility_needs;
   }
   
   return '';
