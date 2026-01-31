@@ -1,252 +1,159 @@
 
+# Audit Report: Why Customization Still Doesn't Work
 
-# Simplifying the Itinerary Generation System
+## Executive Summary
 
-## The Problem: 14 Modules, 8,000+ Lines, Multiple Failure Points
-
-The current system has grown organically into an overly complex architecture with:
-
-| Module | Lines | Purpose | Status |
-|--------|-------|---------|--------|
-| `index.ts` | 8,220 | Main orchestrator + duplicate logic | BLOATED |
-| `archetype-constraints.ts` | 1,984 | 27 archetype definitions + avoid lists | OK |
-| `experience-affinity.ts` | 501 | What to prioritize per archetype | OK |
-| `destination-guides.ts` | 463 | City × archetype recommendations | OK |
-| `personalization-enforcer.ts` | 957 | Forced slots, schedule math | REDUNDANT |
-| `prompt-library.ts` | 1,466 | Another prompt builder | REDUNDANT |
-| `truth-anchors.ts` | ??? | Venue verification | RARELY USED |
-| `explainability.ts` | ??? | Why explanations | OPTIONAL |
-| `cold-start.ts` | ??? | Fallback handling | REDUNDANT |
-| `feedback-instrumentation.ts` | ??? | Learning from swaps | UNUSED |
-| `geographic-coherence.ts` | ??? | Zone optimization | OPTIONAL |
-| `destination-essentials.ts` | ??? | Must-see landmarks | PARTIAL |
-| `destination-enrichment.ts` | ??? | DB enrichment | UNUSED |
-| `golden-personas.ts` | ??? | Test personas | DEV ONLY |
-
-**Root causes of failure:**
-1. **Two code paths** (generate-day vs generateSingleDayWithRetry) that drifted apart
-2. **14 imports** that create a fragile chain - one broken link = generic output
-3. **4 different places** to look for archetype (all with different priorities)
-4. **3 different trait score formats** (trait_scores, travel_dna.trait_scores, travel_dna_v2.trait_scores)
-5. **Validation happening too late** (after generation, not during prompt building)
+After a deep technical audit of the implemented changes, I found that while the new unified modules (`profile-loader.ts` and `archetype-data.ts`) were created correctly, **the `generate-day` action handler is NOT using the new `loadTravelerProfile()` function**. This means the "Single Source of Truth" architecture is only partially implemented.
 
 ---
 
-## Proposed Solution: "Single Source of Truth" Architecture
+## What Was Built Correctly
 
-### Core Principle
-**One unified prompt builder. One data fetcher. One archetype resolver. Zero redundancy.**
-
-### New Architecture
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    generate-itinerary/index.ts                  │
-├─────────────────────────────────────────────────────────────────┤
-│  1. loadTravelerProfile()  ← SINGLE function, returns unified   │
-│                               object or fails with clear error  │
-│                                                                 │
-│  2. buildPrompt()          ← SINGLE function, takes profile +   │
-│                               trip, returns system + user       │
-│                                                                 │
-│  3. generateDay()          ← SINGLE AI call, no retries needed  │
-│                               if prompt is correctly built      │
-└─────────────────────────────────────────────────────────────────┘
-
-                              ↓ imports only
-
-┌─────────────────────────────────────────────────────────────────┐
-│              archetype-data.ts (MERGED MODULE)                  │
-├─────────────────────────────────────────────────────────────────┤
-│  - ARCHETYPE_DEFINITIONS (identity, meaning, avoid, dayStructure)
-│  - EXPERIENCE_AFFINITY (high/medium/low/never per archetype)    │
-│  - TIME_PREFERENCES (start/end times)                           │
-│  - ENVIRONMENT_PREFERENCES (indoor/outdoor, crowds)             │
-│  - PHYSICAL_INTENSITY (walking hours)                           │
-│  - DESTINATION_GUIDES (city × archetype, lazily loaded)         │
-│                                                                 │
-│  One function: getFullArchetypeContext(archetype, destination)  │
-│  Returns: EVERYTHING needed for prompt in one object            │
-└─────────────────────────────────────────────────────────────────┘
-```
+| Module | Status | Notes |
+|--------|--------|-------|
+| `profile-loader.ts` | ✅ Created | Correct archetype resolution logic, trait normalization, avoid list extraction |
+| `archetype-data.ts` | ✅ Created | Merges all archetype data, provides `getFullArchetypeContext()` |
+| Imports in `index.ts` | ✅ Added | Both new modules are imported at lines 104-138 |
+| `buildAllConstraints()` | ✅ Called | Injected into system prompt at line 6878 |
+| `buildExperienceGuidancePrompt()` | ✅ Called | Injected at line 6898 |
+| `buildDestinationGuidancePrompt()` | ✅ Called | Injected at line 6901 |
 
 ---
 
-## Technical Implementation Plan
+## Critical Issue: The New Profile Loader Is NOT Being Used
 
-### Phase 1: Create Unified Traveler Profile Loader
+### The Problem
 
-Create a single function that resolves all data sources into one canonical object:
+The `generate-day` handler (lines 6251-7200) still uses the **old manual resolution logic** instead of calling `loadTravelerProfile()`:
 
 ```typescript
-// profile-loader.ts (NEW - ~150 lines)
+// Lines 6839-6859 - OLD CODE STILL IN USE
+const primaryArchetype = 
+  travelDNA?.primary_archetype_name ||
+  (travelDNA?.travel_dna as any)?.primary_archetype_name ||
+  // ... more manual checks
+  'balanced_story_collector';
 
-interface TravelerProfile {
-  // Canonical fields - ONE source of truth
-  archetype: string;              // NEVER null, always resolved
-  archetypeDefinition: {...};     // Full definition, pre-fetched
-  traitScores: {
-    pace: number;
-    budget: number;
-    // ... all traits with defaults of 0
-  };
-  budgetTier: 'budget' | 'moderate' | 'premium' | 'luxury';
-  interests: string[];
-  dietaryRestrictions: string[];
-  avoidList: string[];
-  mobilityNeeds: string;
-  
-  // Resolution metadata
-  dataCompleteness: number;       // 0-100, for logging
-  resolvedFrom: string;           // For debugging
-}
-
-async function loadTravelerProfile(userId: string, tripId: string): Promise<TravelerProfile> {
-  // 1. Load travel_dna_profiles row
-  // 2. Load trip row for budget tier
-  // 3. Resolve archetype with CLEAR priority:
-  //    a. profile.primary_archetype_name (canonical)
-  //    b. profile.travel_dna.primary_archetype_name
-  //    c. 'balanced_story_collector' + log warning
-  // 4. Resolve traits with defaults
-  // 5. Return unified object
-  // 
-  // NO FALLBACKS IN THE REST OF THE CODE - this function handles ALL resolution
-}
+const traitScores = travelDNA?.trait_scores || 
+                    travelDNA?.travel_dna_v2?.trait_scores ||
+                    // ... more manual checks
 ```
 
-### Phase 2: Merge Archetype Data Modules
-
-Combine `archetype-constraints.ts`, `experience-affinity.ts`, and `destination-guides.ts` into one:
+### What Should Happen
 
 ```typescript
-// archetype-data.ts (MERGED - ~2500 lines, was 3000 across 3 files)
-
-export function getFullArchetypeContext(
-  archetype: string,
-  destination?: string
-): ArchetypeContext {
-  return {
-    definition: ARCHETYPE_DEFINITIONS[archetype],
-    affinity: EXPERIENCE_AFFINITY[archetype],
-    timePrefs: TIME_PREFERENCES[archetype],
-    envPrefs: ENVIRONMENT_PREFERENCES[archetype],
-    intensity: PHYSICAL_INTENSITY[archetype],
-    destinationGuide: destination ? getDestinationGuide(destination, archetype) : null,
-    
-    // Pre-built prompt blocks (cached)
-    promptBlocks: {
-      identity: buildIdentityBlock(archetype),
-      constraints: buildConstraintsBlock(archetype),
-      affinity: buildAffinityBlock(archetype),
-      destinationGuide: destination ? buildDestinationBlock(destination, archetype) : ''
-    }
-  };
-}
+// CORRECT - Using unified profile loader
+const profile = await loadTravelerProfile(supabase, userId, tripId, destination);
+const primaryArchetype = profile.archetype;        // Guaranteed correct
+const traitScores = profile.traitScores;           // Guaranteed normalized
+const avoidList = profile.avoidList;               // Includes archetype avoid list
 ```
 
-### Phase 3: Simplify the Main Handler
+---
 
-Replace the 500+ line `generate-day` action with:
+## Why This Matters
 
+The manual resolution code works differently than the unified loader in subtle but critical ways:
+
+| Behavior | Manual Resolution (Current) | Unified Loader (Correct) |
+|----------|---------------------------|------------------------|
+| Archetype extraction | Checks 4 sources, may miss canonical column | Clear 4-step priority with logging |
+| Trait score normalization | Uses raw values, may miss synonyms | Normalizes `travel_pace` → `pace`, `value_focus` → `budget` |
+| Avoid list | Only archetype definition | Merges user avoid list + archetype avoid list + affinity never list |
+| Error handling | Silent fallback | Explicit warnings in `profile.warnings[]` |
+| Logging | Partial | Full resolution source tracking (`profile.archetypeSource`) |
+
+---
+
+## Secondary Issues Found
+
+### 1. `profile-loader.ts` Has a Circular Dependency Risk
+
+The `profile-loader.ts` imports from `archetype-data.ts`:
 ```typescript
-// In index.ts (reduced from 8220 lines to ~3000)
-
-case 'generate-day': {
-  // 1. Load profile (ONE function, never fails silently)
-  const profile = await loadTravelerProfile(userId, tripId);
-  console.log(`[generate-day] Profile loaded: archetype=${profile.archetype}, completeness=${profile.dataCompleteness}%`);
-  
-  // 2. Get archetype context (ONE function, all data)
-  const archetypeContext = getFullArchetypeContext(profile.archetype, destination);
-  
-  // 3. Build prompt (ONE function, uses profile + context)
-  const { systemPrompt, userPrompt } = buildDayPrompt({
-    profile,
-    archetypeContext,
-    dayNumber,
-    totalDays,
-    date,
-    destination,
-    previousActivities,
-    flightData,
-    hotelData
-  });
-  
-  // 4. Generate (ONE AI call)
-  const day = await callAI(systemPrompt, userPrompt);
-  
-  return { day };
-}
+import { getFullArchetypeContext, type ArchetypeContext } from './archetype-data.ts';
 ```
 
-### Phase 4: Delete Redundant Modules
+And `archetype-data.ts` imports from `archetype-constraints.ts`:
+```typescript
+import { getArchetypeDefinition, buildAllConstraints, ... } from './archetype-constraints.ts';
+```
 
-**DELETE entirely:**
-- `personalization-enforcer.ts` - Absorbed into profile loader
-- `cold-start.ts` - Handled in profile loader
-- `feedback-instrumentation.ts` - Unused
-- `destination-enrichment.ts` - Unused
+This works but creates a 3-level import chain. If any module fails to load, the entire chain breaks.
 
-**KEEP but simplify:**
-- `destination-essentials.ts` - Keep for must-see landmarks
-- `geographic-coherence.ts` - Optional, run after generation
-- `truth-anchors.ts` - Optional, for venue verification
+### 2. Trait Score Field Name Mismatch
 
-**MERGE:**
-- `archetype-constraints.ts` + `experience-affinity.ts` + `destination-guides.ts` → `archetype-data.ts`
-- `prompt-library.ts` - Absorb useful parts into main index.ts
+The database stores `travel_pace` but the constraint builder expects `pace`. The `profile-loader.ts` correctly handles this:
+```typescript
+pace: Number(rawScores.pace ?? rawScores.travel_pace ?? 0),
+```
+
+But the old manual code in `generate-day` does this:
+```typescript
+pace: traitScores.pace || traitScores.travel_pace || 0,  // Line 6882
+```
+
+The difference: `??` handles `0` correctly (falsy but valid), while `||` treats `0` as falsy and falls through. If `pace = 0`, the old code ignores it.
+
+### 3. The Unified Prompt Builder `buildFullPromptGuidance()` Is Not Used
+
+We created `buildFullPromptGuidance()` in `archetype-data.ts` (lines 242-295) which assembles all constraint blocks in the correct order with the generation hierarchy. But the `generate-day` handler manually builds this same structure (lines 6904-6951).
 
 ---
 
-## What This Solves
+## What Needs to Be Fixed
 
-| Problem | Solution |
-|---------|----------|
-| Archetype extracted from wrong field | ONE resolution function with clear priority |
-| Constraints not applied | Prompt built from unified context, never missing |
-| Two code paths diverging | ONE generation function for all cases |
-| Silent fallbacks | Explicit logging at profile load time |
-| 14 imports with fragile chain | 3 imports: profile-loader, archetype-data, AI caller |
-| 8000+ lines in main file | ~3000 lines with clear sections |
-| Redundant modules | Deleted or merged |
+### Phase 2: Complete the Integration (Required)
+
+The `generate-day` action handler needs to be refactored to use the new modules:
+
+**Current flow (600+ lines):**
+```
+1. Load travelDNA manually
+2. Extract archetype manually (with bugs)
+3. Extract traitScores manually (with bugs)
+4. Build constraints
+5. Build prompt
+6. Call AI
+```
+
+**Target flow (50 lines):**
+```
+1. loadTravelerProfile() → unified profile object
+2. getFullArchetypeContext() → all archetype data
+3. buildFullPromptGuidance() → complete constraint block
+4. Build prompt with unified data
+5. Call AI
+```
 
 ---
 
-## Migration Strategy
+## Verification Needed Before Fixing
 
-1. **Create new modules** alongside old ones (no breaking changes)
-2. **Add feature flag** `USE_SIMPLIFIED_PIPELINE=true`
-3. **Test with one user** - compare outputs
-4. **Gradual rollout** - 10% → 50% → 100%
-5. **Delete old code** once new pipeline is proven
+To confirm this analysis, we need to check the edge function logs during a real generation. The current logging should show:
 
----
+1. `[generate-day] ✓ Resolved archetype: flexible_wanderer from DNA sources`
+2. `[generate-day] Constraints built: XXXX chars, archetype=flexible_wanderer`
 
-## Estimated Effort
-
-| Task | Time |
-|------|------|
-| Create `profile-loader.ts` | 2-3 hours |
-| Create merged `archetype-data.ts` | 3-4 hours |
-| Refactor `generate-day` action | 3-4 hours |
-| Delete redundant modules | 1 hour |
-| Testing | 2-3 hours |
-| **Total** | **12-15 hours** |
+If you're seeing `balanced_story_collector` in the logs, it confirms the archetype extraction is failing.
 
 ---
 
-## Before/After Comparison
+## Estimated Fix Effort
 
-**Before (current):**
-```
-14 modules → Complex import chain → Multiple resolution paths → Silent failures → Generic output
-```
+| Task | Effort | Risk |
+|------|--------|------|
+| Replace manual resolution with `loadTravelerProfile()` | 1-2 hours | Low |
+| Replace manual constraint building with `buildFullPromptGuidance()` | 1 hour | Low |
+| Remove 500+ lines of redundant code | 30 min | Medium (must be careful) |
+| Testing | 1-2 hours | - |
+| **Total** | **4-5 hours** | - |
 
-**After (simplified):**
-```
-3 modules → Single profile loader → Single archetype context → Explicit errors → Personalized output
-```
+---
 
-**The key insight:** Customization doesn't require complexity. It requires **a single source of truth** that never fails silently.
+## Recommendation
+
+The implementation is 70% complete. The constraint modules are correctly built and integrated, but the data feeding into them is still coming from the buggy manual resolution code. 
+
+**Next Step:** Complete Phase 2 by replacing the manual resolution in `generate-day` with calls to `loadTravelerProfile()`.
 
