@@ -6825,12 +6825,48 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       // This was the root cause of "identical output" - generate-day was missing ALL constraints
       // ==========================================================================
       
-      // Extract primary archetype from Travel DNA
-      const archetypeMatches = travelDNA?.archetype_matches || travelDNA?.travel_dna_v2?.archetype_matches;
-      const primaryArchetype = Array.isArray(archetypeMatches) ? archetypeMatches[0]?.name : 'balanced_story_collector';
-      const traitScores = travelDNA?.trait_scores || travelDNA?.travel_dna_v2?.trait_scores || {};
+      // ==========================================================================
+      // FIX #1: Correct Archetype Extraction - Check canonical column FIRST
+      // The old code looked at archetype_matches which is often NULL
+      // This caused silent fallback to balanced_story_collector (permissive)
+      // ==========================================================================
+      const primaryArchetype = 
+        // 1. Check canonical column directly on profile (most reliable)
+        travelDNA?.primary_archetype_name ||
+        // 2. Check travel_dna blob (where quiz results are stored)
+        (travelDNA?.travel_dna as any)?.primary_archetype_name ||
+        // 3. Check v2 structure
+        (Array.isArray(travelDNA?.travel_dna_v2?.archetype_matches) 
+          ? travelDNA.travel_dna_v2.archetype_matches[0]?.name 
+          : null) ||
+        // 4. Check legacy archetype_matches
+        (Array.isArray(travelDNA?.archetype_matches) 
+          ? travelDNA.archetype_matches[0]?.name 
+          : null) ||
+        // 5. Fallback
+        'balanced_story_collector';
       
-      console.log(`[generate-day] Building constraints for archetype: ${primaryArchetype}`);
+      // Extract trait scores from multiple possible locations
+      const traitScores = travelDNA?.trait_scores || 
+                          travelDNA?.travel_dna_v2?.trait_scores || 
+                          (travelDNA?.travel_dna as any)?.trait_scores ||
+                          {};
+      
+      // ==========================================================================
+      // FIX #5: Fail-Safe Archetype Validation Warning
+      // ==========================================================================
+      if (primaryArchetype === 'balanced_story_collector') {
+        console.warn(`[generate-day] ⚠️ Using fallback archetype. Travel DNA may be missing or incomplete for user ${userId}`);
+        console.warn(`[generate-day] DNA sources checked: primary_archetype_name=${travelDNA?.primary_archetype_name}, travel_dna.primary_archetype_name=${(travelDNA?.travel_dna as any)?.primary_archetype_name}`);
+      } else {
+        console.log(`[generate-day] ✓ Resolved archetype: ${primaryArchetype} from DNA sources`);
+      }
+      
+      // ==========================================================================
+      // FIX #4: Log Budget Tier from Params
+      // ==========================================================================
+      console.log(`[generate-day] Trip budget tier from params: ${budgetTier}`);
+      console.log(`[generate-day] Trait scores: pace=${traitScores.pace || traitScores.travel_pace || 0}, budget=${traitScores.budget || traitScores.value_focus || 0}`);
       
       // Build comprehensive constraints (archetype identity, avoid lists, day structure)
       const comprehensiveConstraints = buildAllConstraints(
@@ -6841,6 +6877,12 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
           budget: traitScores.budget || traitScores.value_focus || 0
         }
       );
+      
+      // ==========================================================================
+      // FIX #2: Diagnostic Logging for Constraints
+      // ==========================================================================
+      console.log(`[generate-day] Constraints built: ${comprehensiveConstraints.length} chars, archetype=${primaryArchetype}`);
+      console.log(`[generate-day] Constraint preview: ${comprehensiveConstraints.substring(0, 300)}...`);
       
       // Get archetype day structure for activity limits
       const archetypeDefinition = getArchetypeDefinition(primaryArchetype);
@@ -6942,6 +6984,13 @@ CRITICAL REMINDERS:
 
 Generate activities following ALL constraints above.
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
+
+      // ==========================================================================
+      // FIX #3: Log Full Prompt Lengths before AI call
+      // ==========================================================================
+      console.log(`[generate-day] System prompt: ${systemPrompt.length} chars, User prompt: ${userPrompt.length} chars`);
+      console.log(`[generate-day] Experience guidance included: ${experienceGuidancePrompt.length > 0 ? 'YES' : 'NO'} (${experienceGuidancePrompt.length} chars)`);
+      console.log(`[generate-day] Destination guidance included: ${destinationGuidancePrompt.length > 0 ? 'YES' : 'NO'} (${destinationGuidancePrompt.length} chars)`);
 
       try {
         let data: any = null;
