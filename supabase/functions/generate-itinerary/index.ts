@@ -6827,129 +6827,50 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       }
 
       // ==========================================================================
-      // PHASE 11/12 FIX: Use FULL constraint stack (matching generateSingleDayWithRetry)
-      // This was the root cause of "identical output" - generate-day was missing ALL constraints
+      // PHASE 2 FIX: Use Unified Profile Loader (Single Source of Truth)
+      // This replaces 100+ lines of manual archetype/trait resolution with bugs
       // ==========================================================================
       
-      // ==========================================================================
-      // FIX #1: Correct Archetype Extraction - Check canonical column FIRST
-      // The old code looked at archetype_matches which is often NULL
-      // This caused silent fallback to balanced_story_collector (permissive)
-      // ==========================================================================
-      const primaryArchetype = 
-        // 1. Check canonical column directly on profile (most reliable)
-        travelDNA?.primary_archetype_name ||
-        // 2. Check travel_dna blob (where quiz results are stored)
-        (travelDNA?.travel_dna as any)?.primary_archetype_name ||
-        // 3. Check v2 structure
-        (Array.isArray(travelDNA?.travel_dna_v2?.archetype_matches) 
-          ? travelDNA.travel_dna_v2.archetype_matches[0]?.name 
-          : null) ||
-        // 4. Check legacy archetype_matches
-        (Array.isArray(travelDNA?.archetype_matches) 
-          ? travelDNA.archetype_matches[0]?.name 
-          : null) ||
-        // 5. Fallback
-        'balanced_story_collector';
+      const profile = await loadTravelerProfile(supabase, userId, tripId, destination);
       
-      // Extract trait scores from multiple possible locations
-      const traitScores = travelDNA?.trait_scores || 
-                          travelDNA?.travel_dna_v2?.trait_scores || 
-                          (travelDNA?.travel_dna as any)?.trait_scores ||
-                          {};
+      // Extract data from unified profile
+      const primaryArchetype = profile.archetype;
+      const traitScores = profile.traitScores;
       
-      // ==========================================================================
-      // FIX #5: Fail-Safe Archetype Validation Warning
-      // ==========================================================================
-      if (primaryArchetype === 'balanced_story_collector') {
-        console.warn(`[generate-day] ⚠️ Using fallback archetype. Travel DNA may be missing or incomplete for user ${userId}`);
-        console.warn(`[generate-day] DNA sources checked: primary_archetype_name=${travelDNA?.primary_archetype_name}, travel_dna.primary_archetype_name=${(travelDNA?.travel_dna as any)?.primary_archetype_name}`);
-      } else {
-        console.log(`[generate-day] ✓ Resolved archetype: ${primaryArchetype} from DNA sources`);
+      // Log profile resolution for debugging
+      console.log(`[generate-day] ✓ Profile loaded via unified loader:`);
+      console.log(`[generate-day]   archetype=${primaryArchetype} (source: ${profile.archetypeSource})`);
+      console.log(`[generate-day]   completeness=${profile.dataCompleteness}%, fallback=${profile.isFallback}`);
+      console.log(`[generate-day]   traits: pace=${traitScores.pace}, budget=${traitScores.budget}`);
+      console.log(`[generate-day]   avoidList: ${profile.avoidList.length} items`);
+      if (profile.warnings.length > 0) {
+        console.warn(`[generate-day]   warnings: ${profile.warnings.join(', ')}`);
       }
       
-      // ==========================================================================
-      // FIX #4: Log Budget Tier from Params
-      // ==========================================================================
-      console.log(`[generate-day] Trip budget tier from params: ${budgetTier}`);
-      console.log(`[generate-day] Trait scores: pace=${traitScores.pace || traitScores.travel_pace || 0}, budget=${traitScores.budget || traitScores.value_focus || 0}`);
+      // Use profile's budget tier if available, fallback to params
+      const effectiveBudgetTier = profile.budgetTier || budgetTier || 'moderate';
+      console.log(`[generate-day] Budget tier: ${effectiveBudgetTier}`);
       
-      // Build comprehensive constraints (archetype identity, avoid lists, day structure)
-      const comprehensiveConstraints = buildAllConstraints(
+      // ==========================================================================
+      // PHASE 2 FIX: Use buildFullPromptGuidance (replaces 50+ lines of manual assembly)
+      // ==========================================================================
+      const generationHierarchy = buildFullPromptGuidance(
         primaryArchetype,
-        budgetTier,
-        {
-          pace: traitScores.pace || traitScores.travel_pace || 0,
-          budget: traitScores.budget || traitScores.value_focus || 0
-        }
+        destination,
+        effectiveBudgetTier,
+        { pace: traitScores.pace, budget: traitScores.budget }
       );
       
-      // ==========================================================================
-      // FIX #2: Diagnostic Logging for Constraints
-      // ==========================================================================
-      console.log(`[generate-day] Constraints built: ${comprehensiveConstraints.length} chars, archetype=${primaryArchetype}`);
-      console.log(`[generate-day] Constraint preview: ${comprehensiveConstraints.substring(0, 300)}...`);
+      console.log(`[generate-day] Full guidance built: ${generationHierarchy.length} chars`);
       
-      // Get archetype day structure for activity limits
-      const archetypeDefinition = getArchetypeDefinition(primaryArchetype);
-      const maxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
-      
-      // Build experience affinity guidance (what TO prioritize - the "pull" side)
-      const experienceGuidancePrompt = buildExperienceGuidancePrompt(primaryArchetype);
-      
-      // Build destination-specific recommendations if available
-      const destinationGuidancePrompt = buildDestinationGuidancePrompt(destination, primaryArchetype);
-      
-      // Build the generation hierarchy (conflict resolution rules)
-      const generationHierarchy = `
-${'='.repeat(70)}
-⚖️ GENERATION HIERARCHY — CONFLICT RESOLUTION RULES
-${'='.repeat(70)}
-
-When rules conflict, follow this priority order (1 = highest):
-
-1. DESTINATION ESSENTIALS (highest priority)
-   → First-time visitors MUST see iconic landmarks
-   → These are non-negotiable unless user explicitly says "skip"
-
-2. ARCHETYPE IDENTITY (critical - defines WHO the traveler is)
-   → The PRIMARY archetype's meaning, avoid list, and day structure are LAW
-   → "Flexible Wanderer" = unscheduled blocks, max 2 activities, NO luxury/spa/fine dining
-   → "Beach Therapist" = beach-focused, NOT spa-focused. No spa treatments.
-   → If an activity violates the archetype's avoid list, DO NOT INCLUDE IT
-
-3. EXPERIENCE AFFINITY (what TO prioritize - the "pull" side)
-   → Each archetype has HIGH/MEDIUM/LOW/NEVER experience categories
-   → PRIORITIZE experiences from HIGH categories
-   → AVOID experiences from NEVER categories (hard block)
-
-4. DESTINATION-SPECIFIC GUIDE (city × archetype recommendations)
-   → When available, use mustDo/perfectFor/hiddenGems specific to this destination
-   → These are CURATED for this archetype in THIS city
-
-5. BUDGET CONSTRAINTS
-   → Budget tier + budget trait score determine price limits
-   → Value-focused travelers: NO Michelin, NO hotel bars, NO €100+ experiences
-
-6. PACING CONSTRAINTS
-   → Pace trait determines activity density and timing
-   → Pace -5 = max 2-3 activities, start at 10am, 60min buffers
-
-7. VARIETY RULES
-   → Max 1 spa per trip (unless Retreat Regular or Luxury Luminary)
-   → Max 1 Michelin per trip (unless Luxury Luminary or Culinary Cartographer)
-
-8. TRAIT MODIFIERS (lowest priority — fine-tuning only)
-   → Traits adjust timing and intensity within the above constraints
-
-${'='.repeat(70)}
-
-${comprehensiveConstraints}
-
-${experienceGuidancePrompt}
-
-${destinationGuidancePrompt}
-`;
+      // Get archetype context for activity limits and other settings
+      const archetypeContext = getFullArchetypeContext(
+        primaryArchetype, 
+        destination, 
+        effectiveBudgetTier, 
+        { pace: traitScores.pace, budget: traitScores.budget }
+      );
+      const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
 
       const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
 
@@ -6992,11 +6913,11 @@ Generate activities following ALL constraints above.
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
       // ==========================================================================
-      // FIX #3: Log Full Prompt Lengths before AI call
+      // Log Full Prompt Lengths before AI call
       // ==========================================================================
       console.log(`[generate-day] System prompt: ${systemPrompt.length} chars, User prompt: ${userPrompt.length} chars`);
-      console.log(`[generate-day] Experience guidance included: ${experienceGuidancePrompt.length > 0 ? 'YES' : 'NO'} (${experienceGuidancePrompt.length} chars)`);
-      console.log(`[generate-day] Destination guidance included: ${destinationGuidancePrompt.length > 0 ? 'YES' : 'NO'} (${destinationGuidancePrompt.length} chars)`);
+      console.log(`[generate-day] Experience guidance included: ${archetypeContext.promptBlocks.affinity.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.affinity.length} chars)`);
+      console.log(`[generate-day] Destination guidance included: ${archetypeContext.promptBlocks.destination.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.destination.length} chars)`);
 
       try {
         let data: any = null;
