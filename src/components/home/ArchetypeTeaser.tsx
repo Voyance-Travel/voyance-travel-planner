@@ -27,7 +27,7 @@ export default function ArchetypeTeaser({ archetype, onReset }: ArchetypeTeaserP
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-2xl md:text-3xl lg:text-4xl font-serif font-normal mb-4 text-foreground"
+        className="text-2xl md:text-3xl lg:text-4xl font-serif font-normal mb-4 text-white drop-shadow-lg"
       >
         You might be a {data.name}
       </motion.h2>
@@ -36,7 +36,7 @@ export default function ArchetypeTeaser({ archetype, onReset }: ArchetypeTeaserP
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="text-lg md:text-xl text-muted-foreground mb-10"
+        className="text-lg md:text-xl text-white/80 mb-10"
       >
         {data.oneLiner}
       </motion.p>
@@ -49,14 +49,14 @@ export default function ArchetypeTeaser({ archetype, onReset }: ArchetypeTeaserP
         className="grid md:grid-cols-2 gap-4 mb-10"
       >
         {/* Typical Trip */}
-        <div className="p-6 bg-muted/50 rounded-xl text-left">
-          <h3 className="font-medium text-sm uppercase tracking-wide text-muted-foreground mb-4">
+        <div className="p-6 bg-black/40 backdrop-blur-sm rounded-xl text-left border border-white/20">
+          <h3 className="font-medium text-sm uppercase tracking-wide text-white/60 mb-4">
             Typical Trip
           </h3>
           <ul className="space-y-2">
             {data.typicalTrip.map((item, i) => (
-              <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                <span className="text-muted-foreground/50">•</span>
+              <li key={i} className="text-sm text-white/70 flex items-start gap-2">
+                <span className="text-white/40">•</span>
                 {item}
               </li>
             ))}
@@ -64,14 +64,14 @@ export default function ArchetypeTeaser({ archetype, onReset }: ArchetypeTeaserP
         </div>
 
         {/* Your Trip */}
-        <div className="p-6 bg-primary/10 rounded-xl text-left border border-primary/20">
-          <h3 className="font-medium text-sm uppercase tracking-wide text-primary mb-4">
+        <div className="p-6 bg-white/20 backdrop-blur-sm rounded-xl text-left border border-white/40">
+          <h3 className="font-medium text-sm uppercase tracking-wide text-white mb-4">
             Your Trip
           </h3>
           <ul className="space-y-2">
             {data.yourTrip.map((item, i) => (
-              <li key={i} className="text-sm text-foreground flex items-start gap-2">
-                <span className="text-primary">•</span>
+              <li key={i} className="text-sm text-white flex items-start gap-2">
+                <span className="text-white">•</span>
                 {item}
               </li>
             ))}
@@ -90,7 +90,7 @@ export default function ArchetypeTeaser({ archetype, onReset }: ArchetypeTeaserP
           <Button
             onClick={() => navigate(ROUTES.QUIZ)}
             size="lg"
-            className="rounded-full px-8"
+            className="rounded-full px-8 bg-white text-black hover:bg-white/90"
           >
             Find out for sure
             <ArrowRight className="ml-2 w-4 h-4" />
@@ -99,7 +99,7 @@ export default function ArchetypeTeaser({ archetype, onReset }: ArchetypeTeaserP
             onClick={() => navigate(ROUTES.START)}
             variant="outline"
             size="lg"
-            className="rounded-full px-8"
+            className="rounded-full px-8 border-white/40 text-white hover:bg-white/20"
           >
             Or just plan a trip
           </Button>
@@ -107,7 +107,7 @@ export default function ArchetypeTeaser({ archetype, onReset }: ArchetypeTeaserP
         
         <button
           onClick={onReset}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2 mx-auto"
+          className="text-sm text-white/60 hover:text-white transition-colors flex items-center justify-center gap-2 mx-auto"
         >
           <RotateCcw className="w-3 h-3" />
           Answer differently

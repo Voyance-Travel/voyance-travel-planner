@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { POPULAR_DESTINATIONS } from '@/lib/archetypeTeasers';
 import QuickPreviewDisplay from './QuickPreviewDisplay';
@@ -81,7 +80,7 @@ export default function DestinationEntry() {
       <motion.h1 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal mb-4 text-foreground"
+        className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal mb-4 text-white drop-shadow-lg"
       >
         Where do you want to go?
       </motion.h1>
@@ -90,7 +89,7 @@ export default function DestinationEntry() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="text-lg md:text-xl text-muted-foreground mb-10"
+        className="text-lg md:text-xl text-white/80 mb-10"
       >
         Type a destination. See what your trip could look like.
       </motion.p>
@@ -101,31 +100,29 @@ export default function DestinationEntry() {
         transition={{ delay: 0.2 }}
         className="relative max-w-md mx-auto"
       >
-        <Input
+        <input
           type="text"
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Tokyo, Paris, Bali..."
-          className="text-xl text-center py-6 h-auto border-0 border-b-2 rounded-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary"
+          className="w-full text-xl text-center py-4 border-0 border-b-2 border-white/40 bg-transparent text-white placeholder:text-white/50 focus:outline-none focus:border-white transition-colors"
           autoFocus
           disabled={isGenerating}
         />
         
         {destination && !isGenerating && (
-          <Button
+          <button
             onClick={() => handleSubmit()}
-            size="icon"
-            variant="ghost"
-            className="absolute right-0 top-1/2 -translate-y-1/2 text-primary hover:text-primary/80"
+            className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-white hover:text-white/80 transition-colors"
           >
             <ArrowRight className="w-6 h-6" />
-          </Button>
+          </button>
         )}
         
         {isGenerating && (
           <div className="absolute right-0 top-1/2 -translate-y-1/2 p-2">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <Loader2 className="w-5 h-5 animate-spin text-white/60" />
           </div>
         )}
       </motion.div>
@@ -134,7 +131,7 @@ export default function DestinationEntry() {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mt-6 text-muted-foreground"
+          className="mt-6 text-white/70"
         >
           Building you a taste...
         </motion.p>
@@ -157,7 +154,7 @@ export default function DestinationEntry() {
                 setDestination(city);
                 handleSubmit(city);
               }}
-              className="rounded-full"
+              className="rounded-full bg-white/20 text-white border-white/30 hover:bg-white/30 backdrop-blur-sm"
             >
               {city}
             </Button>

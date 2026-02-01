@@ -42,7 +42,7 @@ export default function ItineraryAnalysis({ analysis, onReset }: ItineraryAnalys
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-2xl md:text-3xl font-serif font-normal mb-6 text-foreground"
+        className="text-2xl md:text-3xl font-serif font-normal mb-6 text-white drop-shadow-lg"
       >
         {hasIssues ? "Here's the honest truth:" : "Actually, this looks pretty good."}
       </motion.h2>
@@ -61,12 +61,12 @@ export default function ItineraryAnalysis({ analysis, onReset }: ItineraryAnalys
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 + i * 0.1 }}
-              className="flex gap-3 p-4 rounded-lg bg-muted/30"
+              className="flex gap-3 p-4 rounded-lg bg-black/40 backdrop-blur-sm border border-white/20"
             >
               <span className="text-xl shrink-0">{issue.emoji}</span>
               <div>
-                <p className="font-medium text-foreground">{issue.headline}</p>
-                <p className="text-sm text-muted-foreground mt-1">{issue.detail}</p>
+                <p className="font-medium text-white">{issue.headline}</p>
+                <p className="text-sm text-white/70 mt-1">{issue.detail}</p>
               </div>
             </motion.div>
           ))}
@@ -81,13 +81,13 @@ export default function ItineraryAnalysis({ analysis, onReset }: ItineraryAnalys
           transition={{ delay: 0.4 }}
           className="mb-8"
         >
-          <h3 className="text-sm uppercase tracking-wide text-muted-foreground mb-3">
+          <h3 className="text-sm uppercase tracking-wide text-white/60 mb-3">
             What you got right
           </h3>
           <div className="space-y-2">
             {analysis.positives.map((positive, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm text-foreground">
-                <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+              <div key={i} className="flex items-start gap-2 text-sm text-white">
+                <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
                 {positive}
               </div>
             ))}
@@ -104,12 +104,12 @@ export default function ItineraryAnalysis({ analysis, onReset }: ItineraryAnalys
       >
         {hasIssues && analysis.canFix ? (
           <>
-            <p className="text-foreground mb-4">Want us to fix it?</p>
+            <p className="text-white mb-4">Want us to fix it?</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button
                 onClick={handleFix}
                 size="lg"
-                className="rounded-full px-8"
+                className="rounded-full px-8 bg-white text-black hover:bg-white/90"
               >
                 Build me a better version
                 <ArrowRight className="ml-2 w-4 h-4" />
@@ -118,7 +118,7 @@ export default function ItineraryAnalysis({ analysis, onReset }: ItineraryAnalys
                 onClick={onReset}
                 variant="outline"
                 size="lg"
-                className="rounded-full px-8"
+                className="rounded-full px-8 border-white/40 text-white hover:bg-white/20"
               >
                 <RotateCcw className="mr-2 w-4 h-4" />
                 Analyze another trip
@@ -130,7 +130,7 @@ export default function ItineraryAnalysis({ analysis, onReset }: ItineraryAnalys
             <Button
               onClick={() => navigate(ROUTES.START)}
               size="lg"
-              className="rounded-full px-8"
+              className="rounded-full px-8 bg-white text-black hover:bg-white/90"
             >
               Plan another trip
               <ArrowRight className="ml-2 w-4 h-4" />
@@ -139,7 +139,7 @@ export default function ItineraryAnalysis({ analysis, onReset }: ItineraryAnalys
               onClick={onReset}
               variant="outline"
               size="lg"
-              className="rounded-full px-8"
+              className="rounded-full px-8 border-white/40 text-white hover:bg-white/20"
             >
               <RotateCcw className="mr-2 w-4 h-4" />
               Analyze another trip

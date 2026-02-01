@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ItineraryAnalysis from './ItineraryAnalysis';
@@ -78,7 +77,7 @@ export default function FixItineraryEntry() {
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-2xl md:text-3xl lg:text-4xl font-serif font-normal text-center mb-4 text-foreground"
+        className="text-2xl md:text-3xl lg:text-4xl font-serif font-normal text-center mb-4 text-white drop-shadow-lg"
       >
         Already have a trip planned?
       </motion.h2>
@@ -87,7 +86,7 @@ export default function FixItineraryEntry() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="text-center text-muted-foreground mb-8"
+        className="text-center text-white/80 mb-8"
       >
         Paste your itinerary. We'll tell you what's wrong with it.
       </motion.p>
@@ -97,7 +96,7 @@ export default function FixItineraryEntry() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <Textarea
+        <textarea
           value={itinerary}
           onChange={(e) => setItinerary(e.target.value)}
           placeholder="Paste your itinerary, travel notes, or just describe your plan...
@@ -107,7 +106,7 @@ Day 1: Land at Narita, go to Shibuya
 Day 2: Tsukiji Market, TeamLab, Harajuku, Shinjuku
 Day 3: Day trip to Mt Fuji, Robot Restaurant at night
 ..."
-          className="min-h-[200px] resize-none text-base"
+          className="w-full min-h-[200px] p-4 rounded-xl resize-none text-base bg-black/30 backdrop-blur-sm border border-white/30 text-white placeholder:text-white/50 focus:outline-none focus:border-white transition-colors"
           disabled={isAnalyzing}
         />
 
@@ -115,7 +114,7 @@ Day 3: Day trip to Mt Fuji, Robot Restaurant at night
           onClick={handleAnalyze}
           disabled={!itinerary.trim() || isAnalyzing}
           size="lg"
-          className="w-full mt-4 rounded-full"
+          className="w-full mt-4 rounded-full bg-white text-black hover:bg-white/90"
         >
           {isAnalyzing ? (
             <>
