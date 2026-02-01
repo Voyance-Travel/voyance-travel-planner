@@ -88,24 +88,24 @@ Your trips will be city-focused, neighborhood-deep, and paced for someone who wa
     id: 'wilderness_pioneer',
     name: 'The Wilderness Pioneer',
     category: 'EXPLORER',
-    revealParagraph: `Nature isn't a day trip for you. It's the point.
+    revealParagraph: `You don't go to nature to look at it. You go to be in it.
 
-You feel most yourself with dirt on your boots and no cell signal. The further from roads and crowds, the better. You've probably chosen destinations specifically because they're hard to get to. That's a feature, not a bug.
+The trips that stay with you aren't the ones with the best hotels—they're the ones where you pushed yourself physically, where you were far enough from civilization that your phone was useless, where you earned the view. You've probably hiked in the rain, slept somewhere uncomfortable, and loved every minute of it.
 
-Other people need buildings and restaurants and museums. You need sky and silence and the feeling of being somewhere that doesn't care whether you're there or not. That's not lonely. That's freedom.
+When other people say "getting away from it all," they mean a beach resort. You mean somewhere you can't get cell service. Real nature, not a manicured version of it.
 
-Travel for you is about the wild places that make you feel small in the best possible way.`,
+Your trips will take you off the beaten path—literally. Trails over tourist sites. Remote locations over convenient ones. Experiences that challenge you physically and reward you with the kind of beauty you can't reach by car.`,
     youProbably: [
-      "Have slept under more stars than roofs",
-      "Choose destinations based on trail access",
+      "Have hiked in the rain and called it the best day",
+      "Choose destinations based on trail access, not hotel ratings",
       "Feel more rested after a challenging hike than a beach day",
       "Get twitchy in cities after more than two days"
     ],
     itineraryWillInclude: [
-      "Real nature, not manicured parks",
-      "Distance from crowds and noise",
-      "Physical challenge if you want it",
-      "Space and silence"
+      "Real wilderness, not manicured parks",
+      "Physical challenges if you want them",
+      "Distance from crowds and cell service",
+      "Views you have to earn"
     ],
     protectFrom: [
       "'Nature' that's actually a crowded tourist trail",
@@ -118,23 +118,23 @@ Travel for you is about the wild places that make you feel small in the best pos
     id: 'digital_explorer',
     name: 'The Digital Explorer',
     category: 'EXPLORER',
-    revealParagraph: `You experience travel through a modern lens—literally.
+    revealParagraph: `You see the world through a frame—and that's not a bad thing.
 
-You've found amazing places through TikTok and planned trips around Instagram spots. Not because you're shallow, but because visual discovery is how you engage with the world. You want the shot. But you also want the experience that makes the shot worth taking.
+For you, photography isn't just documentation. It's how you experience a place. You scout locations, time visits for golden hour, and notice details that others walk right past. The hunt for the perfect shot sharpens your attention and leads you to places you'd never find otherwise.
 
-You've probably been the one researching the best photo spots, the golden hour timing, the angle that makes the place come alive. That's not vanity—that's how you remember. How you share. How you connect.
+Some people roll their eyes at travelers who "just want photos." They don't understand. The camera makes you look closer, stay longer, see better. Your photos aren't just memories—they're proof that you were really paying attention.
 
-Travel for you is worth capturing. And worth sharing.`,
+Your trips will include the iconic spots (you want the shot), but also the hidden angles, the less-photographed gems, the moments that require patience and presence. We'll think about light, timing, and composition—because that's how you think.`,
     youProbably: [
-      "Have discovered destinations through social media before any guidebook",
-      "Know the best time of day for photos at places you haven't visited yet",
-      "Curate your feed as carefully as your itinerary",
-      "Get genuine joy from a perfectly captured moment"
+      "Scout locations and time visits for golden hour",
+      "Notice details others walk right past",
+      "Have found amazing places by chasing the perfect shot",
+      "Curate your feed as carefully as your itinerary"
     ],
     itineraryWillInclude: [
-      "Photo-worthy moments (we'll tell you the best times)",
-      "Places that look as good as they photograph",
-      "Unique experiences worth sharing",
+      "Photo-worthy moments (with the best times for light)",
+      "The iconic spots AND the hidden angles",
+      "Unique experiences worth capturing",
       "The spots the algorithms haven't killed yet"
     ],
     protectFrom: [
@@ -148,13 +148,13 @@ Travel for you is worth capturing. And worth sharing.`,
     id: 'flexible_wanderer',
     name: 'The Flexible Wanderer',
     category: 'EXPLORER',
-    revealParagraph: `Plans are suggestions. Good ones, maybe. But suggestions.
+    revealParagraph: `Your best travel moments weren't planned. They happened.
 
-You've tried making detailed itineraries. They last about two hours before you see something interesting and abandon ship entirely. And honestly? Those detours are always the best part.
+You've learned to trust the detour, the wrong turn, the "let's see what's down here" impulse that rigid planners never follow. While others stress about reservations and schedules, you're open to whatever the day brings. That's when the real stuff happens.
 
-You trust your instincts more than any guidebook. The restaurant that looks good IS good. The street that seems interesting IS interesting. You don't need someone telling you what to do every hour—you need room to discover things yourself.
+You're not opposed to planning—you just know that the plan is the starting point, not the destination. You've changed course mid-trip because something better came up, and you've never regretted it.
 
-Other people get stressed without a plan. You get stressed WITH one.`,
+Your trips will have structure without rigidity. Suggestions instead of schedules. Room to wander, discover, and follow whatever catches your eye. We'll give you the ingredients, not the recipe.`,
     youProbably: [
       "Have abandoned a carefully planned day within the first hour",
       "Trust your gut over reviews",
@@ -163,9 +163,9 @@ Other people get stressed without a plan. You get stressed WITH one.`,
     ],
     itineraryWillInclude: [
       "Breathing room and flexibility built in",
-      "Options, not obligations",
+      "Suggestions instead of schedules",
       "The freedom to change everything",
-      "Discovery over direction"
+      "Ingredients, not recipes"
     ],
     protectFrom: [
       "Over-scheduled days (we know you'll ignore half of it anyway)",
@@ -182,13 +182,13 @@ Other people get stressed without a plan. You get stressed WITH one.`,
     id: 'social_butterfly',
     name: 'The Social Butterfly',
     category: 'CONNECTOR',
-    revealParagraph: `Travel is better with people. Especially people you haven't met yet.
+    revealParagraph: `For you, travel is a team sport.
 
-You've made friends on trains, in hostels, at bars. You've had conversations with strangers that turned into dinner invitations. You've stayed in touch with people you met for one night in one city three years ago.
+The destination matters, sure. But you've had amazing trips to mediocre places because the people were right—and disappointing trips to dream destinations because you were with the wrong group. You come alive with others around.
 
-Solo travel doesn't mean lonely for you—it means open. Open to whoever shows up. The best trips have people in them. Stories. Laughter. That moment when you realize you're all in the same beautiful mess together.
+The shared meals, the inside jokes, the "remember when" stories that last for years. You've made friends with strangers in hostel kitchens, on tours, at bars. Some of them you still talk to. Travel, for you, is as much about who you meet as where you go.
 
-Travel for you is a social experience. Even when you're alone.`,
+Your trips will be social by design. Group activities, shared experiences, places where you can meet people if you're traveling with a group or connect with others if you're not. We'll never stick you in isolation when you thrive on connection.`,
     youProbably: [
       "Have made lifelong friends in a hostel common room",
       "Can strike up a conversation with anyone, anywhere",
@@ -212,13 +212,13 @@ Travel for you is a social experience. Even when you're alone.`,
     id: 'family_architect',
     name: 'The Family Architect',
     category: 'CONNECTOR',
-    revealParagraph: `Travel is how you build memories with the people who matter most.
+    revealParagraph: `You travel to build something that lasts: your family's shared story.
 
-You've spent hours researching kid-friendly restaurants and activities that won't bore the adults. You've navigated the impossible balance of what the 5-year-old wants, what the teenager can tolerate, and what you and your partner actually need.
+Vacations aren't escapes for you—they're investments. You're thinking about what your kids will remember in twenty years, what photos will go on the wall, what moments will become family legends.
 
-You know that the "perfect" trip isn't about perfect moments—it's about everyone being tired and happy at the end of the day. It's the inside jokes that start on vacation. The photo where everyone's laughing. The story you'll tell for years.
+You've sat through long car rides and bedtime meltdowns because you know the payoff is worth it. You've learned to balance kid-friendly with parent-sane, adventure with nap time, new experiences with the comfort of routine. It's not always easy. But when it works—when you see your kid's face light up at something they've never seen before—nothing else comes close.
 
-Travel for you is investment. In your family. In your memories.`,
+Your trips will be family-smart. Pacing that works for all ages, accommodations that make sense for your crew, experiences that are genuinely interesting for everyone (not just "kid-friendly" in name only). We'll help you build memories, not manage chaos.`,
     youProbably: [
       "Have researched nap-time-friendly activities",
       "Know which restaurants have good kids' menus AND good adult food",
@@ -242,13 +242,13 @@ Travel for you is investment. In your family. In your memories.`,
     id: 'romantic_curator',
     name: 'The Romantic Curator',
     category: 'CONNECTOR',
-    revealParagraph: `You believe travel should be beautiful. And shared.
+    revealParagraph: `Travel is how you and your partner reconnect.
 
-You notice the details—the table with the view, the timing of sunset, the walk home through quiet streets. You don't just stumble into romantic moments; you create the conditions for them.
+You've felt it—how being somewhere new together strips away the routine, the distractions, the autopilot of daily life. Suddenly you're seeing each other again. The long dinner with nowhere to be. The morning with no alarm. The experiences that become "our places" you'll talk about for years.
 
-Some people think romance is cheesy. You know it's intentional. It's choosing the restaurant with the candlelight. It's finding the rooftop bar no one knows about. It's the effort of making something ordinary into something you'll both remember.
+You care about atmosphere. The view from the room, the table at the restaurant, the timing of a sunset walk—these aren't frivolous details. They're the setting for what you're actually there for: each other.
 
-Travel for you is an act of love. For your partner. For beauty itself.`,
+Your trips will be designed for two. Romance isn't just about luxury (though we're not afraid of that)—it's about intention. Experiences that bring you closer, environments that invite intimacy, and enough unscheduled time to actually be present with each other.`,
     youProbably: [
       "Request specific tables at restaurants",
       "Plan activities around sunset timing",
@@ -272,13 +272,13 @@ Travel for you is an act of love. For your partner. For beauty itself.`,
     id: 'community_builder',
     name: 'The Community Builder',
     category: 'CONNECTOR',
-    revealParagraph: `Travel is a chance to give, not just take.
+    revealParagraph: `You travel with a conscience.
 
-You've probably felt uncomfortable being "just a tourist"—taking photos, spending money, leaving nothing behind. You want to connect. To contribute. To leave a place a little better than you found it.
+You've thought about where your money goes, who benefits from your visit, whether your presence helps or harms. Not in a preachy way—you just can't enjoy a place if you know your trip is extracting more than it gives.
 
-Maybe that's volunteering. Maybe it's supporting local businesses over chains. Maybe it's learning enough of the language to have a real conversation. You believe travelers have a responsibility to the places they visit.
+You seek out local businesses, guides from the community, experiences that create connection rather than consumption. You've probably stayed places that weren't the most convenient because they felt more authentic, more responsible, more right.
 
-Travel for you is exchange, not extraction.`,
+Your trips will reflect your values. We'll prioritize locally-owned, community-positive experiences. Places where your presence matters in a good way. Travel that enriches the places you visit, not just your Instagram.`,
     youProbably: [
       "Research how to support local communities before visiting",
       "Avoid chain restaurants and hotels",
@@ -287,8 +287,8 @@ Travel for you is exchange, not extraction.`,
     ],
     itineraryWillInclude: [
       "Meaningful local connections",
-      "Opportunities to give back (if you want them)",
       "Community-supported businesses",
+      "Opportunities to give back (if you want them)",
       "Experiences that benefit both you and the place"
     ],
     protectFrom: [
@@ -306,13 +306,13 @@ Travel for you is exchange, not extraction.`,
     id: 'bucket_list_conqueror',
     name: 'The Bucket List Conqueror',
     category: 'ACHIEVER',
-    revealParagraph: `You have a list. And you're checking it off.
+    revealParagraph: `You have a list. And you're working through it.
 
-Life is finite. The world is enormous. And there are things you WILL see before you die. The Northern Lights. Machu Picchu. That restaurant you've been reading about for years. You're not casual about this.
+You know where you want to go before you die, and each trip is a chance to check something off. The pyramids. Machu Picchu. The Northern Lights. You want to see the places that humans have talked about for centuries—not because they're trendy, but because they matter.
 
-Some people meander through travel. You have goals. The trip isn't complete until you've done THE THING. Not because you can't enjoy the journey—but because the destination actually matters to you.
+Some people call it tourist-y. You don't care. You're not traveling to prove you're different. You're traveling to witness the things that everyone should see at least once.
 
-Travel for you is about making life count. One checked box at a time.`,
+Your trips will include the icons—without the amateur mistakes. We'll get you there, but at the right time, from the right angle, with the right context. No waiting in unnecessary lines or missing the thing you came for. You want to see it all, and we'll make sure you do.`,
     youProbably: [
       "Have a written list of places you'll visit before you die",
       "Feel genuine satisfaction when you cross something off",
@@ -336,13 +336,13 @@ Travel for you is about making life count. One checked box at a time.`,
     id: 'adrenaline_architect',
     name: 'The Adrenaline Architect',
     category: 'ACHIEVER',
-    revealParagraph: `You don't do relaxing vacations. You do stories.
+    revealParagraph: `You don't do "relaxing" vacations. You do stories.
 
-The best trips leave you with the moment you almost didn't make it. The thing that scared you until you did it. The challenge that made you feel more alive than any beach ever could.
+The trips that stay with you are the ones where something happened—where you pushed yourself, took a risk, felt your heart pound. The moment you almost didn't make it. The view that required a climb. The thing that scared you a little before you did it.
 
-Other people need to "recover" from vacation. You come back charged. The scrapes and sunburns are trophies. The fear you pushed through is the whole point.
+Other people need to "recover" from vacation. You come back charged. The discomfort, the challenge, the not-knowing-how-it-would-turn-out—that's not a bug. That's the feature.
 
-Travel for you is testing yourself. And discovering you're capable of more than you thought.`,
+Your trips will have edge. We'll find the experiences that require something from you and give something back. Not reckless—but not safe either. You want to feel alive, and we'll make sure you do.`,
     youProbably: [
       "Have a story that starts with 'So I signed the waiver...'",
       "Feel restless after two hours on a beach",
@@ -366,13 +366,13 @@ Travel for you is testing yourself. And discovering you're capable of more than 
     id: 'collection_curator',
     name: 'The Collection Curator',
     category: 'ACHIEVER',
-    revealParagraph: `You don't just travel. You specialize.
+    revealParagraph: `You have a thing. And it shapes how you see the world.
 
-Maybe it's wine regions. Maybe it's architecture. Maybe it's trains, or football stadiums, or contemporary art, or Michelin stars. Whatever your thing is, travel is how you pursue it deeply.
+Maybe it's wine regions. Maybe it's modernist architecture. Maybe it's stadiums, or jazz clubs, or ancient ruins. Whatever it is, it gives you a lens that most travelers don't have—and it leads you to places they'll never find.
 
-You've annoyed travel companions by spending three hours in one room of a museum while they wanted to move on. You've chosen destinations entirely because of one specific thing. You've read more about your interest than most experts.
+You've probably planned entire trips around your interest while others thought you were obsessive. You know better. The obsession is what makes it interesting. Going deep on something is more rewarding than going wide on everything.
 
-Travel for you is depth, not breadth. Passion, not obligation.`,
+Your trips will feed your focus. We'll build around your interest, not despite it. The hidden gems, the expert experiences, the places that only matter if you know why they matter. Your thing is the organizing principle.`,
     youProbably: [
       "Have a niche interest that drives your travel choices",
       "Know more about your specialty than most tour guides",
@@ -396,13 +396,13 @@ Travel for you is depth, not breadth. Passion, not obligation.`,
     id: 'status_seeker',
     name: 'The Status Seeker',
     category: 'ACHIEVER',
-    revealParagraph: `You've worked hard. Travel should reflect that.
+    revealParagraph: `You want the experiences that aren't available to everyone.
 
-You want the upgrade. The table they don't give to just anyone. The experience that isn't available to the general public. Not because you're showing off—because you know the difference between good and exceptional. And you've earned exceptional.
+Not because you're showing off—though you're not embarrassed by nice things—but because access opens doors that regular travel can't reach. The private tour after hours. The table that's not on the reservation system. The room that most guests don't know exists.
 
-Some people settle. You don't. The details matter. The service matters. The story you tell when you get home matters. Life's too short for mediocre experiences.
+You've worked hard. You've earned the right to travel at a level that matches your life. The premium isn't wasted on you—you actually notice the difference, appreciate the details, and take full advantage of what you're paying for.
 
-Travel for you is living at the level you've achieved.`,
+Your trips will reflect that. VIP access, exclusive experiences, the insider track that most travelers never see. Not flashy for flashy's sake—but premium where it actually matters.`,
     youProbably: [
       "Know which credit card points get the best upgrades",
       "Have a preferred hotel chain (and status to match)",
@@ -430,13 +430,13 @@ Travel for you is living at the level you've achieved.`,
     id: 'zen_seeker',
     name: 'The Zen Seeker',
     category: 'RESTORER',
-    revealParagraph: `Travel is spiritual practice.
+    revealParagraph: `You travel to find something inside yourself.
 
-You're not on vacation to see things. You're on vacation to be present. To breathe. To sit in silence somewhere beautiful and remember what actually matters.
+It sounds abstract, but you know exactly what it means. The retreats, the meditation sessions, the places that strip away distraction and let you hear your own thoughts. You're not escaping—you're arriving. At yourself.
 
-You've probably sought out temples, retreats, meditation spaces. You've chosen destinations for their energy, not their attractions. You've come home from trips feeling more centered than when you left—and that was the whole point.
+Not everyone understands this kind of travel. They think vacation means sightseeing, activities, doing. You know that sometimes the most valuable trip is one where you do almost nothing—and return completely different.
 
-Travel for you is inner journey as much as outer one.`,
+Your trips will honor that. Contemplative spaces, spiritual depth, room for silence. We won't fill your days with noise when what you need is stillness. The inner journey is just as valid as the outer one.`,
     youProbably: [
       "Have meditated on multiple continents",
       "Choose destinations by energy, not attractions",
@@ -460,13 +460,13 @@ Travel for you is inner journey as much as outer one.`,
     id: 'retreat_regular',
     name: 'The Retreat Regular',
     category: 'RESTORER',
-    revealParagraph: `You understand that rest is not laziness. It's necessity.
+    revealParagraph: `You've learned that real rest requires structure.
 
-You've discovered that a week at a spa or wellness retreat isn't indulgent—it's how you function. You return to real life better. More patient. More present. More capable of handling everything that's waiting for you.
+Left to your own devices, you'd still check email on the beach, squeeze in one more sight, not fully unplug. You need something external to hold the space—a program, a schedule, a setting designed for restoration.
 
-Some people feel guilty doing "nothing" on vacation. You know that nothing is something. The massage isn't extra. The slow morning isn't wasted time. The goal is restoration, and you take that seriously.
+That's why retreats, spas, and wellness resorts work for you. They give you permission to do what you actually need: nothing. Yoga at 7am. Massage at 2pm. Dinner at a set time. The structure liberates you from having to decide.
 
-Travel for you is how you reset.`,
+Your trips will be restoration-forward. We'll find the places that know how to take care of you—where everything is designed to help you let go, not keep going.`,
     youProbably: [
       "Have a go-to retreat you return to",
       "Consider spa time essential, not extra",
@@ -490,13 +490,13 @@ Travel for you is how you reset.`,
     id: 'beach_therapist',
     name: 'The Beach Therapist',
     category: 'RESTORER',
-    revealParagraph: `Ocean. Sand. Done.
+    revealParagraph: `Your happy place has sand and water.
 
-You don't need complex itineraries or cultural enrichment or bucket list achievements. You need the sound of waves, a book you may or may not read, and absolutely nothing on the schedule.
+You've discovered the simplest truth about vacation: sometimes you just need to be horizontal. The sound of waves. A book. A drink. Nowhere to be, nothing to do, no one expecting anything from you.
 
-People ask "but what will you DO there?" and you genuinely don't understand the question. You'll swim. You'll nap. You'll watch the water. You'll finally think thoughts you've been too busy to think.
+Other people feel guilty for "wasting" a trip on a beach. You've stopped caring what other people think. The beach isn't wasted time. It's the point.
 
-Travel for you is horizontal. And that's perfect.`,
+Your trips will prioritize sun, water, and simplicity. We won't overload you with activities or make you feel bad about doing nothing. Sometimes the best trips are the ones where you come back tan, rested, and with very few photos.`,
     youProbably: [
       "Have a favorite beach you return to",
       "Can happily spend an entire day doing nothing",
@@ -522,14 +522,14 @@ Travel for you is horizontal. And that's perfect.`,
     category: 'RESTORER',
     revealParagraph: `You've never understood people who "do" a city in two days.
 
-What's the point of traveling if you're exhausted the whole time? If you're rushing from thing to thing, never actually experiencing any of it? If you come home needing a vacation from your vacation?
+For you, the best moments happen when you're not trying to get somewhere else. The three-hour lunch. The morning at a café with nowhere to be. The second day in a neighborhood, when you start to recognize faces.
 
-For you, the best moments happen when you're not trying to get somewhere else. The three-hour lunch. The morning at a café with nowhere to be. The afternoon you spent doing nothing and loved it.
+You've been told you're "wasting time" by not seeing more. You know better. You're not missing anything. You're actually there—which is more than most travelers can say.
 
-You've been told you're "wasting time" when you travel. You know better. You're not missing anything. You're actually there.`,
+Your trips will have room to breathe. Fewer destinations, more depth. Time built in for the unscheduled, the spontaneous, the nothing. We'll never pack your days so tight that you're always rushing to the next thing.`,
     youProbably: [
       "Have a favorite café in at least three cities",
-      "Have made friends abroad you still keep in touch with",
+      "Prefer staying a week over rushing through three destinations",
       "Get stressed when someone says 'let's see everything'",
       "Have spent an entire vacation day reading and called it perfect"
     ],
@@ -556,11 +556,11 @@ You've been told you're "wasting time" when you travel. You know better. You're 
     category: 'CURATOR',
     revealParagraph: `You've planned entire trips around a single restaurant reservation.
 
-Food isn't fuel for you. It's the point. The market at 7am. The hole-in-the-wall only locals know. The thing you ate three years ago that you still think about.
+Food isn't fuel—it's the point. Where others see eating as an interruption to sightseeing, you see sightseeing as what you do between meals. Your travel research is mostly menus, reviews, and reservation availability.
 
-You research restaurants the way other people research museums. You have opinions about bread. You've been known to evaluate a city by its food scene before considering anything else.
+You've probably eaten things that made other people uncomfortable. You've waited in lines that weren't worth it—and lines that absolutely were. You know the difference between a tourist trap and the real thing, and you'll walk an extra mile for the latter.
 
-Other people see eating as an interruption to sightseeing. You see sightseeing as what you do between meals.`,
+Your trips will be built around food. We'll organize your days around meals, not the other way around. The reservations, the hidden gems, the places you can't find on the first page of Google—that's where we'll take you.`,
     youProbably: [
       "Have a list of restaurants in cities you haven't even booked yet",
       "Know the difference between 'authentic' and 'touristy' by smell alone",
@@ -584,13 +584,13 @@ Other people see eating as an interruption to sightseeing. You see sightseeing a
     id: 'art_aficionado',
     name: 'The Art Aficionado',
     category: 'CURATOR',
-    revealParagraph: `You need beauty like you need oxygen.
+    revealParagraph: `You've stood in front of paintings longer than most people spend in the entire museum.
 
-You've stood in front of paintings until security thought something was wrong. You've chosen destinations for a single gallery. You've had your day made—truly made—by encountering something beautiful you didn't expect.
+Art isn't something you "appreciate"—it's something you need. A city's museums, galleries, and public art tell you more about a place than any guidebook could. You travel to see original works you've only known from reproductions, to feel the scale of something that doesn't translate to a screen.
 
-Some people "do" museums. You experience them. You have opinions. You see things others walk past. Art isn't decoration for you. It's essential.
+You've probably built trips around exhibitions—timed specifically to catch something before it closes. That's not obsessive. That's having priorities.
 
-Travel for you is a pilgrimage to beauty.`,
+Your trips will put art at the center. We'll know what's showing where, which collections are worth your time, and how to see the major works without the major crowds. Your itinerary will treat museums as destinations, not checkboxes.`,
     youProbably: [
       "Have spent three hours in one room of a museum",
       "Choose destinations based on exhibitions",
@@ -616,11 +616,11 @@ Travel for you is a pilgrimage to beauty.`,
     category: 'CURATOR',
     revealParagraph: `You know the difference between expensive and good.
 
-You've stayed in five-star hotels that weren't worth it and boutique gems that exceeded every expectation. You've learned that luxury isn't about price—it's about craft, attention, and getting every detail right.
+You're not impressed by price tags or brand names. You've stayed in overpriced hotels that weren't worth it—and mid-range places that exceeded expectations. What you value is quality: the details, the craftsmanship, the feeling that something was done with care.
 
-You're not flashy about it. You just know what quality feels like. The sheets. The service. The food that's clearly made by someone who cares. Life's too short for anything less than excellent.
+You're not trying to impress anyone. You just appreciate the difference between excellence and mediocrity, and you're willing to invest in the former.
 
-Travel for you is an exercise in taste.`,
+Your trips will reflect your discerning eye. Not luxury for its own sake, but quality where it matters. The places, experiences, and accommodations that earn their reputation—not the ones that just charge for it.`,
     youProbably: [
       "Can tell the difference between expensive and excellent",
       "Notice details others miss—thread count, glassware, service timing",
@@ -648,13 +648,13 @@ Travel for you is an exercise in taste.`,
     id: 'eco_ethicist',
     name: 'The Eco-Ethicist',
     category: 'TRANSFORMER',
-    revealParagraph: `You think about the footprint you leave.
+    revealParagraph: `You can't enjoy a trip if you know it's doing harm.
 
-You've chosen trains over planes when you could. You've researched which hotels actually care about sustainability versus which ones just say they do. You've felt the tension between wanting to see the world and knowing that seeing it has costs.
+It's not that you're preachy about it—you've just done the math. You know that tourism can damage the places we claim to love, and you're not willing to pretend otherwise. So you ask questions, do research, make choices that reflect what you actually value.
 
-You don't want to stop traveling. You want to do it responsibly. In a way that leaves places better, or at least not worse. In a way you can feel good about.
+Some people think this makes travel less fun. For you, it makes it more meaningful. Knowing that your trip enriched a local community, preserved rather than degraded, contributed instead of extracted—that's not a burden. That's the point.
 
-Travel for you is exploration with conscience.`,
+Your trips will align with your values. Locally-owned, environmentally-conscious, community-positive. We'll find the experiences that let you travel well in both senses of the word.`,
     youProbably: [
       "Research sustainability claims before booking",
       "Choose slower transport when feasible",
@@ -678,13 +678,13 @@ Travel for you is exploration with conscience.`,
     id: 'gap_year_graduate',
     name: 'The Gap Year Graduate',
     category: 'TRANSFORMER',
-    revealParagraph: `You stretch every dollar until it screams.
+    revealParagraph: `You'll sleep on a bad mattress if it means another week on the road.
 
-You've slept in airports, eaten grocery store dinners, and walked three miles to avoid a cab fare. Not because you had to—because that money buys another day somewhere amazing.
+Budget isn't a limitation for you—it's a strategy. You've learned to stretch money in ways that let you travel more, see more, do more. The five-star hotel doesn't tempt you when that money could fund a whole other trip.
 
-You've discovered that budget travel isn't lesser travel. It's often better. Closer to the ground. More connected to real places and real people. The hostel was better than the hotel would have been.
+You've probably earned some incredulous looks from people who don't get it. "You went there? And stayed where?" But you know what they don't: that the best experiences aren't the most expensive ones, and that discomfort is a small price for adventure.
 
-Travel for you is about maximum world, minimum cost.`,
+Your trips will maximize experience per dollar. We'll find the places where budget doesn't mean compromise—where your money goes to what actually matters.`,
     youProbably: [
       "Know which day of the week flights are cheapest",
       "Have slept in airports more than once",
@@ -708,13 +708,13 @@ Travel for you is about maximum world, minimum cost.`,
     id: 'midlife_explorer',
     name: 'The Midlife Explorer',
     category: 'TRANSFORMER',
-    revealParagraph: `You've reached the point where you know what you want.
+    revealParagraph: `You've reached the point where you know what you want—and you're done apologizing for it.
 
-You're past proving anything to anyone. Past choosing destinations for how they look on social media. Past suffering through uncomfortable experiences because you feel like you "should."
+You've traveled enough to understand your own preferences. You're not interested in proving anything or chasing what's cool. You want comfort without stuffiness, quality without pretension, experiences that match who you actually are.
 
-Now you travel for yourself. For the things that actually interest you. For comfort and quality without apology. For the simple pleasure of being somewhere beautiful with time to enjoy it.
+You've earned the right to travel exactly how you want. No guilt about skipping the thing everyone says you "have to see." No pressure to keep up with a pace that doesn't work for you. Just good travel, your way.
 
-Travel for you is finally doing it YOUR way.`,
+Your trips will reflect your self-knowledge. We won't give you the same itinerary we'd give a 25-year-old backpacker. We'll give you what actually works for who you are now—thoughtfully designed for someone who's past the phase of figuring it out.`,
     youProbably: [
       "No longer compromise on comfort",
       "Choose destinations that interest YOU, not what's trending",
@@ -738,13 +738,13 @@ Travel for you is finally doing it YOUR way.`,
     id: 'sabbatical_scholar',
     name: 'The Sabbatical Scholar',
     category: 'TRANSFORMER',
-    revealParagraph: `Travel is education that doesn't feel like it.
+    revealParagraph: `Travel, for you, is education by another name.
 
-You want to understand how things work. Why cultures developed the way they did. What history left in the streets. You've read books about places before visiting them and felt the satisfaction of seeing what you studied.
+You want to understand how the world got this way. The history, the context, the layers of meaning beneath the surface. A building isn't just a building—it's a story. A meal isn't just food—it's cultural transmission across generations.
 
-Some people travel to relax. You travel to learn. Museums aren't obligations—they're the point. Historical context isn't boring—it's what makes everything make sense.
+You probably read about places before you go, and you definitely have more questions after you return. You've been accused of making trips "too serious." But you know that understanding makes everything richer.
 
-Travel for you is intellectual adventure.`,
+Your trips will feed your curiosity. Historical context, local expertise, the stories that most visitors never hear. We'll give you the depth that turns sightseeing into genuine learning.`,
     youProbably: [
       "Read about destinations before visiting",
       "Get genuinely excited by historical context",
@@ -768,13 +768,13 @@ Travel for you is intellectual adventure.`,
     id: 'healing_journeyer',
     name: 'The Healing Journeyer',
     category: 'TRANSFORMER',
-    revealParagraph: `You travel to become whole again.
+    revealParagraph: `Travel has been medicine for you.
 
-Maybe something broke. Maybe you're recovering. Maybe you just need distance from your regular life to remember who you are. Travel for you isn't escape—it's medicine.
+At some point, getting away wasn't just a vacation—it was survival. A breakup, a loss, a burnout, a life that needed to be processed far from where it happened. You've learned that new places can help you become new versions of yourself.
 
-You've discovered that new places can make you feel new. That walking streets where no one knows you can be profoundly healing. That sometimes you need to go far away to come back to yourself.
+Not everyone travels for healing. Some people can't understand why you'd go somewhere hard when you're already hurting. But you know: sometimes the distance is the treatment. Sometimes you need to be a stranger to find yourself again.
 
-Travel for you is therapy. Literally.`,
+Your trips will be gentle where they need to be and restorative by design. We'll create space for processing, for solitude, for the kind of travel that helps you come back different—not just rested.`,
     youProbably: [
       "Have traveled specifically to process something",
       "Find distance from home clarifying",
@@ -798,13 +798,13 @@ Travel for you is therapy. Literally.`,
     id: 'retirement_ranger',
     name: 'The Retirement Ranger',
     category: 'TRANSFORMER',
-    revealParagraph: `You've waited your whole life for this.
+    revealParagraph: `You've been waiting for this.
 
-All those trips you postponed. All those "somedays" that finally arrived. You have the time now. The freedom. And you're not wasting a minute of it.
+For years, travel was squeezed into vacations between obligations. Now the obligations are fewer, and the time is yours. You have a list of places you've been putting off, experiences you've been saving for "someday"—and someday is now.
 
-You're not old—you're experienced. You know what you like. You've earned the right to comfort. And you've got a list of places you're finally going to see.
+You want to do it right. Not rushed, not uncomfortable, not compromised. You've earned the version of travel that works for your body and your preferences, without apology.
 
-Travel for you is the reward for a life of work. Time to collect.`,
+Your trips will honor both your ambition and your needs. The bucket list items, done smartly. The pacing that works for this chapter. Experiences that feel earned, not grueling—because you've put in enough grueling to last a lifetime.`,
     youProbably: [
       "Have a list of 'someday' destinations you're finally visiting",
       "Appreciate comfort more than you used to",
@@ -828,23 +828,23 @@ Travel for you is the reward for a life of work. Time to collect.`,
     id: 'balanced_story_collector',
     name: 'The Balanced Story Collector',
     category: 'TRANSFORMER',
-    revealParagraph: `You want it all—in moderation.
+    revealParagraph: `You're not easily categorized—and that's a good thing.
 
-A little adventure. A little relaxation. Some culture. Some food. Famous things and hidden things. Plans and spontaneity. You don't need to specialize because you're genuinely interested in everything.
+You don't have a single dominant travel priority. You like good food, but you're not obsessed. You enjoy being active, but also value rest. You want cultural experiences, but not at the expense of having fun. You're the friend who's up for anything.
 
-You've noticed that extreme travelers—the hardcore foodies, the adrenaline junkies, the total relaxers—seem to miss things. You want the whole picture. A trip that touches everything.
+Some quizzes probably frustrate you with their forced choices. You want the balance—a little of this, a little of that—because variety is what makes travel interesting.
 
-Travel for you is balanced, varied, and complete.`,
+Your trips will reflect your range. We won't pigeonhole you into one type of experience. We'll build itineraries that mix adventure with relaxation, culture with pleasure, famous sites with hidden gems. A little of everything, well-executed—because that's what actually works for you.`,
     youProbably: [
       "Enjoy a mix of activities on any trip",
       "Get bored with too much of any one thing",
-      "Appreciate both famous sites and hidden gems",
+      "Appreciate both famous sites AND local secrets",
       "Like having a plan but leaving room for surprises"
     ],
     itineraryWillInclude: [
       "A bit of everything",
       "Balance between active and restful",
-      "Famous sites AND local secrets",
+      "Famous sites AND hidden gems",
       "Flexibility within structure"
     ],
     protectFrom: [
