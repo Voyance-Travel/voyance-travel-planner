@@ -1,97 +1,195 @@
-# Plan: Enforce Trip Type Theming for All Archetypes
 
-## ✅ COMPLETED - FULL IMPLEMENTATION
+# Plan: Fix Hotel Display in Airport Game Plan
 
-### Implementation Summary
+## Problem Summary
 
-**Problem**: Trip type themes (like "Guys Trip") were being ignored because:
-1. Missing archetype × trip type combinations for many archetypes
-2. No forced slots for group or purpose-driven trip types
-3. Trip type prompts were advisory, not mandatory
+You selected a hotel during planning (Rome Times Hotel) and it's correctly stored in the database, but it's not appearing in the "Your Airport Game Plan" landing strip. The user expects to see the hotel details displayed between the flights section and the transfer times/prices.
 
-### Changes Made (Complete)
+## Root Cause Analysis
 
-#### 1. Complete Archetype × Trip Type Matrix ✅
-**File**: `supabase/functions/generate-itinerary/trip-type-modifiers.ts`
+The issue has **two parts**:
 
-Added all 27 archetypes for **14 trip types**:
-- `guys_trip`: 27 archetypes with group-appropriate guidance
-- `girls_trip`: 27 archetypes with group-appropriate guidance  
-- `birthday`: 27 archetypes with celebration focus
-- `anniversary`: 27 archetypes with romantic focus
-- `honeymoon`: 27 archetypes with post-wedding recovery focus
-- `solo`: 27 archetypes with solo-friendly focus
-- `family`: 27 archetypes with kid-friendly focus
-- `babymoon`: 27 archetypes with gentle/rest focus
-- `graduation`: 27 archetypes with achievement celebration focus
-- `retirement`: 27 archetypes with bucket list and leisure focus
-- `wellness_retreat`: 27 archetypes with wellness-first approach
-- `adventure`: 27 archetypes with active/thrill focus
-- `foodie`: 27 archetypes with culinary immersion focus
-- `business_leisure`: 27 archetypes with time-efficient approach
+### Part 1: Field Name Mismatch
+The database stores hotel data with fields like:
+- `checkIn: "2026-02-25"` (date string)
+- `checkOut: "2026-03-04"`
+- `location: "Via Milano, 42, 00184 Roma RM, Italy"`
 
-**Total: 378 archetype × trip type combinations**
+But `normalizeLegacyHotelSelection()` expects:
+- `checkInDate` / `checkInTime`
+- `checkOutDate` / `checkOutTime`
+- `address`
 
-#### 2. Forced Slots for All Trip Types ✅
-**File**: `supabase/functions/generate-itinerary/personalization-enforcer.ts`
+When the data is already an array, the function returns it as-is without normalizing field names:
+```typescript
+if (Array.isArray(selection)) {
+  return selection as HotelBooking[];  // No field normalization!
+}
+```
 
-Added new `ForcedSlotType` values:
-- `group_bonding_activity` - Guys/Girls trip shared activity
-- `evening_entertainment` - Guys trip: bar/pub scene
-- `evening_out` - Girls trip: rooftop/cocktails
-- `group_experience` - Girls trip: class/tasting/spa
-- `photo_worthy` - Girls trip: instagram-worthy moment
-- `graduation_celebration` - Graduation: celebration moment
-- `reward_experience` - Graduation: earned reward
-- `bucket_list_experience` - Retirement: dream experience
-- `leisurely_morning` - Retirement: no early alarms
-- `morning_wellness` - Wellness: daily practice
-- `wellness_treatment` - Wellness: spa/massage
-- `main_adventure` - Adventure: primary activity
-- `secondary_adventure` - Adventure: supporting activity
-- `adventure_recovery` - Adventure: rest periods
-- `market_visit` - Foodie: food market
-- `cooking_experience` - Foodie: cooking class
-- `signature_restaurant` - Foodie: THE restaurant
-- `food_discovery` - Foodie: street food exploration
-- `efficient_highlight` - Bleisure: quick must-see
-- `quality_dinner` - Bleisure: client-worthy restaurant
-- `easy_break_activity` - Bleisure: 1-2 hour break
+### Part 2: Missing Hotel Display Block
+Even when `hasHotel` is true, the AirportGamePlan only shows:
+1. Flight info
+2. Transfer options (Taxi/Train times and costs)
 
-Added derivation logic for all trip types in `deriveForcedSlots()`.
+It does NOT show a dedicated hotel block with:
+- Hotel name
+- Hotel address/location
+- Check-in date
 
-#### 3. Comprehensive Compliance Checks ✅
-**File**: `supabase/functions/generate-itinerary/trip-type-modifiers.ts`
+The user wants to SEE the hotel listed, not just the transfer options.
 
-Added enforcement blocks for 5 trip type categories:
+## Solution
 
-| Category | Trip Types | Compliance Requirements |
-|----------|------------|------------------------|
-| Group | guys, girls, family, bachelorette | Group activity, evening social, no romantic language |
-| Celebration | birthday, anniversary, honeymoon, graduation, retirement | Special moment, milestone marking |
-| Romance | anniversary, honeymoon, babymoon | Couples focus, romantic highlights |
-| Purpose-Driven | wellness, adventure, foodie | Theme dominates, visible every day |
-| Business | bleisure | Time-efficient, near business district |
+### Step 1: Fix Field Normalization in `hotelValidation.ts`
 
-### Expected Outcome
+Update `normalizeLegacyHotelSelection()` to normalize array items too:
 
-| Trip Type | Forced Slots | Compliance Check |
-|-----------|-------------|------------------|
-| guys_trip | group_bonding, evening_entertainment | Group-obvious, not romantic |
-| girls_trip | group_experience, photo_worthy, evening_out | Group-obvious, Instagram-ready |
-| birthday | celebration_dinner, celebration_experience | Celebration visible |
-| anniversary | romantic_dinner, sunset_moment | Romance throughout |
-| honeymoon | romantic_dinner ×2, couples_experience, relaxation | Romance + rest |
-| graduation | graduation_celebration, reward_experience | Achievement celebrated |
-| retirement | bucket_list, celebration_dinner, leisurely_morning | Life achievement + rest |
-| wellness_retreat | morning_wellness, treatment, rest | Wellness dominates |
-| adventure | main_adventure, secondary_adventure, recovery | Adventure dominates |
-| foodie | market, cooking, signature_restaurant, food_discovery | Food dominates |
-| business_leisure | efficient_highlight, quality_dinner | Time-efficient |
+```typescript
+export function normalizeLegacyHotelSelection(
+  selection: unknown,
+  tripStartDate: string,
+  tripEndDate: string
+): HotelBooking[] {
+  if (!selection) return [];
+  
+  // Helper to normalize a single hotel object
+  const normalizeHotel = (hotel: Record<string, unknown>): HotelBooking | null => {
+    if (!hotel.name) return null;
+    
+    return {
+      id: (hotel.id as string) || `migrated-${Date.now()}`,
+      name: hotel.name as string,
+      // Support both 'address' and 'location' fields
+      address: (hotel.address as string) || (hotel.location as string) || undefined,
+      neighborhood: hotel.neighborhood as string | undefined,
+      // Support multiple date field formats
+      checkInDate: (hotel.checkInDate as string) || (hotel.checkIn as string) || tripStartDate,
+      checkOutDate: (hotel.checkOutDate as string) || (hotel.checkOut as string) || tripEndDate,
+      checkInTime: hotel.checkInTime as string | undefined,
+      checkOutTime: hotel.checkOutTime as string | undefined,
+      website: hotel.website as string | undefined,
+      googleMapsUrl: hotel.googleMapsUrl as string | undefined,
+      images: hotel.images as string[] | undefined,
+      imageUrl: hotel.imageUrl as string | undefined,
+      placeId: hotel.placeId as string | undefined,
+      rating: hotel.rating as number | undefined,
+      isManualEntry: hotel.isManualEntry as boolean | undefined,
+      isEnriched: hotel.isEnriched as boolean | undefined,
+    };
+  };
+  
+  // If already an array, normalize each item
+  if (Array.isArray(selection)) {
+    return selection
+      .map(item => normalizeHotel(item as Record<string, unknown>))
+      .filter((h): h is HotelBooking => h !== null);
+  }
+  
+  // Legacy single object format
+  const normalized = normalizeHotel(selection as Record<string, unknown>);
+  return normalized ? [normalized] : [];
+}
+```
 
-### Verification
+### Step 2: Add Hotel Display Block to AirportGamePlan
 
-To verify, regenerate an itinerary and check logs for:
-- Forced slots matching the trip type
-- Compliance check language in prompt
-- Theme visible throughout generated activities
+Update the `AirportGamePlan` component to show the hotel information between flights and transfers:
+
+**Location**: `src/components/itinerary/EditorialItinerary.tsx` (lines 3847-3884)
+
+**New structure** (after flight section, before transfer section):
+
+```typescript
+{/* Hotel Section - Show hotel details */}
+{hasHotel && (
+  <div className="flex items-start gap-3">
+    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+      <Hotel className="h-4 w-4 text-primary" />
+    </div>
+    <div className="flex-1">
+      <p className="font-medium text-sm">{hotelSelection?.name}</p>
+      {hotelSelection?.address && (
+        <p className="text-xs text-muted-foreground mt-0.5">{hotelSelection.address}</p>
+      )}
+      {(hotelSelection?.checkInDate || hotelSelection?.checkIn) && (
+        <p className="text-xs text-muted-foreground mt-1">
+          Check-in: {format(parseISO(hotelSelection.checkInDate || hotelSelection.checkIn!), 'MMM d')}
+          {hotelSelection?.checkInTime && ` at ${hotelSelection.checkInTime}`}
+        </p>
+      )}
+    </div>
+  </div>
+)}
+
+{/* Transfer Section - Travel times (existing code, slightly modified header) */}
+{hasHotel && (
+  <div className="flex items-start gap-3">
+    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+      <Car className="h-4 w-4 text-muted-foreground" />
+    </div>
+    <div className="flex-1">
+      <div className="flex items-center gap-2">
+        <p className="font-medium text-sm">Getting There</p>
+        {/* Live badge, etc. */}
+      </div>
+      {/* Transfer grid - existing code */}
+    </div>
+  </div>
+)}
+```
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/utils/hotelValidation.ts` | Fix `normalizeLegacyHotelSelection()` to normalize array items and support `location`/`checkIn` field names |
+| `src/components/itinerary/EditorialItinerary.tsx` | Add dedicated hotel display block in `AirportGamePlan` between flights and transfers |
+
+## Expected Outcome
+
+After implementation, the Airport Game Plan will show:
+
+```text
+╔═══════════════════════════════════════════════════════════════╗
+║  ✈️  Your Airport Game Plan                                   ║
+╠═══════════════════════════════════════════════════════════════╣
+║  🕐  Arrive at airport by 5:30 AM                             ║
+║      We recommend 2.5 hours before your 8:00 AM departure     ║
+╠───────────────────────────────────────────────────────────────╣
+║  📍  Landing at 2:00 PM (FCO)                                 ║
+║      Afternoon arrival - grab lunch and explore               ║
+╠═══════════════════════════════════════════════════════════════╣
+║  🏨  Rome Times Hotel                     ← NEW SECTION       ║
+║      Via Milano, 42, 00184 Roma RM, Italy                     ║
+║      Check-in: Feb 25                                         ║
+╠═══════════════════════════════════════════════════════════════╣
+║  🚗  Getting There                                            ║
+║      ┌─────────────────┬─────────────────┐                   ║
+║      │ 🚕 Taxi/Uber    │ 🚆 Train/Metro  │                   ║
+║      │ 45-60 min       │ 32 min          │                   ║
+║      │ €48 fixed       │ €14             │                   ║
+║      └─────────────────┴─────────────────┘                   ║
+╠═══════════════════════════════════════════════════════════════╣
+║  ✨  Recommended: Check in, then lunch & explore              ║
+║      Afternoon arrival - grab lunch and explore the area      ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+## Implementation Notes
+
+1. The `HotelSelection` interface in `EditorialItinerary.tsx` already supports both `checkIn` and `checkInDate` fields, so no interface changes needed
+2. The `normalizeLegacyHotelSelection` fix ensures consistent field names regardless of how data was stored
+3. Adding `Car` icon import for the transfer section header (already imported in the file)
+4. The format function from date-fns is already imported
+
+## Verification
+
+After implementation:
+1. Navigate to `/trip/264370bf-0d21-4399-b16c-f8431daa6788`
+2. Check the Airport Game Plan shows:
+   - ✓ Flight information
+   - ✓ **Rome Times Hotel** with address
+   - ✓ Check-in date (Feb 25)
+   - ✓ Transfer options (Taxi and Train)
+   - ✓ Post-landing recommendation
