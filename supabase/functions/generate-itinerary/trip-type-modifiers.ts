@@ -4890,3 +4890,340 @@ DO use language like "your pace", "no rush", "freedom", "counter seating"
 
   return section;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXTENDED HONEYMOON MATRIX - Full details for each archetype
+// ═══════════════════════════════════════════════════════════════════════════
+// This extends the basic honeymoon matrix with rest, romance, dining guidance
+// and sample days for each archetype combination
+
+export interface ExtendedArchetypeMatrix {
+  interaction: 'override' | 'combine' | 'amplify';
+  description: string;
+  pacingModifier: number;
+  include: string[];
+  exclude: string[];
+  rest: string;
+  romance: string;
+  diningGuidance: string;
+  sampleDay: string;
+}
+
+export const extendedHoneymoonMatrix: Record<string, ExtendedArchetypeMatrix> = {
+  // --- CURATORS ---
+  culinary_cartographer: {
+    interaction: 'combine',
+    description: 'Food honeymoon. Cooking classes together. Restaurant tour. Wine tasting.',
+    pacingModifier: -2,
+    include: ['couples cooking class', 'food tours together', 'wine tasting', 'special restaurants'],
+    exclude: ['solo food experiences', 'counter dining'],
+    rest: 'Between meals. Food coma is real.',
+    romance: 'Food is romantic. Cooking together. Feeding each other.',
+    diningGuidance: 'Romantic tables for two. Tasting menus to share. Wine pairings.',
+    sampleDay: 'Market together. Cooking class. Long lunch. Rest. Special dinner.'
+  },
+  art_aficionado: {
+    interaction: 'combine',
+    description: 'Art honeymoon. Museums together. Design hotels. Cultural romance.',
+    pacingModifier: -2,
+    include: ['art museums together', 'design hotels', 'cultural experiences', 'beautiful things'],
+    exclude: ['rushing through museums', 'ignoring aesthetics'],
+    rest: 'Beautiful rest. Design hotel suite.',
+    romance: 'Beauty is romantic. Share aesthetic experiences.',
+    diningGuidance: 'Beautiful restaurants. Design-forward spaces. Art-adjacent venues.',
+    sampleDay: 'Museum together. Art-adjacent lunch. Hotel beauty. Gallery. Elegant dinner.'
+  },
+  luxury_luminary: {
+    interaction: 'amplify',
+    description: 'Luxury honeymoon. Five-star everything. Private experiences. Premium romance.',
+    pacingModifier: -2,
+    include: ['five-star everything', 'private experiences', 'VIP treatment', 'premium romance'],
+    exclude: ['budget anything', 'group tours'],
+    rest: 'Luxury rest. Suite. Butler. Spa.',
+    romance: 'Luxury IS romance for them. Highest expression.',
+    diningGuidance: 'Michelin-starred. Private dining. Chef\'s table experiences.',
+    sampleDay: 'Breakfast in suite. Private tour. Fine dining lunch. Spa. Extraordinary dinner.'
+  },
+  // --- TRANSFORMERS ---
+  eco_ethicist: {
+    interaction: 'combine',
+    description: 'Eco honeymoon. Sustainable resorts. Nature. Responsible romance.',
+    pacingModifier: -2,
+    include: ['sustainable options', 'nature', 'eco-lodges', 'responsible choices'],
+    exclude: ['wasteful luxury', 'environmental harm'],
+    rest: 'Nature rest. Eco-lodge hammock.',
+    romance: 'Shared values are romantic. Nature is romantic.',
+    diningGuidance: 'Farm-to-table. Sustainable seafood. Local and organic.',
+    sampleDay: 'Nature walk together. Eco-lodge lunch. Rest. Conservation activity. Farm dinner.'
+  },
+  gap_year_graduate: {
+    interaction: 'combine',
+    description: 'Budget honeymoon. Romantic doesn\'t require luxury. Meaningful over expensive.',
+    pacingModifier: -2,
+    include: ['budget romance', 'free romantic activities', 'one splurge', 'meaningful over expensive'],
+    exclude: ['expensive pressure', 'luxury expectations'],
+    rest: 'Hostel private room nap. Beach rest. Free.',
+    romance: 'Love doesn\'t cost money. Creativity over budget.',
+    diningGuidance: 'Street food romance. Picnics. One special splurge dinner.',
+    sampleDay: 'Free beach morning. Cheap romantic lunch. Nap. Sunset. One nice dinner.'
+  },
+  midlife_explorer: {
+    interaction: 'combine',
+    description: 'Mature honeymoon. Quality over flash. Meaningful, not showy.',
+    pacingModifier: -2,
+    include: ['quality experiences', 'meaningful moments', 'substance over style'],
+    exclude: ['superficial', 'trying too hard'],
+    rest: 'Built-in through pace.',
+    romance: 'Mature romance. Depth over display.',
+    diningGuidance: 'Quality restaurants. Meaningful atmosphere over hype.',
+    sampleDay: 'Leisurely start. Meaningful experience. Quality lunch. Rest. Thoughtful dinner.'
+  },
+  sabbatical_scholar: {
+    interaction: 'combine',
+    description: 'Learning honeymoon. Courses together. Intellectual romance.',
+    pacingModifier: -2,
+    include: ['learning together', 'courses', 'intellectual connection', 'curious romance'],
+    exclude: ['anti-intellectual venues', 'mindless activities'],
+    rest: 'Reading together. Processing.',
+    romance: 'Intellectual connection is romantic. Learn together.',
+    diningGuidance: 'Bookshop cafes. Literary venues. Discussion-friendly spots.',
+    sampleDay: 'Workshop together. Thoughtful lunch. Reading rest. Cultural site. Dinner discussion.'
+  },
+  healing_journeyer: {
+    interaction: 'combine',
+    description: 'Gentle honeymoon. Healing together. Restorative. Peaceful bond.',
+    pacingModifier: -3,
+    include: ['gentle activities', 'healing', 'nature', 'peaceful togetherness'],
+    exclude: ['intensity', 'stress', 'packed schedules'],
+    rest: 'Maximum. Healing is the point.',
+    romance: 'Gentle love. Healing together.',
+    diningGuidance: 'Nourishing. Comfort food. No pressure venues.',
+    sampleDay: 'Gentle morning. Easy activity. Nourishing lunch. Long rest. Peaceful dinner.'
+  },
+  retirement_ranger: {
+    interaction: 'combine',
+    description: 'Later-life honeymoon. Comfortable. Quality. No rushing. Celebrating partnership.',
+    pacingModifier: -2,
+    include: ['comfort', 'quality', 'no rushing', 'celebrating years together'],
+    exclude: ['physical strain', 'rushing', 'uncomfortable'],
+    rest: 'Built-in through pace.',
+    romance: 'Mature romance. Comfort is romantic.',
+    diningGuidance: 'Early dinner available. Comfortable seating. Quality over trendy.',
+    sampleDay: 'Late breakfast. Comfortable activity. Nice lunch. Rest. Early lovely dinner.'
+  },
+  balanced_story_collector: {
+    interaction: 'combine',
+    description: 'Classic honeymoon. Mix of romance, sightseeing, relaxation. Balanced newlywed trip.',
+    pacingModifier: -2,
+    include: ['balance', 'mix of activities', 'romantic moments', 'some sightseeing', 'relaxation'],
+    exclude: ['extremes', 'imbalance'],
+    rest: 'Built-in through balance.',
+    romance: 'Classic romance. Sunset. Special dinner. Beautiful moments.',
+    diningGuidance: 'Mix of casual and special. Balance of local and fine.',
+    sampleDay: 'Leisurely start. One activity. Romantic lunch. Rest/pool. Sunset. Special dinner.'
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SYNTHESIS FUNCTION - Combine Trip Type + Archetype + Traits
+// ═══════════════════════════════════════════════════════════════════════════
+// This is the master function that produces comprehensive guidance
+
+export interface TraitScores {
+  pace: number;
+  budget: number;
+  adventure: number;
+  comfort: number;
+  social: number;
+  planning: number;
+}
+
+export interface SynthesizedGuidance {
+  interactionType: 'override' | 'combine' | 'amplify' | 'neutral';
+  effectivePace: number;
+  promptSection: string;
+  validation: string;
+}
+
+/**
+ * Synthesize trip type, archetype, and traits into comprehensive generation guidance
+ */
+export function synthesizeTripTypeAndArchetype(
+  tripType: string,
+  archetype: string,
+  traits: TraitScores
+): SynthesizedGuidance {
+  const normalizedTripType = tripType?.toLowerCase().replace(/[\s-]+/g, '_') || 'none';
+  const normalizedArchetype = archetype?.toLowerCase().replace(/[\s-]+/g, '_') || '';
+  
+  // Get matrix interaction rules
+  const matrix = getArchetypeInteraction(normalizedTripType, normalizedArchetype);
+  
+  // Get oxymoron handler if applicable
+  const oxymoronHandler = getOxymoronHandler(normalizedTripType, normalizedArchetype);
+  
+  // Get extended honeymoon data if applicable
+  const extendedHoneymoon = normalizedTripType === 'honeymoon' 
+    ? extendedHoneymoonMatrix[normalizedArchetype] 
+    : null;
+  
+  // Get solo social calibration if applicable
+  const soloCalibration = normalizedTripType === 'solo' 
+    ? soloSocialCalibration[normalizedArchetype] 
+    : null;
+  
+  // Calculate effective pacing
+  const basePace = traits?.pace ?? 5;
+  const tripModifier = matrix?.pacingModifier || 0;
+  const effectivePace = Math.max(1, Math.min(10, basePace + tripModifier));
+  
+  // Get interaction type
+  const interactionType = matrix?.interaction || 'combine';
+  
+  // Get pacing rules based on effective pace
+  let pacingRules = '';
+  if (effectivePace <= 3) {
+    pacingRules = 'VERY SLOW pacing. Max 2-3 gentle activities per day. Long rest blocks. No rushing.';
+  } else if (effectivePace <= 5) {
+    pacingRules = 'MODERATE pacing. 3-4 activities per day. Include rest breaks. Buffer time between.';
+  } else if (effectivePace <= 7) {
+    pacingRules = 'ACTIVE pacing. 4-5 activities per day. Efficient but not exhausting.';
+  } else {
+    pacingRules = 'FULL pacing. 5-6 activities per day. Maximize time. Include recovery blocks.';
+  }
+  
+  // Build the comprehensive prompt section
+  let promptSection = `
+═══════════════════════════════════════════════════════════════════════════
+TRIP TYPE × ARCHETYPE SYNTHESIS
+═══════════════════════════════════════════════════════════════════════════
+
+Trip Type: ${normalizedTripType.replace(/_/g, ' ').toUpperCase()}
+Archetype: ${normalizedArchetype.replace(/_/g, ' ')}
+Interaction: ${interactionType.toUpperCase()}
+
+${matrix?.description || 'Standard combination - apply archetype style to trip type requirements.'}
+`;
+
+  // Add oxymoron handling if applicable
+  if (oxymoronHandler) {
+    promptSection += `
+
+═══════════════════════════════════════════════════════════════════════════
+⚠️ SPECIAL COMBINATION DETECTED
+═══════════════════════════════════════════════════════════════════════════
+
+This combination may SEEM contradictory but represents a REAL traveler type.
+
+COMMON MISUNDERSTANDING: ${oxymoronHandler.commonMisunderstanding}
+ACTUAL NEED: ${oxymoronHandler.actualNeed}
+TRANSLATION PRINCIPLE: ${oxymoronHandler.translationPrinciple}
+
+WHAT THEY WANT:
+${oxymoronHandler.concreteExamples.slice(0, 5).map(ex => `✓ ${ex}`).join('\n')}
+
+MISTAKES TO AVOID:
+${oxymoronHandler.avoidMistakes.slice(0, 4).map(m => `✗ ${m}`).join('\n')}
+`;
+  }
+
+  // Add solo social calibration if applicable
+  if (soloCalibration) {
+    promptSection += `
+
+═══════════════════════════════════════════════════════════════════════════
+SOLO SOCIAL CALIBRATION: ${soloCalibration.socialLevel.toUpperCase()}
+═══════════════════════════════════════════════════════════════════════════
+
+${soloCalibration.description}
+
+INCLUDE:
+${soloCalibration.include.slice(0, 5).map(i => `✓ ${i}`).join('\n')}
+
+AVOID:
+${soloCalibration.avoid.slice(0, 3).map(a => `✗ ${a}`).join('\n')}
+`;
+  }
+
+  // Add extended honeymoon details if applicable
+  if (extendedHoneymoon) {
+    promptSection += `
+
+═══════════════════════════════════════════════════════════════════════════
+HONEYMOON DETAILS FOR ${normalizedArchetype.replace(/_/g, ' ').toUpperCase()}
+═══════════════════════════════════════════════════════════════════════════
+
+${extendedHoneymoon.description}
+
+REST REQUIREMENTS: ${extendedHoneymoon.rest}
+ROMANCE GUIDANCE: ${extendedHoneymoon.romance}
+DINING: ${extendedHoneymoon.diningGuidance}
+SAMPLE DAY: ${extendedHoneymoon.sampleDay}
+`;
+  }
+
+  // Add priority shifts and constraints
+  if (matrix?.priorityShift && matrix.priorityShift.length > 0) {
+    promptSection += `
+
+=== PRIORITIZE (move to top of experience list) ===
+${matrix.priorityShift.map(p => `• ${p}`).join('\n')}
+`;
+  }
+
+  if (matrix?.deprioritize && matrix.deprioritize.length > 0) {
+    promptSection += `
+=== DEPRIORITIZE (move down or remove) ===
+${matrix.deprioritize.map(d => `• ${d}`).join('\n')}
+`;
+  }
+
+  if (matrix?.hardConstraints && matrix.hardConstraints.length > 0) {
+    promptSection += `
+=== HARD CONSTRAINTS (cannot be violated) ===
+${matrix.hardConstraints.map(c => `🚫 ${c}`).join('\n')}
+`;
+  }
+
+  // Add effective pacing
+  promptSection += `
+
+=== EFFECTIVE PACING ===
+Base pace: ${basePace}
+Trip type modifier: ${tripModifier > 0 ? '+' : ''}${tripModifier}
+Effective pace: ${effectivePace}
+
+${pacingRules}
+
+═══════════════════════════════════════════════════════════════════════════
+`;
+
+  // Build validation checklist
+  const validation = `
+SYNTHESIS VALIDATION - Before finalizing, verify:
+
+☐ Does the trip type purpose show clearly? (${normalizedTripType.replace(/_/g, ' ')})
+☐ Is the archetype style expressed? (${normalizedArchetype.replace(/_/g, ' ')})
+${matrix?.priorityShift?.length ? '☐ Are PRIORITIZE items present?' : ''}
+${matrix?.deprioritize?.length ? '☐ Are DEPRIORITIZE items absent?' : ''}
+☐ Is pacing correct for effective pace of ${effectivePace}?
+${soloCalibration ? `☐ Is social calibration at '${soloCalibration.socialLevel}' level?` : ''}
+${oxymoronHandler ? `☐ Is the special combination handled correctly?` : ''}
+☐ Would THIS specific traveler be excited by this itinerary?
+`;
+
+  return {
+    interactionType,
+    effectivePace,
+    promptSection,
+    validation
+  };
+}
+
+/**
+ * Get extended honeymoon matrix for a specific archetype
+ */
+export function getExtendedHoneymoonGuidance(archetype: string): ExtendedArchetypeMatrix | null {
+  const normalizedArchetype = archetype?.toLowerCase().replace(/[\s-]+/g, '_') || '';
+  return extendedHoneymoonMatrix[normalizedArchetype] || null;
+}
