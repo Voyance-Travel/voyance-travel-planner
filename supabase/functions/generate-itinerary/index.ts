@@ -94,6 +94,24 @@ import {
 } from './reservation-urgency.ts';
 
 // =============================================================================
+// PHASE 2: Advanced Temporal & Environmental Intelligence
+// =============================================================================
+import {
+  calculateJetLagImpact,
+  buildJetLagPrompt,
+  resolveTimezone,
+} from './jet-lag-calculator.ts';
+
+import {
+  buildWeatherBackupPrompt,
+  determineSeason,
+} from './weather-backup.ts';
+
+import {
+  buildDailyEstimatesPrompt,
+} from './daily-estimates.ts';
+
+// =============================================================================
 // PHASE 13: UNIFIED ARCHETYPE DATA - Single Source of Truth for All Archetype Info
 // Merges: archetype-constraints.ts + experience-affinity.ts + destination-guides.ts
 // =============================================================================
@@ -192,6 +210,10 @@ interface GenerationContext {
   hotelData?: PromptHotelData;
   // Phase 12: First-time visitor detection
   isFirstTimeVisitor?: boolean;
+  // Phase 2: Advanced temporal intelligence
+  originCity?: string;
+  destinationTimezone?: string;
+  jetLagSensitivity?: 'low' | 'moderate' | 'high';
 }
 
 interface StrictActivity {
@@ -3413,11 +3435,16 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     totalDays,
     travelers: trip.travelers || 1,
     childrenCount: trip.metadata?.childrenCount || 0,
+    childrenAges: trip.metadata?.childrenAges || [],
     tripType: trip.trip_type,
     budgetTier: trip.budget_tier,
     pace: trip.metadata?.pace || 'moderate',
     interests: trip.metadata?.interests || [],
-    currency: 'USD'
+    currency: 'USD',
+    // Phase 2: Origin city and timezone for jet lag calculation
+    originCity: trip.origin_city,
+    destinationTimezone: resolveTimezone(trip.destination) || undefined,
+    jetLagSensitivity: trip.metadata?.jetLagSensitivity || 'moderate',
   };
 
   // Set daily budget based on tier
@@ -3976,11 +4003,26 @@ ${experienceGuidancePrompt}
 ${destinationGuidancePrompt}
 `;
 
+      // Phase 2: Build temporal intelligence prompts
+      const tripDurationPrompt = buildTripDurationPrompt(context.totalDays, !!context.flightData?.hasOutboundFlight, !!context.flightData?.hasReturnFlight);
+      const childrenAgesPrompt = context.childrenAges?.length ? buildChildrenAgesPrompt(context.childrenAges) : '';
+      const jetLagPrompt = buildJetLagPrompt(context.originCity || null, context.destinationTimezone || null, undefined, undefined, context.jetLagSensitivity);
+      const weatherBackupPrompt = buildWeatherBackupPrompt(context.destination, context.startDate);
+      const reservationPrompt = buildReservationUrgencyPrompt();
+      const dailyEstimatesPrompt = buildDailyEstimatesPrompt(context.budgetTier);
+
       const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
 
 ${generationHierarchy}
 
 ${qualityRules}
+
+${tripDurationPrompt}
+${childrenAgesPrompt}
+${jetLagPrompt}
+${weatherBackupPrompt}
+${reservationPrompt}
+${dailyEstimatesPrompt}
 
 ${destinationEssentialsPrompt ? `${destinationEssentialsPrompt}
 
