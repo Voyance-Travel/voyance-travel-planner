@@ -23,6 +23,741 @@ export interface TripTypeModifier {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TRIP TYPE × ARCHETYPE INTERACTION MODEL
+// ═══════════════════════════════════════════════════════════════════════════
+// 
+// The hierarchy:
+// 1. TRIP TYPE sets WHAT (purpose, constraints, safety requirements)
+// 2. ARCHETYPE determines HOW (style, expression within those constraints)
+// 3. TRAITS fine-tune (exact calibration)
+//
+// Three interaction patterns:
+// - OVERRIDE: Trip type overrides archetype behavior (safety, logistics)
+// - COMBINE: Trip type requirements blend with archetype style
+// - AMPLIFY: Trip type amplifies existing archetype tendencies
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type InteractionType = 'override' | 'combine' | 'amplify' | 'neutral';
+
+export interface ArchetypeInteraction {
+  interaction: InteractionType;
+  description: string;
+  pacingModifier: number;
+  priorityShift: string[];
+  deprioritize: string[];
+  hardConstraints?: string[];
+}
+
+/**
+ * Complete interaction matrix for all trip types × archetypes
+ * Defines HOW the trip type affects archetype behavior
+ */
+export const tripTypeArchetypeInteraction: Record<string, Record<string, ArchetypeInteraction>> = {
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BABYMOON - Heavy OVERRIDE for pregnancy safety
+  // ═══════════════════════════════════════════════════════════════════════════
+  babymoon: {
+    adrenaline_architect: {
+      interaction: 'override',
+      description: 'Adventure instincts fully overridden. Safety first. Scenic drives instead of activities.',
+      pacingModifier: -4,
+      priorityShift: ['rest', 'comfort', 'scenic viewing', 'prenatal spa'],
+      deprioritize: ['adventure', 'physical challenges', 'strenuous activities'],
+      hardConstraints: ['All activities must be pregnancy-safe', 'Maximum 1-2 activities per day', 'No adventure activities']
+    },
+    bucket_list_conqueror: {
+      interaction: 'override',
+      description: 'Must-see energy redirected to comfortable highlights only.',
+      pacingModifier: -3,
+      priorityShift: ['rest', 'scenic viewing', 'comfortable must-sees'],
+      deprioritize: ['packed schedules', 'efficiency', 'marathon sightseeing'],
+      hardConstraints: ['Maximum 2 easy activities per day', 'Include rest blocks']
+    },
+    wilderness_pioneer: {
+      interaction: 'override',
+      description: 'Outdoor energy redirected to gentle nature viewing, scenic drives.',
+      pacingModifier: -4,
+      priorityShift: ['scenic drives', 'gentle walks', 'nature viewing'],
+      deprioritize: ['hiking', 'camping', 'strenuous outdoors'],
+      hardConstraints: ['No strenuous outdoor activities', 'Pregnancy-safe only']
+    },
+    slow_traveler: {
+      interaction: 'amplify',
+      description: 'Natural match. Extra slow. Maximum rest. Perfect fit.',
+      pacingModifier: -1,
+      priorityShift: ['rest', 'comfort', 'prenatal pampering'],
+      deprioritize: []
+    },
+    beach_therapist: {
+      interaction: 'amplify',
+      description: 'Beach + pregnancy = perfect. Gentle swimming, lounging, rest.',
+      pacingModifier: -1,
+      priorityShift: ['beach lounging', 'gentle swimming', 'shade'],
+      deprioritize: ['water sports']
+    },
+    retreat_regular: {
+      interaction: 'amplify',
+      description: 'Spa focus with prenatal treatments. Peak babymoon experience.',
+      pacingModifier: -1,
+      priorityShift: ['prenatal spa', 'wellness', 'rest'],
+      deprioritize: []
+    },
+    zen_seeker: {
+      interaction: 'amplify',
+      description: 'Peaceful preparation for parenthood. Meditation, gentle yoga.',
+      pacingModifier: -1,
+      priorityShift: ['prenatal yoga', 'meditation', 'spiritual preparation'],
+      deprioritize: []
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Food focus maintained but pregnancy-safe options only.',
+      pacingModifier: -2,
+      priorityShift: ['pregnancy-safe dining', 'gentle food tours', 'seated experiences'],
+      deprioritize: ['raw fish', 'alcohol-focused venues', 'long walking food tours'],
+      hardConstraints: ['All restaurants must have pregnancy-safe options', 'No raw fish focus']
+    },
+    luxury_luminary: {
+      interaction: 'combine',
+      description: 'Luxury with prenatal pampering. Premium comfort for two.',
+      pacingModifier: -2,
+      priorityShift: ['luxury prenatal spa', 'premium comfort', 'room service option'],
+      deprioritize: ['strenuous VIP experiences']
+    },
+    // Default for all other archetypes
+    _default: {
+      interaction: 'override',
+      description: 'Pregnancy safety overrides all other preferences.',
+      pacingModifier: -3,
+      priorityShift: ['rest', 'comfort', 'pregnancy-safe activities'],
+      deprioritize: ['adventure', 'strenuous activities', 'packed schedules'],
+      hardConstraints: ['All activities pregnancy-safe', 'Maximum 2 activities per day', 'Daily rest blocks required']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FAMILY - Override for kid logistics and timing
+  // ═══════════════════════════════════════════════════════════════════════════
+  family: {
+    bucket_list_conqueror: {
+      interaction: 'override',
+      description: 'Must-see list filtered through kid lens. Fewer sites, more time each.',
+      pacingModifier: -2,
+      priorityShift: ['kid-friendly highlights', 'interactive sites', 'family must-sees'],
+      deprioritize: ['marathon sightseeing', 'adult museums', 'packed schedules'],
+      hardConstraints: ['Max 2-3 activities per day', 'Include rest time 13:00-15:00']
+    },
+    adrenaline_architect: {
+      interaction: 'combine',
+      description: 'Adventure channeled into age-appropriate thrills. Water parks, easy hikes.',
+      pacingModifier: -2,
+      priorityShift: ['kid-friendly adventure', 'family activities', 'age-appropriate thrills'],
+      deprioritize: ['extreme sports', 'adult-only adventures'],
+      hardConstraints: ['All activities must be age-appropriate']
+    },
+    slow_traveler: {
+      interaction: 'amplify',
+      description: 'Slow pace matches kid pace naturally. Extra rest time.',
+      pacingModifier: 0,
+      priorityShift: ['rest time', 'playground breaks', 'relaxed kid pace'],
+      deprioritize: []
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Food focus with kid-friendly execution. Cooking classes, food markets.',
+      pacingModifier: -1,
+      priorityShift: ['family cooking class', 'kid-friendly food', 'casual dining'],
+      deprioritize: ['fine dining', 'long tasting menus', 'late dinners'],
+      hardConstraints: ['Dinner by 18:30', 'Lunch by 13:00']
+    },
+    luxury_luminary: {
+      interaction: 'combine',
+      description: 'Luxury family experience. Best family resorts, kids clubs, family suites.',
+      pacingModifier: -1,
+      priorityShift: ['luxury family resort', 'kids club', 'family VIP experiences'],
+      deprioritize: ['adults-only venues']
+    },
+    social_butterfly: {
+      interaction: 'combine',
+      description: 'Social family trip. Activities with other families, kid-friendly group tours.',
+      pacingModifier: -1,
+      priorityShift: ['family group activities', 'meeting other families'],
+      deprioritize: ['nightlife', 'adult social scenes']
+    },
+    _default: {
+      interaction: 'override',
+      description: 'Kid logistics override normal preferences. Meal times, rest blocks, early evenings.',
+      pacingModifier: -2,
+      priorityShift: ['kid-friendly activities', 'rest blocks', 'early dining'],
+      deprioritize: ['adult-only', 'late nights', 'fine dining'],
+      hardConstraints: ['Lunch by 13:00', 'Dinner by 18:30', 'Rest time 13:00-15:00', 'Max 2-3 activities per day']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HONEYMOON - Combine romance with style, override for rest
+  // ═══════════════════════════════════════════════════════════════════════════
+  honeymoon: {
+    adrenaline_architect: {
+      interaction: 'combine',
+      description: 'Adventure romance. Shared thrills build memories. But include rest.',
+      pacingModifier: -1,
+      priorityShift: ['couples adventure', 'romantic settings', 'recovery time', 'shared thrills'],
+      deprioritize: ['solo challenges', 'extreme intensity', 'back-to-back adventures']
+    },
+    slow_traveler: {
+      interaction: 'amplify',
+      description: 'Ultimate slow romance. Long meals, no rushing, savoring newlywed time.',
+      pacingModifier: -1,
+      priorityShift: ['romantic lingering', 'quality time', 'long meals'],
+      deprioritize: []
+    },
+    bucket_list_conqueror: {
+      interaction: 'combine',
+      description: 'Dream destination with romantic lens. Must-sees with couple time.',
+      pacingModifier: -1,
+      priorityShift: ['romantic must-sees', 'couple experiences', 'buffer time'],
+      deprioritize: ['marathon efficiency', 'solo sightseeing']
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Food honeymoon. Cooking classes together, romantic dinners.',
+      pacingModifier: -1,
+      priorityShift: ['couples cooking class', 'romantic restaurants', 'food experiences together'],
+      deprioritize: ['solo counter dining']
+    },
+    beach_therapist: {
+      interaction: 'amplify',
+      description: 'Beach honeymoon. Ultimate relaxation, ocean sunsets, simple romance.',
+      pacingModifier: -1,
+      priorityShift: ['beach romance', 'sunset moments', 'couples lounging'],
+      deprioritize: []
+    },
+    luxury_luminary: {
+      interaction: 'amplify',
+      description: 'Luxury honeymoon. Five-star everything, private experiences, premium romance.',
+      pacingModifier: -1,
+      priorityShift: ['VIP couples experiences', 'premium romance', 'private moments'],
+      deprioritize: []
+    },
+    social_butterfly: {
+      interaction: 'combine',
+      description: 'Social honeymoon but couples-focused. Classes with other couples.',
+      pacingModifier: -1,
+      priorityShift: ['couples activities', 'small group experiences', 'meeting other newlyweds'],
+      deprioritize: ['singles social', 'party scenes']
+    },
+    _default: {
+      interaction: 'combine',
+      description: 'Romance threads through archetype style. Rest for post-wedding exhaustion.',
+      pacingModifier: -2,
+      priorityShift: ['romantic experiences', 'couples activities', 'rest time'],
+      deprioritize: ['solo activities', 'group tours with strangers'],
+      hardConstraints: ['Include daily rest blocks', 'At least 2 romantic dinners', 'Late start times (10am+)']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WELLNESS RETREAT - Override for wellness focus
+  // ═══════════════════════════════════════════════════════════════════════════
+  wellness_retreat: {
+    retreat_regular: {
+      interaction: 'amplify',
+      description: 'Dream trip. Full immersion. Daily treatments. Total reset.',
+      pacingModifier: -1,
+      priorityShift: ['comprehensive wellness', 'daily treatments', 'full programs'],
+      deprioritize: []
+    },
+    zen_seeker: {
+      interaction: 'amplify',
+      description: 'Spiritual wellness. Meditation intensive. Inner journey.',
+      pacingModifier: -1,
+      priorityShift: ['meditation', 'spiritual practices', 'silence'],
+      deprioritize: []
+    },
+    adrenaline_architect: {
+      interaction: 'override',
+      description: 'Active wellness. Challenging yoga, fitness retreat, athletic recovery.',
+      pacingModifier: -2,
+      priorityShift: ['active wellness', 'fitness classes', 'challenging yoga'],
+      deprioritize: ['adventure activities', 'thrills', 'adrenaline'],
+      hardConstraints: ['All activities must be wellness-focused']
+    },
+    bucket_list_conqueror: {
+      interaction: 'override',
+      description: 'Wellness goals instead of sightseeing. Complete a program.',
+      pacingModifier: -2,
+      priorityShift: ['wellness achievements', 'program completion', 'health goals'],
+      deprioritize: ['tourist attractions', 'sightseeing', 'packed schedules'],
+      hardConstraints: ['Wellness dominates every day']
+    },
+    culinary_cartographer: {
+      interaction: 'override',
+      description: 'Nutrition wellness. Healthy cooking, food as medicine.',
+      pacingModifier: -2,
+      priorityShift: ['healthy eating', 'nutrition classes', 'clean dining'],
+      deprioritize: ['indulgent dining', 'multi-course meals', 'alcohol'],
+      hardConstraints: ['All dining must be health-focused']
+    },
+    slow_traveler: {
+      interaction: 'amplify',
+      description: 'Slow wellness. Unhurried treatments, mindful pace.',
+      pacingModifier: -1,
+      priorityShift: ['unhurried wellness', 'integration time'],
+      deprioritize: []
+    },
+    _default: {
+      interaction: 'override',
+      description: 'Wellness is the purpose. All activities filtered through wellness lens.',
+      pacingModifier: -3,
+      priorityShift: ['daily wellness practice', 'treatments', 'healthy dining', 'rest'],
+      deprioritize: ['sightseeing', 'adventure', 'packed schedules', 'indulgent dining'],
+      hardConstraints: ['Morning practice daily', 'At least one treatment per day', 'Health-focused dining', 'Very slow pacing']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADVENTURE - Override activity selection, amplify active archetypes
+  // ═══════════════════════════════════════════════════════════════════════════
+  adventure: {
+    adrenaline_architect: {
+      interaction: 'amplify',
+      description: 'Dream trip. Maximum adventure. Expert level. Full send.',
+      pacingModifier: +1,
+      priorityShift: ['extreme activities', 'challenges', 'adrenaline', 'expert level'],
+      deprioritize: ['rest', 'museums', 'relaxation']
+    },
+    wilderness_pioneer: {
+      interaction: 'amplify',
+      description: 'Outdoor adventure focus. Multi-day treks. Expedition style.',
+      pacingModifier: +1,
+      priorityShift: ['outdoor adventure', 'nature challenges', 'expedition'],
+      deprioritize: ['urban', 'relaxation']
+    },
+    slow_traveler: {
+      interaction: 'override',
+      description: 'Gentle adventure. Hiking not climbing. Accessible thrills.',
+      pacingModifier: +1,
+      priorityShift: ['accessible adventure', 'scenic active', 'gentle thrills'],
+      deprioritize: ['extreme', 'strenuous', 'multi-hour hikes']
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Adventure eating. Foraging, extreme food, adventure + fuel.',
+      pacingModifier: +1,
+      priorityShift: ['adventurous eating', 'foraging', 'fuel-focused dining'],
+      deprioritize: ['fine dining', 'long seated meals']
+    },
+    luxury_luminary: {
+      interaction: 'combine',
+      description: 'Luxury adventure. Heli-skiing, private guides, premium thrills.',
+      pacingModifier: 0,
+      priorityShift: ['premium adventure', 'VIP experiences', 'private guides'],
+      deprioritize: ['budget options', 'group tours']
+    },
+    beach_therapist: {
+      interaction: 'override',
+      description: 'Water adventure. Surfing, diving, kayaking. Active beach.',
+      pacingModifier: +1,
+      priorityShift: ['water sports', 'active beach', 'ocean adventure'],
+      deprioritize: ['lounging', 'passive beach time']
+    },
+    _default: {
+      interaction: 'override',
+      description: 'Adventure is the purpose. 60%+ of activities must be adventure-focused.',
+      pacingModifier: +1,
+      priorityShift: ['adventure activities', 'active experiences', 'physical challenges'],
+      deprioritize: ['relaxation', 'museums', 'shopping', 'passive activities'],
+      hardConstraints: ['Adventure activity every day', 'Include recovery blocks', 'Fuel-focused dining']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FOODIE - Override for food focus, maintain dining style
+  // ═══════════════════════════════════════════════════════════════════════════
+  foodie: {
+    culinary_cartographer: {
+      interaction: 'amplify',
+      description: 'Dream trip. Food is 90% of experience. Expert level.',
+      pacingModifier: -1,
+      priorityShift: ['signature restaurants', 'expert food experiences', 'food deep dive'],
+      deprioritize: ['non-food activities']
+    },
+    slow_traveler: {
+      interaction: 'amplify',
+      description: 'Slow food pilgrimage. 3-hour meals. Savoring.',
+      pacingModifier: -1,
+      priorityShift: ['long meals', 'unhurried dining', 'food appreciation'],
+      deprioritize: ['quick bites']
+    },
+    adrenaline_architect: {
+      interaction: 'combine',
+      description: 'Food adventure. Extreme cuisine, bizarre foods, challenges.',
+      pacingModifier: 0,
+      priorityShift: ['adventurous eating', 'food challenges', 'extreme cuisine'],
+      deprioritize: ['safe choices', 'familiar food']
+    },
+    bucket_list_conqueror: {
+      interaction: 'combine',
+      description: 'Bucket list restaurants. THE places. Michelin stars.',
+      pacingModifier: 0,
+      priorityShift: ['bucket list restaurants', 'famous chefs', 'legendary meals'],
+      deprioritize: ['unknown spots']
+    },
+    luxury_luminary: {
+      interaction: 'amplify',
+      description: 'Luxury foodie. Michelin stars, tasting menus, chef tables.',
+      pacingModifier: -1,
+      priorityShift: ['Michelin dining', 'chef experiences', 'premium food'],
+      deprioritize: ['casual dining']
+    },
+    gap_year_graduate: {
+      interaction: 'combine',
+      description: 'Budget foodie. Street food mastery, markets, cheap eats excellence.',
+      pacingModifier: 0,
+      priorityShift: ['street food', 'markets', 'value dining', 'local cheap eats'],
+      deprioritize: ['expensive restaurants']
+    },
+    _default: {
+      interaction: 'override',
+      description: 'Food is the purpose. 60%+ of itinerary must be food-focused.',
+      pacingModifier: -1,
+      priorityShift: ['market visits', 'cooking classes', 'signature restaurants', 'food discovery'],
+      deprioritize: ['non-food activities', 'quick meals'],
+      hardConstraints: ['Every meal is intentional', 'Include market visit', 'Include cooking class or food activity', '2+ hours for main meals']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SOLO - Combine with social calibration from archetype
+  // ═══════════════════════════════════════════════════════════════════════════
+  solo: {
+    social_butterfly: {
+      interaction: 'combine',
+      description: 'Solo but social. Tours, hostels, pub crawls to meet people.',
+      pacingModifier: 0,
+      priorityShift: ['social activities', 'group tours', 'meeting travelers', 'communal dining'],
+      deprioritize: ['isolated experiences', 'private activities']
+    },
+    gap_year_graduate: {
+      interaction: 'combine',
+      description: 'Classic solo backpacking. Hostels, meeting travelers, budget social.',
+      pacingModifier: 0,
+      priorityShift: ['hostel social', 'backpacker activities', 'pub crawls', 'free tours'],
+      deprioritize: ['expensive solo', 'isolating luxury']
+    },
+    zen_seeker: {
+      interaction: 'amplify',
+      description: 'Solo spiritual journey. Solitude is the practice.',
+      pacingModifier: 0,
+      priorityShift: ['solitude', 'meditation', 'silence', 'inner focus'],
+      deprioritize: ['social activities', 'crowds', 'noise']
+    },
+    healing_journeyer: {
+      interaction: 'amplify',
+      description: 'Solo healing. Solitude as medicine. Space to feel.',
+      pacingModifier: 0,
+      priorityShift: ['peaceful activities', 'nature', 'journaling time', 'gentle pace'],
+      deprioritize: ['forced social', 'crowds', 'intense activities']
+    },
+    flexible_wanderer: {
+      interaction: 'amplify',
+      description: 'Peak freedom. Zero compromise. This is what solo is for.',
+      pacingModifier: 0,
+      priorityShift: ['flexibility', 'spontaneity', 'unscheduled time', 'freedom'],
+      deprioritize: ['fixed plans', 'rigid schedules']
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Solo food journey. Counter seating, food tours, markets.',
+      pacingModifier: 0,
+      priorityShift: ['solo-friendly dining', 'counter seats', 'food tours', 'markets'],
+      deprioritize: ['romantic restaurants', 'couples tables']
+    },
+    slow_traveler: {
+      interaction: 'amplify',
+      description: 'Solo savoring. Alone is the point. Your pace exactly.',
+      pacingModifier: 0,
+      priorityShift: ['cafes with books', 'long solo lunches', 'museums alone', 'parks'],
+      deprioritize: ['group tours', 'social activities']
+    },
+    _default: {
+      interaction: 'combine',
+      description: 'Solo experience calibrated to archetype social level.',
+      pacingModifier: 0,
+      priorityShift: ['solo-friendly venues', 'freedom blocks', 'flexibility'],
+      deprioritize: ['couples activities', 'romantic venues', 'partner-required'],
+      hardConstraints: ['All restaurants must be solo-friendly', 'Include unstructured time', 'Celebrate solo travel']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GUYS TRIP - Combine with group energy
+  // ═══════════════════════════════════════════════════════════════════════════
+  guys_trip: {
+    adrenaline_architect: {
+      interaction: 'amplify',
+      description: 'Adventure guys trip. Group challenges, shared thrills.',
+      pacingModifier: 0,
+      priorityShift: ['group adventure', 'shared challenges', 'team activities'],
+      deprioritize: ['solo activities', 'quiet experiences']
+    },
+    slow_traveler: {
+      interaction: 'combine',
+      description: 'Relaxed guys trip. Long meals, craft beer, no rushing.',
+      pacingModifier: -1,
+      priorityShift: ['long group meals', 'beer tastings', 'quality hang time'],
+      deprioritize: ['packed schedule', 'rushing anywhere']
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Foodie guys trip. Brewery tours, BBQ, food crawls.',
+      pacingModifier: 0,
+      priorityShift: ['group food experiences', 'shareable food', 'brewery tours', 'BBQ'],
+      deprioritize: ['tasting menus', 'quiet fine dining']
+    },
+    flexible_wanderer: {
+      interaction: 'combine',
+      description: 'Spontaneous guys trip. Discover bars together, follow energy.',
+      pacingModifier: 0,
+      priorityShift: ['group spontaneity', 'bar discoveries', 'following vibes'],
+      deprioritize: ['rigid plans', 'strict schedules']
+    },
+    luxury_luminary: {
+      interaction: 'combine',
+      description: 'VIP guys trip. Premium experiences, exclusive access.',
+      pacingModifier: 0,
+      priorityShift: ['VIP experiences', 'premium venues', 'exclusive access'],
+      deprioritize: ['budget options']
+    },
+    _default: {
+      interaction: 'combine',
+      description: 'Group bonding with archetype style applied.',
+      pacingModifier: 0,
+      priorityShift: ['group activities', 'bonding experiences', 'shared meals', 'evening entertainment'],
+      deprioritize: ['solo activities', 'romantic venues', 'couples experiences'],
+      hardConstraints: ['At least one group bonding activity', 'At least one evening/bar option', 'Group-friendly dining']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GIRLS TRIP - Combine with group energy
+  // ═══════════════════════════════════════════════════════════════════════════
+  girls_trip: {
+    retreat_regular: {
+      interaction: 'amplify',
+      description: 'Spa girls trip. Group treatments, wellness together.',
+      pacingModifier: -1,
+      priorityShift: ['group spa', 'wellness activities', 'pampering together'],
+      deprioritize: ['solo treatments']
+    },
+    adrenaline_architect: {
+      interaction: 'combine',
+      description: 'Adventure girls trip. Surfing, hiking together.',
+      pacingModifier: 0,
+      priorityShift: ['group adventure', 'shared challenges', 'active experiences'],
+      deprioritize: ['solo activities']
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Foodie girls trip. Wine tasting, cooking class, brunch.',
+      pacingModifier: 0,
+      priorityShift: ['group food experiences', 'wine tasting', 'cooking class', 'brunch'],
+      deprioritize: ['solo dining', 'counter seats']
+    },
+    slow_traveler: {
+      interaction: 'combine',
+      description: 'Leisurely girls trip. Long brunches, shopping, quality time.',
+      pacingModifier: -1,
+      priorityShift: ['long meals', 'relaxed shopping', 'quality girlfriend time'],
+      deprioritize: ['packed schedule', 'rushing']
+    },
+    luxury_luminary: {
+      interaction: 'amplify',
+      description: 'Luxury girls trip. Spa, fine dining, champagne everything.',
+      pacingModifier: 0,
+      priorityShift: ['luxury spa', 'fine dining', 'champagne experiences'],
+      deprioritize: ['budget options']
+    },
+    _default: {
+      interaction: 'combine',
+      description: 'Group experiences with archetype style applied.',
+      pacingModifier: 0,
+      priorityShift: ['photo-worthy experiences', 'brunch', 'group activities', 'evening out'],
+      deprioritize: ['solo activities', 'romantic venues'],
+      hardConstraints: ['At least one photo-worthy experience', 'Include brunch', 'Group-friendly dining', 'Evening out option']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BIRTHDAY - Combine celebration with archetype style
+  // ═══════════════════════════════════════════════════════════════════════════
+  birthday: {
+    slow_traveler: {
+      interaction: 'combine',
+      description: 'One perfect leisurely birthday meal. No fuss celebration.',
+      pacingModifier: 0,
+      priorityShift: ['quality birthday meal', 'unhurried celebration'],
+      deprioritize: ['birthday overload', 'multiple celebrations']
+    },
+    adrenaline_architect: {
+      interaction: 'combine',
+      description: 'Birthday adventure. That activity they have always wanted.',
+      pacingModifier: 0,
+      priorityShift: ['birthday bucket list activity', 'adventure celebration'],
+      deprioritize: ['fancy dinner if not their thing']
+    },
+    social_butterfly: {
+      interaction: 'combine',
+      description: 'Birthday party. Group celebration, energy.',
+      pacingModifier: 0,
+      priorityShift: ['group celebration', 'party energy', 'festive atmosphere'],
+      deprioritize: ['quiet intimate']
+    },
+    zen_seeker: {
+      interaction: 'combine',
+      description: 'Meaningful birthday. Peaceful celebration, reflection.',
+      pacingModifier: 0,
+      priorityShift: ['meaningful moment', 'peaceful celebration', 'reflection'],
+      deprioritize: ['party', 'crowds', 'noise']
+    },
+    luxury_luminary: {
+      interaction: 'combine',
+      description: 'VIP birthday. Champagne, upgrades, the works.',
+      pacingModifier: 0,
+      priorityShift: ['VIP treatment', 'champagne', 'premium everything'],
+      deprioritize: ['budget options']
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Birthday at THE restaurant. Food-focused celebration.',
+      pacingModifier: 0,
+      priorityShift: ['signature birthday dinner', 'special restaurant'],
+      deprioritize: ['generic dining']
+    },
+    _default: {
+      interaction: 'combine',
+      description: 'Celebration styled to archetype. ONE special moment, not birthday overload.',
+      pacingModifier: 0,
+      priorityShift: ['birthday dinner', 'celebration moment'],
+      deprioritize: ['generic activities'],
+      hardConstraints: ['ONE special birthday dinner (not every meal)', 'ONE birthday moment/surprise', 'Personalized to archetype']
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ANNIVERSARY - Combine romance with archetype style
+  // ═══════════════════════════════════════════════════════════════════════════
+  anniversary: {
+    slow_traveler: {
+      interaction: 'combine',
+      description: 'Slow romance. Long anniversary dinner, no rush.',
+      pacingModifier: 0,
+      priorityShift: ['romantic lingering', 'long special dinner'],
+      deprioritize: ['rushing']
+    },
+    adrenaline_architect: {
+      interaction: 'combine',
+      description: 'Adventure anniversary. Shared thrills, romantic adventure.',
+      pacingModifier: 0,
+      priorityShift: ['couples adventure', 'romantic settings', 'shared challenges'],
+      deprioritize: ['extreme solo challenges']
+    },
+    culinary_cartographer: {
+      interaction: 'combine',
+      description: 'Food anniversary. Cooking class together, special restaurant.',
+      pacingModifier: 0,
+      priorityShift: ['couples cooking class', 'anniversary dinner', 'food experiences together'],
+      deprioritize: []
+    },
+    luxury_luminary: {
+      interaction: 'amplify',
+      description: 'Luxury anniversary. Five-star everything, private experiences.',
+      pacingModifier: 0,
+      priorityShift: ['premium romance', 'private experiences', 'VIP treatment'],
+      deprioritize: []
+    },
+    beach_therapist: {
+      interaction: 'combine',
+      description: 'Beach anniversary. Ocean sunsets, simple romance.',
+      pacingModifier: 0,
+      priorityShift: ['beach romance', 'sunset moments', 'seaside dining'],
+      deprioritize: []
+    },
+    _default: {
+      interaction: 'combine',
+      description: 'Romance styled to archetype. Celebrating the milestone together.',
+      pacingModifier: 0,
+      priorityShift: ['special anniversary dinner', 'romantic moment', 'couples activities'],
+      deprioritize: ['solo activities', 'group tours'],
+      hardConstraints: ['At least one romantic dinner', 'At least one romantic moment/setting', 'Acknowledge the celebration']
+    }
+  }
+};
+
+/**
+ * Get the interaction rules for a specific trip type × archetype combination
+ */
+export function getArchetypeInteraction(tripType: string, archetype: string): ArchetypeInteraction | null {
+  const normalizedTripType = tripType?.toLowerCase().replace(/[\s-]+/g, '_') || 'none';
+  const normalizedArchetype = archetype?.toLowerCase().replace(/[\s-]+/g, '_') || '';
+  
+  const tripTypeRules = tripTypeArchetypeInteraction[normalizedTripType];
+  if (!tripTypeRules) return null;
+  
+  // Check for specific archetype rule, fall back to _default
+  return tripTypeRules[normalizedArchetype] || tripTypeRules['_default'] || null;
+}
+
+/**
+ * Build the interaction prompt section that explains HOW trip type affects archetype
+ */
+export function buildInteractionPrompt(tripType: string, archetype: string, basePace: number): string {
+  const interaction = getArchetypeInteraction(tripType, archetype);
+  if (!interaction) return '';
+  
+  const effectivePace = basePace + interaction.pacingModifier;
+  
+  let prompt = `
+═══════════════════════════════════════════════════════════════════════════
+TRIP TYPE × ARCHETYPE INTERACTION
+═══════════════════════════════════════════════════════════════════════════
+
+Interaction Type: ${interaction.interaction.toUpperCase()}
+${interaction.description}
+
+=== EFFECTIVE PACING ===
+Base pace: ${basePace}
+Trip type modifier: ${interaction.pacingModifier > 0 ? '+' : ''}${interaction.pacingModifier}
+Effective pace: ${effectivePace}
+`;
+
+  if (interaction.priorityShift.length > 0) {
+    prompt += `
+=== PRIORITIZE (move to top of experience list) ===
+${interaction.priorityShift.map(p => `• ${p}`).join('\n')}
+`;
+  }
+
+  if (interaction.deprioritize.length > 0) {
+    prompt += `
+=== DEPRIORITIZE (move down or remove) ===
+${interaction.deprioritize.map(d => `• ${d}`).join('\n')}
+`;
+  }
+
+  if (interaction.hardConstraints && interaction.hardConstraints.length > 0) {
+    prompt += `
+=== HARD CONSTRAINTS (cannot be violated) ===
+${interaction.hardConstraints.map(c => `✗ ${c}`).join('\n')}
+`;
+  }
+
+  return prompt;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SOLO SOCIAL CALIBRATION - Different solo travelers have VERY different needs
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -3122,9 +3857,67 @@ HARD LIMIT: Maximum ${modifier.maxActivitiesPerDay} scheduled activities per day
 `;
   }
 
-  // Add archetype interaction
+  // Add archetype interaction text (descriptive guidance)
   if (interaction) {
-    section += interaction;
+    section += `
+=== ARCHETYPE × TRIP TYPE STYLE ===
+${interaction}
+`;
+  }
+
+  // Add structured interaction rules (override/combine/amplify with priorities)
+  const interactionRules = getArchetypeInteraction(normalizedType, archetype);
+  if (interactionRules) {
+    section += `
+═══════════════════════════════════════════════════════════════════════════
+TRIP TYPE × ARCHETYPE INTERACTION RULES
+═══════════════════════════════════════════════════════════════════════════
+
+Interaction Type: ${interactionRules.interaction.toUpperCase()}
+${interactionRules.description}
+
+The hierarchy for this trip:
+1. TRIP TYPE sets WHAT (purpose, constraints, safety requirements)
+2. ARCHETYPE determines HOW (style, expression within those constraints)
+3. TRAITS fine-tune (exact calibration)
+`;
+
+    if (interactionRules.priorityShift.length > 0) {
+      section += `
+=== PRIORITIZE THESE (move to top of experience list) ===
+${interactionRules.priorityShift.map(p => `✓ ${p}`).join('\n')}
+`;
+    }
+
+    if (interactionRules.deprioritize.length > 0) {
+      section += `
+=== DEPRIORITIZE THESE (move down or remove) ===
+${interactionRules.deprioritize.map(d => `✗ ${d}`).join('\n')}
+`;
+    }
+
+    if (interactionRules.hardConstraints && interactionRules.hardConstraints.length > 0) {
+      section += `
+=== HARD CONSTRAINTS (CANNOT be violated regardless of archetype) ===
+${interactionRules.hardConstraints.map(c => `🚫 ${c}`).join('\n')}
+`;
+    }
+
+    // Add effective pacing calculation
+    const basePacingModifier = modifier.pacingModifier || 0;
+    const interactionPacingModifier = interactionRules.pacingModifier || 0;
+    const effectivePacingModifier = basePacingModifier + interactionPacingModifier;
+    
+    if (effectivePacingModifier !== basePacingModifier) {
+      section += `
+=== COMBINED PACING EFFECT ===
+Base trip type modifier: ${basePacingModifier > 0 ? '+' : ''}${basePacingModifier}
+Archetype interaction modifier: ${interactionPacingModifier > 0 ? '+' : ''}${interactionPacingModifier}
+EFFECTIVE modifier: ${effectivePacingModifier > 0 ? '+' : ''}${effectivePacingModifier}
+${effectivePacingModifier < -2 ? '⚠️ VERY slow pacing required. Maximum 2-3 gentle activities per day.' : ''}
+${effectivePacingModifier > 1 ? '⚡ Active pacing allowed. Can include more activities with recovery blocks.' : ''}
+`;
+    }
   }
 
   // Add upgrade note
