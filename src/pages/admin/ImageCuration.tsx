@@ -3,19 +3,22 @@
  * 
  * Tinder-style interface for rating destination images.
  * Good votes boost quality_score, bad votes blacklist images.
+ * Includes ability to add new curated images for edge cases.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { ThumbsUp, ThumbsDown, SkipForward, RefreshCw, ChevronLeft, CheckCircle2, XCircle } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, SkipForward, RefreshCw, ChevronLeft, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
+import { AddCuratedImage } from '@/components/admin/AddCuratedImage';
 
 interface ImageForReview {
   id: string;
@@ -195,6 +198,8 @@ export default function ImageCuration() {
           </div>
           
           <div className="flex items-center gap-3">
+            <AddCuratedImage onImageAdded={fetchImages} />
+            
             <Select value={filter} onValueChange={(v: typeof filter) => setFilter(v)}>
               <SelectTrigger className="w-36">
                 <SelectValue />
