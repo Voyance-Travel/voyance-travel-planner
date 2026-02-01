@@ -93,7 +93,41 @@ export function sortHotelsByDate(hotels: HotelBooking[]): HotelBooking[] {
 }
 
 /**
+ * Normalize a single hotel object to standard HotelBooking format
+ * Supports both legacy field names (location, checkIn) and new format (address, checkInDate)
+ */
+function normalizeHotel(
+  hotel: Record<string, unknown>,
+  tripStartDate: string,
+  tripEndDate: string
+): HotelBooking | null {
+  if (!hotel.name) return null;
+  
+  return {
+    id: (hotel.id as string) || `migrated-${Date.now()}`,
+    name: hotel.name as string,
+    // Support both 'address' and 'location' fields
+    address: (hotel.address as string) || (hotel.location as string) || undefined,
+    neighborhood: hotel.neighborhood as string | undefined,
+    // Support multiple date field formats
+    checkInDate: (hotel.checkInDate as string) || (hotel.checkIn as string) || tripStartDate,
+    checkOutDate: (hotel.checkOutDate as string) || (hotel.checkOut as string) || tripEndDate,
+    checkInTime: hotel.checkInTime as string | undefined,
+    checkOutTime: hotel.checkOutTime as string | undefined,
+    website: hotel.website as string | undefined,
+    googleMapsUrl: hotel.googleMapsUrl as string | undefined,
+    images: hotel.images as string[] | undefined,
+    imageUrl: hotel.imageUrl as string | undefined,
+    placeId: hotel.placeId as string | undefined,
+    rating: hotel.rating as number | undefined,
+    isManualEntry: hotel.isManualEntry as boolean | undefined,
+    isEnriched: hotel.isEnriched as boolean | undefined,
+  };
+}
+
+/**
  * Convert legacy single hotel object to array format
+ * Also normalizes field names for arrays (handles location→address, checkIn→checkInDate)
  */
 export function normalizeLegacyHotelSelection(
   selection: unknown,
@@ -102,33 +136,14 @@ export function normalizeLegacyHotelSelection(
 ): HotelBooking[] {
   if (!selection) return [];
   
-  // Already an array
+  // If already an array, normalize each item to ensure consistent field names
   if (Array.isArray(selection)) {
-    return selection as HotelBooking[];
+    return selection
+      .map(item => normalizeHotel(item as Record<string, unknown>, tripStartDate, tripEndDate))
+      .filter((h): h is HotelBooking => h !== null);
   }
   
-  // Legacy single object format - convert to array
-  const legacy = selection as Record<string, unknown>;
-  if (legacy.name) {
-    return [{
-      id: (legacy.id as string) || `migrated-${Date.now()}`,
-      name: legacy.name as string,
-      address: legacy.address as string | undefined,
-      neighborhood: legacy.neighborhood as string | undefined,
-      checkInDate: (legacy.checkInDate as string) || tripStartDate,
-      checkOutDate: (legacy.checkOutDate as string) || tripEndDate,
-      checkInTime: (legacy.checkIn as string) || (legacy.checkInTime as string),
-      checkOutTime: (legacy.checkOut as string) || (legacy.checkOutTime as string),
-      website: legacy.website as string | undefined,
-      googleMapsUrl: legacy.googleMapsUrl as string | undefined,
-      images: legacy.images as string[] | undefined,
-      imageUrl: legacy.imageUrl as string | undefined,
-      placeId: legacy.placeId as string | undefined,
-      rating: legacy.rating as number | undefined,
-      isManualEntry: legacy.isManualEntry as boolean | undefined,
-      isEnriched: legacy.isEnriched as boolean | undefined,
-    }];
-  }
-  
-  return [];
+  // Legacy single object format - normalize and convert to array
+  const normalized = normalizeHotel(selection as Record<string, unknown>, tripStartDate, tripEndDate);
+  return normalized ? [normalized] : [];
 }
