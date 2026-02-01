@@ -85,6 +85,7 @@ import {
 import {
   getFullArchetypeContext,
   buildFullPromptGuidance,
+  buildFullPromptGuidanceAsync,
   getMaxActivities,
   isSpaOK,
   isMichelinOK,
@@ -561,6 +562,32 @@ function buildValidationContext(
     traitScores,
     tripIntents
   };
+}
+
+// =============================================================================
+// DESTINATION ID LOOKUP HELPER
+// Resolves city name to destination UUID for dynamic feature matching
+// =============================================================================
+async function getDestinationId(supabase: any, destination: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('destinations')
+      .select('id')
+      .or(`city.ilike.%${destination}%,country.ilike.%${destination}%`)
+      .limit(1);
+    
+    if (error) {
+      console.warn(`[getDestinationId] Query failed:`, error.message);
+      return null;
+    }
+    
+    const id = data?.[0]?.id || null;
+    console.log(`[getDestinationId] ${destination} → ${id || 'not found'}`);
+    return id;
+  } catch (e) {
+    console.warn(`[getDestinationId] Exception:`, e);
+    return null;
+  }
 }
 
 
@@ -6076,15 +6103,25 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       
       // =======================================================================
       // STAGE 1.99: Build Unified Archetype Constraints (Phase 2 Fix)
+      // Now with DYNAMIC features: attraction matching + AI-generated city guides
       // =======================================================================
       const effectiveBudgetTier = unifiedProfile.budgetTier || context.budgetTier || 'moderate';
-      const generationHierarchy = buildFullPromptGuidance(
+      
+      // Resolve destination ID for dynamic features (graceful fallback if not found)
+      const destinationId = await getDestinationId(supabase, context.destination);
+      
+      // Use async builder for dynamic attraction matching + AI city guides
+      const generationHierarchy = await buildFullPromptGuidanceAsync(
+        supabase,
         unifiedProfile.archetype,
         context.destination,
+        destinationId,
         effectiveBudgetTier,
-        { pace: unifiedProfile.traitScores.pace, budget: unifiedProfile.traitScores.budget }
+        { pace: unifiedProfile.traitScores.pace, budget: unifiedProfile.traitScores.budget },
+        LOVABLE_API_KEY
       );
-      console.log(`[Stage 1.99] ✓ Generated unified archetype constraints for ${unifiedProfile.archetype} (${generationHierarchy.length} chars)`);
+      console.log(`[Stage 1.99] ✓ Generated unified archetype constraints for ${unifiedProfile.archetype} (${generationHierarchy.length} chars, dynamic=${!!destinationId})`);
+      
       
       // Combine all context for maximum personalization
       // Order: ARCHETYPE CONSTRAINTS → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
@@ -7194,16 +7231,24 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       console.log(`[generate-day] Budget tier: ${effectiveBudgetTier}`);
       
       // ==========================================================================
-      // PHASE 2 FIX: Use buildFullPromptGuidance (replaces 50+ lines of manual assembly)
+      // PHASE 2 FIX: Use buildFullPromptGuidanceAsync (with dynamic features)
+      // Includes attraction matching + AI-generated city guides (graceful fallback)
       // ==========================================================================
-      const generationHierarchy = buildFullPromptGuidance(
+      
+      // Resolve destination ID for dynamic features
+      const destinationId = await getDestinationId(supabase, destination);
+      
+      const generationHierarchy = await buildFullPromptGuidanceAsync(
+        supabase,
         primaryArchetype,
         destination,
+        destinationId,
         effectiveBudgetTier,
-        { pace: traitScores.pace, budget: traitScores.budget }
+        { pace: traitScores.pace, budget: traitScores.budget },
+        LOVABLE_API_KEY
       );
       
-      console.log(`[generate-day] Full guidance built: ${generationHierarchy.length} chars`);
+      console.log(`[generate-day] Full guidance built: ${generationHierarchy.length} chars (dynamic=${!!destinationId})`);
       
       // Get archetype context for activity limits and other settings
       const archetypeContext = getFullArchetypeContext(
