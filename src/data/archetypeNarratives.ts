@@ -38,6 +38,12 @@ export interface ArchetypeNarrative {
   emoji: string;
   /** Lucide icon name for this archetype's category */
   iconName?: string;
+  /** "Screenshot moment" - the paragraph they'll send to friends */
+  revealParagraph?: string;
+  /** "You probably..." observations that feel personal */
+  youProbably?: string[];
+  /** What their itinerary will feel like */
+  itineraryPreview?: string[];
 }
 
 export const CATEGORY_COLORS = {
@@ -243,7 +249,19 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Sometimes the hotel breakfast is fine"
     ],
     perfectTripPreview: "You taste your way to understanding.",
-    emoji: "🍜"
+    emoji: "🍜",
+    revealParagraph: `You've been known to plan entire trips around a single restaurant reservation. Food isn't just fuel for you—it's the point. The market at 7am. The hole-in-the-wall only locals know. The thing you ate that you still think about years later. Other people see eating as an interruption to sightseeing. You see sightseeing as what you do between meals.`,
+    youProbably: [
+      "Have a list of restaurants in cities you haven't even booked yet",
+      "Know the difference between 'authentic' and 'touristy' by smell alone",
+      "Have made friends over a shared table at a tiny restaurant"
+    ],
+    itineraryPreview: [
+      "Meals as main events, not afterthoughts",
+      "Market visits built into every trip",
+      "Time to actually taste things (no rushed lunches)",
+      "Local spots, not hotel restaurants"
+    ]
   },
   luxury_luminary: {
     id: 'luxury_luminary',
@@ -318,7 +336,19 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Recovery is part of the journey"
     ],
     perfectTripPreview: "Your heart races in the most beautiful settings.",
-    emoji: "🪂"
+    emoji: "🪂",
+    revealParagraph: `You don't understand "relaxing" vacations. Lying on a beach sounds like punishment. You need to do something. The best trips leave you with stories—the time you almost didn't make it, the thing that scared you until you did it, the moment you surprised yourself. Other people need to "recover" from vacation. You come back feeling more alive than when you left.`,
+    youProbably: [
+      "Have a story that starts with 'So I signed the waiver...'",
+      "Feel restless after two hours on a beach",
+      "Have convinced reluctant friends to try something that terrified them"
+    ],
+    itineraryPreview: [
+      "Heart-pounding activities (the kind that make great stories)",
+      "Early starts to catch the best conditions",
+      "Active recovery, not lazy days",
+      "The kind of tired that feels earned"
+    ]
   },
   slow_traveler: {
     id: 'slow_traveler',
@@ -343,7 +373,19 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "FOMO isn't always wrong"
     ],
     perfectTripPreview: "You stay long enough to have a favorite café.",
-    emoji: "🐌"
+    emoji: "🐌",
+    revealParagraph: `You've never understood people who "do" a city in two days. What's the point of traveling if you're exhausted the whole time? For you, the best moments happen when you're not trying to get somewhere else. The three-hour lunch that turns into wine and conversation. The morning spent with a book at a café you'll never find again. The afternoon you spent doing absolutely nothing and loved every minute. You've probably been told you're "wasting time" when you travel. You know better. You're not missing anything. You're actually there.`,
+    youProbably: [
+      "Have a favorite café in at least three cities",
+      "Have made friends abroad you still keep in touch with",
+      "Get stressed when someone says 'let's see everything'"
+    ],
+    itineraryPreview: [
+      "Long, unrushed meals (because a 45-minute dinner is a crime)",
+      "Breathing room between activities",
+      "Permission to do nothing",
+      "Fewer things, experienced fully"
+    ]
   },
   // Default/fallback archetypes based on simple mapping
   explorer: {
@@ -894,7 +936,19 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Peak season requires planning"
     ],
     perfectTripPreview: "You trust the journey to unfold.",
-    emoji: "🌬️"
+    emoji: "🌬️",
+    revealParagraph: `You've tried making detailed itineraries. They last about two hours before you see something interesting and abandon the plan entirely. Your best travel memories weren't planned. They were the thing you stumbled into because you turned left instead of right. The restaurant you found because it looked good. The neighborhood you explored because why not. Other people get stressed without a plan. You get stressed with one.`,
+    youProbably: [
+      "Have extended a 'long weekend' into something much longer",
+      "Make friends jealous with stories that start 'So I was wandering and...'",
+      "Own a bag you can pack in 10 minutes"
+    ],
+    itineraryPreview: [
+      "Suggestions, not schedules",
+      "Plenty of unstructured time",
+      "Permission to change everything",
+      "Options, not obligations"
+    ]
   },
 };
 
