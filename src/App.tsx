@@ -70,6 +70,7 @@ import TripConfirmation from "./pages/TripConfirmation";
 // Pages - Itinerary
 import ItineraryView from "./pages/ItineraryView";
 import SampleItinerary from "./pages/SampleItinerary";
+import ActiveTrip from "./pages/ActiveTrip";
 import Demo from "./pages/Demo";
 
 // Pages - Legal
@@ -189,6 +190,8 @@ function AnimatedRoutes() {
           {/* Trip Management Routes */}
           <Route path="/trip/dashboard" element={<TripDashboard />} />
           <Route path="/trip/:tripId" element={<TripDetail />} />
+          <Route path="/trip/:tripId/active" element={<ActiveTrip />} />
+          <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
           <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
           
           {/* Itinerary Routes */}
