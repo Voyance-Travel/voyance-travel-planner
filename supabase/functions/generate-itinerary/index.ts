@@ -1268,6 +1268,14 @@ function normalizeUserContext(
       'cultural': { authenticity: 4, transformation: 2 },      // Local experiences, learning
       'beach': { pace: -3, comfort: 2 },                       // Relaxed, comfortable
       'city_break': { pace: 3, social: 1 },                    // Fast-paced, social
+      'birthday': { comfort: 3, social: 2 },                   // Celebratory, social, special treatment
+      'anniversary': { comfort: 4, social: -2, pace: -2 },     // Romantic celebration, intimate, relaxed
+      'celebration': { comfort: 3, social: 2 },                // Festive, social, memorable
+      'milestone': { comfort: 3, transformation: 2 },          // Special occasion, meaningful experiences
+      'bachelorette': { social: 4, adventure: 2, pace: 2 },    // Party, group fun, high energy
+      'bachelor': { social: 4, adventure: 3, pace: 2 },        // Party, adventure, high energy
+      'graduation': { comfort: 2, social: 2, transformation: 2 }, // Celebratory milestone
+      'retirement': { pace: -2, comfort: 3, transformation: 2 }, // Relaxed, meaningful
     };
     
     const adjustments = tripTypeAdjustments[tripContext.tripType];
@@ -1540,6 +1548,14 @@ function buildNormalizedPromptContext(
         'cultural': '🏛️ Cultural exploration: museums, history, local traditions',
         'beach': '🏖️ Beach vacation: sun, sea, relaxation, water activities',
         'city_break': '🏙️ City break: urban exploration, nightlife, landmarks',
+        'birthday': '🎂 Birthday celebration: special experiences, celebratory dinners, memorable moments, treat-yourself activities',
+        'anniversary': '💝 Anniversary trip: romantic celebration, special dinners, intimate experiences, milestone moments',
+        'celebration': '🎉 Celebration trip: festive activities, special occasions, memorable experiences',
+        'milestone': '🏆 Milestone trip: meaningful experiences, bucket-list activities, significant moments',
+        'bachelorette': '👯‍♀️ Bachelorette party: group fun, nightlife, bonding activities, celebration',
+        'bachelor': '🎊 Bachelor party: adventure, nightlife, group activities, celebration',
+        'graduation': '🎓 Graduation trip: celebratory, reward experiences, new chapter adventures',
+        'retirement': '🌅 Retirement celebration: relaxed pace, bucket-list experiences, meaningful moments',
       };
       tripSection += `\n${tripTypeLabels[tripCtx.tripType] || `Trip type: ${tripCtx.tripType}`}`;
     }
