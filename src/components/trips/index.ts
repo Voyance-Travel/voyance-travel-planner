@@ -4,3 +4,4 @@ export { ReservationCard } from './ReservationCard';
 export type { ReservationData, ReservationType, ReservationStatus } from './ReservationCard';
 export { TicketQRModal } from './TicketQRModal';
 export type { TicketData } from './TicketQRModal';
+export { default as WhatsNearby } from './WhatsNearby';
