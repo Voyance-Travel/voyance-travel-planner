@@ -1,296 +1,287 @@
 
-# AI Integration Plan: Brain, Not Face
-## Adding Natural Language Without Breaking What Works
+# Value-First Homepage: Show the Magic Before Asking for Anything
 
----
+## The Problem You Identified
 
-## Executive Summary
-
-Voyance already uses AI for itinerary **generation**. This plan adds AI for **input parsing** (natural language → same data structure) and **post-generation interaction** (explain + modify). The 27-archetype rules engine, trip type modifiers, and personalization matrix remain unchanged—AI becomes a better interface TO this intelligence, not a replacement.
-
----
-
-## Current System Architecture (Preserved)
+The current funnel demands commitment before delivering value:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                         EXISTING SYSTEM                             │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  INPUT (Structured Forms)           INTELLIGENCE (Rules Engine)    │
-│  ─────────────────────────          ──────────────────────────     │
-│  • Start.tsx                        • 27 Archetype definitions     │
-│  • ItineraryContextForm.tsx         • 14 Trip type modifiers       │
-│  • Quiz.tsx (27 questions)          • 378 Interaction matrix       │
-│  • Date/traveler selectors          • Pacing/budget/forced slots   │
-│                                     • Destination essentials       │
-│                                                                     │
-│  GENERATION (Already AI)            OUTPUT (Static Display)        │
-│  ─────────────────────────          ──────────────────────────     │
-│  • generate-itinerary edge fn       • EditorialItinerary.tsx       │
-│  • prompt-library.ts                • DayTimeline components       │
-│  • profile-loader.ts                • Activity cards               │
-│  • archetype-data.ts                                               │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+Homepage → Quiz → Archetype → Trip Form → Itinerary
+   ↓         ↓        ↓           ↓
+ BOUNCE   ABANDON  "SO WHAT?"   TOO MUCH    (few arrive)
 ```
 
-**What stays unchanged:**
-- All archetype definitions and constraints
-- Trip type modifier logic 
-- Pacing, budget, forced slot rules
-- Profile loader and prompt library
-- Existing forms (as fallback option)
-- Generation pipeline
+All the AI enhancements we built (explain recommendations, inline modifications, conversational onboarding) are useless if users never reach the itinerary.
+
+## The Solution: Value First
+
+```text
+Instant Value → "Want more?" → Easy personalization → Deep value
+     ↓              ↓                 ↓                  ↓
+  "Oh wow"     "Yes please"      "This is fun"       "I need this"
+```
+
+Show them magic in 10 seconds. THEN they want to invest.
 
 ---
 
-## What We're Adding
+## What We're Building
 
-### 1. Natural Language Trip Input (Alternative to Form)
+### Phase 0: Value-First Homepage Hero
 
-**Location:** New edge function + new UI component on Start page
+Replace the current `TravelDNAHero` (static headline + CTA buttons) with an **interactive hero** that has three entry modes:
 
-**How it works:**
+| Mode | User Action | Immediate Value |
+|------|-------------|-----------------|
+| **Destination** | Types "Tokyo" | 3-day preview in 5 seconds |
+| **Style Quiz** | Answers ONE question | Archetype teaser with comparison |
+| **Fix Trip** | Pastes existing itinerary | "Roast" with specific issues |
+
+### Entry Point 1: Instant Trip Preview (Primary)
+
 ```text
-User types: "Beach trip in March, 2 kids (6 and 9), somewhere warm, around $4k"
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│           Where do you want to go?                              │
+│                                                                 │
+│      [ Tokyo________________________________ ]                  │
+│                                                                 │
+│      [Tokyo] [Paris] [Bali] [Rome] [Barcelona]                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-AI extracts → TripInput structure:
-{
-  tripType: "family",
-  childrenAges: [6, 9],
-  season: "march",
-  vibe: "beach",
-  budget: 4000,
-  travelers: 4
+User types "Tokyo" → **5 seconds later**:
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Tokyo                                                          │
+│                                                                 │
+│  Here's a taste of what we'd build for you:                     │
+│                                                                 │
+│  Day 1 │ Arrive slow. One quiet dinner in Shinjuku.             │
+│  Day 2 │ Senso-ji at 7am. Then: nothing until lunch.            │
+│  Day 3 │ Get lost in Yanaka. That's the whole plan.             │
+│                                                                 │
+│  + 4 more days                                                  │
+│                                                                 │
+│  This is a "Slow Traveler" trip. Yours might be different.      │
+│                                                                 │
+│  [ Make it mine ] ← Now they WANT personalization               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Entry Point 2: One-Question Hook
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  It's 2pm on vacation and you're fading. You...                 │
+│                                                                 │
+│  ○ Push through. Sleep when I'm dead.                           │
+│  ○ Find a café and people-watch for an hour.                    │
+│  ○ Head back to the hotel. Nap is calling.                      │
+│  ○ Get lost somewhere new. Tired but curious.                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+User clicks one option → **Instant archetype teaser**:
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  You might be a Slow Traveler.                                  │
+│                                                                 │
+│  ┌─────────────────────┐  ┌─────────────────────┐               │
+│  │ TYPICAL TRIP        │  │ YOUR TRIP           │               │
+│  │ 6am alarm           │  │ Wake when ready     │               │
+│  │ 4 museums/day       │  │ One neighborhood    │               │
+│  │ 45-min dinner       │  │ 3-hour lunch        │               │
+│  │ Exhausted by day 3  │  │ Actually relaxed    │               │
+│  └─────────────────────┘  └─────────────────────┘               │
+│                                                                 │
+│  [ Find out for sure ]    [ Or just plan a trip ]               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Entry Point 3: Fix My Itinerary
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Already have a trip planned?                                   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Paste your itinerary...                                  │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  [ Roast my itinerary ]                                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+AI analyzes and responds:
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Honest feedback on your Tokyo trip:                            │
+│                                                                 │
+│  🚨 Day 2 is a disaster                                         │
+│  TeamLab, Shibuya, AND Harajuku on the same day?                │
+│  You'll spend 3 hours on trains.                                │
+│                                                                 │
+│  🚨 Day 4 dinner won't happen                                   │
+│  Sukiyabashi Jiro needs 30-day reservations.                    │
+│                                                                 │
+│  😐 You're eating at tourist traps                              │
+│  That ramen place near Senso-ji? There are 10 better options.   │
+│                                                                 │
+│  [ Fix this mess ]                                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Technical Architecture
+
+### New Edge Function: `generate-quick-preview`
+
+A **fast, lightweight** version of itinerary generation:
+- Uses `google/gemini-2.5-flash` (fastest model)
+- Generates only 3 days, 2-3 sentences each
+- No database lookups, no truth anchors
+- Target: < 5 second response time
+- Uses a default archetype ("Slow Traveler") for the preview
+
+```typescript
+// supabase/functions/generate-quick-preview/index.ts
+
+interface QuickPreviewRequest {
+  destination: string;
 }
 
-Same structure the form produces → Same generation pipeline
+interface QuickPreviewResponse {
+  destination: string;
+  days: Array<{
+    dayNumber: number;
+    headline: string;
+    description: string;
+  }>;
+  totalDays: number;
+  archetypeUsed: string;
+  archetypeTagline: string;
+}
 ```
 
-**Components:**
-- `supabase/functions/parse-trip-input/index.ts` - AI parsing endpoint
-- `src/components/planner/NaturalTripInput.tsx` - Text input with suggestions
-- Modification to `Start.tsx` - Dual mode toggle (natural | form)
+### New Edge Function: `analyze-itinerary`
 
----
+Analyzes user-pasted itinerary for issues:
 
-### 2. Natural Language Itinerary Modification (Enhanced)
+```typescript
+// supabase/functions/analyze-itinerary/index.ts
 
-**Existing:** `itinerary-chat` edge function already handles structured modifications
+interface AnalyzeItineraryRequest {
+  itineraryText: string;
+}
 
-**Enhancement:** Make it smarter, expose it better in UI
-
-**Current flow:**
-```text
-User clicks chat icon → Types "make day 3 lighter" → Gets structured action → Clicks approve
+interface AnalyzeItineraryResponse {
+  destination: string | null;
+  issues: Array<{
+    emoji: string;
+    headline: string;
+    detail: string;
+    severity: 'critical' | 'warning' | 'suggestion';
+  }>;
+  positives: string[];
+  canFix: boolean;
+}
 ```
 
-**Enhanced flow:**
-```text
-User types in inline input → Sees preview of changes → One click to apply
-
-"Make day 3 lighter"
-→ AI: "Moving museum to Day 4, pushing dinner back 1hr. Day 3 now has free afternoon."
-→ [Apply] [Undo]
-```
-
-**Components:**
-- `src/components/itinerary/InlineModifier.tsx` - Text input on itinerary page
-- Enhance `itinerary-chat` to return diff previews
-- No new edge function needed
-
----
-
-### 3. Explainable Recommendations
-
-**Location:** Activity cards in itinerary
-
-**How it works:**
-```text
-Activity card shows: "Trattoria da Enzo"
-User clicks: "Why this?"
-
-AI generates explanation using:
-- User's archetype (from profile-loader)
-- Trip context (honeymoon, budget, etc.)
-- The activity metadata
-
-Returns: "This family-run spot since 1935 is where Romans actually eat. 
-You mentioned avoiding tourist traps—this qualifies. It's walkable from 
-your hotel in Trastevere, and their cacio e pepe is the real thing."
-```
-
-**Components:**
-- `supabase/functions/explain-recommendation/index.ts` - New edge function
-- `src/components/itinerary/ExplainableActivity.tsx` - Wraps activity card
-- Add `onExplain` callback to existing `TripActivityCard.tsx`
-
----
-
-### 4. Alternative Quiz Path (Conversational)
-
-**Location:** New page parallel to existing Quiz
-
-**How it works:**
-```text
-User selects: "Just tell us how you like to travel"
-
-Prompt: "Describe a trip you loved. What made it great?"
-
-User writes: "Japan was amazing but exhausting. Best day was getting lost 
-in Kyoto and finding a tiny soba shop. Wish the whole trip was like that."
-
-AI extracts:
-- Pace: slow (exhaustion from over-scheduling)
-- Style: wandering, discovery
-- Dining: local spots, long meals
-- What went wrong: too packed
-
-Maps to archetype: "Slow Traveler" (same as quiz would produce)
-```
-
-**Components:**
-- `supabase/functions/parse-travel-story/index.ts` - Story → archetype
-- `src/pages/OnboardConversation.tsx` - Conversational alternative
-- Modification to Quiz landing to offer choice
-
----
-
-## File Structure
+### New UI Components
 
 ```text
 NEW FILES:
-├── supabase/functions/
-│   ├── parse-trip-input/index.ts        # NL → TripInput structure
-│   ├── explain-recommendation/index.ts  # Activity explanations
-│   └── parse-travel-story/index.ts      # Story → archetype
-│
-├── src/components/planner/
-│   └── NaturalTripInput.tsx             # "Just tell us" input
-│
-├── src/components/itinerary/
-│   ├── InlineModifier.tsx               # Inline modification input
-│   └── ExplainableActivity.tsx          # "Why this?" wrapper
-│
-└── src/pages/
-    └── OnboardConversation.tsx          # Alternative to quiz
+├── src/components/home/
+│   ├── ValueFirstHero.tsx           # Main interactive hero container
+│   ├── DestinationEntry.tsx         # "Where do you want to go?" input
+│   ├── QuickPreviewDisplay.tsx      # 3-day preview card
+│   ├── OneQuestionEntry.tsx         # Single question archetype hook
+│   ├── ArchetypeTeaser.tsx          # Side-by-side comparison
+│   ├── FixItineraryEntry.tsx        # "Roast my itinerary" input
+│   └── ItineraryAnalysis.tsx        # Issues display
 
 MODIFIED FILES:
-├── src/pages/Start.tsx                  # Add mode toggle
-├── src/pages/Quiz.tsx                   # Add choice at start
-├── src/components/planner/TripActivityCard.tsx  # Add onExplain
-└── src/components/itinerary/EditorialItinerary.tsx  # Add InlineModifier
+├── src/pages/Home.tsx               # Replace TravelDNAHero with ValueFirstHero
+└── src/lib/strangerCopy.ts          # Add hook question + archetype teasers
+```
+
+### Data: Archetype Teasers
+
+Leverage existing `src/data/archetypeReveals.ts` and `src/data/archetypeNarratives.ts` to build teaser comparisons. Add mapping from single-question answers to archetypes:
+
+```typescript
+// src/lib/archetypeTeasers.ts
+
+export const ONE_QUESTION_HOOK = {
+  question: "It's 2pm on vacation and you're fading. You...",
+  options: [
+    { value: 'push', label: "Push through. Sleep when I'm dead.", archetype: 'adrenaline_architect' },
+    { value: 'cafe', label: "Find a café and people-watch for an hour.", archetype: 'slow_traveler' },
+    { value: 'hotel', label: "Head back to the hotel. Nap is calling.", archetype: 'retreat_regular' },
+    { value: 'explore', label: "Get lost somewhere new. Tired but curious.", archetype: 'flexible_wanderer' },
+  ],
+};
+
+export const ARCHETYPE_TEASERS: Record<string, {
+  name: string;
+  oneLiner: string;
+  typicalTrip: string[];
+  yourTrip: string[];
+}> = {
+  slow_traveler: {
+    name: "Slow Traveler",
+    oneLiner: "You'd rather do 3 things well than 10 things rushed.",
+    typicalTrip: ["6am alarm for sunrise", "4 museums in one day", "45-minute dinner", "Exhausted by day 3"],
+    yourTrip: ["Wake up when you wake up", "One neighborhood per day", "3-hour lunch", "Actually relaxed"],
+  },
+  // ... other archetypes
+};
 ```
 
 ---
 
-## Technical Details
+## File Changes Summary
 
-### Parse Trip Input Edge Function
-
-```typescript
-// supabase/functions/parse-trip-input/index.ts
-
-interface ParsedTripInput {
-  destination?: string;
-  dates?: { start: string; end: string };
-  travelers?: number;
-  childrenAges?: number[];
-  tripType?: string;
-  budget?: number;
-  vibe?: string[];
-  constraints?: string[];
-  needsClarification?: { field: string; question: string }[];
-}
-
-// Uses Lovable AI to extract structure from natural language
-// Returns SAME shape that Start.tsx form produces
-// If ambiguous, returns clarification questions
-```
-
-### Explain Recommendation Edge Function
-
-```typescript
-// supabase/functions/explain-recommendation/index.ts
-
-// Loads user profile using profile-loader.ts (reuse existing)
-// Gets archetype context using archetype-data.ts (reuse existing)
-// Generates 2-3 sentence explanation specific to THIS user
-// References their traits, trip type, stated preferences
-```
-
-### UI Integration Points
-
-**Start.tsx modification:**
-```tsx
-// Add toggle at top of form
-<div className="flex gap-2 mb-6">
-  <button 
-    onClick={() => setMode('natural')}
-    className={mode === 'natural' ? 'active' : ''}
-  >
-    Just tell us
-  </button>
-  <button 
-    onClick={() => setMode('form')}
-    className={mode === 'form' ? 'active' : ''}
-  >
-    Use form
-  </button>
-</div>
-
-{mode === 'natural' && <NaturalTripInput onExtracted={setTripData} />}
-{mode === 'form' && <ExistingFormComponents />}
-```
-
-**Activity card modification:**
-```tsx
-// Add to TripActivityCard.tsx
-<button 
-  onClick={() => onExplain?.(activity)}
-  className="text-sm text-muted-foreground"
->
-  Why this?
-</button>
-```
-
----
-
-## What This Does NOT Change
-
-| Component | Status |
-|-----------|--------|
-| 27 Archetype definitions | Unchanged |
-| 14 Trip type modifiers | Unchanged |
-| Archetype × Trip Type matrix | Unchanged |
-| Pacing/budget/forced slot rules | Unchanged |
-| Profile loader logic | Reused, not modified |
-| Prompt library | Reused, not modified |
-| Generation pipeline | Unchanged |
-| Existing forms | Kept as option |
-| Existing quiz | Kept as option |
+| File | Action | Purpose |
+|------|--------|---------|
+| `supabase/functions/generate-quick-preview/index.ts` | Create | Fast 3-day preview generation |
+| `supabase/functions/analyze-itinerary/index.ts` | Create | Roast user's existing itinerary |
+| `src/components/home/ValueFirstHero.tsx` | Create | Main interactive hero with 3 modes |
+| `src/components/home/DestinationEntry.tsx` | Create | Destination input + preview |
+| `src/components/home/QuickPreviewDisplay.tsx` | Create | Display generated preview |
+| `src/components/home/OneQuestionEntry.tsx` | Create | Single question hook |
+| `src/components/home/ArchetypeTeaser.tsx` | Create | Side-by-side comparison |
+| `src/components/home/FixItineraryEntry.tsx` | Create | Paste itinerary input |
+| `src/components/home/ItineraryAnalysis.tsx` | Create | Display issues found |
+| `src/lib/archetypeTeasers.ts` | Create | Teaser data for each archetype |
+| `src/pages/Home.tsx` | Modify | Replace TravelDNAHero with ValueFirstHero |
+| `supabase/config.toml` | Modify | Add new edge functions |
 
 ---
 
 ## Implementation Priority
 
-| Phase | What | Why First |
-|-------|------|-----------|
-| **1** | Explain recommendations | Highest value, no risk to core flow |
-| **2** | Inline modifications | Enhances existing chat, users have itineraries |
-| **3** | Natural trip input | Alternative path, form stays as fallback |
-| **4** | Conversational onboarding | Nice-to-have, quiz works well |
+| Phase | What | Why |
+|-------|------|-----|
+| **0a** | `generate-quick-preview` + `DestinationEntry` | Core value-first experience |
+| **0b** | `OneQuestionEntry` + `ArchetypeTeaser` | For users without a destination |
+| **0c** | `analyze-itinerary` + `FixItineraryEntry` | For skeptics with existing plans |
 
 ---
 
 ## Key Principle
 
-**AI is a better interface to the same intelligence.**
+**Show value in 10 seconds. THEN ask for commitment.**
 
-Your rules engine (archetypes, trip types, matrices, pacing, forced slots) IS the intelligence. AI just makes it easier to:
-- **Tell** the system what you want (input)
-- **Understand** why it recommended something (explain)
-- **Change** it without rebuilding (modify)
-
-The brain stays the same. AI is a better mouth and ears.
+The quiz, the form, the full system—all still there. But now people arrive at them already wanting what you have, instead of being asked to trust you first.
