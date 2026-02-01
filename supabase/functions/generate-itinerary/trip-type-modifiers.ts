@@ -1217,6 +1217,801 @@ export const soloSocialCalibration: Record<string, SoloSocialCalibration> = {
   }
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// "OXYMORON" HANDLERS - Seemingly contradictory but REAL traveler combinations
+// ═══════════════════════════════════════════════════════════════════════════
+// These are NOT edge cases. These are real travelers who need real guidance.
+// The system must recognize and properly handle these "contradictions."
+
+export interface OxymoronHandler {
+  combination: string;
+  commonMisunderstanding: string;
+  actualNeed: string;
+  translationPrinciple: string;
+  concreteExamples: string[];
+  avoidMistakes: string[];
+  diningGuidance?: string;
+  sampleDay?: string;
+}
+
+export const oxymoronHandlers: OxymoronHandler[] = [
+
+  // ═══════════════════════════════════════════════════════════════
+  // SOLO COMBINATIONS - The "traveling alone but..." cases
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'solo + social_butterfly',
+    commonMisunderstanding: 'Contradiction - social people travel with others',
+    actualNeed: 'Travels alone but WANTS to meet people. Solo by circumstance or choice, social by nature.',
+    translationPrinciple: 'Create opportunities for connection, not forced solitude',
+    concreteExamples: [
+      'Walking tours where they will meet other travelers',
+      'Hostels with great social common areas (even if private room)',
+      'Pub crawls and group activities',
+      'Communal dining experiences',
+      'Cooking classes with group tables',
+      'Bar seating where conversation happens naturally',
+      'Food tours with other participants',
+      'Group day trips'
+    ],
+    avoidMistakes: [
+      'Assuming they want solitude',
+      'Private/isolated experiences',
+      'Solo tables at restaurants',
+      'Romantic solo framing ("table for one with a view")',
+      'Language emphasizing aloneness'
+    ],
+    diningGuidance: 'Communal tables. Bar seating where conversation happens. Food tours with others.',
+    sampleDay: 'Morning walking tour. Lunch with tour group. Hostel social hour. Pub crawl evening.'
+  },
+
+  {
+    combination: 'solo + luxury_luminary',
+    commonMisunderstanding: 'Sad rich person eating alone',
+    actualNeed: 'Wants PREMIUM solo treatment. Not lonely, just traveling without compromise.',
+    translationPrinciple: 'Solo does not mean lesser. Premium experience, party of one.',
+    concreteExamples: [
+      'Chef\'s counter (THE premium solo dining spot)',
+      'Omakase experiences (intimate, solo-perfect)',
+      'Spa treatments (solo pampering)',
+      'Private tours (not group budget tours)',
+      'Best seat in the house (not hidden away)',
+      'Concierge-arranged experiences',
+      'Premium hotel with excellent solo service',
+      'VIP treatment without needing a +1'
+    ],
+    avoidMistakes: [
+      'Budget alternatives because "you\'re just one person"',
+      'Group tours to save money',
+      'Assuming they want company',
+      'Seating them at bad tables',
+      'Treating solo as lesser-than'
+    ],
+    diningGuidance: 'Chef\'s counter. Omakase. Sommelier attention. Best seat, not hidden.',
+    sampleDay: 'Late breakfast in bed. Spa. Shopping. Chef\'s counter dinner. Nightcap at top bar.'
+  },
+
+  {
+    combination: 'solo + family_architect',
+    commonMisunderstanding: 'Should be with family, not alone',
+    actualNeed: 'Parent escaping for self-care. Remembering who they were before kids.',
+    translationPrinciple: 'This is restoration, not abandonment. They NEED this.',
+    concreteExamples: [
+      'Sleep in (no kids waking them)',
+      'Adult restaurants (no kids menu!)',
+      'Uninterrupted museum time',
+      'Reading on the beach alone',
+      'Spa day without guilt',
+      'Late dinners',
+      'Activities they gave up for kids',
+      'Quiet. So much quiet.'
+    ],
+    avoidMistakes: [
+      'Kid-friendly anything',
+      'Family references',
+      'Guilt-inducing language',
+      'Assuming they miss their kids constantly',
+      'Suggesting they call home'
+    ],
+    diningGuidance: 'Adult restaurants. Late dinners. Wine. No kids menu in sight.',
+    sampleDay: 'SLEEP IN. Long adult brunch. Museum alone. Spa. Late dinner with wine. Silence.'
+  },
+
+  {
+    combination: 'solo + romantic_curator',
+    commonMisunderstanding: 'Romance alone? That is sad.',
+    actualNeed: 'Self-romance. Treating yourself. Self-love journey.',
+    translationPrinciple: 'Romance with yourself is valid and beautiful.',
+    concreteExamples: [
+      'Nice dinners alone (good bar seating)',
+      'Spa and self-care',
+      'Beautiful hotels for yourself',
+      'Scenic spots (sunset for one is still beautiful)',
+      'Treating yourself to experiences',
+      'Self-dates: bookshop, cafe, gallery',
+      'Journaling spots',
+      'Photography walks'
+    ],
+    avoidMistakes: [
+      'Couples-focused venues',
+      'Pity framing',
+      '"Table for one?" with sad tone',
+      'Assuming they wish they had a partner',
+      'Romantic activities designed for two'
+    ],
+    diningGuidance: 'Nice restaurants with good bar seating. Treat yourself. No pity, no apology.',
+    sampleDay: 'Leisurely morning. Art gallery solo date. Spa afternoon. Lovely dinner at bar.'
+  },
+
+  {
+    combination: 'solo + healing_journeyer',
+    commonMisunderstanding: 'Depressed person alone - is that safe?',
+    actualNeed: 'Solitude AS healing. Space to process. Nature therapy.',
+    translationPrinciple: 'Solitude is medicine, not isolation. Honor the need for space.',
+    concreteExamples: [
+      'Nature walks alone',
+      'Quiet accommodations',
+      'Journaling-friendly cafes',
+      'Meditation spots',
+      'Gentle solo activities',
+      'No forced social interaction',
+      'Peaceful environments',
+      'Time and space to think'
+    ],
+    avoidMistakes: [
+      'Forced social activities',
+      'Checking if they are "okay" repeatedly',
+      'Party atmospheres',
+      'Crowded venues',
+      'High-stimulation activities'
+    ],
+    diningGuidance: 'Quiet, nourishing. No pressure. Comfort food.',
+    sampleDay: 'Gentle start. Nature walk. Quiet lunch. Journal. Rest. Early simple dinner.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // ADVENTURE COMBINATIONS - "Gentle thrill seekers"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'adventure + slow_traveler',
+    commonMisunderstanding: 'Lazy adventurer - contradiction',
+    actualNeed: 'GENTLE adventure. Accessible thrills. Not extreme, but still active.',
+    translationPrinciple: 'Adventure has a spectrum. Match intensity to preference.',
+    concreteExamples: [
+      'Scenic hiking (not mountaineering)',
+      'Kayaking calm waters (not white water)',
+      'Snorkeling (not scuba certification)',
+      'Bike tours at leisure pace',
+      'Wildlife watching (active but calm)',
+      'Easy via ferrata',
+      'Gentle surf lessons',
+      'Nature walks with some challenge'
+    ],
+    avoidMistakes: [
+      'Extreme activities',
+      'Early morning departures',
+      'Back-to-back adventures',
+      'Competitive framing',
+      'Pushing physical limits'
+    ],
+    diningGuidance: 'Fuel for gentle adventure. Relaxed post-activity meals.',
+    sampleDay: 'Late start. Scenic moderate hike. Long lunch with views. Rest. Easy evening activity.'
+  },
+
+  {
+    combination: 'adventure + luxury_luminary',
+    commonMisunderstanding: 'Adventure is rugged and cheap',
+    actualNeed: 'PREMIUM adventure. Best guides, best gear, best recovery.',
+    translationPrinciple: 'Adventure + luxury is a huge market. Honor it.',
+    concreteExamples: [
+      'Heli-skiing',
+      'Private guides (not group tours)',
+      'Luxury safari',
+      'Premium surf camp',
+      'Yacht-based diving',
+      'Five-star base camp',
+      'Private climbing instruction',
+      'Spa recovery after adventure'
+    ],
+    avoidMistakes: [
+      'Budget group adventures',
+      'Basic accommodations',
+      'Shared equipment',
+      'Rustic framing',
+      'Assuming adventure = roughing it'
+    ],
+    diningGuidance: 'Premium recovery dining. Private chef. Fine dining after adventure.',
+    sampleDay: 'Private guide adventure. Gourmet packed lunch. Spa recovery. Fine dining.'
+  },
+
+  {
+    combination: 'adventure + healing_journeyer',
+    commonMisunderstanding: 'They should rest, not adventure',
+    actualNeed: 'Adventure AS therapy. Building confidence. Overcoming fears.',
+    translationPrinciple: 'Physical challenge can be healing. Respect the journey.',
+    concreteExamples: [
+      'Confidence-building challenges',
+      'Conquering fears (heights, water, etc.)',
+      'Physical accomplishment',
+      'Nature immersion',
+      'Solo challenges with support',
+      'Progressive difficulty',
+      'Celebration of achievement'
+    ],
+    avoidMistakes: [
+      'Only gentle activities',
+      'Assuming they cannot handle challenge',
+      'Overprotecting',
+      'Not celebrating achievements'
+    ],
+    diningGuidance: 'Celebratory meals after achievements. Nourishing recovery food.',
+    sampleDay: 'Confidence-building activity. Celebrate with good lunch. Rest. Reflect. Dinner.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // WELLNESS COMBINATIONS - "Active relaxers"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'wellness_retreat + adrenaline_architect',
+    commonMisunderstanding: 'Wellness = gentle, quiet, slow',
+    actualNeed: 'ACTIVE wellness. Fitness retreat. Athletic recovery.',
+    translationPrinciple: 'Wellness through physical challenge is valid.',
+    concreteExamples: [
+      'Fitness bootcamp retreats',
+      'Challenging yoga (power, ashtanga)',
+      'HIIT and strength training',
+      'Athletic recovery protocols',
+      'Sports massage',
+      'High-altitude training',
+      'Surf and yoga combo',
+      'Endurance building'
+    ],
+    avoidMistakes: [
+      'Only gentle/restorative options',
+      'Assuming they want to slow down',
+      'Passive treatments only',
+      'Slow-paced programming'
+    ],
+    diningGuidance: 'Performance nutrition. Protein-focused. Athlete fuel.',
+    sampleDay: 'Early HIIT class. Healthy power breakfast. Training. Sports massage. Protein dinner.'
+  },
+
+  {
+    combination: 'wellness_retreat + culinary_cartographer',
+    commonMisunderstanding: 'Food focus conflicts with wellness',
+    actualNeed: 'Food AS wellness. Nutrition. Healthy gourmet. Medicine through meals.',
+    translationPrinciple: 'Food and wellness are deeply connected. Honor both.',
+    concreteExamples: [
+      'Healthy cooking classes',
+      'Nutrition education',
+      'Farm-to-table wellness',
+      'Ayurvedic cooking',
+      'Juice cleanse (for those who want it)',
+      'Mindful eating practices',
+      'Healthy gourmet dining',
+      'Food as medicine approach'
+    ],
+    avoidMistakes: [
+      'Restriction/diet framing',
+      'Ignoring food entirely',
+      'Boring "health food"',
+      'Guilt about eating'
+    ],
+    diningGuidance: 'Healthy gourmet. Food as medicine. Beautiful AND nutritious.',
+    sampleDay: 'Morning practice. Healthy cooking class. Nutritious beautiful lunch. Treatment. Wellness dinner.'
+  },
+
+  {
+    combination: 'wellness_retreat + bucket_list_conqueror',
+    commonMisunderstanding: 'Wellness is passive, not achievement',
+    actualNeed: 'Wellness ACHIEVEMENTS. Complete a program. Transform.',
+    translationPrinciple: 'Some people want wellness with goals and outcomes.',
+    concreteExamples: [
+      'Complete a yoga teacher training',
+      'Finish a detox program',
+      'Master meditation technique',
+      'Achieve flexibility goals',
+      'Complete wellness certification',
+      'Transformational retreat completion',
+      'Measurable health outcomes'
+    ],
+    avoidMistakes: [
+      'Open-ended, goalless wellness',
+      'No structure or program',
+      'Assuming they want to "just be"',
+      'No achievement markers'
+    ],
+    diningGuidance: 'Program-aligned meals. Structured nutrition plan.',
+    sampleDay: 'Program session. Structured lunch. Afternoon intensive. Progress tracking. Dinner.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // HONEYMOON COMBINATIONS - "Not your typical newlyweds"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'honeymoon + gap_year_graduate',
+    commonMisunderstanding: 'Honeymoons should be fancy',
+    actualNeed: 'ROMANTIC on a budget. Love does not require luxury.',
+    translationPrinciple: 'Special does not mean expensive. Meaningful romance.',
+    concreteExamples: [
+      'Budget romantic destinations',
+      'Hostels with private rooms',
+      'Street food romance',
+      'Free romantic activities (beaches, sunsets, walks)',
+      'One splurge meal, budget the rest',
+      'Camping under stars',
+      'Picnic romance',
+      'Local experiences over tourist traps'
+    ],
+    avoidMistakes: [
+      'Luxury assumptions',
+      'Expensive restaurant pressure',
+      'Making them feel cheap',
+      'Only premium options'
+    ],
+    diningGuidance: 'Romantic budget finds. Street food for two. One special splurge.',
+    sampleDay: 'Free beach morning. Picnic lunch. Explore together. Budget romantic dinner. Stars.'
+  },
+
+  {
+    combination: 'honeymoon + adrenaline_architect',
+    commonMisunderstanding: 'Honeymoons are spa and relaxation',
+    actualNeed: 'Adventure ROMANCE. Bond through thrills, not just candles.',
+    translationPrinciple: 'Shared adventure builds marriage foundation. Valid honeymoon style.',
+    concreteExamples: [
+      'Tandem skydiving',
+      'Couples surf lessons',
+      'Hiking to romantic viewpoints',
+      'Scuba certification together',
+      'Safari honeymoon',
+      'Adventure by day, romance by night',
+      'Shared challenges',
+      'Story-building experiences'
+    ],
+    avoidMistakes: [
+      'Only spa and beach',
+      'Passive experiences',
+      'Assuming they need to rest',
+      'Separating adventure from romance'
+    ],
+    diningGuidance: 'Celebratory post-adventure dinners. Romance after the thrill.',
+    sampleDay: 'Adventure activity together. Celebratory lunch. Rest. Romantic sunset. Special dinner.'
+  },
+
+  {
+    combination: 'honeymoon + social_butterfly',
+    commonMisunderstanding: 'Honeymoon should be private couple time',
+    actualNeed: 'Some couples are SOCIAL. They want to meet other couples.',
+    translationPrinciple: 'Not all romance is isolation. Social romance is valid.',
+    concreteExamples: [
+      'Cooking classes with other couples',
+      'Group tours with romantic elements',
+      'Boutique hotels with social atmosphere',
+      'Wine tastings with others',
+      'Resort with social programming',
+      'Meeting other newlyweds',
+      'Dinner with other travelers'
+    ],
+    avoidMistakes: [
+      'Only private/isolated experiences',
+      'Assuming they want to be alone',
+      'No social options',
+      'Hermit honeymoon'
+    ],
+    diningGuidance: 'Social romantic venues. Communal tables with couples. Wine events.',
+    sampleDay: 'Couples activity with other couples. Social lunch. Pool with others. Group dinner.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // GUYS/GIRLS TRIP COMBINATIONS - "Not that kind of group"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'guys_trip + zen_seeker',
+    commonMisunderstanding: 'Guys trips are always party/sports',
+    actualNeed: 'Wellness with the boys. Golf retreat. Meditation bros.',
+    translationPrinciple: 'Male friendship has many forms. Honor the quiet version.',
+    concreteExamples: [
+      'Golf trip (sport + nature + bonding)',
+      'Fishing trip (quiet bonding)',
+      'Hiking trip (nature + challenge)',
+      'Surf trip (active + meditative)',
+      'Wellness retreat with guys',
+      'Morning practice, afternoon hang',
+      'Meaningful conversations over beer'
+    ],
+    avoidMistakes: [
+      'Forcing party atmosphere',
+      'Only bars and nightlife',
+      'Assuming they want loud/wild',
+      'No quiet options'
+    ],
+    diningGuidance: 'Quality over quantity. Good beer, good food, good conversation.',
+    sampleDay: 'Morning golf/activity. Long quality lunch. Afternoon hang. Nice dinner with beers.'
+  },
+
+  {
+    combination: 'guys_trip + slow_traveler',
+    commonMisunderstanding: 'Guys trips need energy and action',
+    actualNeed: 'Quality hang time. Long meals. No rushing.',
+    translationPrinciple: 'Male bonding through presence, not just activity.',
+    concreteExamples: [
+      'Long lunches with beers',
+      'Craft brewery tastings (not crawls)',
+      'Quality restaurant, not quick bites',
+      'Sitting and talking',
+      'Golf (not rushed)',
+      'One bar, good conversation',
+      'No packed schedule'
+    ],
+    avoidMistakes: [
+      'Back-to-back activities',
+      'Pub CRAWL energy',
+      'Rushing between things',
+      'Assuming they want maximum action'
+    ],
+    diningGuidance: 'Long quality meals. Craft beer tastings. Time to talk.',
+    sampleDay: 'Late start. Long leisurely activity. 3-hour lunch. Afternoon hang. Nice dinner.'
+  },
+
+  {
+    combination: 'girls_trip + adrenaline_architect',
+    commonMisunderstanding: 'Girls trips are spa and shopping',
+    actualNeed: 'Adventure girls trip. Women want thrills too.',
+    translationPrinciple: 'Adventure has no gender. Honor active women.',
+    concreteExamples: [
+      'Surfing together',
+      'Hiking trip',
+      'Zip-lining, bungee',
+      'Diving certification',
+      'Mountain biking',
+      'Rock climbing',
+      'Kayaking',
+      'Adventure + evening celebrations'
+    ],
+    avoidMistakes: [
+      'Only spa options',
+      'Assuming shopping is priority',
+      'Gentle/passive activities',
+      'Pink-washing adventure'
+    ],
+    diningGuidance: 'Celebratory post-adventure meals. Recovery fuel. Fun dinners.',
+    sampleDay: 'Adventure activity. Celebratory lunch. Rest. Pre-dinner drinks. Fun dinner out.'
+  },
+
+  {
+    combination: 'girls_trip + zen_seeker',
+    commonMisunderstanding: 'Girls trips are social/party',
+    actualNeed: 'Peaceful girlfriend time. Meaningful connection over activity.',
+    translationPrinciple: 'Female friendship can be quiet and deep.',
+    concreteExamples: [
+      'Wellness retreat together',
+      'Yoga retreat',
+      'Nature walks and talks',
+      'Meditation workshop',
+      'Quiet meaningful meals',
+      'Journaling/reading together',
+      'Supporting each other in peace'
+    ],
+    avoidMistakes: [
+      'Forcing party energy',
+      'Only nightlife options',
+      'Surface-level social activities',
+      'Assuming they want loud/busy'
+    ],
+    diningGuidance: 'Quiet meaningful meals. Healthy options. Space for conversation.',
+    sampleDay: 'Morning practice together. Quiet brunch. Nature walk. Spa. Peaceful dinner.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // FAMILY COMBINATIONS - "Not your typical family vacation"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'family + adrenaline_architect',
+    commonMisunderstanding: 'Adventure with kids is reckless',
+    actualNeed: 'AGE-APPROPRIATE adventure. Building adventurous kids.',
+    translationPrinciple: 'Adventure families raise adventurous children. Support it.',
+    concreteExamples: [
+      'Water parks (kid thrills)',
+      'Easy hikes with rewards',
+      'Snorkeling (kid-safe)',
+      'Zip-lining (age-appropriate)',
+      'Kayaking calm waters',
+      'Bike rides',
+      'Junior surf lessons',
+      'Adventure parks with kid options'
+    ],
+    avoidMistakes: [
+      'Only passive activities',
+      'Assuming kids cannot handle anything',
+      'Over-restricting',
+      'Adult-level adventure'
+    ],
+    diningGuidance: 'Casual spots that refuel. Kid-friendly but interesting food.',
+    sampleDay: 'Family adventure activity. Casual fun lunch. Rest/pool. Easy evening activity. Early dinner.'
+  },
+
+  {
+    combination: 'family + culinary_cartographer',
+    commonMisunderstanding: 'Kids are picky, forget foodie dreams',
+    actualNeed: 'Teaching kids about food. Food adventure as family.',
+    translationPrinciple: 'Foodie parents raise adventurous eaters. Support the mission.',
+    concreteExamples: [
+      'Kid-friendly cooking classes',
+      'Market visits (visual, interactive)',
+      'Food tours with kid-friendly stops',
+      'Pizza-making classes',
+      'Ice cream "research"',
+      'Teaching kids about local food',
+      'Casual but good restaurants',
+      'Food as education'
+    ],
+    avoidMistakes: [
+      'Only kids menu restaurants',
+      'Skipping food experiences',
+      'Assuming kids will not engage',
+      'Fine dining with kids (usually)'
+    ],
+    diningGuidance: 'Casual but quality. Kid-friendly foodie spots. Educational food experiences.',
+    sampleDay: 'Market morning. Kid cooking class. Casual good lunch. Rest. Family-friendly foodie dinner.'
+  },
+
+  {
+    combination: 'family + luxury_luminary',
+    commonMisunderstanding: 'Luxury travel with kids is wasteful',
+    actualNeed: 'PREMIUM family experience. Kids club. Family suite. Service.',
+    translationPrinciple: 'Luxury family travel is a huge market. Serve it.',
+    concreteExamples: [
+      'Five-star family resorts',
+      'Kids clubs (premium childcare)',
+      'Family suites',
+      'Private family tours',
+      'Concierge for family logistics',
+      'Child-friendly fine dining',
+      'VIP family experiences',
+      'Premium family adventures'
+    ],
+    avoidMistakes: [
+      'Budget family options',
+      'Assuming luxury is wasted on kids',
+      'No premium family options',
+      'Treating family as downgrade'
+    ],
+    diningGuidance: 'Premium family-friendly dining. Nice restaurants with kid service.',
+    sampleDay: 'Kids club morning. Parents spa. Family lunch. Pool. Premium family dinner.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // BIRTHDAY/CELEBRATION COMBINATIONS - "Different ways to celebrate"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'birthday + zen_seeker',
+    commonMisunderstanding: 'Birthdays need party energy',
+    actualNeed: 'Meaningful birthday. Peaceful celebration. Reflection.',
+    translationPrinciple: 'Introverts deserve birthday trips too. Honor quiet celebration.',
+    concreteExamples: [
+      'Sunrise meditation birthday',
+      'Nature birthday (hike to viewpoint)',
+      'Solo spa birthday',
+      'Quiet special dinner',
+      'Meaningful site visit',
+      'Journaling/reflection time',
+      'One special moment, not party'
+    ],
+    avoidMistakes: [
+      'Forcing party atmosphere',
+      'Surprise parties',
+      'Group celebrations',
+      'Loud venues',
+      'Over-the-top fanfare'
+    ],
+    diningGuidance: 'Quiet special dinner. Meaningful over loud. Quality over fanfare.',
+    sampleDay: 'Sunrise practice. Peaceful morning. Meaningful site. Quiet special birthday dinner.'
+  },
+
+  {
+    combination: 'birthday + gap_year_graduate',
+    commonMisunderstanding: 'Birthday = expensive dinner',
+    actualNeed: 'Fun birthday experience, not expensive dinner.',
+    translationPrinciple: 'Celebration does not require money. Experience over expense.',
+    concreteExamples: [
+      'Birthday adventure activity',
+      'Free birthday experience (beach, hike, sunset)',
+      'Budget special meal (best street food, not Michelin)',
+      'Hostel birthday party',
+      'Birthday at a viewpoint',
+      'Creative celebration',
+      'Story over status'
+    ],
+    avoidMistakes: [
+      'Expensive dinner pressure',
+      'Luxury expectations',
+      'Making them feel cheap',
+      'Status-focused celebration'
+    ],
+    diningGuidance: 'Best street food spot. Budget special. Experience over price tag.',
+    sampleDay: 'Fun activity. Beach/viewpoint birthday moment. Best budget dinner. Cheap drinks out.'
+  },
+
+  {
+    combination: 'birthday + healing_journeyer',
+    commonMisunderstanding: 'Birthdays should be happy/celebratory',
+    actualNeed: 'Gentle birthday. Honoring the year. Self-care celebration.',
+    translationPrinciple: 'Some birthdays are about surviving another year. Honor that.',
+    concreteExamples: [
+      'Peaceful birthday ritual',
+      'Nature birthday',
+      'Spa self-care',
+      'Meaningful solo moment',
+      'Reflection time',
+      'Gentle celebration',
+      'Kind self-acknowledgment'
+    ],
+    avoidMistakes: [
+      'Forced happiness',
+      'Over-the-top celebration',
+      'Assuming they want attention',
+      'Party pressure'
+    ],
+    diningGuidance: 'Gentle special meal. Self-care dinner. Quiet and kind.',
+    sampleDay: 'Gentle morning. Nature time. Quiet reflection. Spa. Peaceful special dinner alone.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // RETIREMENT COMBINATIONS - "Still got it"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'retirement + adrenaline_architect',
+    commonMisunderstanding: 'Retirees should take it easy',
+    actualNeed: 'Proving vitality. Adventure within ability. Not ready to slow down.',
+    translationPrinciple: 'Age-appropriate adventure is real adventure. Honor it.',
+    concreteExamples: [
+      'Hiking (appropriate level)',
+      'Scuba/snorkeling',
+      'Cycling tours (e-bikes if needed)',
+      'Safari',
+      'Kayaking',
+      'Zip-lining (if able)',
+      'Golf (competitive element)',
+      'Adventure with accessibility considered'
+    ],
+    avoidMistakes: [
+      'Only passive activities',
+      'Treating them as fragile',
+      'No adventure options',
+      'Assuming physical limitation'
+    ],
+    diningGuidance: 'Quality recovery meals. Comfortable timing. Good restaurants.',
+    sampleDay: 'Age-appropriate adventure. Nice lunch. Rest. Light activity. Early quality dinner.'
+  },
+
+  {
+    combination: 'retirement + gap_year_graduate',
+    commonMisunderstanding: 'Retirees have money to spend',
+    actualNeed: 'Budget retirement travel. Fixed income. Stretch savings.',
+    translationPrinciple: 'Not all retirees are wealthy. Budget travel, dignified.',
+    concreteExamples: [
+      'Value accommodations',
+      'Free activities (parks, walks, beaches)',
+      'Senior discounts emphasized',
+      'Slow travel (longer, cheaper per day)',
+      'Cooking own meals',
+      'Off-peak travel',
+      'Quality budget options'
+    ],
+    avoidMistakes: [
+      'Luxury assumptions',
+      'Expensive defaults',
+      'Making them feel cheap',
+      'Ignoring budget constraints'
+    ],
+    diningGuidance: 'Budget quality. Senior specials. Value-focused dining.',
+    sampleDay: 'Free morning activity. Budget good lunch. Rest. Affordable quality dinner.'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // FOODIE COMBINATIONS - "Different ways to eat"
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    combination: 'foodie + healing_journeyer',
+    commonMisunderstanding: 'Emotional eating / unhealthy',
+    actualNeed: 'Comfort food as medicine. Nourishing. Food as healing.',
+    translationPrinciple: 'Food can be part of healing. Honor the connection.',
+    concreteExamples: [
+      'Comfort food done well',
+      'Nourishing meals',
+      'Gentle food experiences',
+      'No pressure dining',
+      'Soul-feeding restaurants',
+      'Food as self-care',
+      'Meaningful eating experiences'
+    ],
+    avoidMistakes: [
+      'Challenging food experiences',
+      'High-pressure dining',
+      'Extreme cuisine',
+      'Performance eating'
+    ],
+    diningGuidance: 'Comfort food. Nourishing. Soul-feeding. No pressure or challenge.',
+    sampleDay: 'Gentle morning. Comforting brunch. Rest. Nourishing dinner. Kind to self.'
+  }
+];
+
+/**
+ * Get oxymoron handler for a specific trip type × archetype combination
+ */
+export function getOxymoronHandler(tripType: string, archetype: string): OxymoronHandler | null {
+  const normalizedTripType = tripType?.toLowerCase().replace(/[\s-]+/g, '_') || '';
+  const normalizedArchetype = archetype?.toLowerCase().replace(/[\s-]+/g, '_') || '';
+  
+  const combinationKey = `${normalizedTripType} + ${normalizedArchetype}`;
+  
+  return oxymoronHandlers.find(h => 
+    h.combination.toLowerCase() === combinationKey.toLowerCase()
+  ) || null;
+}
+
+/**
+ * Build oxymoron-aware prompt section when applicable
+ */
+export function buildOxymoronPromptSection(tripType: string, archetype: string): string {
+  const handler = getOxymoronHandler(tripType, archetype);
+  
+  if (!handler) return '';
+  
+  return `
+═══════════════════════════════════════════════════════════════════════════
+⚠️  SPECIAL COMBINATION DETECTED: ${handler.combination.toUpperCase()}
+═══════════════════════════════════════════════════════════════════════════
+
+This combination may SEEM contradictory but represents a REAL traveler type.
+Do NOT treat this as an error or edge case.
+
+COMMON MISUNDERSTANDING: ${handler.commonMisunderstanding}
+
+ACTUAL NEED: ${handler.actualNeed}
+
+TRANSLATION PRINCIPLE: ${handler.translationPrinciple}
+
+=== CONCRETE EXAMPLES - What this person actually wants ===
+${handler.concreteExamples.map(ex => `✓ ${ex}`).join('\n')}
+
+=== MISTAKES TO AVOID - Common errors with this combination ===
+${handler.avoidMistakes.map(m => `✗ ${m}`).join('\n')}
+
+${handler.diningGuidance ? `=== DINING GUIDANCE ===
+${handler.diningGuidance}
+` : ''}
+
+${handler.sampleDay ? `=== SAMPLE DAY ===
+${handler.sampleDay}
+` : ''}
+
+COMPLIANCE CHECK:
+☐ Does the itinerary honor BOTH the trip type AND the archetype?
+☐ Have you avoided the common mistakes listed above?
+☐ Would this person recognize this itinerary as THEIR trip?
+☐ Is the combination treated as VALID, not as an error to fix?
+
+═══════════════════════════════════════════════════════════════════════════
+`;
+}
+
+/**
+ * Check if a combination is an "oxymoron" that needs special handling
+ */
+export function isOxymoronCombination(tripType: string, archetype: string): boolean {
+  return getOxymoronHandler(tripType, archetype) !== null;
+}
+
 /**
  * Build comprehensive solo trip prompt based on archetype
  */
@@ -3918,6 +4713,15 @@ ${effectivePacingModifier < -2 ? '⚠️ VERY slow pacing required. Maximum 2-3 
 ${effectivePacingModifier > 1 ? '⚡ Active pacing allowed. Can include more activities with recovery blocks.' : ''}
 `;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADD OXYMORON HANDLER IF APPLICABLE
+  // These are "contradictory" combinations that are actually real travelers
+  // ═══════════════════════════════════════════════════════════════════════════
+  const oxymoronSection = buildOxymoronPromptSection(normalizedType, archetype);
+  if (oxymoronSection) {
+    section += oxymoronSection;
   }
 
   // Add upgrade note
