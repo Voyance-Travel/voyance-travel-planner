@@ -51,18 +51,20 @@ export type ConflictResolution = {
 
 // Required slot types based on traits
 export type ForcedSlotType = 
-  | 'signature_meal'      // Foodie trait
-  | 'deep_context'        // History/cultural trait  
-  | 'linger_block'        // Relaxed pace trait
-  | 'edge_activity'       // Adventure trait
-  | 'wellness_moment'     // Transformation trait
-  | 'authentic_encounter' // Authenticity trait
-  | 'social_experience'   // Social trait (positive)
-  | 'solo_retreat'        // Social trait (negative/introvert)
-  | 'vip_experience'      // Status Seeker: high comfort + budget
-  | 'couples_moment'      // Romantic Curator: romantic trip or archetype
-  | 'connectivity_spot'   // Digital Explorer: wifi-guaranteed venue
-  | 'family_activity';    // Family Architect: kid-friendly activity
+  | 'signature_meal'         // Foodie trait
+  | 'deep_context'           // History/cultural trait  
+  | 'linger_block'           // Relaxed pace trait
+  | 'edge_activity'          // Adventure trait
+  | 'wellness_moment'        // Transformation trait
+  | 'authentic_encounter'    // Authenticity trait
+  | 'social_experience'      // Social trait (positive)
+  | 'solo_retreat'           // Social trait (negative/introvert)
+  | 'vip_experience'         // Status Seeker: high comfort + budget
+  | 'couples_moment'         // Romantic Curator: romantic trip or archetype
+  | 'connectivity_spot'      // Digital Explorer: wifi-guaranteed venue
+  | 'family_activity'        // Family Architect: kid-friendly activity
+  | 'celebration_dinner'     // Birthday/Anniversary: special celebration dinner
+  | 'celebration_experience'; // Birthday/Anniversary: memorable milestone experience
 
 export interface ForcedSlot {
   type: ForcedSlotType;
@@ -249,7 +251,7 @@ export function deriveForcedSlots(
   }
   
   // ==========================================================================
-  // NEW ARCHETYPE-SPECIFIC SLOTS (4 additions)
+  // ARCHETYPE-SPECIFIC & OCCASION-SPECIFIC SLOTS
   // ==========================================================================
   
   // 1. STATUS SEEKER: VIP Experience (comfort >= 5 AND budget >= 3)
@@ -321,6 +323,37 @@ export function deriveForcedSlots(
       description: 'One family-friendly activity (engaging for all ages, stroller-accessible if needed)',
       validationTags: ['family-friendly', 'kids', 'children', 'all-ages', 'stroller', 'interactive', 'educational', 'playground']
     });
+  }
+  
+  // 5. BIRTHDAY/CELEBRATION: Special celebration moments
+  const isCelebration = context?.tripType === 'birthday' || 
+    context?.tripType?.toLowerCase()?.includes('birthday') ||
+    context?.tripType === 'anniversary' ||
+    context?.tripType?.toLowerCase()?.includes('celebration') ||
+    context?.tripType?.toLowerCase()?.includes('milestone');
+  if (isCelebration) {
+    // Add a special celebration dinner (once per trip, towards the end for maximum anticipation)
+    const celebrationDinnerDay = totalDays >= 3 ? totalDays - 1 : Math.ceil(totalDays * 0.7);
+    if (dayNumber === celebrationDinnerDay || (totalDays === 1 && dayNumber === 1)) {
+      slots.push({
+        type: 'celebration_dinner',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'BIRTHDAY/CELEBRATION: Special celebration dinner at a highly-rated restaurant with great ambiance',
+        validationTags: ['celebration', 'special-occasion', 'fine-dining', 'birthday', 'anniversary', 'upscale', 'memorable', 'reservation-worthy', 'champagne']
+      });
+    }
+    // Add a celebration activity/experience (mid-trip highlight)
+    const celebrationExperienceDay = Math.ceil(totalDays / 2);
+    if (dayNumber === celebrationExperienceDay && totalDays >= 2) {
+      slots.push({
+        type: 'celebration_experience',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'BIRTHDAY/CELEBRATION: Memorable milestone experience (special tour, unique activity, champagne toast, scenic moment)',
+        validationTags: ['special-experience', 'celebration', 'champagne', 'memorable', 'unique', 'treat-yourself', 'milestone', 'bucket-list']
+      });
+    }
   }
   
   // ==========================================================================
