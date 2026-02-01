@@ -106,6 +106,12 @@ import {
   buildDestinationGuidancePrompt,
   hasDestinationGuide,
   getArchetypeDestinationGuide,
+  // New dynamic attraction matching (Phase 14)
+  getMatchingAttractions,
+  getOrGenerateArchetypeGuide,
+  buildMatchedAttractionsPrompt,
+  buildArchetypeGuidePrompt,
+  EXPERIENCE_CATEGORIES,
 } from './archetype-data.ts';
 
 // =============================================================================

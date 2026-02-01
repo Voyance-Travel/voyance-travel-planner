@@ -1801,65 +1801,148 @@ export type Database = {
         }
         Relationships: []
       }
+      archetype_destination_guides: {
+        Row: {
+          archetype: string
+          created_at: string | null
+          destination_id: string
+          expires_at: string | null
+          generated_at: string | null
+          guide: Json
+          id: string
+          usage_count: number | null
+        }
+        Insert: {
+          archetype: string
+          created_at?: string | null
+          destination_id: string
+          expires_at?: string | null
+          generated_at?: string | null
+          guide: Json
+          id?: string
+          usage_count?: number | null
+        }
+        Update: {
+          archetype?: string
+          created_at?: string | null
+          destination_id?: string
+          expires_at?: string | null
+          generated_at?: string | null
+          guide?: Json
+          id?: string
+          usage_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archetype_destination_guides_destination_id_fkey"
+            columns: ["destination_id"]
+            isOneToOne: false
+            referencedRelation: "destinations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attractions: {
         Row: {
           address: string | null
           average_rating: number | null
+          best_time_of_day: string[] | null
+          budget_level: string | null
           category: string | null
           created_at: string
+          crowd_level: string | null
           crowd_patterns: Json | null
           description: string | null
           destination_id: string | null
+          enriched_at: string | null
+          experience_categories: string[] | null
+          family_friendly: boolean | null
+          group_friendly: boolean | null
           id: string
+          indoor_outdoor: string | null
           latitude: number | null
           longitude: number | null
           name: string
           opening_hours: Json | null
           peak_hours: Json | null
+          physical_intensity: string | null
           price_range: Json | null
+          requires_reservation: boolean | null
+          romantic: boolean | null
+          solo_friendly: boolean | null
           subcategory: string | null
           tags: Json | null
+          typical_duration_minutes: number | null
           updated_at: string
+          vibe: string[] | null
           visit_duration_mins: number | null
         }
         Insert: {
           address?: string | null
           average_rating?: number | null
+          best_time_of_day?: string[] | null
+          budget_level?: string | null
           category?: string | null
           created_at?: string
+          crowd_level?: string | null
           crowd_patterns?: Json | null
           description?: string | null
           destination_id?: string | null
+          enriched_at?: string | null
+          experience_categories?: string[] | null
+          family_friendly?: boolean | null
+          group_friendly?: boolean | null
           id?: string
+          indoor_outdoor?: string | null
           latitude?: number | null
           longitude?: number | null
           name: string
           opening_hours?: Json | null
           peak_hours?: Json | null
+          physical_intensity?: string | null
           price_range?: Json | null
+          requires_reservation?: boolean | null
+          romantic?: boolean | null
+          solo_friendly?: boolean | null
           subcategory?: string | null
           tags?: Json | null
+          typical_duration_minutes?: number | null
           updated_at?: string
+          vibe?: string[] | null
           visit_duration_mins?: number | null
         }
         Update: {
           address?: string | null
           average_rating?: number | null
+          best_time_of_day?: string[] | null
+          budget_level?: string | null
           category?: string | null
           created_at?: string
+          crowd_level?: string | null
           crowd_patterns?: Json | null
           description?: string | null
           destination_id?: string | null
+          enriched_at?: string | null
+          experience_categories?: string[] | null
+          family_friendly?: boolean | null
+          group_friendly?: boolean | null
           id?: string
+          indoor_outdoor?: string | null
           latitude?: number | null
           longitude?: number | null
           name?: string
           opening_hours?: Json | null
           peak_hours?: Json | null
+          physical_intensity?: string | null
           price_range?: Json | null
+          requires_reservation?: boolean | null
+          romantic?: boolean | null
+          solo_friendly?: boolean | null
           subcategory?: string | null
           tags?: Json | null
+          typical_duration_minutes?: number | null
           updated_at?: string
+          vibe?: string[] | null
           visit_duration_mins?: number | null
         }
         Relationships: []

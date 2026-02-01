@@ -12,6 +12,98 @@ export interface ExperienceAffinity {
 }
 
 // =============================================================================
+// EXPERIENCE CATEGORY TAXONOMY - All possible experience types
+// =============================================================================
+// These are the categories attractions can be tagged with in the database.
+// Used for matching attractions to archetypes dynamically.
+// =============================================================================
+
+export const EXPERIENCE_CATEGORIES: Record<string, string> = {
+  // Cultural & Historical
+  landmark: 'Major monuments, famous sites',
+  museum: 'Art, history, science museums',
+  historical_site: 'Ruins, archaeological sites',
+  religious_site: 'Churches, temples, mosques, shrines',
+  architecture: 'Notable buildings, design',
+  cultural_performance: 'Theater, traditional shows, concerts',
+  
+  // Food & Drink
+  fine_dining: 'Michelin, high-end restaurants',
+  local_restaurant: 'Authentic local cuisine, mid-range',
+  casual_dining: 'Everyday restaurants, trattorias',
+  street_food: 'Markets, food stalls, quick bites',
+  food_market: 'Fresh markets, food halls',
+  food_tour: 'Guided culinary experiences',
+  cooking_class: 'Hands-on food preparation',
+  wine_tasting: 'Wineries, wine bars, tastings',
+  cocktail_bar: 'Craft cocktails, rooftop bars',
+  local_bar: 'Neighborhood bars, pubs',
+  cafe: 'Coffee shops, tea houses',
+  
+  // Nature & Outdoors
+  beach: 'Beaches, coastal areas',
+  park: 'Urban parks, gardens',
+  garden: 'Botanical gardens, formal gardens',
+  hiking: 'Trails, mountain walks',
+  nature_reserve: 'Protected areas, wildlife',
+  viewpoint: 'Scenic overlooks, panoramas',
+  water_activity: 'Swimming, kayaking, boat tours',
+  
+  // Adventure & Active
+  adventure_activity: 'Skydiving, bungee, extreme sports',
+  outdoor_sport: 'Cycling, climbing, surfing',
+  walking_tour: 'Guided city walks',
+  bike_tour: 'Cycling experiences',
+  
+  // Urban & Neighborhood
+  neighborhood: 'District exploration, wandering',
+  street_life: 'People watching, urban vibe',
+  shopping_local: 'Boutiques, artisan shops, markets',
+  shopping_luxury: 'High-end retail, designer brands',
+  night_market: 'Evening markets, street shopping',
+  
+  // Wellness & Relaxation
+  spa: 'Spa treatments, massage',
+  wellness_center: 'Yoga studios, meditation centers',
+  hot_spring: 'Onsen, thermal baths',
+  retreat: 'Wellness retreats, health programs',
+  
+  // Entertainment & Nightlife
+  nightclub: 'Dancing, DJ venues',
+  live_music: 'Concerts, jazz clubs',
+  nightlife: 'Evening entertainment, bar hopping',
+  pub_crawl: 'Group bar tours',
+  gaming: 'Arcades, gaming cafes, VR',
+  
+  // Learning & Enrichment
+  workshop: 'Hands-on classes (non-food)',
+  lecture: 'Talks, educational events',
+  library: 'Libraries, reading rooms',
+  university: 'Campus visits, academic sites',
+  
+  // Social & Group
+  group_activity: 'Shared experiences with others',
+  hostel_social: 'Hostel events, meetups',
+  local_home: 'Home dining, local family visits',
+  
+  // Family
+  family_attraction: 'Kid-friendly museums, zoos',
+  playground: 'Parks with play areas',
+  aquarium: 'Marine life exhibits',
+  zoo: 'Animal parks',
+  theme_park: 'Amusement parks',
+  
+  // Specialty
+  photography_spot: 'Instagram-worthy locations',
+  sunset_spot: 'Best sunset viewing',
+  sunrise_spot: 'Best sunrise viewing',
+  hidden_gem: 'Off-the-beaten-path',
+  vip_experience: 'Exclusive access, private tours',
+  volunteer: 'Community service opportunities',
+  eco_tour: 'Sustainable tourism experiences'
+};
+
+// =============================================================================
 // EXPERIENCE AFFINITY BY ARCHETYPE
 // =============================================================================
 
