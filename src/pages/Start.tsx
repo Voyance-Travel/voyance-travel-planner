@@ -31,6 +31,7 @@ import { FlightDetailsModal, type FlightDetails, type FlightSegment } from '@/co
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import TripSetupFeedback from '@/components/common/TripSetupFeedback';
 
 // Types for structured location data
 interface LocationSelection {
@@ -1160,6 +1161,13 @@ export default function Start() {
                   onChange={setDestinationSelection}
                   placeholder="Where do you want to go?"
                 />
+                {/* Warm feedback for destination */}
+                {destinationSelection.cityName && (
+                  <TripSetupFeedback 
+                    field="destination" 
+                    value={destinationSelection.cityName} 
+                  />
+                )}
               </div>
 
               {/* Flight Details - Always optional */}

@@ -10,6 +10,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { QuizCompletion } from '@/components/quiz/QuizCompletion';
+import QuizFeedback from '@/components/quiz/QuizFeedback';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
@@ -850,9 +851,19 @@ export default function Quiz() {
                               index={index}
                               isMultiSelect={question.multiSelect}
                             />
-                          ))}
-                        </div>
-                        
+                            ))}
+                          </div>
+                          
+                          {/* Conversation feedback after selection */}
+                          <QuizFeedback
+                            questionId={question.id}
+                            answerValue={
+                              Array.isArray(answers[question.id])
+                                ? (answers[question.id] as string[])[0]
+                                : (answers[question.id] as string) || null
+                            }
+                            show={!!answers[question.id]}
+                          />
                         {/* Text input for allergies/custom input */}
                         {question.hasTextInput && question.textInputId && (
                           <motion.div
