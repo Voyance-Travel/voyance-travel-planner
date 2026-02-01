@@ -70,7 +70,25 @@ export type ForcedSlotType =
   | 'evening_entertainment'    // Guys trip: bar/pub/sports bar
   | 'evening_out'              // Girls trip: rooftop/wine bar/cocktails
   | 'group_experience'         // Girls trip: class/tasting/spa
-  | 'photo_worthy';            // Girls trip: instagram-worthy moment
+  | 'photo_worthy'             // Girls trip: instagram-worthy moment
+  // PURPOSE-DRIVEN TRIP SLOTS:
+  | 'graduation_celebration'   // Graduation: celebration moment
+  | 'reward_experience'        // Graduation: earned reward activity
+  | 'bucket_list_experience'   // Retirement: bucket list item
+  | 'leisurely_morning'        // Retirement: no early alarms
+  | 'morning_wellness'         // Wellness retreat: daily morning practice
+  | 'wellness_treatment'       // Wellness retreat: spa/massage
+  | 'healthy_dining'           // Wellness retreat: nourishing meals
+  | 'main_adventure'           // Adventure trip: primary adventure
+  | 'secondary_adventure'      // Adventure trip: supporting activity
+  | 'adventure_recovery'       // Adventure trip: rest between activities
+  | 'market_visit'             // Foodie trip: food market experience
+  | 'cooking_experience'       // Foodie trip: cooking class/workshop
+  | 'signature_restaurant'     // Foodie trip: THE restaurant
+  | 'food_discovery'           // Foodie trip: street food/neighborhood crawl
+  | 'efficient_highlight'      // Business leisure: quick must-see
+  | 'quality_dinner'           // Business leisure: client-worthy restaurant
+  | 'easy_break_activity';     // Business leisure: 1-2 hour break activity
 
 export interface ForcedSlot {
   type: ForcedSlotType;
@@ -430,6 +448,237 @@ export function deriveForcedSlots(
         traitValue: 0,
         description: 'GIRLS TRIP: Photo-worthy location or aesthetically beautiful experience',
         validationTags: ['photo', 'instagram', 'scenic', 'aesthetic', 'viewpoint', 'beautiful', 'shareable']
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 8. GRADUATION: Celebration and reward experiences
+  // ==========================================================================
+  const isGraduation = context?.tripType === 'graduation' || 
+    context?.tripType?.toLowerCase()?.includes('graduation');
+  if (isGraduation) {
+    // Celebration moment mid-trip
+    const celebrationDay = Math.ceil(totalDays / 2);
+    if (dayNumber === celebrationDay) {
+      slots.push({
+        type: 'graduation_celebration',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'GRADUATION: Special celebration moment (dinner, toast, memorable experience)',
+        validationTags: ['celebration', 'special', 'dinner', 'toast', 'milestone', 'achievement']
+      });
+    }
+    // Reward experience (day 2 or 3)
+    const rewardDay = totalDays >= 3 ? 2 : 1;
+    if (dayNumber === rewardDay) {
+      slots.push({
+        type: 'reward_experience',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'GRADUATION: Reward activity they earned (bucket list, splurge, dream experience)',
+        validationTags: ['reward', 'bucket-list', 'splurge', 'earned', 'special', 'memorable']
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 9. RETIREMENT: Bucket list and leisurely pace
+  // ==========================================================================
+  const isRetirement = context?.tripType === 'retirement' || 
+    context?.tripType?.toLowerCase()?.includes('retirement');
+  if (isRetirement) {
+    // Bucket list experience mid-trip
+    const bucketListDay = Math.ceil(totalDays / 2);
+    if (dayNumber === bucketListDay) {
+      slots.push({
+        type: 'bucket_list_experience',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'RETIREMENT: THE experience they\'ve always wanted - no more "someday"',
+        validationTags: ['bucket-list', 'dream', 'lifetime', 'special', 'iconic', 'must-do']
+      });
+    }
+    // Celebration dinner
+    const dinnerDay = totalDays >= 3 ? 3 : 2;
+    if (dayNumber === dinnerDay) {
+      slots.push({
+        type: 'celebration_dinner',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'RETIREMENT: Special dinner celebrating career achievement',
+        validationTags: ['celebration', 'dinner', 'special', 'fine-dining', 'memorable']
+      });
+    }
+    // Leisurely mornings - no early alarms
+    if (dayNumber > 1) {
+      slots.push({
+        type: 'leisurely_morning',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'RETIREMENT: No early alarms - they\'ve earned rest. Late breakfast or brunch.',
+        validationTags: ['late-start', 'brunch', 'leisurely', 'relaxed', 'no-rush']
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 10. WELLNESS RETREAT: Daily wellness focus
+  // ==========================================================================
+  const isWellness = context?.tripType === 'wellness_retreat' || 
+    context?.tripType === 'wellness-retreat' ||
+    context?.tripType?.toLowerCase()?.includes('wellness');
+  if (isWellness) {
+    // Morning wellness every day
+    slots.push({
+      type: 'morning_wellness',
+      traitSource: 'context',
+      traitValue: 0,
+      description: 'WELLNESS: Morning practice (yoga, meditation, or wellness activity)',
+      validationTags: ['yoga', 'meditation', 'morning', 'wellness', 'mindfulness', 'practice']
+    });
+    // Treatment every other day minimum
+    if (dayNumber % 2 === 0 || dayNumber === 1) {
+      slots.push({
+        type: 'wellness_treatment',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'WELLNESS: Spa treatment, massage, or therapeutic experience',
+        validationTags: ['spa', 'massage', 'treatment', 'therapeutic', 'healing', 'relaxation']
+      });
+    }
+    // Integration/rest time every day
+    slots.push({
+      type: 'linger_block',
+      traitSource: 'context',
+      traitValue: 0,
+      description: 'WELLNESS: Rest and integration time between activities',
+      validationTags: ['rest', 'integration', 'quiet', 'relaxation', 'downtime']
+    });
+  }
+
+  // ==========================================================================
+  // 11. ADVENTURE TRIP: Adventure activities with recovery
+  // ==========================================================================
+  const isAdventure = context?.tripType === 'adventure' || 
+    context?.tripType?.toLowerCase()?.includes('adventure');
+  if (isAdventure) {
+    // Main adventure activity most days
+    if (dayNumber % 2 === 1 || dayNumber === 2) { // Days 1, 2, 3, 5, etc.
+      slots.push({
+        type: 'main_adventure',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'ADVENTURE: Primary adventure activity (the reason for the trip)',
+        validationTags: ['adventure', 'extreme', 'active', 'outdoor', 'thrill', 'adrenaline']
+      });
+    }
+    // Secondary adventure on alternating days
+    if (dayNumber % 2 === 0 && dayNumber <= 4) {
+      slots.push({
+        type: 'secondary_adventure',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'ADVENTURE: Supporting active experience',
+        validationTags: ['active', 'outdoor', 'adventure', 'hiking', 'sport', 'physical']
+      });
+    }
+    // Recovery time mid-trip and end
+    if (dayNumber === Math.ceil(totalDays / 2) || dayNumber === totalDays) {
+      slots.push({
+        type: 'adventure_recovery',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'ADVENTURE: Recovery time (rest, spa, easy activity)',
+        validationTags: ['recovery', 'rest', 'spa', 'easy', 'relaxation', 'gentle']
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 12. FOODIE TRIP: Food-focused activities
+  // ==========================================================================
+  const isFoodieTripType = context?.tripType === 'foodie' || 
+    context?.tripType?.toLowerCase()?.includes('foodie') ||
+    context?.tripType?.toLowerCase()?.includes('culinary');
+  if (isFoodieTripType) {
+    // Market visit early in trip
+    if (dayNumber <= 2) {
+      slots.push({
+        type: 'market_visit',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'FOODIE: Food market, farmers market, or specialty food shopping',
+        validationTags: ['market', 'food-market', 'farmers', 'local', 'produce', 'specialty']
+      });
+    }
+    // Cooking experience mid-trip
+    const cookingDay = Math.ceil(totalDays / 2);
+    if (dayNumber === cookingDay) {
+      slots.push({
+        type: 'cooking_experience',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'FOODIE: Cooking class, food workshop, or hands-on culinary experience',
+        validationTags: ['cooking', 'class', 'workshop', 'culinary', 'hands-on', 'chef']
+      });
+    }
+    // Signature restaurant later in trip
+    const signatureDay = totalDays >= 4 ? totalDays - 1 : totalDays;
+    if (dayNumber === signatureDay) {
+      slots.push({
+        type: 'signature_restaurant',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'FOODIE: THE restaurant of the trip - researched, reserved, anticipated',
+        validationTags: ['signature', 'fine-dining', 'special', 'renowned', 'destination', 'bucket-list']
+      });
+    }
+    // Food discovery every day
+    slots.push({
+      type: 'food_discovery',
+      traitSource: 'context',
+      traitValue: 0,
+      description: 'FOODIE: Street food, local specialty, or neighborhood food exploration',
+      validationTags: ['street-food', 'local', 'authentic', 'discovery', 'neighborhood', 'hidden-gem']
+    });
+  }
+
+  // ==========================================================================
+  // 13. BUSINESS LEISURE: Efficient use of limited free time
+  // ==========================================================================
+  const isBusinessLeisure = context?.tripType === 'business_leisure' || 
+    context?.tripType === 'business-leisure' ||
+    context?.tripType?.toLowerCase()?.includes('bleisure');
+  if (isBusinessLeisure) {
+    // Efficient highlight - the ONE thing to see
+    if (dayNumber === 1 || dayNumber === totalDays) {
+      slots.push({
+        type: 'efficient_highlight',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'BLEISURE: Must-see highlight doable in limited free time',
+        validationTags: ['must-see', 'landmark', 'efficient', 'quick', 'iconic', 'highlight']
+      });
+    }
+    // Quality dinner option for business entertaining
+    if (dayNumber <= 2) {
+      slots.push({
+        type: 'quality_dinner',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'BLEISURE: Restaurant suitable for client entertainment or quality solo meal',
+        validationTags: ['business-appropriate', 'upscale', 'quality', 'impressive', 'professional']
+      });
+    }
+    // Easy break activity
+    if (dayNumber === 2 && totalDays >= 2) {
+      slots.push({
+        type: 'easy_break_activity',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'BLEISURE: Quick activity (1-2 hours) doable between meetings',
+        validationTags: ['quick', 'nearby', 'break', 'flexible', 'accessible', 'central']
       });
     }
   }
