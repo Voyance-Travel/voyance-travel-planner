@@ -1205,36 +1205,237 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // OTHER TRIP TYPES (keeping existing patterns)
+    // GRADUATION - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    graduation: {
+      // EXPLORERS
+      cultural_anthropologist: "Educational celebration - meaningful historical site, cultural depth, honoring the learning journey.",
+      urban_nomad: "City graduation trip - neighborhood exploration, celebrating freedom, urban adventure begins.",
+      wilderness_pioneer: "Outdoor graduation celebration - summit hike, nature adventure, conquering new heights.",
+      digital_explorer: "Modern graduation trip - Instagram-worthy moments, trendy spots, shareable celebration.",
+      flexible_wanderer: "Freedom graduation trip - no more schedules, pure spontaneity, celebrating independence.",
+      // CONNECTORS
+      social_butterfly: "Party graduation - group celebration, meeting people, nightlife, maximum social energy.",
+      family_architect: "Family graduation celebration - multi-generational trip, making parents proud, shared joy.",
+      romantic_curator: "Couples graduation trip - celebrating together, romantic milestone marking.",
+      community_builder: "Meaningful graduation - volunteering, giving back, starting next chapter with purpose.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Bucket list graduation - THE trip you've been waiting for, reward for years of work.",
+      adrenaline_architect: "Adventure graduation - you earned this thrill, skydiving, bungee, epic experience.",
+      collection_curator: "Passion graduation trip - deep dive into your interest, celebrating your expertise.",
+      status_seeker: "Impressive graduation trip - brag-worthy destination, VIP experiences, Instagram gold.",
+      // RESTORERS
+      zen_seeker: "Peaceful graduation - rest after years of stress, meditation, finding center before next chapter.",
+      retreat_regular: "Wellness graduation - spa recovery from finals, treatments, restoring depleted energy.",
+      beach_therapist: "Beach graduation - finally relaxing, ocean therapy, decompressing from academic stress.",
+      slow_traveler: "Slow graduation trip - no deadlines, no rushing, savoring freedom at last.",
+      // CURATORS
+      culinary_cartographer: "Foodie graduation - eating your way through celebration, food adventures, no meal plan budget.",
+      art_aficionado: "Art graduation - museums without rush, cultural immersion, feeding creativity.",
+      luxury_luminary: "Luxury graduation - treating yourself after sacrifice, premium everything, you earned it.",
+      // TRANSFORMERS
+      eco_ethicist: "Sustainable graduation - eco-conscious celebration, nature, starting career with values.",
+      gap_year_graduate: "Budget graduation adventure - backpacking, hostels, stretching graduation money far.",
+      midlife_explorer: "Career-change graduation - celebrating reinvention, meaningful new chapter.",
+      sabbatical_scholar: "Academic graduation - intellectual celebration, bookshops, scholarly satisfaction.",
+      healing_journeyer: "Gentle graduation - recovering from academic pressure, peaceful transition.",
+      retirement_ranger: "Late-life graduation - celebrating lifelong learning, comfortable pace.",
+      balanced_story_collector: "Classic graduation trip - mix of celebration, relaxation, and adventure."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // RETIREMENT - All 27 Archetypes
     // ═══════════════════════════════════════════════════════════════
     retirement: {
-      bucket_list_conqueror: "Finally checking off that big dream destination. No work constraints!",
-      slow_traveler: "Ultimate slow retirement trip - no clock, no rush, pure enjoyment.",
-      cultural_anthropologist: "Deep cultural immersion they never had time for while working.",
-      luxury_luminary: "Well-deserved luxury retirement celebration.",
-      flexible_wanderer: "Retirement freedom - wander without schedule, pure spontaneity.",
-      adrenaline_architect: "Retirement adventure - bucket list thrills finally possible.",
-      beach_therapist: "Beach retirement - endless relaxation, simple pleasures.",
-      culinary_cartographer: "Foodie retirement - explore cuisines without rushing home.",
-      balanced_story_collector: "Retirement celebration - quality experiences, comfortable pace."
+      // EXPLORERS
+      cultural_anthropologist: "Cultural retirement trip - finally time for deep immersion, meaningful exploration, no work calls.",
+      urban_nomad: "City retirement exploration - walking cities at your pace, no schedule, urban freedom.",
+      wilderness_pioneer: "Outdoor retirement - hiking bucket list, nature immersion, active retirement celebration.",
+      digital_explorer: "Modern retirement trip - unique experiences, photo-worthy moments, staying current.",
+      flexible_wanderer: "Freedom retirement - no more schedules ever, pure spontaneity, earned independence.",
+      // CONNECTORS
+      social_butterfly: "Social retirement - group tours, meeting fellow travelers, cruises, new friendships.",
+      family_architect: "Family retirement trip - traveling with grandkids, multi-generational memories.",
+      romantic_curator: "Romantic retirement - second honeymoon energy, celebrating partnership through career.",
+      community_builder: "Meaningful retirement - volunteering abroad, giving back with new free time.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Ultimate bucket list - THE destinations you've always dreamed of, no more 'someday'.",
+      adrenaline_architect: "Active retirement - proving age is just a number, adventure within ability.",
+      collection_curator: "Passion retirement - finally time for your hobby, deep expertise trips.",
+      status_seeker: "Impressive retirement - luxury travel you've earned, premium experiences, bragging rights.",
+      // RESTORERS
+      zen_seeker: "Peaceful retirement - spiritual exploration, meditation retreats, finding meaning.",
+      retreat_regular: "Wellness retirement - spa trips, health focus, taking care of yourself finally.",
+      beach_therapist: "Beach retirement - ocean time, relaxation, simple pleasures, no alarm clocks.",
+      slow_traveler: "Slow retirement travel - ultimate slow travel, weeks not days, no rushing ever.",
+      // CURATORS
+      culinary_cartographer: "Foodie retirement - food tours, cooking classes, culinary bucket list.",
+      art_aficionado: "Art retirement - museums without rushing, cultural immersion, lifelong learning.",
+      luxury_luminary: "Luxury retirement - five-star everything, you worked for this, premium treatment.",
+      // TRANSFORMERS
+      eco_ethicist: "Eco retirement - sustainable travel, nature, leaving good footprint.",
+      gap_year_graduate: "Budget retirement adventure - stretching savings, smart travel, experience over luxury.",
+      midlife_explorer: "N/A - retirement is past midlife, redirect to retirement_ranger.",
+      sabbatical_scholar: "Learning retirement - courses, lectures, intellectual travel, lifelong student.",
+      healing_journeyer: "Healing retirement - rest from career stress, gentle recovery, peace.",
+      retirement_ranger: "Classic retirement travel - comfortable pace, quality experiences, celebrating life's work.",
+      balanced_story_collector: "Balanced retirement - mix of bucket list, relaxation, and new experiences."
     },
 
-    wellness: {
-      slow_traveler: "Natural wellness fit - already values slow, restorative experiences.",
-      adrenaline_architect: "Wellness recovery - they need it even if they resist. Balance the energy.",
-      bucket_list_conqueror: "Wellness as reset before next big adventure.",
-      zen_seeker: "Deep wellness immersion - meditation, yoga, spiritual practices.",
-      retreat_regular: "Full wellness retreat - spa, treatments, healthy living.",
-      beach_therapist: "Wellness by the water - beach yoga, swimming, gentle restoration."
+    // ═══════════════════════════════════════════════════════════════
+    // WELLNESS RETREAT - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    wellness_retreat: {
+      // EXPLORERS
+      cultural_anthropologist: "Cultural wellness - local healing traditions, traditional medicine, indigenous wellness practices.",
+      urban_nomad: "Urban wellness - city yoga studios, juice bars, wellness neighborhoods, mindful city walking.",
+      wilderness_pioneer: "Nature wellness - forest bathing, outdoor yoga, wilderness therapy, hiking meditation.",
+      digital_explorer: "Modern wellness - biohacking centers, wellness tech, meditation apps, infrared saunas.",
+      flexible_wanderer: "Flexible wellness - drop-in classes, no rigid schedule, intuitive self-care.",
+      // CONNECTORS
+      social_butterfly: "Group wellness - retreat with others, group yoga, wellness community, shared healing.",
+      family_architect: "Family wellness - kid-friendly wellness resort, family yoga, healthy habits together.",
+      romantic_curator: "Couples wellness - partner yoga, couples massage, romantic health retreat.",
+      community_builder: "Community wellness - wellness volunteering, teaching yoga, sharing healing.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Achievement wellness - complete a program, yoga teacher training, wellness certification.",
+      adrenaline_architect: "Active wellness - intensive fitness retreat, challenging yoga, athletic recovery.",
+      collection_curator: "Specialist wellness - deep dive into specific practice, Ayurveda immersion, expertise.",
+      status_seeker: "Premium wellness - exclusive retreat, celebrity-level facilities, impressive program.",
+      // RESTORERS
+      zen_seeker: "Spiritual wellness - meditation intensive, silent retreat, deep practice, enlightenment focus.",
+      retreat_regular: "Full wellness immersion - comprehensive program, daily treatments, total reset.",
+      beach_therapist: "Beach wellness - oceanside yoga, beach meditation, water therapy, natural healing.",
+      slow_traveler: "Gentle wellness - no intensive programs, slow yoga, rest-focused, easy pace.",
+      // CURATORS
+      culinary_cartographer: "Nutrition wellness - healthy cooking, detox cuisine, food as medicine, clean eating.",
+      art_aficionado: "Creative wellness - art therapy, creative expression, healing through art.",
+      luxury_luminary: "Luxury wellness - six-star spa resort, premium treatments, world-class facilities.",
+      // TRANSFORMERS
+      eco_ethicist: "Eco wellness - sustainable retreat, organic everything, nature connection, earth healing.",
+      gap_year_graduate: "Budget wellness - affordable retreat, work-exchange yoga, hostel yoga classes.",
+      midlife_explorer: "Transformative wellness - midlife reset, health reboot, new chapter preparation.",
+      sabbatical_scholar: "Learning wellness - wellness education, understanding the science, intellectual approach.",
+      healing_journeyer: "Deep healing retreat - trauma-informed, therapeutic focus, professional support.",
+      retirement_ranger: "Gentle wellness - age-appropriate, restorative, comfortable healing.",
+      balanced_story_collector: "Balanced wellness - mix of activity, rest, treatments, and learning."
     },
 
+    // ═══════════════════════════════════════════════════════════════
+    // ADVENTURE TRIP - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
     adventure: {
-      slow_traveler: "Adventure at their pace - not rushed, quality over quantity of activities.",
-      culinary_cartographer: "Adventure + food - fuel the adventure with great local eating.",
-      social_butterfly: "Group adventures - shared experiences create connection.",
-      adrenaline_architect: "Full adventure mode - maximum thrills, challenge seeking.",
-      wilderness_pioneer: "Outdoor adventure focus - hiking, camping, nature immersion.",
-      bucket_list_conqueror: "Adventure bucket list - checking off epic experiences."
+      // EXPLORERS
+      cultural_anthropologist: "Cultural adventure - adventurous local experiences, off-grid communities, challenging cultural immersion.",
+      urban_nomad: "Urban adventure - parkour spots, urban climbing, city challenges, underground exploration.",
+      wilderness_pioneer: "Ultimate wilderness adventure - multi-day trek, mountaineering, expedition-level.",
+      digital_explorer: "Tech adventure - drone photography spots, GoPro moments, shareable thrills.",
+      flexible_wanderer: "Spontaneous adventure - no fixed plan, say yes to opportunities, organic thrills.",
+      // CONNECTORS
+      social_butterfly: "Group adventure - adventure tours, meeting fellow thrill-seekers, shared adrenaline.",
+      family_architect: "Family adventure - age-appropriate thrills, adventure parks, safe excitement.",
+      romantic_curator: "Couples adventure - tandem skydiving, couples surf lessons, bonding through thrills.",
+      community_builder: "Purposeful adventure - conservation expeditions, meaningful challenges.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Bucket list adventure - THE thing you've always wanted to do, epic achievement.",
+      adrenaline_architect: "Maximum adventure - extreme everything, pushing limits, ultimate thrills.",
+      collection_curator: "Specialist adventure - deep expertise in one activity, skill progression.",
+      status_seeker: "Impressive adventure - brag-worthy experiences, exclusive access, Instagram gold.",
+      // RESTORERS
+      zen_seeker: "Mindful adventure - adventure as meditation, present-moment focus, flow states.",
+      retreat_regular: "Recovery adventure - active recovery, challenging but balanced, spa after.",
+      beach_therapist: "Water adventure - surfing, diving, kiteboarding, ocean-based thrills.",
+      slow_traveler: "Gentle adventure - hiking not climbing, kayaking not rapids, accessible thrills.",
+      // CURATORS
+      culinary_cartographer: "Food adventure - extreme food experiences, foraging, survival cooking.",
+      art_aficionado: "Creative adventure - adventure photography, capturing the extreme, artistic thrills.",
+      luxury_luminary: "Luxury adventure - heli-skiing, private guides, premium adventure experiences.",
+      // TRANSFORMERS
+      eco_ethicist: "Eco adventure - sustainable expeditions, conservation adventures, leave no trace.",
+      gap_year_graduate: "Budget adventure - cheap thrills, backpacker adventures, DIY adrenaline.",
+      midlife_explorer: "Midlife adventure - proving yourself, new challenges, age-defying experiences.",
+      sabbatical_scholar: "Learning adventure - understanding the science, skilled progression, expert instruction.",
+      healing_journeyer: "Therapeutic adventure - adventure therapy, overcoming fears, building confidence.",
+      retirement_ranger: "Accessible adventure - within physical ability, safe thrills, proving vitality.",
+      balanced_story_collector: "Mixed adventure - variety of activities, some intense, some moderate."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // FOODIE TRIP - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    foodie: {
+      // EXPLORERS
+      cultural_anthropologist: "Cultural food immersion - understanding food history, traditional techniques, food as culture.",
+      urban_nomad: "Street food crawl - neighborhood eating, market hopping, local joints, walking food tour.",
+      wilderness_pioneer: "Foraging foodie - wild food, farm visits, source-to-table, outdoor cooking.",
+      digital_explorer: "Instagrammable food - aesthetic cafes, trendy spots, viral restaurants, food content.",
+      flexible_wanderer: "Spontaneous foodie - no reservations, follow your nose, discover hidden gems.",
+      // CONNECTORS
+      social_butterfly: "Social food experience - group cooking classes, food tours, communal dining, chef's tables.",
+      family_architect: "Family food adventure - kid-friendly cooking classes, food tours with children, teaching food.",
+      romantic_curator: "Romantic food journey - couples cooking class, intimate dinners, wine pairings.",
+      community_builder: "Community food - home dining experiences, local family meals, food cooperatives.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Bucket list restaurants - THE places you've always wanted to eat, famous chefs.",
+      adrenaline_architect: "Extreme food - bizarre foods, spicy challenges, food adventures, eating dares.",
+      collection_curator: "Specialist foodie - deep dive into one cuisine, wine expertise, cheese mastery.",
+      status_seeker: "Elite dining - Michelin stars, hard reservations, celebrity chef experiences, bragging rights.",
+      // RESTORERS
+      zen_seeker: "Mindful eating - slow food, meditation before meals, food as spiritual practice.",
+      retreat_regular: "Wellness foodie - healthy gourmet, spa cuisine, nutritional excellence.",
+      beach_therapist: "Seafood journey - coastal cuisine, beachside dining, fresh catch, ocean flavors.",
+      slow_traveler: "Slow food pilgrimage - long lunches, savoring every bite, meal as destination.",
+      // CURATORS
+      culinary_cartographer: "Ultimate food obsession - every meal researched, maximum food experiences, total immersion.",
+      art_aficionado: "Artistic dining - beautiful presentation, design-forward restaurants, food as art.",
+      luxury_luminary: "Luxury gastronomy - tasting menus, rare ingredients, premium wine pairings, five-star dining.",
+      // TRANSFORMERS
+      eco_ethicist: "Sustainable foodie - farm-to-table, organic, zero-waste restaurants, ethical eating.",
+      gap_year_graduate: "Budget foodie - cheap eats, street food, market meals, maximum flavor minimum cost.",
+      midlife_explorer: "Culinary awakening - new cuisines, cooking skills, food education, expanding palate.",
+      sabbatical_scholar: "Food education - culinary school, understanding technique, wine certifications.",
+      healing_journeyer: "Comfort food journey - nourishing meals, food as healing, gentle culinary exploration.",
+      retirement_ranger: "Leisurely food tour - long lunches, comfortable dining, accessible restaurants.",
+      balanced_story_collector: "Balanced food trip - mix of fine dining, street food, cooking classes, markets."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // BUSINESS LEISURE (Bleisure) - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    business_leisure: {
+      // EXPLORERS
+      cultural_anthropologist: "Cultural bleisure - squeeze in museums, historical sites during breaks, evening cultural walks.",
+      urban_nomad: "Urban bleisure - explore neighborhoods near conference, walking between meetings, city discovery.",
+      wilderness_pioneer: "Active bleisure - morning runs, weekend nature escape, outdoor breaks.",
+      digital_explorer: "Tech bleisure - visit tech districts, innovative cafes, work-friendly unique spaces.",
+      flexible_wanderer: "Opportunistic bleisure - grab free moments, spontaneous discoveries, flexible exploring.",
+      // CONNECTORS
+      social_butterfly: "Networking bleisure - client dinners, colleague outings, business social events.",
+      family_architect: "Family extension - bring family for weekend after work, kid-friendly additions.",
+      romantic_curator: "Partner bleisure - partner joins for weekend, romantic extension after business.",
+      community_builder: "Meaningful bleisure - local business connections, community visits during gaps.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Efficient bleisure - hit major landmarks in limited time, maximize free hours.",
+      adrenaline_architect: "Active bleisure - morning workouts, adventure day after conference, active breaks.",
+      collection_curator: "Specialist bleisure - visit specific interest during free time, targeted experiences.",
+      status_seeker: "Impressive bleisure - best restaurants for client dinners, VIP experiences, show off city.",
+      // RESTORERS
+      zen_seeker: "Wellness bleisure - hotel yoga, meditation apps, peaceful moments between meetings.",
+      retreat_regular: "Spa bleisure - hotel spa after work, wellness morning routine, recovery.",
+      beach_therapist: "Beach bleisure - beach lunch break, coastal weekend, ocean time if near water.",
+      slow_traveler: "Restful bleisure - don't overschedule free time, quality over quantity, actual rest.",
+      // CURATORS
+      culinary_cartographer: "Food bleisure - research best restaurants, local specialties, food-focused free time.",
+      art_aficionado: "Art bleisure - galleries during lunch, museum after conference, cultural evenings.",
+      luxury_luminary: "Premium bleisure - upgrade hotel, expense account dinners, luxury free time.",
+      // TRANSFORMERS
+      eco_ethicist: "Sustainable bleisure - eco-conscious choices, sustainable restaurants, green options.",
+      gap_year_graduate: "Budget bleisure - save per diem, cheap local eats, budget explorations.",
+      midlife_explorer: "Meaningful bleisure - make work trips count, quality experiences in limited time.",
+      sabbatical_scholar: "Learning bleisure - bookshops, lectures if available, intellectual additions.",
+      healing_journeyer: "Gentle bleisure - don't overdo it, rest between work, gentle exploration.",
+      retirement_ranger: "N/A - not typical for retirees, redirect to leisure trip.",
+      balanced_story_collector: "Balanced bleisure - mix of rest, food, sights in available time."
     }
   };
 
@@ -1338,10 +1539,12 @@ Elevate experiences within the stated budget tier. Choose the BEST options at th
 `;
   }
 
-  // Add critical compliance check for group trips
-  const groupTripTypes = ['guys_trip', 'guys-trip', 'girls_trip', 'girls-trip', 'family', 'bachelorette', 'bachelor'];
+  // Add critical compliance check based on trip type category
   const normalizedType = (tripType || '').toLowerCase().replace(/[\s-]+/g, '_');
-  if (groupTripTypes.some(g => normalizedType.includes(g.replace(/-/g, '_')))) {
+  
+  // Group trips
+  const groupTripTypes = ['guys_trip', 'girls_trip', 'family', 'bachelorette', 'bachelor'];
+  if (groupTripTypes.some(g => normalizedType.includes(g))) {
     section += `
 ═══════════════════════════════════════════════════════════════════════
               CRITICAL: GROUP TRIP COMPLIANCE CHECK
@@ -1359,6 +1562,84 @@ The GROUP nature MUST be OBVIOUS in activity selection and language.
 
 Do NOT use language like "intimate", "romantic", "quiet solo moment"
 DO use language like "group-friendly", "perfect for friends", "shared experience"
+`;
+  }
+
+  // Celebration trips
+  const celebrationTypes = ['birthday', 'anniversary', 'honeymoon', 'graduation', 'retirement'];
+  if (celebrationTypes.some(c => normalizedType.includes(c))) {
+    section += `
+═══════════════════════════════════════════════════════════════════════
+              CRITICAL: CELEBRATION TRIP COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+This is a CELEBRATION trip. The itinerary MUST include:
+✓ At least ONE clear celebration moment (special dinner, toast, experience)
+✓ The occasion should feel SPECIAL, not generic
+✓ Something memorable that marks this milestone
+
+⚠️ VIOLATION CHECK:
+If this itinerary could be a random vacation with no occasion = REGENERATE
+The CELEBRATION nature MUST be OBVIOUS.
+`;
+  }
+
+  // Romance trips (may overlap with celebration)
+  const romanceTypes = ['anniversary', 'honeymoon', 'babymoon'];
+  if (romanceTypes.some(r => normalizedType.includes(r))) {
+    section += `
+═══════════════════════════════════════════════════════════════════════
+              CRITICAL: ROMANCE TRIP COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+This is a ROMANTIC trip. The itinerary MUST include:
+✓ Romance/couples focus visible throughout
+✓ Activities designed for TWO people together
+✓ At least ONE romantic highlight (sunset, special dinner, scenic moment)
+✓ Pacing relaxed enough for couples time
+
+⚠️ VIOLATION CHECK:
+If this itinerary lacks romantic elements = REGENERATE
+Do NOT use language like "solo", "group", "meeting people"
+DO use language like "together", "romantic", "intimate", "couples"
+`;
+  }
+
+  // Purpose-driven trips
+  const purposeTypes = ['wellness_retreat', 'wellness', 'adventure', 'foodie', 'culinary'];
+  if (purposeTypes.some(p => normalizedType.includes(p))) {
+    section += `
+═══════════════════════════════════════════════════════════════════════
+              CRITICAL: PURPOSE-DRIVEN TRIP COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+This is a PURPOSE-DRIVEN trip (${normalizedType.replace(/_/g, ' ')}). The itinerary MUST:
+✓ Make the PURPOSE dominate the itinerary
+✓ Show the theme EVERY DAY, not just once
+✓ Be immediately recognizable for what it is
+
+⚠️ VIOLATION CHECK:
+If someone couldn't immediately identify the trip purpose = REGENERATE
+The theme must be OBVIOUS and VISIBLE throughout.
+`;
+  }
+
+  // Business leisure
+  if (normalizedType.includes('business') || normalizedType.includes('bleisure')) {
+    section += `
+═══════════════════════════════════════════════════════════════════════
+              CRITICAL: BUSINESS LEISURE COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+This is a BLEISURE trip. The itinerary MUST:
+✓ Keep free-time activities EFFICIENT (not full-day commitments)
+✓ Include a quality dinner option for business entertaining
+✓ Place activities NEAR likely business/hotel districts
+✓ Allow flexibility for work schedule changes
+
+⚠️ VIOLATION CHECK:
+If activities require too much time or travel = REGENERATE
+The LIMITED FREE TIME reality must be respected.
 `;
   }
 
