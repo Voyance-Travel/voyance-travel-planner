@@ -1,11 +1,10 @@
 /**
- * JourneyAwareCTA - CTA button that adapts based on user's journey stage
- * Shows contextually appropriate action with urgency styling
+ * JourneyAwareCTA - Simple CTA that adapts based on user's journey stage
+ * No urgency styling, no nagging - just the right next step
  */
 
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useJourneyStore } from '@/stores/journey-store';
 import { Button } from '@/components/ui/button';
 import { MagneticButton } from '@/components/ui/magnetic-button';
@@ -22,80 +21,45 @@ interface JourneyAwareCTAProps {
   overrideLabel?: string;
   /** Show arrow icon */
   showArrow?: boolean;
-  /** Show sparkle icon */
-  showSparkle?: boolean;
   /** Additional className */
   className?: string;
-  /** Variant for transparent backgrounds */
-  isTransparent?: boolean;
+  /** Button variant */
+  variant?: 'default' | 'outline' | 'ghost' | 'hero';
 }
 
 export function JourneyAwareCTA({
-  magnetic = true,
+  magnetic = false,
   size = 'default',
   overrideHref,
   overrideLabel,
   showArrow = false,
-  showSparkle = true,
   className,
-  isTransparent = false,
+  variant = 'default',
 }: JourneyAwareCTAProps) {
   const getSuggestedNextStep = useJourneyStore(state => state.getSuggestedNextStep);
   const nextStep = getSuggestedNextStep();
 
   const href = overrideHref || nextStep.href;
   const label = overrideLabel || nextStep.label;
-  const priority = nextStep.priority;
-
-  // Priority-based styling
-  const priorityStyles = {
-    low: 'variant-outline',
-    medium: 'variant-default',
-    high: 'variant-hero',
-  };
-
-  const getVariant = () => {
-    if (isTransparent) return 'heroOutline';
-    switch (priority) {
-      case 'high': return 'hero';
-      case 'medium': return 'default';
-      case 'low': return 'outline';
-      default: return 'default';
-    }
-  };
 
   const ButtonComponent = magnetic ? MagneticButton : Button;
 
   return (
-    <motion.div
-      initial={{ scale: 0.95, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      whileHover={{ scale: magnetic ? 1 : 1.02 }}
-      transition={{ duration: 0.2 }}
+    <ButtonComponent
+      asChild
+      variant={variant}
+      size={size}
+      className={cn('gap-2', className)}
     >
-      <ButtonComponent
-        asChild
-        variant={getVariant()}
-        size={size}
-        className={cn(
-          'gap-2',
-          isTransparent && 'bg-white text-foreground hover:bg-white/90',
-          className
-        )}
-      >
-        <Link to={href}>
-          {showSparkle && priority === 'high' && (
-            <Sparkles className="h-4 w-4" />
-          )}
-          {label}
-          {showArrow && <ArrowRight className="h-4 w-4" />}
-        </Link>
-      </ButtonComponent>
-    </motion.div>
+      <Link to={href}>
+        {label}
+        {showArrow && <ArrowRight className="h-4 w-4" />}
+      </Link>
+    </ButtonComponent>
   );
 }
 
-// Simpler inline version without motion wrapper
+// Inline version for nav
 export function JourneyAwareCTASimple({
   className,
   size = 'sm',
@@ -110,7 +74,6 @@ export function JourneyAwareCTASimple({
     <Button asChild size={size} className={className}>
       <Link to={nextStep.href}>
         {nextStep.label}
-        <ArrowRight className="h-4 w-4 ml-1" />
       </Link>
     </Button>
   );

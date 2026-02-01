@@ -116,11 +116,9 @@ function JourneyTracker() {
   useEffect(() => {
     trackPageView(location.pathname);
     
-    // Track specific actions based on route
+    // Track demo view action
     if (location.pathname === '/demo') {
       trackAction('demo_viewed');
-    } else if (location.pathname === '/pricing') {
-      trackAction('pricing_viewed');
     }
   }, [location.pathname, trackPageView, trackAction]);
   
