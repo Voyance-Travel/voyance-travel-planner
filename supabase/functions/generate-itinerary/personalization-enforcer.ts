@@ -51,20 +51,26 @@ export type ConflictResolution = {
 
 // Required slot types based on traits
 export type ForcedSlotType = 
-  | 'signature_meal'         // Foodie trait
-  | 'deep_context'           // History/cultural trait  
-  | 'linger_block'           // Relaxed pace trait
-  | 'edge_activity'          // Adventure trait
-  | 'wellness_moment'        // Transformation trait
-  | 'authentic_encounter'    // Authenticity trait
-  | 'social_experience'      // Social trait (positive)
-  | 'solo_retreat'           // Social trait (negative/introvert)
-  | 'vip_experience'         // Status Seeker: high comfort + budget
-  | 'couples_moment'         // Romantic Curator: romantic trip or archetype
-  | 'connectivity_spot'      // Digital Explorer: wifi-guaranteed venue
-  | 'family_activity'        // Family Architect: kid-friendly activity
-  | 'celebration_dinner'     // Birthday/Anniversary: special celebration dinner
-  | 'celebration_experience'; // Birthday/Anniversary: memorable milestone experience
+  | 'signature_meal'           // Foodie trait
+  | 'deep_context'             // History/cultural trait  
+  | 'linger_block'             // Relaxed pace trait
+  | 'edge_activity'            // Adventure trait
+  | 'wellness_moment'          // Transformation trait
+  | 'authentic_encounter'      // Authenticity trait
+  | 'social_experience'        // Social trait (positive)
+  | 'solo_retreat'             // Social trait (negative/introvert)
+  | 'vip_experience'           // Status Seeker: high comfort + budget
+  | 'couples_moment'           // Romantic Curator: romantic trip or archetype
+  | 'connectivity_spot'        // Digital Explorer: wifi-guaranteed venue
+  | 'family_activity'          // Family Architect: kid-friendly activity
+  | 'celebration_dinner'       // Birthday/Anniversary: special celebration dinner
+  | 'celebration_experience'   // Birthday/Anniversary: memorable milestone experience
+  // GROUP TRIP SLOTS:
+  | 'group_bonding_activity'   // Guys/Girls trip: shared group activity
+  | 'evening_entertainment'    // Guys trip: bar/pub/sports bar
+  | 'evening_out'              // Girls trip: rooftop/wine bar/cocktails
+  | 'group_experience'         // Girls trip: class/tasting/spa
+  | 'photo_worthy';            // Girls trip: instagram-worthy moment
 
 export interface ForcedSlot {
   type: ForcedSlotType;
@@ -352,6 +358,78 @@ export function deriveForcedSlots(
         traitValue: 0,
         description: 'BIRTHDAY/CELEBRATION: Memorable milestone experience (special tour, unique activity, champagne toast, scenic moment)',
         validationTags: ['special-experience', 'celebration', 'champagne', 'memorable', 'unique', 'treat-yourself', 'milestone', 'bucket-list']
+      });
+    }
+  }
+  
+  // ==========================================================================
+  // 6. GUYS TRIP: Group bonding and evening entertainment
+  // ==========================================================================
+  const isGuysTrip = context?.tripType === 'guys_trip' || 
+    context?.tripType === 'guys-trip' ||
+    context?.tripType?.toLowerCase()?.includes('guys');
+  if (isGuysTrip) {
+    // Group bonding activity mid-trip
+    const groupActivityDay = Math.ceil(totalDays / 2);
+    if (dayNumber === groupActivityDay && totalDays >= 2) {
+      slots.push({
+        type: 'group_bonding_activity',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'GUYS TRIP: Group bonding activity (sports, adventure, brewery tour, or shared experience)',
+        validationTags: ['group', 'bonding', 'adventure', 'sports', 'tour', 'brewery', 'active', 'shared-experience', 'guys-activity']
+      });
+    }
+    // Evening entertainment (day 2 or 3)
+    const eveningDay = totalDays >= 3 ? 2 : 1;
+    if (dayNumber === eveningDay) {
+      slots.push({
+        type: 'evening_entertainment',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'GUYS TRIP: Evening out (bar, pub crawl, sports bar, or nightlife)',
+        validationTags: ['bar', 'pub', 'nightlife', 'sports-bar', 'evening', 'drinks', 'social', 'night-out']
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 7. GIRLS TRIP: Group experiences and photo opportunities
+  // ==========================================================================
+  const isGirlsTrip = context?.tripType === 'girls_trip' || 
+    context?.tripType === 'girls-trip' ||
+    context?.tripType?.toLowerCase()?.includes('girls');
+  if (isGirlsTrip) {
+    // Group experience mid-trip
+    const groupExperienceDay = Math.ceil(totalDays / 2);
+    if (dayNumber === groupExperienceDay && totalDays >= 2) {
+      slots.push({
+        type: 'group_experience',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'GIRLS TRIP: Shared group experience (wine tasting, cooking class, spa day, or group tour)',
+        validationTags: ['group', 'class', 'tasting', 'spa', 'tour', 'shared', 'bonding', 'girls-activity']
+      });
+    }
+    // Evening out option
+    const eveningDay = totalDays >= 3 ? 2 : 1;
+    if (dayNumber === eveningDay) {
+      slots.push({
+        type: 'evening_out',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'GIRLS TRIP: Evening out (rooftop bar, wine bar, cocktails, or nightlife)',
+        validationTags: ['rooftop', 'wine-bar', 'cocktails', 'evening', 'nightlife', 'drinks', 'girls-night']
+      });
+    }
+    // Photo-worthy moment
+    if (dayNumber <= 3) {
+      slots.push({
+        type: 'photo_worthy',
+        traitSource: 'context',
+        traitValue: 0,
+        description: 'GIRLS TRIP: Photo-worthy location or aesthetically beautiful experience',
+        validationTags: ['photo', 'instagram', 'scenic', 'aesthetic', 'viewpoint', 'beautiful', 'shareable']
       });
     }
   }
