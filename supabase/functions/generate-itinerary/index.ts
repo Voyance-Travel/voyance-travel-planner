@@ -6946,13 +6946,20 @@ THE TRAVELER IS LEAVING. Keep it stress-free.`;
 
           } else if (isMidDayFlight) {
             // ===== MIDDAY FLIGHT (12pm - 3pm): 1 light activity max =====
+            // Calculate a realistic breakfast time that still allows checkout before transfer
+            const breakfastStart = '08:30';
+            const breakfastEnd = '09:30';
+            // Checkout must happen BEFORE leaveHotelBy - use calculated time
+            const checkoutStart = addMinutesToHHMM(leaveHotelBy, -45); // 45 min before leaving
+            const checkoutEnd = addMinutesToHHMM(leaveHotelBy, -30); // Complete 30 min before leaving
+            
             dayConstraints = `
 === DEPARTURE DAY: MIDDAY FLIGHT (${departure24}) ===
 
 Flight: ${departure24}
 Airport transfer: ~${airportTransferMins} minutes
 Leave hotel by: ${leaveHotelBy}
-Checkout: ${hotelCheckout}
+Checkout by: ${checkoutEnd}
 
 HARD CONSTRAINTS:
 - Last activity must END by: ${latestSightseeing}
@@ -6967,43 +6974,51 @@ LUGGAGE REALITY:
 
 DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 
-REALISTIC STRUCTURE:
+⚠️ CRITICAL SEQUENCE - CHECKOUT MUST HAPPEN BEFORE AIRPORT TRANSFER:
 1. "Breakfast at hotel or nearby café"
-   - startTime: "08:30", endTime: "09:30"
+   - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
    - category: "dining"
    - NEAR HOTEL
 
 2. "Hotel Checkout & Luggage Storage"
-   - startTime: "09:45", endTime: "10:15"
+   - startTime: "${checkoutStart}", endTime: "${checkoutEnd}"
    - category: "accommodation"
    - description: "Check out, store luggage with hotel"
 
-3. ONE OPTIONAL light activity (if time):
+3. ONE OPTIONAL light activity (if time permits):
    - Must be walking distance from hotel
    - Must END by ${latestSightseeing}
    - Example: "Final stroll through [neighborhood near hotel]"
 
 4. "Collect Luggage & Transfer to Airport"
-   - startTime: "${addMinutesToHHMM(leaveHotelBy, -15)}", endTime: "${airportArrival}"
+   - startTime: "${leaveHotelBy}", endTime: "${airportArrival}"
    - category: "transport"
+   - description: "Collect bags from hotel and depart for airport"
 
 5. "Departure"
    - startTime: "${airportArrival}", endTime: "${departure24}"
    - category: "transport"
+   - description: "Check-in, security, and boarding"
 
 ⚠️ DO NOT schedule activities across the city.
 ⚠️ DO NOT plan activities after ${latestSightseeing}.
+⚠️ CHECKOUT (step 2) MUST have an earlier startTime than TRANSFER (step 4). VIOLATION = REGENERATION.
 THE TRAVELER IS LEAVING. Make it a gentle goodbye, not a marathon.`;
 
           } else if (isAfternoonFlight) {
             // ===== AFTERNOON FLIGHT (3pm - 6pm): 1-2 activities near hotel =====
+            // Calculate checkout time - must be before any transfer
+            const checkoutStart = addMinutesToHHMM(leaveHotelBy, -60); // 1 hour before leaving
+            const checkoutEnd = addMinutesToHHMM(leaveHotelBy, -45); // Complete 45 min before leaving
+            const collectLuggageTime = addMinutesToHHMM(leaveHotelBy, -15); // 15 min to collect and go
+            
             dayConstraints = `
 === DEPARTURE DAY: AFTERNOON FLIGHT (${departure24}) ===
 
 Flight: ${departure24}
 Airport transfer: ~${airportTransferMins} minutes
 Leave hotel by: ${leaveHotelBy}
-Checkout: ${hotelCheckout}
+Checkout by: ${checkoutEnd}
 
 HARD CONSTRAINTS:
 - Last activity must END by: ${latestSightseeing}
@@ -7017,7 +7032,7 @@ LUGGAGE REALITY:
 
 DEPARTURE DAY ACTIVITIES: 1-2 maximum (morning only, near hotel)
 
-REALISTIC STRUCTURE:
+⚠️ CRITICAL SEQUENCE - CHECKOUT MUST HAPPEN BEFORE AIRPORT TRANSFER:
 1. "Breakfast"
    - startTime: "08:30", endTime: "09:30"
    - Near hotel
@@ -7027,30 +7042,40 @@ REALISTIC STRUCTURE:
    - End by ${latestSightseeing}
    
 3. "Light Lunch" (optional)
-   - Near hotel or on way to airport area
+   - Near hotel or on way back
 
-4. "Return to Hotel & Collect Luggage"
-   - startTime: "${addMinutesToHHMM(leaveHotelBy, -30)}"
-   
+4. "Hotel Checkout & Collect Luggage"
+   - startTime: "${checkoutStart}", endTime: "${checkoutEnd}"
+   - category: "accommodation"
+   - description: "Check out and collect stored luggage"
+
 5. "Transfer to Airport"
    - startTime: "${leaveHotelBy}", endTime: "${airportArrival}"
+   - category: "transport"
 
 6. "Departure"
    - startTime: "${airportArrival}", endTime: "${departure24}"
+   - category: "transport"
 
 ⚠️ NO activities scheduled after ${latestSightseeing}.
 ⚠️ Stay near hotel. Do not go across the city.
+⚠️ CHECKOUT (step 4) MUST have an earlier startTime than TRANSFER (step 5). VIOLATION = REGENERATION.
 THE TRAVELER IS LEAVING. Make it relaxed.`;
 
           } else {
             // ===== EVENING FLIGHT (6pm+): 2-3 activities possible but condensed =====
+            // For evening flights, checkout can be standard noon time
+            const checkoutTime = '12:00';
+            const checkoutEnd = '12:30';
+            const collectLuggageStart = addMinutesToHHMM(leaveHotelBy, -30);
+            
             dayConstraints = `
 === DEPARTURE DAY: EVENING FLIGHT (${departure24}) ===
 
 Flight: ${departure24}
 Airport transfer: ~${airportTransferMins} minutes
 Leave hotel by: ${leaveHotelBy}
-Checkout: ~12:00 (noon, standard checkout)
+Checkout: ${checkoutTime} (noon, standard checkout)
 
 HARD CONSTRAINTS:
 - Last activity must END by: ${latestSightseeing}
@@ -7067,36 +7092,40 @@ LUGGAGE REALITY:
 
 DEPARTURE DAY ACTIVITIES: 2-3 maximum, but CONDENSED
 
-REALISTIC STRUCTURE:
+⚠️ CRITICAL SEQUENCE - ALL ACTIVITIES MUST BE CHRONOLOGICALLY ORDERED:
 1. "Breakfast"
-   - 08:30 - 09:30
+   - startTime: "08:30", endTime: "09:30"
+   - category: "dining"
 
 2. Morning activity (can be 10-15 min from hotel)
    
 3. "Hotel Checkout & Luggage Storage"
-   - startTime: "12:00", endTime: "12:30"
+   - startTime: "${checkoutTime}", endTime: "${checkoutEnd}"
    - category: "accommodation"
+   - description: "Check out and store luggage with hotel for afternoon activities"
 
 4. "Lunch"
    - Near hotel
+   - category: "dining"
 
 5. ONE afternoon activity (optional)
    - Must stay in same area/neighborhood
    - Low-stakes (can be cut short if needed)
 
-6. "Collect Luggage & Depart"
-   - Return to hotel with buffer time
-   - startTime: "${addMinutesToHHMM(leaveHotelBy, -30)}", endTime: "${leaveHotelBy}"
+6. "Collect Luggage & Transfer to Airport"
+   - startTime: "${collectLuggageStart}", endTime: "${airportArrival}"
+   - category: "transport"
+   - description: "Return to hotel, collect stored luggage, and head to airport"
 
-7. "Transfer to Airport"
-   - startTime: "${leaveHotelBy}", endTime: "${airportArrival}"
-
-8. "Departure"
+7. "Departure"
    - startTime: "${airportArrival}", endTime: "${departure24}"
+   - category: "transport"
+   - description: "Check-in, security, and boarding"
 
 ⚠️ All activities after checkout must be in ONE area.
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
 ⚠️ No reservations that can't be cancelled.
+⚠️ CHECKOUT must happen BEFORE luggage collection/transfer. VIOLATION = REGENERATION.
 THE TRAVELER IS LEAVING. A gentle goodbye, not a marathon.`;
           }
           
