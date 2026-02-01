@@ -1,0 +1,1447 @@
+{
+  "version": "3.0.0",
+  "metadata": {
+    "totalQuestions": 21,
+    "estimatedTime": "5-6 minutes",
+    "targetArchetypes": 27
+  },
+  "questions": [
+    {
+      "id": "q1_morning",
+      "step": 1,
+      "category": "Pace",
+      "prompt": "It's your first morning. You're finally here. You...",
+      "type": "single",
+      "feedback": {
+        "a": "Ease into it. Smart.",
+        "b": "Early bird gets the good light.",
+        "c": "Food first. Always.",
+        "d": "Squad coordination activated."
+      },
+      "answers": [
+        {
+          "id": "q1a",
+          "label": "Need that quiet coffee moment before the world starts",
+          "traits": {
+            "pace": -0.8,
+            "restoration": 0.9,
+            "social": -0.5,
+            "spirituality": 0.3
+          }
+        },
+        {
+          "id": "q1b",
+          "label": "Are already dressed—you were up before your alarm",
+          "traits": {
+            "pace": 0.9,
+            "adventure": 0.7,
+            "restoration": -0.6,
+            "planning": 0.4
+          }
+        },
+        {
+          "id": "q1c",
+          "label": "Are in bed googling 'best breakfast near me' (priorities)",
+          "traits": {
+            "food_focus": 0.9,
+            "planning": 0.6,
+            "pace": -0.2
+          }
+        },
+        {
+          "id": "q1d",
+          "label": "Text the group: 'what's the plan?'",
+          "traits": {
+            "social": 0.9,
+            "flexibility": 0.7,
+            "planning": -0.3
+          }
+        }
+      ]
+    },
+    {
+      "id": "q2_week_off",
+      "step": 1,
+      "category": "Motivation",
+      "prompt": "You have one week off. No obligations. Where does your mind go first?",
+      "type": "single",
+      "feedback": {
+        "a": "Novelty is the drug.",
+        "b": "Depth over breadth.",
+        "c": "Home is a destination too.",
+        "d": "The list is calling.",
+        "e": "Company over coordinates."
+      },
+      "answers": [
+        {
+          "id": "q2a",
+          "label": "Somewhere I've never been. A place that feels completely different from home.",
+          "traits": {
+            "novelty": 0.95,
+            "adventure": 0.7,
+            "cultural_depth": 0.5
+          }
+        },
+        {
+          "id": "q2b",
+          "label": "Back to a place I loved. Why risk it on somewhere new?",
+          "traits": {
+            "novelty": -0.7,
+            "cultural_depth": 0.8,
+            "budget": -0.2
+          }
+        },
+        {
+          "id": "q2c",
+          "label": "Honestly? Nowhere. A week at home with nothing planned sounds perfect.",
+          "traits": {
+            "restoration": 0.9,
+            "pace": -0.8,
+            "adventure": -0.7
+          }
+        },
+        {
+          "id": "q2d",
+          "label": "Somewhere with a list. Places I need to see before I die.",
+          "traits": {
+            "bucket_list": 0.95,
+            "pace": 0.6,
+            "planning": 0.7
+          }
+        },
+        {
+          "id": "q2e",
+          "label": "Wherever my people are going. The destination matters less than the company.",
+          "traits": {
+            "social": 0.9,
+            "flexibility": 0.8,
+            "romance": 0.3,
+            "family": 0.3
+          }
+        }
+      ]
+    },
+    {
+      "id": "q3_hotel",
+      "step": 2,
+      "category": "Budget",
+      "prompt": "The hotel you want is $150/night more than the one down the street. You...",
+      "type": "single",
+      "feedback": {
+        "a": "Spend on experiences, not pillows.",
+        "b": "Due diligence. Respect.",
+        "c": "Sleep is non-negotiable.",
+        "d": "Different budget entirely. Noted."
+      },
+      "answers": [
+        {
+          "id": "q3a",
+          "label": "Book the cheaper one. That's four nice dinners.",
+          "traits": {
+            "budget": -0.8,
+            "food_focus": 0.4
+          }
+        },
+        {
+          "id": "q3b",
+          "label": "Check the reviews obsessively. If it's actually better, maybe.",
+          "traits": {
+            "planning": 0.8,
+            "budget": 0
+          }
+        },
+        {
+          "id": "q3c",
+          "label": "Book the nicer one. Where you sleep matters.",
+          "traits": {
+            "budget": 0.6,
+            "restoration": 0.5
+          }
+        },
+        {
+          "id": "q3d",
+          "label": "$150? I'm looking at the wrong hotels.",
+          "traits": {
+            "budget": 0.95,
+            "quality_intrinsic": 0.7,
+            "status_seeking": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q4_fading",
+      "step": 2,
+      "category": "Pace",
+      "prompt": "It's 2pm and you're fading. You...",
+      "type": "single",
+      "feedback": {
+        "a": "Rest isn't laziness.",
+        "b": "No regrets. Got it.",
+        "c": "Flexible. We like it.",
+        "d": "Naps are sacred."
+      },
+      "answers": [
+        {
+          "id": "q4a",
+          "label": "Find a café and people-watch for an hour. No rush.",
+          "traits": {
+            "pace": -0.8,
+            "cultural_depth": 0.6,
+            "restoration": 0.5
+          }
+        },
+        {
+          "id": "q4b",
+          "label": "Push through—I'll sleep when I'm dead.",
+          "traits": {
+            "pace": 0.95,
+            "adventure": 0.7,
+            "restoration": -0.8
+          }
+        },
+        {
+          "id": "q4c",
+          "label": "Coffee, then see what happens.",
+          "traits": {
+            "flexibility": 0.8,
+            "pace": 0.2
+          }
+        },
+        {
+          "id": "q4d",
+          "label": "Head back to the hotel for a proper nap.",
+          "traits": {
+            "restoration": 0.9,
+            "pace": -0.6
+          }
+        }
+      ]
+    },
+    {
+      "id": "q5_line",
+      "step": 3,
+      "category": "Style",
+      "prompt": "You see a long line outside a famous restaurant. You...",
+      "type": "single",
+      "feedback": {
+        "a": "Patience for the classics.",
+        "b": "Lines aren't travel.",
+        "c": "Work smarter.",
+        "d": "The real stuff is elsewhere."
+      },
+      "answers": [
+        {
+          "id": "q5a",
+          "label": "Get in line. It's famous for a reason.",
+          "traits": {
+            "bucket_list": 0.8,
+            "planning": 0.5
+          }
+        },
+        {
+          "id": "q5b",
+          "label": "Keep walking. Life's too short to wait.",
+          "traits": {
+            "flexibility": 0.8,
+            "pace": 0.5
+          }
+        },
+        {
+          "id": "q5c",
+          "label": "Google if there's a reservation hack.",
+          "traits": {
+            "planning": 0.9,
+            "status_seeking": 0.4
+          }
+        },
+        {
+          "id": "q5d",
+          "label": "Wonder what the locals eat instead.",
+          "traits": {
+            "cultural_depth": 0.9,
+            "food_focus": 0.6
+          }
+        }
+      ]
+    },
+    {
+      "id": "q6_group",
+      "step": 3,
+      "category": "Social",
+      "prompt": "A friend invites you on a group trip. Eight people, shared house, one week. Your honest reaction?",
+      "type": "single",
+      "feedback": {
+        "a": "The more the merrier.",
+        "b": "Quality over quantity.",
+        "c": "Intimate crew.",
+        "d": "Autonomy matters.",
+        "e": "Solo soul."
+      },
+      "answers": [
+        {
+          "id": "q6a",
+          "label": "I'm in. Group trips are the best—shared chaos, inside jokes, someone else handles logistics.",
+          "traits": {
+            "social": 0.95,
+            "planning": -0.4
+          }
+        },
+        {
+          "id": "q6b",
+          "label": "Depends entirely on the eight people. With the right group, amazing. Wrong group? Nightmare.",
+          "traits": {
+            "social": 0.4
+          }
+        },
+        {
+          "id": "q6c",
+          "label": "I'd rather do a smaller trip with 2-3 of them. Eight is a lot.",
+          "traits": {
+            "social": 0.2,
+            "romance": 0.3
+          }
+        },
+        {
+          "id": "q6d",
+          "label": "Probably not. I love those people, but I need more control over my time.",
+          "traits": {
+            "social": -0.5,
+            "planning": 0.6
+          }
+        },
+        {
+          "id": "q6e",
+          "label": "I'll pass. I travel to get away from social obligations, not create new ones.",
+          "traits": {
+            "social": -0.9,
+            "restoration": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q7_full_day",
+      "step": 4,
+      "category": "Interests",
+      "prompt": "You have one full day in a city you've never visited. What actually drives your choices?",
+      "type": "single",
+      "feedback": {
+        "a": "See the classics.",
+        "b": "Eat your way through.",
+        "c": "The lens comes first.",
+        "d": "Deep dive on your thing.",
+        "e": "Let it unfold.",
+        "f": "Check the list.",
+        "g": "Move to see."
+      },
+      "answers": [
+        {
+          "id": "q7a",
+          "label": "Art. If there's a great museum, that's where I'll be. I could spend the whole day in one gallery.",
+          "traits": {
+            "art_focus": 0.95,
+            "cultural_depth": 0.7,
+            "pace": -0.4
+          }
+        },
+        {
+          "id": "q7b",
+          "label": "Food. Every meal is planned. I'll see things between reservations.",
+          "traits": {
+            "food_focus": 0.95,
+            "planning": 0.7
+          }
+        },
+        {
+          "id": "q7c",
+          "label": "Photography. I've researched the best spots and timed it for good light. The photos matter.",
+          "traits": {
+            "photo_focus": 0.95,
+            "planning": 0.6,
+            "novelty": 0.5
+          }
+        },
+        {
+          "id": "q7d",
+          "label": "A niche interest—architecture, sports, music, history. I have a specific thing I'm looking for.",
+          "traits": {
+            "niche_interest": 0.95,
+            "cultural_depth": 0.5
+          }
+        },
+        {
+          "id": "q7e",
+          "label": "Wandering. I'll find what I find. The city reveals itself.",
+          "traits": {
+            "flexibility": 0.95,
+            "planning": -0.7,
+            "novelty": 0.6
+          }
+        },
+        {
+          "id": "q7f",
+          "label": "The highlights. I want to see what this place is known for.",
+          "traits": {
+            "bucket_list": 0.8,
+            "pace": 0.5
+          }
+        },
+        {
+          "id": "q7g",
+          "label": "Activity. A hike, a bike tour, something that gets me moving and outside.",
+          "traits": {
+            "adventure": 0.9,
+            "nature_vs_urban": 0.6,
+            "pace": 0.6
+          }
+        }
+      ]
+    },
+    {
+      "id": "q8_accommodation",
+      "step": 4,
+      "category": "Accommodation",
+      "prompt": "You're booking a place to stay. Be honest—what actually matters most to you?",
+      "type": "single",
+      "feedback": {
+        "a": "Time is the real currency.",
+        "b": "Sleep is non-negotiable.",
+        "c": "Live like a local.",
+        "d": "Memorable over comfortable.",
+        "e": "Trust but verify.",
+        "f": "Practical. We respect it."
+      },
+      "answers": [
+        {
+          "id": "q8a",
+          "label": "Location. I'll sacrifice space and amenities to be in the right neighborhood.",
+          "traits": {
+            "pace": 0.5,
+            "cultural_depth": 0.4
+          }
+        },
+        {
+          "id": "q8b",
+          "label": "The bed. I need to sleep well or the whole trip suffers.",
+          "traits": {
+            "restoration": 0.8,
+            "budget": 0.4
+          }
+        },
+        {
+          "id": "q8c",
+          "label": "A kitchen. I want to cook at least some meals and feel like I live there.",
+          "traits": {
+            "cultural_depth": 0.7,
+            "budget": -0.3
+          }
+        },
+        {
+          "id": "q8d",
+          "label": "Something interesting. I'd rather stay somewhere weird and memorable than comfortable and forgettable.",
+          "traits": {
+            "novelty": 0.9,
+            "adventure": 0.5
+          }
+        },
+        {
+          "id": "q8e",
+          "label": "Reviews. Specifically the photos from real guests, not the listing photos.",
+          "traits": {
+            "planning": 0.8
+          }
+        },
+        {
+          "id": "q8f",
+          "label": "Honestly? I don't care that much. Clean, safe, convenient. Done.",
+          "traits": {
+            "flexibility": 0.6
+          }
+        }
+      ]
+    },
+    {
+      "id": "q9_rain",
+      "step": 5,
+      "category": "Flexibility",
+      "prompt": "You're planning a trip. Weather forecast shows rain the whole week. You...",
+      "type": "single",
+      "feedback": {
+        "a": "Weather matters.",
+        "b": "Roll with it.",
+        "c": "Flexibility.",
+        "d": "Context-dependent. Fair.",
+        "e": "Silver linings."
+      },
+      "answers": [
+        {
+          "id": "q9a",
+          "label": "Change the dates. I'm not paying to be rained on.",
+          "traits": {
+            "planning": 0.8,
+            "flexibility": -0.6
+          }
+        },
+        {
+          "id": "q9b",
+          "label": "Go anyway. Rain doesn't ruin a trip. Pack layers and find covered things.",
+          "traits": {
+            "flexibility": 0.9,
+            "adventure": 0.4
+          }
+        },
+        {
+          "id": "q9c",
+          "label": "Change the destination. Somewhere the weather's better.",
+          "traits": {
+            "flexibility": 0.6,
+            "planning": 0.4
+          }
+        },
+        {
+          "id": "q9d",
+          "label": "Depends on the destination. Paris in the rain? Fine. Beach resort in the rain? No.",
+          "traits": {
+            "flexibility": 0.3
+          }
+        },
+        {
+          "id": "q9e",
+          "label": "Rain makes places interesting. Fewer tourists. Moody photos. I kind of love it.",
+          "traits": {
+            "flexibility": 0.95,
+            "photo_focus": 0.4,
+            "novelty": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q10_why",
+      "step": 5,
+      "category": "Motivation",
+      "prompt": "Be honest. What's actually true about why you travel?",
+      "type": "single",
+      "feedback": {
+        "a": "Travel as reset.",
+        "b": "You find yourself out there.",
+        "c": "The clock is ticking.",
+        "d": "Food is reason enough.",
+        "e": "Connection over coordinates.",
+        "f": "The pull is real."
+      },
+      "answers": [
+        {
+          "id": "q10a",
+          "label": "I need to escape. My regular life is fine, but I need breaks from it to stay sane.",
+          "traits": {
+            "restoration": 0.9,
+            "healing": 0.4
+          }
+        },
+        {
+          "id": "q10b",
+          "label": "I feel most like myself when I'm somewhere new. Travel makes me who I am.",
+          "traits": {
+            "novelty": 0.8,
+            "spirituality": 0.5,
+            "adventure": 0.4
+          }
+        },
+        {
+          "id": "q10c",
+          "label": "I want to see things before they're gone—or before I am. Time is short.",
+          "traits": {
+            "bucket_list": 0.9,
+            "pace": 0.5
+          }
+        },
+        {
+          "id": "q10d",
+          "label": "I want to eat and drink things I can't get at home. That's honestly most of it.",
+          "traits": {
+            "food_focus": 0.95
+          }
+        },
+        {
+          "id": "q10e",
+          "label": "I want to be with the people I love somewhere that isn't home. New places make old relationships feel new.",
+          "traits": {
+            "social": 0.7,
+            "romance": 0.6,
+            "family": 0.6
+          }
+        },
+        {
+          "id": "q10f",
+          "label": "I don't know. I just know I need to go.",
+          "traits": {
+            "novelty": 0.6,
+            "adventure": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q11_success",
+      "step": 6,
+      "category": "Outcomes",
+      "prompt": "You just got home. The trip was a success if...",
+      "type": "single",
+      "feedback": {
+        "a": "You go hard.",
+        "b": "That's the point.",
+        "c": "Travel as narrative.",
+        "d": "Relationships deepened.",
+        "e": "Transformation.",
+        "f": "The travel bug. Terminal."
+      },
+      "answers": [
+        {
+          "id": "q11a",
+          "label": "I'm exhausted but happy. I did everything. No regrets.",
+          "traits": {
+            "pace": 0.9,
+            "bucket_list": 0.6,
+            "restoration": -0.7
+          }
+        },
+        {
+          "id": "q11b",
+          "label": "I'm actually rested. I came back better than I left.",
+          "traits": {
+            "restoration": 0.95,
+            "pace": -0.6
+          }
+        },
+        {
+          "id": "q11c",
+          "label": "I have stories. Things happened. Some of them I'll be telling for years.",
+          "traits": {
+            "adventure": 0.8,
+            "novelty": 0.6
+          }
+        },
+        {
+          "id": "q11d",
+          "label": "I feel closer to the people I traveled with. We have shared memories now.",
+          "traits": {
+            "social": 0.8,
+            "romance": 0.5,
+            "family": 0.5
+          }
+        },
+        {
+          "id": "q11e",
+          "label": "I see the world differently. Something shifted in how I think.",
+          "traits": {
+            "spirituality": 0.9,
+            "cultural_depth": 0.7
+          }
+        },
+        {
+          "id": "q11f",
+          "label": "I'm already planning the next one.",
+          "traits": {
+            "novelty": 0.8,
+            "adventure": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q12_market",
+      "step": 6,
+      "category": "Cultural",
+      "prompt": "You're walking through a market in a country where you don't speak the language. You...",
+      "type": "single",
+      "feedback": {
+        "a": "Universal language.",
+        "b": "Prepared to connect.",
+        "c": "Engagement on your terms.",
+        "d": "Curated immersion.",
+        "e": "Know yourself."
+      },
+      "answers": [
+        {
+          "id": "q12a",
+          "label": "Point, smile, use hand gestures. This is the best part of travel.",
+          "traits": {
+            "cultural_depth": 0.95,
+            "flexibility": 0.7,
+            "adventure": 0.5
+          }
+        },
+        {
+          "id": "q12b",
+          "label": "Have a translation app open and ready. I want to actually communicate.",
+          "traits": {
+            "planning": 0.7,
+            "cultural_depth": 0.6
+          }
+        },
+        {
+          "id": "q12c",
+          "label": "Stick to stalls where someone speaks English. I'll engage, but on my terms.",
+          "traits": {
+            "cultural_depth": -0.3,
+            "budget": 0.3
+          }
+        },
+        {
+          "id": "q12d",
+          "label": "I have a guide with me. They translate, explain, and help me understand what I'm seeing.",
+          "traits": {
+            "budget": 0.7,
+            "planning": 0.6,
+            "status_seeking": 0.4
+          }
+        },
+        {
+          "id": "q12e",
+          "label": "Walk through quickly. Markets are overwhelming. I'll find a quieter spot.",
+          "traits": {
+            "social": -0.6,
+            "restoration": 0.5,
+            "pace": -0.4
+          }
+        }
+      ]
+    },
+    {
+      "id": "q13_upgrade",
+      "step": 7,
+      "category": "Priorities",
+      "prompt": "You can upgrade one thing on your next trip. What do you choose?",
+      "type": "single",
+      "feedback": {
+        "a": "Comfort in transit.",
+        "b": "Sleep is non-negotiable.",
+        "c": "Access over amenities.",
+        "d": "More time over more luxury.",
+        "e": "Quantity over quality."
+      },
+      "answers": [
+        {
+          "id": "q13a",
+          "label": "The flight. I'll suffer at a hostel, but I want space and sleep on the plane.",
+          "traits": {
+            "budget": 0.4,
+            "restoration": 0.5
+          }
+        },
+        {
+          "id": "q13b",
+          "label": "The hotel. I don't care how I get there, but I want to sleep well every night.",
+          "traits": {
+            "restoration": 0.8,
+            "budget": 0.5
+          }
+        },
+        {
+          "id": "q13c",
+          "label": "The experiences. Skip-the-line, private tours, tables at restaurants I couldn't get otherwise.",
+          "traits": {
+            "status_seeking": 0.9,
+            "budget": 0.6
+          }
+        },
+        {
+          "id": "q13d",
+          "label": "The length. I'd rather have a longer trip than a fancier one.",
+          "traits": {
+            "budget": -0.4,
+            "cultural_depth": 0.5
+          }
+        },
+        {
+          "id": "q13e",
+          "label": "Nothing. I'll take the savings and put them toward another trip.",
+          "traits": {
+            "budget": -0.8,
+            "novelty": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q14_meaningful",
+      "step": 7,
+      "category": "Values",
+      "prompt": "Which travel moment would be most meaningful to you?",
+      "type": "single",
+      "feedback": {
+        "a": "Connection changes you.",
+        "b": "Dreams realized.",
+        "c": "You surprised yourself.",
+        "d": "The table is sacred."
+      },
+      "answers": [
+        {
+          "id": "q14a",
+          "label": "A conversation with a local that shifts your perspective",
+          "traits": {
+            "cultural_depth": 0.95,
+            "spirituality": 0.5
+          }
+        },
+        {
+          "id": "q14b",
+          "label": "Standing in a place you've dreamed about since childhood",
+          "traits": {
+            "bucket_list": 0.95
+          }
+        },
+        {
+          "id": "q14c",
+          "label": "A physical challenge you weren't sure you could complete",
+          "traits": {
+            "adventure": 0.95,
+            "nature_vs_urban": 0.5
+          }
+        },
+        {
+          "id": "q14d",
+          "label": "A perfect, unhurried meal with the people you love",
+          "traits": {
+            "food_focus": 0.7,
+            "social": 0.6,
+            "romance": 0.5,
+            "pace": -0.4
+          }
+        }
+      ]
+    },
+    {
+      "id": "q15_meeting",
+      "step": 8,
+      "category": "Social",
+      "prompt": "How do you feel about meeting new people while traveling?",
+      "type": "single",
+      "feedback": {
+        "a": "Introverts unite. Separately.",
+        "b": "Quality connections.",
+        "c": "Easy social.",
+        "d": "Social butterfly."
+      },
+      "answers": [
+        {
+          "id": "q15a",
+          "label": "I recharge in solitude—other travelers drain me",
+          "traits": {
+            "social": -0.95,
+            "restoration": 0.6
+          }
+        },
+        {
+          "id": "q15b",
+          "label": "Small, meaningful connections are enough—I prefer depth over breadth",
+          "traits": {
+            "social": -0.3,
+            "cultural_depth": 0.5
+          }
+        },
+        {
+          "id": "q15c",
+          "label": "I enjoy casual connections—hostel chats, tour group banter",
+          "traits": {
+            "social": 0.5
+          }
+        },
+        {
+          "id": "q15d",
+          "label": "The more the merrier—I love meeting everyone",
+          "traits": {
+            "social": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "q16_environment",
+      "step": 8,
+      "category": "Environment",
+      "prompt": "Your ideal 'getting away from it all' means...",
+      "type": "single",
+      "feedback": {
+        "a": "Wilderness calls.",
+        "b": "Cities are your wilderness.",
+        "c": "Sand and surf.",
+        "d": "Company matters most.",
+        "e": "Home base comfort."
+      },
+      "answers": [
+        {
+          "id": "q16a",
+          "label": "Mountains, forests, somewhere I can't get cell service. Real nature, not a park.",
+          "traits": {
+            "nature_vs_urban": 0.95,
+            "adventure": 0.6,
+            "social": -0.4
+          }
+        },
+        {
+          "id": "q16b",
+          "label": "A different city. New streets, new cafés, new everything. Cities are my wilderness.",
+          "traits": {
+            "nature_vs_urban": -0.9,
+            "pace": 0.5,
+            "novelty": 0.7
+          }
+        },
+        {
+          "id": "q16c",
+          "label": "A beach. Sun, water, sand, simplicity.",
+          "traits": {
+            "restoration": 0.8,
+            "pace": -0.5,
+            "nature_vs_urban": 0.3
+          }
+        },
+        {
+          "id": "q16d",
+          "label": "Anywhere my people are. The 'where' matters less than the 'who.'",
+          "traits": {
+            "social": 0.8,
+            "flexibility": 0.6
+          }
+        },
+        {
+          "id": "q16e",
+          "label": "Honestly, I don't need to get away. I like my regular life.",
+          "traits": {
+            "restoration": 0.6,
+            "novelty": -0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q17_companions",
+      "step": 9,
+      "category": "Companions",
+      "prompt": "When you picture your ideal trip, who's there and why?",
+      "type": "single",
+      "feedback": {
+        "a": "Solo soul.",
+        "b": "Romance is the point.",
+        "c": "Adventure buddies.",
+        "d": "Family memories.",
+        "e": "The right people.",
+        "f": "Open to all."
+      },
+      "answers": [
+        {
+          "id": "q17a",
+          "label": "Just me. Solo travel is when I'm most myself.",
+          "traits": {
+            "social": -0.9,
+            "restoration": 0.4
+          }
+        },
+        {
+          "id": "q17b",
+          "label": "My partner—and romance is the point. Intimate dinners, beautiful settings, reconnection.",
+          "traits": {
+            "romance": 0.95,
+            "social": 0.3,
+            "budget": 0.4
+          }
+        },
+        {
+          "id": "q17c",
+          "label": "My partner—but as adventure buddies, not a romantic getaway.",
+          "traits": {
+            "adventure": 0.6,
+            "social": 0.3
+          }
+        },
+        {
+          "id": "q17d",
+          "label": "My kids. Showing them the world is the whole point.",
+          "traits": {
+            "family": 0.95,
+            "social": 0.5,
+            "pace": -0.3
+          }
+        },
+        {
+          "id": "q17e",
+          "label": "Close friends or family. The right people make any trip better.",
+          "traits": {
+            "social": 0.7,
+            "family": 0.4
+          }
+        },
+        {
+          "id": "q17f",
+          "label": "Whoever wants to come. I'm flexible on companions.",
+          "traits": {
+            "flexibility": 0.8,
+            "social": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q18_wellbeing",
+      "step": 9,
+      "category": "Wellbeing",
+      "prompt": "What role does personal wellbeing play in your travel?",
+      "type": "single",
+      "feedback": {
+        "a": "Wellness is the point.",
+        "b": "Inner journey.",
+        "c": "Rest and nothing more.",
+        "d": "Movement is medicine.",
+        "e": "Travel as healing.",
+        "f": "Not a priority."
+      },
+      "answers": [
+        {
+          "id": "q18a",
+          "label": "Central. I do retreats, meditation, spa programs—structured wellness is the point.",
+          "traits": {
+            "restoration": 0.9,
+            "spirituality": 0.6,
+            "planning": 0.5
+          }
+        },
+        {
+          "id": "q18b",
+          "label": "Spiritual. I travel for inner work—transformation, reflection, maybe something I can't quite name.",
+          "traits": {
+            "spirituality": 0.95,
+            "restoration": 0.5
+          }
+        },
+        {
+          "id": "q18c",
+          "label": "Rest. No alarm, no obligations. I travel to do nothing and recover.",
+          "traits": {
+            "restoration": 0.95,
+            "pace": -0.8,
+            "planning": -0.5
+          }
+        },
+        {
+          "id": "q18d",
+          "label": "Physical. Moving my body is how I recharge—hiking, swimming, activity.",
+          "traits": {
+            "adventure": 0.8,
+            "nature_vs_urban": 0.6,
+            "restoration": 0.4
+          }
+        },
+        {
+          "id": "q18e",
+          "label": "Healing. Travel has been medicine for me during difficult times.",
+          "traits": {
+            "healing": 0.95,
+            "restoration": 0.7
+          }
+        },
+        {
+          "id": "q18f",
+          "label": "Not really a factor. I travel for experiences, not wellbeing.",
+          "traits": {
+            "adventure": 0.4,
+            "restoration": -0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q19_lifestage",
+      "step": 10,
+      "category": "Life Stage",
+      "prompt": "Which best describes where you are in life right now?",
+      "type": "single",
+      "feedback": {
+        "a": "Make it work.",
+        "b": "Balance mode.",
+        "c": "You've earned it.",
+        "d": "Freedom era.",
+        "e": "Life stage doesn't define you."
+      },
+      "answers": [
+        {
+          "id": "q19a",
+          "label": "Early career—budget matters, but I'll figure it out. Experiences over comfort.",
+          "traits": {
+            "budget": -0.8,
+            "adventure": 0.6,
+            "life_stage": "early"
+          }
+        },
+        {
+          "id": "q19b",
+          "label": "Building—career, maybe family. Travel is how I recharge from real life.",
+          "traits": {
+            "restoration": 0.6,
+            "family": 0.3,
+            "life_stage": "building"
+          }
+        },
+        {
+          "id": "q19c",
+          "label": "Established—I know what I like. I've earned the right to travel my way.",
+          "traits": {
+            "budget": 0.6,
+            "quality_intrinsic": 0.7,
+            "life_stage": "established"
+          }
+        },
+        {
+          "id": "q19d",
+          "label": "Free—fewer obligations now. Time to see what I've been putting off.",
+          "traits": {
+            "bucket_list": 0.7,
+            "flexibility": 0.6,
+            "life_stage": "free"
+          }
+        },
+        {
+          "id": "q19e",
+          "label": "Doesn't matter—my life stage doesn't affect how I travel.",
+          "traits": {
+            "flexibility": 0.4,
+            "life_stage": "neutral"
+          }
+        }
+      ]
+    },
+    {
+      "id": "q20_quality",
+      "step": 10,
+      "category": "Quality",
+      "prompt": "When you splurge on travel, what's the real reason?",
+      "type": "single",
+      "feedback": {
+        "a": "Quality for its own sake.",
+        "b": "Access is everything.",
+        "c": "You deserve it.",
+        "d": "Time is the luxury.",
+        "e": "More trips > fancier trips."
+      },
+      "answers": [
+        {
+          "id": "q20a",
+          "label": "I want the best. Quality matters to me intrinsically—not to impress anyone.",
+          "traits": {
+            "quality_intrinsic": 0.95,
+            "budget": 0.7
+          }
+        },
+        {
+          "id": "q20b",
+          "label": "I want access. Experiences that aren't available to everyone. Skip the line, private tours, exclusive tables.",
+          "traits": {
+            "status_seeking": 0.95,
+            "budget": 0.7
+          }
+        },
+        {
+          "id": "q20c",
+          "label": "I want comfort. After working hard, I deserve to be taken care of.",
+          "traits": {
+            "restoration": 0.7,
+            "budget": 0.5
+          }
+        },
+        {
+          "id": "q20d",
+          "label": "I want time. A longer trip matters more than a fancier one.",
+          "traits": {
+            "budget": -0.4,
+            "cultural_depth": 0.5
+          }
+        },
+        {
+          "id": "q20e",
+          "label": "I don't really splurge. I'd rather save for more trips.",
+          "traits": {
+            "budget": -0.8,
+            "novelty": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "q21_values",
+      "step": 10,
+      "category": "Values",
+      "prompt": "How much do your values shape your travel decisions?",
+      "type": "single",
+      "feedback": {
+        "a": "Travel with purpose.",
+        "b": "Thoughtful choices.",
+        "c": "Authenticity matters.",
+        "d": "Just enjoy it."
+      },
+      "answers": [
+        {
+          "id": "q21a",
+          "label": "A lot. I research environmental impact, local ownership, and whether my money helps the community.",
+          "traits": {
+            "ethics": 0.95,
+            "cultural_depth": 0.5
+          }
+        },
+        {
+          "id": "q21b",
+          "label": "I try to be thoughtful—local restaurants over chains, respectful behavior—but I'm not strict about it.",
+          "traits": {
+            "ethics": 0.5,
+            "cultural_depth": 0.4
+          }
+        },
+        {
+          "id": "q21c",
+          "label": "I appreciate authentic experiences, but I don't stress about the ethics of every choice.",
+          "traits": {
+            "cultural_depth": 0.5,
+            "ethics": 0.2
+          }
+        },
+        {
+          "id": "q21d",
+          "label": "Honestly, not much. I'm there to enjoy myself, not to make a statement.",
+          "traits": {
+            "ethics": -0.5
+          }
+        }
+      ]
+    }
+  ],
+  "traitDefinitions": {
+    "pace": { "dimension": "energy", "range": [-1, 1], "description": "Slow (-1) to Fast (+1)" },
+    "planning": { "dimension": "structure", "range": [-1, 1], "description": "Spontaneous (-1) to Planned (+1)" },
+    "social": { "dimension": "social", "range": [-1, 1], "description": "Solo (-1) to Group (+1)" },
+    "budget": { "dimension": "comfort", "range": [-1, 1], "description": "Budget (-1) to Luxury (+1)" },
+    "adventure": { "dimension": "energy", "range": [-1, 1], "description": "Comfort-seeking (-1) to Thrill-seeking (+1)" },
+    "cultural_depth": { "dimension": "authenticity", "range": [-1, 1], "description": "Surface (-1) to Immersive (+1)" },
+    "food_focus": { "dimension": "interest", "range": [0, 1], "description": "Food importance" },
+    "flexibility": { "dimension": "structure", "range": [-1, 1], "description": "Rigid (-1) to Flexible (+1)" },
+    "novelty": { "dimension": "exploration", "range": [-1, 1], "description": "Familiar (-1) to New (+1)" },
+    "restoration": { "dimension": "energy", "range": [-1, 1], "description": "None (-1) to Primary (+1)" },
+    "nature_vs_urban": { "dimension": "environment", "range": [-1, 1], "description": "Urban (-1) to Nature (+1)" },
+    "spirituality": { "dimension": "transformation", "range": [0, 1], "description": "Spiritual focus" },
+    "romance": { "dimension": "companion", "range": [0, 1], "description": "Romance focus" },
+    "family": { "dimension": "companion", "range": [0, 1], "description": "Family focus" },
+    "art_focus": { "dimension": "interest", "range": [0, 1], "description": "Art/museum importance" },
+    "photo_focus": { "dimension": "interest", "range": [0, 1], "description": "Photography importance" },
+    "niche_interest": { "dimension": "interest", "range": [0, 1], "description": "Specialization level" },
+    "ethics": { "dimension": "values", "range": [-1, 1], "description": "Not factor (-1) to Primary (+1)" },
+    "quality_intrinsic": { "dimension": "values", "range": [0, 1], "description": "Quality for its own sake" },
+    "status_seeking": { "dimension": "values", "range": [0, 1], "description": "Exclusivity/access seeking" },
+    "healing": { "dimension": "transformation", "range": [0, 1], "description": "Travel as healing" },
+    "bucket_list": { "dimension": "motivation", "range": [0, 1], "description": "Bucket list driven" }
+  },
+  "archetypeProfiles": {
+    "cultural_anthropologist": {
+      "name": "The Cultural Anthropologist",
+      "category": "EXPLORER",
+      "required": { "cultural_depth": { "min": 0.6 } },
+      "preferred": { "pace": { "range": [-0.3, 0.3] }, "novelty": { "min": 0.4 } },
+      "penalties": { "status_seeking": { "above": 0.6, "weight": -0.3 } }
+    },
+    "urban_nomad": {
+      "name": "The Urban Nomad",
+      "category": "EXPLORER",
+      "required": { "nature_vs_urban": { "max": -0.4 } },
+      "preferred": { "pace": { "min": 0.3 }, "novelty": { "min": 0.4 } },
+      "penalties": { "restoration": { "above": 0.7, "weight": -0.2 } }
+    },
+    "wilderness_pioneer": {
+      "name": "The Wilderness Pioneer",
+      "category": "EXPLORER",
+      "required": { "nature_vs_urban": { "min": 0.6 }, "adventure": { "min": 0.5 } },
+      "preferred": { "social": { "max": 0 } },
+      "penalties": { "budget": { "above": 0.7, "weight": -0.2 } }
+    },
+    "digital_explorer": {
+      "name": "The Digital Explorer",
+      "category": "EXPLORER",
+      "required": { "photo_focus": { "min": 0.7 } },
+      "preferred": { "novelty": { "min": 0.5 }, "planning": { "min": 0.3 } },
+      "penalties": {}
+    },
+    "flexible_wanderer": {
+      "name": "The Flexible Wanderer",
+      "category": "EXPLORER",
+      "required": { "flexibility": { "min": 0.7 }, "planning": { "max": -0.3 } },
+      "preferred": { "novelty": { "min": 0.4 } },
+      "penalties": { "bucket_list": { "above": 0.7, "weight": -0.2 } }
+    },
+    "social_butterfly": {
+      "name": "The Social Butterfly",
+      "category": "CONNECTOR",
+      "required": { "social": { "min": 0.7 } },
+      "preferred": { "pace": { "min": 0.2 } },
+      "penalties": { "restoration": { "above": 0.7, "weight": -0.2 } }
+    },
+    "family_architect": {
+      "name": "The Family Architect",
+      "category": "CONNECTOR",
+      "required": { "family": { "min": 0.7 } },
+      "preferred": { "pace": { "range": [-0.4, 0.3] } },
+      "penalties": { "adventure": { "above": 0.8, "weight": -0.2 } }
+    },
+    "romantic_curator": {
+      "name": "The Romantic Curator",
+      "category": "CONNECTOR",
+      "required": { "romance": { "min": 0.7 } },
+      "preferred": { "budget": { "min": 0.2 } },
+      "penalties": { "social": { "above": 0.7, "weight": -0.2 } }
+    },
+    "community_builder": {
+      "name": "The Community Builder",
+      "category": "CONNECTOR",
+      "required": { "ethics": { "min": 0.7 }, "cultural_depth": { "min": 0.5 } },
+      "preferred": {},
+      "penalties": { "status_seeking": { "above": 0.5, "weight": -0.3 } }
+    },
+    "bucket_list_conqueror": {
+      "name": "The Bucket List Conqueror",
+      "category": "ACHIEVER",
+      "required": { "bucket_list": { "min": 0.7 } },
+      "preferred": { "pace": { "min": 0.4 } },
+      "penalties": { "flexibility": { "above": 0.7, "weight": -0.2 } }
+    },
+    "adrenaline_architect": {
+      "name": "The Adrenaline Architect",
+      "category": "ACHIEVER",
+      "required": { "adventure": { "min": 0.8 } },
+      "preferred": { "pace": { "min": 0.5 } },
+      "penalties": { "restoration": { "above": 0.6, "weight": -0.3 } }
+    },
+    "collection_curator": {
+      "name": "The Collection Curator",
+      "category": "ACHIEVER",
+      "required": { "niche_interest": { "min": 0.7 } },
+      "preferred": { "cultural_depth": { "min": 0.4 } },
+      "penalties": {}
+    },
+    "status_seeker": {
+      "name": "The Status Seeker",
+      "category": "ACHIEVER",
+      "required": { "status_seeking": { "min": 0.7 } },
+      "preferred": { "budget": { "min": 0.5 } },
+      "penalties": { "budget": { "below": -0.3, "weight": -0.4 } }
+    },
+    "zen_seeker": {
+      "name": "The Zen Seeker",
+      "category": "RESTORER",
+      "required": { "spirituality": { "min": 0.7 } },
+      "preferred": { "restoration": { "min": 0.5 }, "social": { "max": 0 } },
+      "penalties": { "pace": { "above": 0.5, "weight": -0.2 } }
+    },
+    "retreat_regular": {
+      "name": "The Retreat Regular",
+      "category": "RESTORER",
+      "required": { "restoration": { "min": 0.7 }, "planning": { "min": 0.3 } },
+      "preferred": { "budget": { "min": 0.3 } },
+      "penalties": { "adventure": { "above": 0.6, "weight": -0.2 } }
+    },
+    "beach_therapist": {
+      "name": "The Beach Therapist",
+      "category": "RESTORER",
+      "required": { "restoration": { "min": 0.6 }, "pace": { "max": -0.3 } },
+      "preferred": { "nature_vs_urban": { "range": [0, 0.5] } },
+      "penalties": { "adventure": { "above": 0.7, "weight": -0.2 } }
+    },
+    "slow_traveler": {
+      "name": "The Slow Traveler",
+      "category": "RESTORER",
+      "required": { "pace": { "max": -0.5 }, "cultural_depth": { "min": 0.5 } },
+      "preferred": { "flexibility": { "min": 0.3 } },
+      "penalties": { "bucket_list": { "above": 0.7, "weight": -0.3 } }
+    },
+    "culinary_cartographer": {
+      "name": "The Culinary Cartographer",
+      "category": "CURATOR",
+      "required": { "food_focus": { "min": 0.8 } },
+      "preferred": { "cultural_depth": { "min": 0.3 } },
+      "penalties": {}
+    },
+    "art_aficionado": {
+      "name": "The Art Aficionado",
+      "category": "CURATOR",
+      "required": { "art_focus": { "min": 0.7 } },
+      "preferred": { "cultural_depth": { "min": 0.4 } },
+      "penalties": { "adventure": { "above": 0.7, "weight": -0.2 } }
+    },
+    "luxury_luminary": {
+      "name": "The Luxury Luminary",
+      "category": "CURATOR",
+      "required": { "quality_intrinsic": { "min": 0.7 }, "budget": { "min": 0.5 } },
+      "preferred": {},
+      "penalties": { "status_seeking": { "above": 0.7, "weight": -0.2 } }
+    },
+    "eco_ethicist": {
+      "name": "The Eco Ethicist",
+      "category": "TRANSFORMER",
+      "required": { "ethics": { "min": 0.8 } },
+      "preferred": { "nature_vs_urban": { "min": 0.2 } },
+      "penalties": { "budget": { "above": 0.8, "weight": -0.2 } }
+    },
+    "gap_year_graduate": {
+      "name": "The Gap Year Graduate",
+      "category": "TRANSFORMER",
+      "required": { "budget": { "max": -0.5 }, "adventure": { "min": 0.4 } },
+      "preferred": { "social": { "min": 0.2 } },
+      "lifeStageBonus": { "early": 0.3 }
+    },
+    "midlife_explorer": {
+      "name": "The Midlife Explorer",
+      "category": "TRANSFORMER",
+      "required": { "quality_intrinsic": { "min": 0.5 } },
+      "preferred": { "novelty": { "min": 0.4 } },
+      "lifeStageBonus": { "established": 0.4 }
+    },
+    "sabbatical_scholar": {
+      "name": "The Sabbatical Scholar",
+      "category": "TRANSFORMER",
+      "required": { "cultural_depth": { "min": 0.7 } },
+      "preferred": { "planning": { "min": 0.3 } },
+      "penalties": { "pace": { "above": 0.6, "weight": -0.2 } }
+    },
+    "healing_journeyer": {
+      "name": "The Healing Journeyer",
+      "category": "TRANSFORMER",
+      "required": { "healing": { "min": 0.7 } },
+      "preferred": { "restoration": { "min": 0.5 } },
+      "penalties": { "pace": { "above": 0.5, "weight": -0.2 } }
+    },
+    "retirement_ranger": {
+      "name": "The Retirement Ranger",
+      "category": "TRANSFORMER",
+      "required": { "bucket_list": { "min": 0.5 } },
+      "preferred": { "pace": { "range": [-0.4, 0.4] }, "budget": { "min": 0.3 } },
+      "lifeStageBonus": { "free": 0.4 }
+    },
+    "balanced_story_collector": {
+      "name": "The Balanced Story Collector",
+      "category": "EXPLORER",
+      "required": {},
+      "preferred": {},
+      "penalties": {},
+      "isDefault": true,
+      "maxTraitSpread": 0.4
+    }
+  },
+  "stepCategories": [
+    { "step": 1, "label": "Identity", "questions": ["q1_morning", "q2_week_off"] },
+    { "step": 2, "label": "Budget & Pace", "questions": ["q3_hotel", "q4_fading"] },
+    { "step": 3, "label": "Style", "questions": ["q5_line", "q6_group"] },
+    { "step": 4, "label": "Interests", "questions": ["q7_full_day", "q8_accommodation"] },
+    { "step": 5, "label": "Flexibility", "questions": ["q9_rain", "q10_why"] },
+    { "step": 6, "label": "Outcomes", "questions": ["q11_success", "q12_market"] },
+    { "step": 7, "label": "Priorities", "questions": ["q13_upgrade", "q14_meaningful"] },
+    { "step": 8, "label": "Social", "questions": ["q15_meeting", "q16_environment"] },
+    { "step": 9, "label": "Companions", "questions": ["q17_companions", "q18_wellbeing"] },
+    { "step": 10, "label": "You", "questions": ["q19_lifestage", "q20_quality", "q21_values"] }
+  ]
+}

@@ -1,20 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ArrowLeft, ArrowRight, Check, Sparkles, Compass, Plane, Hotel, Utensils, 
-  Sun, Heart, Clock, Users, MapPin, Wand2, DollarSign, Briefcase, Glasses,
-  UserCircle2, Palette, Mountain, Coffee, Luggage, Globe, Star, AlertCircle, MessageCircle
+  ArrowLeft, ArrowRight, Check, Compass, Plane,
+  Clock, Users, MapPin, Wand2, 
+  Mountain, Coffee, Luggage, Globe, Star, AlertCircle, MessageCircle
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { QuizCompletion } from '@/components/quiz/QuizCompletion';
-import QuizFeedback from '@/components/quiz/QuizFeedback';
+import QuizFeedbackV3 from '@/components/quiz/QuizFeedbackV3';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
-import { useJourneyStore } from '@/stores/journey-store';
 import { 
   submitQuizComplete, 
   createQuizSession, 
@@ -22,256 +21,86 @@ import {
   saveQuizResponse,
   type TravelDNAPayload 
 } from '@/utils/quizMapping';
+import { determineArchetype } from '@/services/engines/travelDNA/archetype-matcher';
+import quizConfig from '@/config/quiz-questions-v3.json';
 
-// Comprehensive 10-step quiz based on the detailed quiz documentation
-const questions = [
-  {
-    id: 'traveler_type',
-    step: 1,
-    category: 'Identity',
-    title: 'What kind of traveler are you?',
-    subtitle: 'Choose the one that resonates most with how you approach travel',
-    icon: <Compass className="w-5 h-5" />,
-    options: [
-      { value: 'explorer', label: 'Curiosity-Driven', description: 'You seek authentic, off-the-beaten-path adventures and hidden gems' },
-      { value: 'escape_artist', label: 'Peace-Seeking', description: 'Travel is about disconnecting, recharging, and finding inner peace' },
-      { value: 'curated_luxe', label: 'Refinement-Focused', description: 'You appreciate curated experiences, premium service, and elegant surroundings' },
-      { value: 'story_seeker', label: 'Moment-Collecting', description: 'Every trip is about collecting memorable moments and cultural experiences' },
-    ],
-  },
-  {
-    id: 'travel_vibes',
-    step: 2,
-    category: 'Vibes',
-    title: 'What vibes draw you in?',
-    subtitle: 'Select all the atmospheres that excite you',
-    icon: <Heart className="w-5 h-5" />,
-    multiSelect: true,
-    options: [
-      { value: 'coastal', label: 'Coastal', description: 'Beach, ocean, and seaside serenity' },
-      { value: 'urban', label: 'Urban', description: 'City energy, architecture, and metropolitan buzz' },
-      { value: 'mountain', label: 'Mountain', description: 'Alpine views, fresh air, and natural grandeur' },
-      { value: 'quiet', label: 'Quiet & Peaceful', description: 'Secluded retreats and tranquil escapes' },
-      { value: 'relaxation', label: 'Relaxation', description: 'Spas, slow mornings, and restorative vibes' },
-      { value: 'bold', label: 'Bold & Adventurous', description: 'Unique, unexpected, extraordinary experiences' },
-      { value: 'spiritual', label: 'Spiritual & Mindful', description: 'Meaningful journeys with cultural depth' },
-    ],
-  },
-  {
-    id: 'trip_frequency',
-    step: 3,
-    category: 'Habits',
-    title: 'How often do you travel?',
-    subtitle: 'This helps us understand your travel lifestyle',
-    icon: <Plane className="w-5 h-5" />,
-    options: [
-      { value: 'monthly', label: 'Monthly', description: 'Multiple trips per year, travel is a lifestyle' },
-      { value: 'quarterly', label: 'Quarterly', description: '3-4 trips per year, regular escapes' },
-      { value: 'biannually', label: 'Twice a Year', description: 'Intentional trips, quality over quantity' },
-      { value: 'annually', label: 'Once a Year', description: 'One special trip that really counts' },
-    ],
-  },
-  {
-    id: 'trip_duration',
-    step: 3,
-    category: 'Habits',
-    title: 'What\'s your ideal trip length?',
-    subtitle: 'How long do you like to be away?',
-    icon: <Clock className="w-5 h-5" />,
-    options: [
-      { value: 'weekend', label: 'Weekend Getaway', description: '2-3 days of quick escape' },
-      { value: 'short_week', label: 'Short Week', description: '4-5 days, enough to unwind' },
-      { value: 'week', label: 'A Full Week', description: '6-8 days to really explore' },
-      { value: 'extended', label: 'Extended Journey', description: '10+ days to deeply immerse' },
-    ],
-  },
-  {
-    id: 'budget',
-    step: 4,
-    category: 'Budget',
-    title: 'What\'s your travel budget style?',
-    subtitle: 'Per person, per trip. We\'ll match recommendations accordingly',
-    icon: <Sparkles className="w-5 h-5" />,
-    options: [
-      { value: 'budget', label: 'Budget-Conscious', description: 'Maximize experiences without overspending' },
-      { value: 'moderate', label: 'Balanced Value', description: 'Quality experiences at reasonable prices' },
-      { value: 'premium', label: 'Premium Comfort', description: 'Willing to pay more for better experiences' },
-      { value: 'luxury', label: 'Luxury First', description: 'The best of everything, cost is secondary' },
-    ],
-  },
-  {
-    id: 'pace',
-    step: 5,
-    category: 'Style',
-    title: 'What\'s your ideal travel pace?',
-    subtitle: 'How packed should your days be?',
-    icon: <Clock className="w-5 h-5" />,
-    options: [
-      { value: 'relaxed', label: 'Slow & Intentional', description: '1-2 activities per day, lots of breathing room' },
-      { value: 'balanced', label: 'Balanced Rhythm', description: '3-4 activities with breaks in between' },
-      { value: 'active', label: 'Active Explorer', description: '5+ activities, maximizing every moment' },
-    ],
-  },
-  {
-    id: 'planning_style',
-    step: 5,
-    category: 'Style',
-    title: 'How do you like to plan?',
-    subtitle: 'Structure vs spontaneity',
-    icon: <MapPin className="w-5 h-5" />,
-    options: [
-      { value: 'detailed', label: 'Every Detail Planned', description: 'I research extensively and plan it all in advance' },
-      { value: 'flexible', label: 'Loose Framework', description: 'Key bookings made, but room for spontaneity' },
-      { value: 'spontaneous', label: 'Figure It Out There', description: 'Minimal planning, maximum flexibility' },
-    ],
-  },
-  {
-    id: 'travel_companions',
-    step: 6,
-    category: 'Companions',
-    title: 'Who do you usually travel with?',
-    subtitle: 'Select all that apply to you',
-    icon: <Users className="w-5 h-5" />,
-    multiSelect: true,
-    options: [
-      { value: 'solo', label: 'Solo', description: 'I enjoy traveling on my own' },
-      { value: 'partner', label: 'Partner', description: 'Romantic getaways for two' },
-      { value: 'family', label: 'Family', description: 'Trips with kids or extended family' },
-      { value: 'friends', label: 'Friends', description: 'Group adventures with friends' },
-    ],
-  },
-  {
-    id: 'interests',
-    step: 7,
-    category: 'Interests',
-    title: 'What experiences excite you most?',
-    subtitle: 'Select all that you\'d want in your itinerary',
-    icon: <Heart className="w-5 h-5" />,
-    multiSelect: true,
-    options: [
-      { value: 'food', label: 'Food & Culinary', description: 'Local cuisine, restaurants, food tours' },
-      { value: 'culture', label: 'Culture & History', description: 'Museums, monuments, heritage sites' },
-      { value: 'nature', label: 'Nature & Outdoors', description: 'Parks, hiking, wildlife, scenic views' },
-      { value: 'art', label: 'Art & Architecture', description: 'Galleries, design, creative spaces' },
-      { value: 'nightlife', label: 'Nightlife & Social', description: 'Bars, clubs, live music venues' },
-      { value: 'wellness', label: 'Wellness & Relaxation', description: 'Spas, yoga, mindfulness retreats' },
-      { value: 'adventure', label: 'Adventure & Sports', description: 'Active excursions, adrenaline activities' },
-      { value: 'shopping', label: 'Shopping & Markets', description: 'Local crafts, boutiques, souvenirs' },
-    ],
-  },
-  {
-    id: 'accommodation',
-    step: 8,
-    category: 'Hotels',
-    title: 'Where do you love to stay?',
-    subtitle: 'Your preferred accommodation style',
-    icon: <Hotel className="w-5 h-5" />,
-    options: [
-      { value: 'boutique', label: 'Boutique Hotels', description: 'Unique, design-forward, intimate properties' },
-      { value: 'luxury', label: 'Luxury Hotels', description: 'Five-star service, premium amenities' },
-      { value: 'chain', label: 'Trusted Brands', description: 'Reliable chains with consistent quality' },
-      { value: 'vacation_rental', label: 'Vacation Rentals', description: 'Apartments, homes, local stays' },
-      { value: 'resort', label: 'Resorts', description: 'All-inclusive or amenity-rich properties' },
-    ],
-  },
-  {
-    id: 'hotel_priorities',
-    step: 8,
-    category: 'Hotels',
-    title: 'What matters most in a hotel?',
-    subtitle: 'Select your top priorities',
-    icon: <Hotel className="w-5 h-5" />,
-    multiSelect: true,
-    options: [
-      { value: 'location', label: 'Central Location', description: 'Walking distance to main attractions' },
-      { value: 'quiet', label: 'Quiet & Peaceful', description: 'Away from noise and crowds' },
-      { value: 'views', label: 'Scenic Views', description: 'Beautiful surroundings and vistas' },
-      { value: 'pool', label: 'Pool & Amenities', description: 'Leisure facilities on-site' },
-      { value: 'local', label: 'Local Neighborhood', description: 'Authentic, non-touristy area' },
-    ],
-  },
-  {
-    id: 'dining_style',
-    step: 9,
-    category: 'Dining',
-    title: 'How do you like to dine when traveling?',
-    subtitle: 'Your food and dining preferences',
-    icon: <Utensils className="w-5 h-5" />,
-    options: [
-      { value: 'adventurous', label: 'Adventurous Eater', description: 'I\'ll try anything local and authentic' },
-      { value: 'balanced', label: 'Balanced Explorer', description: 'Mix of familiar and new cuisines' },
-      { value: 'familiar', label: 'Comfort Seeker', description: 'I prefer cuisines I know I\'ll enjoy' },
-      { value: 'fine_dining', label: 'Fine Dining Focus', description: 'Michelin stars and memorable meals' },
-    ],
-  },
-  {
-    id: 'dietary_restrictions',
-    step: 9,
-    category: 'Dining',
-    title: 'Any dietary considerations?',
-    subtitle: 'Select all that apply. We\'ll factor these in',
-    icon: <Utensils className="w-5 h-5" />,
-    multiSelect: true,
-    optional: true,
-    options: [
-      { value: 'vegetarian', label: 'Vegetarian', description: 'No meat, but may include dairy/eggs' },
-      { value: 'vegan', label: 'Vegan', description: 'No animal products' },
-      { value: 'gluten_free', label: 'Gluten-Free', description: 'No wheat or gluten' },
-      { value: 'kosher', label: 'Kosher', description: 'Follows kosher dietary laws' },
-      { value: 'halal', label: 'Halal', description: 'Follows halal dietary laws' },
-      { value: 'none', label: 'No Restrictions', description: 'I eat everything!' },
-    ],
-    hasTextInput: true,
-    textInputId: 'food_allergies',
-    textInputLabel: 'Any food allergies or other dietary needs?',
-    textInputPlaceholder: 'e.g., nut allergy, shellfish, lactose intolerant...',
-  },
-  {
-    id: 'weather_preference',
-    step: 10,
-    category: 'Logistics',
-    title: 'What climate do you prefer?',
-    subtitle: 'We\'ll recommend destinations that match',
-    icon: <Sun className="w-5 h-5" />,
-    multiSelect: true,
-    options: [
-      { value: 'tropical', label: 'Warm & Tropical', description: 'Beach weather, sun, and warmth' },
-      { value: 'temperate', label: 'Mild & Temperate', description: 'Comfortable year-round temperatures' },
-      { value: 'cold', label: 'Cool & Crisp', description: 'Cozy sweater weather' },
-      { value: 'variable', label: 'I Adapt', description: 'Weather doesn\'t drive my decisions' },
-    ],
-  },
-  {
-    id: 'social_energy',
-    step: 10,
-    category: 'Logistics',
-    title: 'How do you feel about meeting new people while traveling?',
-    subtitle: 'This helps us match your social preferences',
-    icon: <Users className="w-5 h-5" />,
-    options: [
-      { value: 'recharge_alone', label: 'I recharge alone', description: 'Solo time is essential for me' },
-      { value: 'small_groups', label: 'Small groups are nice', description: 'I enjoy select company' },
-      { value: 'flexible', label: 'I\'m flexible', description: 'Happy with either solo or social' },
-      { value: 'love_people', label: 'I love meeting people!', description: 'The more connections, the better' },
-    ],
-  },
-];
+// Transform JSON config into component-ready format
+interface QuizQuestion {
+  id: string;
+  step: number;
+  category: string;
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  options: Array<{
+    value: string;
+    label: string;
+    description?: string;
+  }>;
+  multiSelect?: boolean;
+  optional?: boolean;
+  hasTextInput?: boolean;
+  textInputId?: string;
+  textInputLabel?: string;
+  textInputPlaceholder?: string;
+  feedback?: Record<string, string>;
+}
 
-// Group questions by step for display
-const getQuestionsForStep = (step: number) => questions.filter(q => q.step === step);
-const totalSteps = 10;
-const stepCategories = [
-  { step: 1, category: 'Identity', label: 'Who You Are' },
-  { step: 2, category: 'Vibes', label: 'Your Vibes' },
-  { step: 3, category: 'Habits', label: 'Travel Habits' },
-  { step: 4, category: 'Budget', label: 'Budget' },
-  { step: 5, category: 'Style', label: 'Your Style' },
-  { step: 6, category: 'Companions', label: 'Companions' },
-  { step: 7, category: 'Interests', label: 'Interests' },
-  { step: 8, category: 'Hotels', label: 'Hotels' },
-  { step: 9, category: 'Dining', label: 'Dining' },
-  { step: 10, category: 'Logistics', label: 'Logistics' },
-];
+// Map categories to icons
+const categoryIcons: Record<string, React.ReactNode> = {
+  'Pace': <Clock className="w-5 h-5" />,
+  'Motivation': <Compass className="w-5 h-5" />,
+  'Budget': <Star className="w-5 h-5" />,
+  'Style': <MapPin className="w-5 h-5" />,
+  'Social': <Users className="w-5 h-5" />,
+  'Interests': <Globe className="w-5 h-5" />,
+  'Accommodation': <MapPin className="w-5 h-5" />,
+  'Flexibility': <Wand2 className="w-5 h-5" />,
+  'Outcomes': <Star className="w-5 h-5" />,
+  'Cultural': <Globe className="w-5 h-5" />,
+  'Priorities': <Star className="w-5 h-5" />,
+  'Values': <Compass className="w-5 h-5" />,
+  'Environment': <Mountain className="w-5 h-5" />,
+  'Companions': <Users className="w-5 h-5" />,
+  'Wellbeing': <Coffee className="w-5 h-5" />,
+  'Life Stage': <Users className="w-5 h-5" />,
+  'Quality': <Star className="w-5 h-5" />,
+};
+
+// Transform questions from JSON config
+function transformQuestions(): QuizQuestion[] {
+  return quizConfig.questions.map(q => ({
+    id: q.id,
+    step: q.step,
+    category: q.category,
+    title: q.prompt,
+    subtitle: q.type === 'multi' ? 'Select all that apply' : 'Choose the one that fits best',
+    icon: categoryIcons[q.category] || <Compass className="w-5 h-5" />,
+    multiSelect: q.type === 'multi',
+    feedback: q.feedback,
+    options: q.answers.map(a => ({
+      value: a.id,
+      label: a.label,
+    })),
+  }));
+}
+
+const questions = transformQuestions();
+const totalSteps = quizConfig.stepCategories.length;
+
+// Get questions for a specific step
+const getQuestionsForStep = (step: number) => {
+  const stepConfig = quizConfig.stepCategories[step];
+  if (!stepConfig) return [];
+  return questions.filter(q => stepConfig.questions.includes(q.id));
+};
+
+// Step categories from config
+const stepCategories = quizConfig.stepCategories.map((s, idx) => ({
+  step: idx + 1,
+  category: s.label,
+  label: s.label,
+}));
 
 // Floating decorative motifs for visual interest
 const FloatingMotif = ({ icon, delay, x, y }: { icon: React.ReactNode; delay: number; x: string; y: string }) => (
@@ -873,7 +702,7 @@ export default function Quiz() {
                           </div>
                           
                           {/* Conversation feedback after selection */}
-                          <QuizFeedback
+                          <QuizFeedbackV3
                             questionId={question.id}
                             answerValue={
                               Array.isArray(answers[question.id])
