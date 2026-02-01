@@ -112,6 +112,29 @@ import {
 } from './daily-estimates.ts';
 
 // =============================================================================
+// PHASE 3: Premium Features - Group, Commitments, Must-Dos, Packing
+// =============================================================================
+import {
+  blendGroupArchetypes,
+  type TravelerArchetype,
+} from './group-archetype-blending.ts';
+
+import {
+  analyzePreBookedCommitments,
+  type PreBookedCommitment,
+} from './pre-booked-commitments.ts';
+
+import {
+  parseMustDoInput,
+  scheduleMustDos,
+  type MustDoPriority,
+} from './must-do-priorities.ts';
+
+import {
+  generatePackingSuggestions,
+} from './packing-suggestions.ts';
+
+// =============================================================================
 // PHASE 13: UNIFIED ARCHETYPE DATA - Single Source of Truth for All Archetype Info
 // Merges: archetype-constraints.ts + experience-affinity.ts + destination-guides.ts
 // =============================================================================
@@ -214,6 +237,10 @@ interface GenerationContext {
   originCity?: string;
   destinationTimezone?: string;
   jetLagSensitivity?: 'low' | 'moderate' | 'high';
+  // Phase 3: Premium features
+  preBookedCommitments?: PreBookedCommitment[];
+  mustDoActivities?: string;
+  groupArchetypes?: TravelerArchetype[];
 }
 
 interface StrictActivity {
