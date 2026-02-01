@@ -2042,6 +2042,7 @@ export type Database = {
         Row: {
           airport_codes: Json | null
           airport_lookup_codes: string | null
+          airport_transfer_minutes: number | null
           alternative_names: Json | null
           best_time_to_visit: string | null
           city: string
@@ -2082,6 +2083,7 @@ export type Database = {
         Insert: {
           airport_codes?: Json | null
           airport_lookup_codes?: string | null
+          airport_transfer_minutes?: number | null
           alternative_names?: Json | null
           best_time_to_visit?: string | null
           city: string
@@ -2122,6 +2124,7 @@ export type Database = {
         Update: {
           airport_codes?: Json | null
           airport_lookup_codes?: string | null
+          airport_transfer_minutes?: number | null
           alternative_names?: Json | null
           best_time_to_visit?: string | null
           city?: string
