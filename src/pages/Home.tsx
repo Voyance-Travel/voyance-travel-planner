@@ -45,12 +45,12 @@ export default function Home() {
   }, [navigate]);
 
   return (
-    <main className="antialiased relative">
+    <main className="antialiased">
       <OnboardingRedirect />
       <TopNav />
       <BrowseNudge />
       
-      <div className="bg-background overflow-hidden relative">
+      <div className="bg-background overflow-hidden">
         {/* Value-First Interactive Hero */}
         <ValueFirstHero />
         
