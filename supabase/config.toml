@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.transfer-pricing]
 verify_jwt = false
+
+[functions.explain-recommendation]
+verify_jwt = false

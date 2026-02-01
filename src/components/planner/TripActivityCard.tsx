@@ -5,26 +5,35 @@ import { Badge } from '@/components/ui/badge';
 import { getActivityIcon, getActivityColor, formatDuration } from '@/utils/plannerUtils';
 import { trackActivityClick } from '@/services/behaviorTrackingService';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { ExplainableActivity } from '@/components/itinerary/ExplainableActivity';
 import type { TripActivity } from '@/types/trip';
 
 interface TripActivityCardProps {
   activity: TripActivity;
   currency?: string;
   destination?: string;
+  tripType?: string;
+  budget?: string;
+  travelers?: number;
   onToggleLock?: (activityId: string, locked: boolean) => void;
   onEdit?: (activity: TripActivity) => void;
   onDelete?: (activityId: string) => void;
   onActivityUpdate?: (activity: TripActivity) => void;
+  showExplain?: boolean;
 }
 
 const TripActivityCard: React.FC<TripActivityCardProps> = ({
   activity,
   currency = "USD",
   destination = "",
+  tripType,
+  budget,
+  travelers,
   onToggleLock,
   onEdit,
   onDelete: _onDelete,
-  onActivityUpdate: _onActivityUpdate
+  onActivityUpdate: _onActivityUpdate,
+  showExplain = false
 }) => {
   const categoryColor = getActivityColor(activity.category || activity.type);
   const icon = getActivityIcon(activity.type);
@@ -39,7 +48,7 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
     );
   };
 
-  return (
+  const cardContent = (
     <motion.div
       layout
       className="bg-card border border-border rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer"
@@ -166,6 +175,25 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
       </div>
     </motion.div>
   );
+
+  // Wrap with ExplainableActivity if showExplain is enabled
+  if (showExplain && destination) {
+    return (
+      <ExplainableActivity
+        activity={activity}
+        tripContext={{
+          destination,
+          tripType,
+          budget,
+          travelers,
+        }}
+      >
+        {cardContent}
+      </ExplainableActivity>
+    );
+  }
+
+  return cardContent;
 };
 
 export default TripActivityCard;
