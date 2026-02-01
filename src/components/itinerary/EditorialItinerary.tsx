@@ -65,6 +65,8 @@ import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDra
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
+import { InlineModifier } from './InlineModifier';
+import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -1644,6 +1646,21 @@ export function EditorialItinerary({
               destination={destination}
               onNavigateToBookings={() => setActiveTab('overview')}
             />
+
+            {/* Inline Modifier - Natural language itinerary changes */}
+            {effectiveIsEditable && (
+              <InlineModifier
+                tripId={tripId}
+                destination={destination}
+                startDate={startDate}
+                endDate={endDate}
+                days={days as unknown as ItineraryDay[]}
+                onItineraryUpdate={(updatedDays) => {
+                  setDays(updatedDays as unknown as EditorialDay[]);
+                  setHasChanges(true);
+                }}
+              />
+            )}
 
             {/* Day Navigation Bar */}
             <div className="flex items-center gap-2">
