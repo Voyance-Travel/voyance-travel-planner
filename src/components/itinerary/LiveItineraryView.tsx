@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isBefore, isAfter, parseISO, startOfDay } from 'date-fns';
 import { 
   Calendar, Sun, Cloud, Sparkles, TrendingUp, 
@@ -11,6 +11,9 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LiveActivityCard } from './LiveActivityCard';
 import { useTripFeedback, useUserPreferenceInsights } from '@/services/activityFeedbackAPI';
+import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
+import { FeedbackPromptOverlay } from '@/components/feedback/FeedbackPromptOverlay';
+import type { ActivityContext } from '@/types/feedback';
 import { cn } from '@/lib/utils';
 
 interface Activity {
@@ -67,9 +70,38 @@ export function LiveItineraryView({
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [completedActivities, setCompletedActivities] = useState<Set<string>>(new Set());
   const [skippedActivities, setSkippedActivities] = useState<Set<string>>(new Set());
+  const [recentCompletedActivity, setRecentCompletedActivity] = useState<ActivityContext | null>(null);
   
   const { data: tripFeedback } = useTripFeedback(tripId);
   const { data: insights } = useUserPreferenceInsights();
+
+  // Convert activities to feedback context format
+  const currentDayActivities = useMemo((): ActivityContext[] => {
+    if (!days[selectedDayIndex]) return [];
+    return days[selectedDayIndex].activities.map(a => ({
+      id: a.id,
+      name: a.name,
+      category: a.category,
+      type: a.type,
+      startTime: a.startTime,
+      endTime: a.endTime,
+    }));
+  }, [days, selectedDayIndex]);
+
+  // Feedback trigger system
+  const {
+    currentPrompt,
+    dismissPrompt,
+    completePrompt,
+  } = useFeedbackTrigger({
+    tripId,
+    destination,
+    startDate,
+    endDate,
+    activities: currentDayActivities,
+    recentCompletedActivity: recentCompletedActivity || undefined,
+    enabled: true,
+  });
 
   // Determine the current day based on dates
   useEffect(() => {
@@ -143,15 +175,29 @@ export function LiveItineraryView({
     return 'upcoming';
   };
 
-  const handleMarkComplete = (activityId: string) => {
+  const handleMarkComplete = useCallback((activityId: string) => {
     setCompletedActivities(prev => new Set([...prev, activityId]));
     onActivityComplete?.(activityId);
-  };
+    
+    // Track recently completed activity for feedback triggers
+    const activity = days[selectedDayIndex]?.activities.find(a => a.id === activityId);
+    if (activity) {
+      setRecentCompletedActivity({
+        id: activity.id,
+        name: activity.name,
+        category: activity.category,
+        type: activity.type,
+        startTime: activity.startTime,
+        endTime: activity.endTime,
+        completedAt: new Date(),
+      });
+    }
+  }, [days, selectedDayIndex, onActivityComplete]);
 
-  const handleSkip = (activityId: string) => {
+  const handleSkip = useCallback((activityId: string) => {
     setSkippedActivities(prev => new Set([...prev, activityId]));
     onActivitySkip?.(activityId);
-  };
+  }, [onActivitySkip]);
 
   // Calculate trip progress
   const totalActivities = days.reduce((sum, day) => sum + day.activities.length, 0);
@@ -333,6 +379,18 @@ export function LiveItineraryView({
           </CardContent>
         </Card>
       )}
+
+      {/* Contextual Feedback Prompt Overlay */}
+      <AnimatePresence>
+        {currentPrompt && (
+          <FeedbackPromptOverlay
+            context={currentPrompt}
+            tripId={tripId}
+            onClose={dismissPrompt}
+            onComplete={completePrompt}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
