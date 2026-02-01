@@ -1435,6 +1435,10 @@ export default function Start() {
                           if (childrenCount > num) {
                             setChildrenCount(Math.max(0, num - 1));
                           }
+                          // If increasing travelers from solo, switch trip type away from solo
+                          if (num > 1 && tripType === 'solo') {
+                            setTripType('leisure');
+                          }
                         }}
                         className={cn(
                           "w-12 h-12 rounded-lg border-2 transition-all text-sm font-medium",
@@ -1510,7 +1514,14 @@ export default function Start() {
                     <button
                       key={occasion.id}
                       type="button"
-                      onClick={() => setTripType(occasion.id)}
+                      onClick={() => {
+                        setTripType(occasion.id);
+                        // Solo trips are always 1 traveler
+                        if (occasion.id === 'solo') {
+                          setTravelers(1);
+                          setChildrenCount(0);
+                        }
+                      }}
                       className={cn(
                         "px-3 py-1.5 rounded-full border transition-all text-sm",
                         tripType === occasion.id
@@ -1536,11 +1547,18 @@ export default function Start() {
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-2">
                     <div className="flex flex-wrap gap-2">
-                      {tripOccasions.slice(6).map((occasion) => (
+                    {tripOccasions.slice(6).map((occasion) => (
                         <button
                           key={occasion.id}
                           type="button"
-                          onClick={() => setTripType(occasion.id)}
+                          onClick={() => {
+                            setTripType(occasion.id);
+                            // Solo trips are always 1 traveler
+                            if (occasion.id === 'solo') {
+                              setTravelers(1);
+                              setChildrenCount(0);
+                            }
+                          }}
                           className={cn(
                             "px-3 py-1.5 rounded-full border transition-all text-sm",
                             tripType === occasion.id
