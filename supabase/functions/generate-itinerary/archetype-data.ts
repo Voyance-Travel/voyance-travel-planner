@@ -14,6 +14,11 @@
 export type { ArchetypeDefinition } from './archetype-constraints.ts';
 export type { ExperienceAffinity, TimePreferences, EnvironmentPreferences, PhysicalIntensity } from './experience-affinity.ts';
 export type { DestinationArchetypeGuide } from './destination-guides.ts';
+export type { 
+  MatchedAttraction, 
+  AttractionQuery, 
+  ArchetypeDestinationGuide as DynamicArchetypeGuide 
+} from './attraction-matching.ts';
 
 // Import from original modules (these still exist during migration)
 import { 
@@ -34,6 +39,7 @@ import {
   getEnvironmentPreferences,
   getPhysicalIntensity,
   buildExperienceGuidancePrompt,
+  EXPERIENCE_CATEGORIES,
   type ExperienceAffinity,
   type TimePreferences,
   type EnvironmentPreferences,
@@ -46,6 +52,29 @@ import {
   buildDestinationGuidancePrompt,
   type DestinationArchetypeGuide
 } from './destination-guides.ts';
+
+// Import dynamic attraction matching
+import {
+  getMatchingAttractions,
+  getOrGenerateArchetypeGuide,
+  buildMatchedAttractionsPrompt,
+  buildArchetypeGuidePrompt,
+  getAttractionsNeedingEnrichment,
+  updateAttractionTags,
+  getValidExperienceCategories,
+} from './attraction-matching.ts';
+
+// Re-export attraction matching functions
+export {
+  getMatchingAttractions,
+  getOrGenerateArchetypeGuide,
+  buildMatchedAttractionsPrompt,
+  buildArchetypeGuidePrompt,
+  getAttractionsNeedingEnrichment,
+  updateAttractionTags,
+  getValidExperienceCategories,
+  EXPERIENCE_CATEGORIES,
+};
 
 // =============================================================================
 // UNIFIED ARCHETYPE CONTEXT
@@ -292,6 +321,88 @@ When rules conflict, follow this priority order (1 = highest):
   ];
   
   return sections.filter(Boolean).join('\n\n');
+}
+
+/**
+ * Async version of buildFullPromptGuidance that includes dynamic attraction matching
+ * and AI-generated destination guides (with caching).
+ * 
+ * Use this when you need the full power of the dynamic system.
+ * Falls back to static guidance if dynamic features fail.
+ */
+export async function buildFullPromptGuidanceAsync(
+  supabase: any,
+  archetype: string,
+  destination: string,
+  destinationId: string | null,
+  budgetTier: string,
+  traitScores: { pace: number; budget: number },
+  aiGatewayKey?: string
+): Promise<string> {
+  // Get static guidance first
+  const staticGuidance = buildFullPromptGuidance(archetype, destination, budgetTier, traitScores);
+  
+  const dynamicSections: string[] = [];
+  
+  // Try to get matched attractions if we have a destination ID
+  if (destinationId) {
+    try {
+      // Map budget tier to physical intensity based on typical patterns
+      const intensityMap: Record<string, 'low' | 'moderate' | 'high'> = {
+        luxury: 'low',      // Luxury travelers typically want less walking
+        moderate: 'moderate',
+        budget: 'high',     // Budget travelers often walk more
+      };
+      
+      const attractions = await getMatchingAttractions(supabase, {
+        destinationId,
+        archetype,
+        budgetTier: budgetTier as 'budget' | 'moderate' | 'luxury',
+        physicalIntensity: intensityMap[budgetTier] || 'moderate',
+        limit: 30,
+      });
+      
+      if (attractions.length > 0) {
+        const attractionsPrompt = buildMatchedAttractionsPrompt(attractions, archetype);
+        if (attractionsPrompt) {
+          dynamicSections.push(attractionsPrompt);
+          console.log(`[buildFullPromptGuidanceAsync] Added ${attractions.length} matched attractions`);
+        }
+      }
+    } catch (e) {
+      console.warn('[buildFullPromptGuidanceAsync] Attraction matching failed, continuing with static:', e);
+    }
+    
+    // Try to get or generate archetype × destination guide
+    if (aiGatewayKey) {
+      try {
+        const guide = await getOrGenerateArchetypeGuide(
+          supabase,
+          archetype,
+          destinationId,
+          destination,
+          aiGatewayKey
+        );
+        
+        if (guide) {
+          const guidePrompt = buildArchetypeGuidePrompt(guide, archetype, destination);
+          if (guidePrompt) {
+            dynamicSections.push(guidePrompt);
+            console.log(`[buildFullPromptGuidanceAsync] Added dynamic archetype guide for ${archetype} × ${destination}`);
+          }
+        }
+      } catch (e) {
+        console.warn('[buildFullPromptGuidanceAsync] Dynamic guide generation failed, using static:', e);
+      }
+    }
+  }
+  
+  // Combine static and dynamic sections
+  if (dynamicSections.length > 0) {
+    return staticGuidance + '\n\n' + dynamicSections.join('\n\n');
+  }
+  
+  return staticGuidance;
 }
 
 // =============================================================================
