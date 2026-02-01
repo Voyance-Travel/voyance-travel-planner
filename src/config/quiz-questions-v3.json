@@ -1744,7 +1744,7 @@
     },
     "balanced_story_collector": {
       "name": "Balanced Story Collector",
-      "category": "EXPLORER",
+      "category": "TRANSFORMER",
       "required": {},
       "boosters": {
         "flexibility": 0.8,
