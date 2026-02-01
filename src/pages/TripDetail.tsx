@@ -969,6 +969,7 @@ export default function TripDetail() {
                   endDate={trip.end_date}
                   travelers={trip.travelers || 1}
                   budgetTier={trip.budget_tier || undefined}
+                  tripType={trip.trip_type || undefined}
                   days={editorDays}
                   flightSelection={normalizedFlight}
                   hotelSelection={primaryHotelSelection as any}

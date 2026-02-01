@@ -195,6 +195,7 @@ export interface EditorialItineraryProps {
   endDate: string;
   travelers: number;
   budgetTier?: string;
+  tripType?: string;
   style?: string;
   pace?: string;
   days: EditorialDay[];
@@ -498,6 +499,7 @@ export function EditorialItinerary({
   endDate,
   travelers,
   budgetTier,
+  tripType,
   style,
   pace,
   days: initialDays,
@@ -1285,6 +1287,7 @@ export function EditorialItinerary({
             date: day.date,
             travelers,
             budgetTier,
+            tripType,
             previousDayActivities: currentDayActivities, // Force different venues
             keepActivities,
             currentActivities: backendActivities, // Backend format with isLocked
