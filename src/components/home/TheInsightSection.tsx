@@ -78,7 +78,7 @@ export default function TheInsightSection() {
             {/* Image with overlay */}
             <div className="relative rounded-2xl overflow-hidden aspect-[4/5] shadow-2xl">
               <img 
-                src="https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=800&q=80"
+                src="https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=800&q=80"
                 alt="Happy travelers exploring"
                 className="w-full h-full object-cover"
               />
