@@ -79,6 +79,21 @@ import {
 } from './prompt-library.ts';
 
 // =============================================================================
+// PHASE 12: Trip Duration + Reservation Urgency + Children Ages
+// =============================================================================
+import {
+  getTripDurationConfig,
+  calculateDayEnergies,
+  buildTripDurationPrompt,
+  analyzeChildrenAges,
+  buildChildrenAgesPrompt,
+} from './trip-duration-rules.ts';
+
+import {
+  buildReservationUrgencyPrompt,
+} from './reservation-urgency.ts';
+
+// =============================================================================
 // PHASE 13: UNIFIED ARCHETYPE DATA - Single Source of Truth for All Archetype Info
 // Merges: archetype-constraints.ts + experience-affinity.ts + destination-guides.ts
 // =============================================================================
@@ -164,6 +179,7 @@ interface GenerationContext {
   totalDays: number;
   travelers: number;
   childrenCount?: number; // Number of children in the travel party
+  childrenAges?: number[]; // Specific ages of children for toddler/teen logic
   tripType?: string;
   budgetTier?: string;
   pace?: string;
@@ -174,6 +190,8 @@ interface GenerationContext {
   travelerDNA?: TravelerDNA;
   flightData?: PromptFlightData;
   hotelData?: PromptHotelData;
+  // Phase 12: First-time visitor detection
+  isFirstTimeVisitor?: boolean;
 }
 
 interface StrictActivity {
@@ -3843,7 +3861,8 @@ async function generateSingleDayWithRetry(
       // Build destination essentials prompt (non-negotiables + hidden gems)
       // Now uses DB-driven data with freshness-based Perplexity enrichment
       const authenticityScore = context.travelerDNA?.traits?.authenticity || 0;
-      const isFirstTimeVisitor = true; // TODO: Add first-time detection from trip form
+      // Use isFirstTimeVisitor from context if provided, default to true
+      const isFirstTimeVisitor = context.isFirstTimeVisitor ?? true;
       const destinationEssentialsPrompt = supabaseClient
         ? await buildDestinationEssentialsPromptWithDB(
             supabaseClient,
