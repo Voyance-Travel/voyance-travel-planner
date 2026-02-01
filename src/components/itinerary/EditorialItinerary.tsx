@@ -1902,6 +1902,7 @@ export function EditorialItinerary({
                 travelers={travelers}
                 budgetTier={budgetTier}
                 tripCurrency={tripCurrency}
+                displayCost={displayCost}
                 destination={destination}
                 isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
                 isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
@@ -4131,6 +4132,7 @@ interface DayCardProps {
   travelers: number;
   budgetTier?: string;
   tripCurrency: string; // Currency for cost formatting
+  displayCost: (amountInUSD: number) => number; // Convert USD to display currency
   destination: string; // For real photo lookup
   isExpanded: boolean;
   isRegenerating: boolean;
@@ -4163,6 +4165,7 @@ function DayCard({
   travelers,
   budgetTier,
   tripCurrency,
+  displayCost,
   destination,
   isExpanded,
   isRegenerating,
@@ -4226,7 +4229,7 @@ function DayCard({
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pl-10 sm:pl-0">
             {totalCost > 0 && (
               <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0">
-                {formatCurrency(totalCost, tripCurrency)}
+                {formatCurrency(displayCost(totalCost), tripCurrency)}
               </Badge>
             )}
             {day.weather && (
@@ -4321,6 +4324,7 @@ function DayCard({
                       travelers={travelers}
                       budgetTier={budgetTier}
                       tripCurrency={tripCurrency}
+                      displayCost={displayCost}
                       tripId={tripId}
                       showTransportDetails={showTransportDetails}
                       existingPayment={getPaymentForItem('activity', activity.id)}
@@ -4366,7 +4370,7 @@ function DayCard({
                     </Button>
                   )}
                   <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                    Day Total: {formatCurrency(totalCost, tripCurrency)}
+                    Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}
                   </span>
                 </div>
               </div>
@@ -4396,6 +4400,7 @@ interface ActivityRowProps {
   travelers: number;
   budgetTier?: string;
   tripCurrency: string; // User's preferred display currency
+  displayCost: (amountInUSD: number) => number; // Convert USD to display currency
   tripId: string;
   showTransportDetails: boolean; // Whether to show expanded transport info
   existingPayment?: TripPayment;
@@ -4424,6 +4429,7 @@ function ActivityRow({
   travelers,
   budgetTier,
   tripCurrency,
+  displayCost,
   tripId,
   showTransportDetails,
   existingPayment,
@@ -4749,7 +4755,7 @@ function ActivityRow({
                     <span>• {activity.transportation.distance}</span>
                   )}
                   {activity.transportation.estimatedCost?.amount && activity.transportation.estimatedCost.amount > 0 && (
-                    <span>• ~{formatCurrency(activity.transportation.estimatedCost.amount, activity.transportation.estimatedCost.currency || tripCurrency)}</span>
+                    <span>• ~{formatCurrency(displayCost(activity.transportation.estimatedCost.amount), tripCurrency)}</span>
                   )}
                 </button>
                 
@@ -4791,7 +4797,7 @@ function ActivityRow({
 
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
-            <span className="font-medium">{formatCurrency(cost, tripCurrency)}</span>
+            <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
             {/* Booking state actions - replaces static vendor links */}
             <InlineBookingActions
               activity={{
