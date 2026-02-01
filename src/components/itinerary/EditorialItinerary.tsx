@@ -3844,44 +3844,64 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
           </div>
         )}
 
-        {/* Hotel Section - Second */}
+        {/* Hotel Section - Show hotel details */}
         {hasHotel ? (
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-              <Hotel className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <p className="font-medium text-sm">
-                  {hasFlight ? `Getting to ${hotelSelection?.name}` : `${destination} Airport → ${hotelSelection?.name}`}
-                </p>
-                {isLoadingTransfer && (
-                  <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
+          <>
+            {/* Hotel Info Block */}
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Hotel className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">{hotelSelection?.name}</p>
+                {hotelSelection?.address && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{hotelSelection.address}</p>
                 )}
-                {transferData && !isLoadingTransfer && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/20">
-                    Live
-                  </Badge>
+                {hotelSelection?.checkInDate && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Check-in: {format(parseISO(hotelSelection.checkInDate), 'MMM d')}
+                    {hotelSelection?.checkInTime && ` at ${hotelSelection.checkInTime}`}
+                  </p>
                 )}
               </div>
-              {/* Always show transfer options when hotel exists (use static fallback if no live data) */}
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                  <span className="font-medium">🚕 Taxi/Uber</span>
-                  <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
-                </div>
-                <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                  <span className="font-medium">🚆 Train/Metro</span>
-                  <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
-                </div>
-              </div>
-              {!hasFlight && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Add your flight to get personalized arrival day timing
-                </p>
-              )}
             </div>
-          </div>
+
+            {/* Transfer Options Block */}
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                <Car className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-sm">Getting There</p>
+                  {isLoadingTransfer && (
+                    <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
+                  )}
+                  {transferData && !isLoadingTransfer && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/20">
+                      Live
+                    </Badge>
+                  )}
+                </div>
+                {/* Always show transfer options when hotel exists (use static fallback if no live data) */}
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                    <span className="font-medium">🚕 Taxi/Uber</span>
+                    <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
+                  </div>
+                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
+                    <span className="font-medium">🚆 Train/Metro</span>
+                    <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
+                  </div>
+                </div>
+                {!hasFlight && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Add your flight to get personalized arrival day timing
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
         ) : (
           <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
             <div className="flex items-center gap-3">
