@@ -275,6 +275,65 @@ export type Database = {
           },
         ]
       }
+      activity_quality_scores: {
+        Row: {
+          activity_id: string | null
+          archetype_breakdown: Json
+          average_rating: number | null
+          category: string | null
+          common_tips: string[] | null
+          created_at: string
+          destination: string
+          id: string
+          last_updated_at: string
+          rating_distribution: Json
+          total_ratings: number
+          venue_id: string | null
+          venue_name: string
+          worth_price_score: number | null
+        }
+        Insert: {
+          activity_id?: string | null
+          archetype_breakdown?: Json
+          average_rating?: number | null
+          category?: string | null
+          common_tips?: string[] | null
+          created_at?: string
+          destination: string
+          id?: string
+          last_updated_at?: string
+          rating_distribution?: Json
+          total_ratings?: number
+          venue_id?: string | null
+          venue_name: string
+          worth_price_score?: number | null
+        }
+        Update: {
+          activity_id?: string | null
+          archetype_breakdown?: Json
+          average_rating?: number | null
+          category?: string | null
+          common_tips?: string[] | null
+          created_at?: string
+          destination?: string
+          id?: string
+          last_updated_at?: string
+          rating_distribution?: Json
+          total_ratings?: number
+          venue_id?: string | null
+          venue_name?: string
+          worth_price_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_quality_scores_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agency_accounts: {
         Row: {
           account_type: Database["public"]["Enums"]["agency_account_type"]
@@ -1842,6 +1901,42 @@ export type Database = {
           },
         ]
       }
+      archetype_pacing_stats: {
+        Row: {
+          archetype: string
+          created_at: string
+          id: string
+          last_calculated_at: string
+          pacing_distribution: Json
+          recommended_adjustment: number | null
+          sample_size_threshold: number | null
+          total_responses: number
+          trip_type: string | null
+        }
+        Insert: {
+          archetype: string
+          created_at?: string
+          id?: string
+          last_calculated_at?: string
+          pacing_distribution?: Json
+          recommended_adjustment?: number | null
+          sample_size_threshold?: number | null
+          total_responses?: number
+          trip_type?: string | null
+        }
+        Update: {
+          archetype?: string
+          created_at?: string
+          id?: string
+          last_calculated_at?: string
+          pacing_distribution?: Json
+          recommended_adjustment?: number | null
+          sample_size_threshold?: number | null
+          total_responses?: number
+          trip_type?: string | null
+        }
+        Relationships: []
+      }
       attractions: {
         Row: {
           address: string | null
@@ -2392,6 +2487,116 @@ export type Database = {
           id?: string
           name?: string
           value_type?: string
+        }
+        Relationships: []
+      }
+      feedback_prompt_log: {
+        Row: {
+          action: string
+          activity_id: string | null
+          created_at: string
+          day_number: number | null
+          id: string
+          prompt_id: string | null
+          prompt_type: Database["public"]["Enums"]["feedback_prompt_type"]
+          shown_at: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          activity_id?: string | null
+          created_at?: string
+          day_number?: number | null
+          id?: string
+          prompt_id?: string | null
+          prompt_type: Database["public"]["Enums"]["feedback_prompt_type"]
+          shown_at?: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          activity_id?: string | null
+          created_at?: string
+          day_number?: number | null
+          id?: string
+          prompt_id?: string | null
+          prompt_type?: Database["public"]["Enums"]["feedback_prompt_type"]
+          shown_at?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_prompt_log_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_prompt_log_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "feedback_prompts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_prompt_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "feedback_prompt_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feedback_prompts: {
+        Row: {
+          archetype_relevance: string[] | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          priority: number
+          prompt_type: Database["public"]["Enums"]["feedback_prompt_type"]
+          questions: Json
+          trigger_config: Json
+          updated_at: string
+        }
+        Insert: {
+          archetype_relevance?: string[] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          priority?: number
+          prompt_type: Database["public"]["Enums"]["feedback_prompt_type"]
+          questions?: Json
+          trigger_config?: Json
+          updated_at?: string
+        }
+        Update: {
+          archetype_relevance?: string[] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          priority?: number
+          prompt_type?: Database["public"]["Enums"]["feedback_prompt_type"]
+          questions?: Json
+          trigger_config?: Json
+          updated_at?: string
         }
         Relationships: []
       }
@@ -4045,6 +4250,165 @@ export type Database = {
           },
         ]
       }
+      trip_day_summaries: {
+        Row: {
+          created_at: string
+          day_date: string
+          day_number: number
+          energy_level: number | null
+          highlight_activity_id: string | null
+          highlight_text: string | null
+          id: string
+          notes: string | null
+          overall_rating: number | null
+          pacing_rating: string | null
+          trip_id: string
+          unexpected_discoveries: string[] | null
+          updated_at: string
+          user_id: string
+          weather_experience: string | null
+        }
+        Insert: {
+          created_at?: string
+          day_date: string
+          day_number: number
+          energy_level?: number | null
+          highlight_activity_id?: string | null
+          highlight_text?: string | null
+          id?: string
+          notes?: string | null
+          overall_rating?: number | null
+          pacing_rating?: string | null
+          trip_id: string
+          unexpected_discoveries?: string[] | null
+          updated_at?: string
+          user_id: string
+          weather_experience?: string | null
+        }
+        Update: {
+          created_at?: string
+          day_date?: string
+          day_number?: number
+          energy_level?: number | null
+          highlight_activity_id?: string | null
+          highlight_text?: string | null
+          id?: string
+          notes?: string | null
+          overall_rating?: number | null
+          pacing_rating?: string | null
+          trip_id?: string
+          unexpected_discoveries?: string[] | null
+          updated_at?: string
+          user_id?: string
+          weather_experience?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_day_summaries_highlight_activity_id_fkey"
+            columns: ["highlight_activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_day_summaries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_day_summaries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_departure_summaries: {
+        Row: {
+          archetype_fit: string | null
+          best_experience_activity_id: string | null
+          best_meal_activity_id: string | null
+          created_at: string
+          final_thoughts: string | null
+          highlight_activities: string[] | null
+          id: string
+          overall_trip_rating: number | null
+          recommend_score: number | null
+          suggestions_for_destination: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+          would_change: string[] | null
+          would_recommend: boolean | null
+        }
+        Insert: {
+          archetype_fit?: string | null
+          best_experience_activity_id?: string | null
+          best_meal_activity_id?: string | null
+          created_at?: string
+          final_thoughts?: string | null
+          highlight_activities?: string[] | null
+          id?: string
+          overall_trip_rating?: number | null
+          recommend_score?: number | null
+          suggestions_for_destination?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+          would_change?: string[] | null
+          would_recommend?: boolean | null
+        }
+        Update: {
+          archetype_fit?: string | null
+          best_experience_activity_id?: string | null
+          best_meal_activity_id?: string | null
+          created_at?: string
+          final_thoughts?: string | null
+          highlight_activities?: string[] | null
+          id?: string
+          overall_trip_rating?: number | null
+          recommend_score?: number | null
+          suggestions_for_destination?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+          would_change?: string[] | null
+          would_recommend?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_departure_summaries_best_experience_activity_id_fkey"
+            columns: ["best_experience_activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_departure_summaries_best_meal_activity_id_fkey"
+            columns: ["best_meal_activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_departure_summaries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_departure_summaries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_expenses: {
         Row: {
           actual_amount: number | null
@@ -4124,6 +4488,80 @@ export type Database = {
           },
           {
             foreignKeyName: "trip_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_feedback_responses: {
+        Row: {
+          activity_id: string | null
+          created_at: string
+          day_number: number | null
+          dismissed_at: string | null
+          id: string
+          location: Json | null
+          prompt_id: string | null
+          prompt_type: Database["public"]["Enums"]["feedback_prompt_type"]
+          responses: Json
+          submitted_at: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          created_at?: string
+          day_number?: number | null
+          dismissed_at?: string | null
+          id?: string
+          location?: Json | null
+          prompt_id?: string | null
+          prompt_type: Database["public"]["Enums"]["feedback_prompt_type"]
+          responses?: Json
+          submitted_at?: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string | null
+          created_at?: string
+          day_number?: number | null
+          dismissed_at?: string | null
+          id?: string
+          location?: Json | null
+          prompt_id?: string | null
+          prompt_type?: Database["public"]["Enums"]["feedback_prompt_type"]
+          responses?: Json
+          submitted_at?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_feedback_responses_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_feedback_responses_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "feedback_prompts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_feedback_responses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_feedback_responses_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
@@ -5868,6 +6306,19 @@ export type Database = {
         | "itinerary"
         | "other"
       expense_split_type: "equal" | "manual" | "percentage"
+      feedback_prompt_type:
+        | "quick_reaction"
+        | "day_summary"
+        | "restaurant_specific"
+        | "departure_summary"
+        | "one_week_followup"
+      feedback_question_type:
+        | "emoji_scale"
+        | "single_select"
+        | "multi_select"
+        | "text"
+        | "activity_pick"
+        | "rating_scale"
       finance_entry_source:
         | "stripe_webhook"
         | "manual"
@@ -6118,6 +6569,21 @@ export const Constants = {
         "other",
       ],
       expense_split_type: ["equal", "manual", "percentage"],
+      feedback_prompt_type: [
+        "quick_reaction",
+        "day_summary",
+        "restaurant_specific",
+        "departure_summary",
+        "one_week_followup",
+      ],
+      feedback_question_type: [
+        "emoji_scale",
+        "single_select",
+        "multi_select",
+        "text",
+        "activity_pick",
+        "rating_scale",
+      ],
       finance_entry_source: [
         "stripe_webhook",
         "manual",
