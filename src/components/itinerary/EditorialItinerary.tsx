@@ -48,6 +48,7 @@ import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
+import { preloadCostIndex, estimateCostSync } from '@/lib/cost-estimation';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
@@ -597,49 +598,64 @@ interface CostInfo {
   amount: number;
   isEstimated: boolean;
   estimateReason?: string;
+  confidence?: 'high' | 'medium' | 'low';
 }
 
+/**
+ * Get activity cost with defensible estimation using destination_cost_index
+ * Uses synchronous version for immediate rendering - cache preloaded on component mount
+ */
 function getActivityCostInfo(
   activity: EditorialActivity,
   travelers: number = 1,
-  budgetTier: string = 'moderate'
+  budgetTier: string = 'moderate',
+  destinationCity?: string,
+  destinationCountry?: string
 ): CostInfo {
-  // Check cost.amount first - this is explicit pricing
+  // Check cost.amount first - this is explicit pricing from venue data
   if (activity.cost?.amount !== undefined && activity.cost.amount >= 0) {
-    return { amount: activity.cost.amount, isEstimated: false };
+    return { amount: activity.cost.amount, isEstimated: false, confidence: 'high' };
   }
-  // Check estimatedCost - AI provided estimate
+  
+  // Check estimatedCost - AI-provided estimate during generation
   if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount >= 0) {
     return { 
       amount: activity.estimatedCost.amount, 
       isEstimated: true,
-      estimateReason: 'AI-estimated based on venue type'
+      estimateReason: 'AI-estimated based on venue type',
+      confidence: 'medium'
     };
   }
   
-  // Smart estimation based on category, travelers, and budget
+  // Use defensible cost estimation engine
   const category = activity.category || activity.type || 'activity';
-  const estimated = estimateCostByCategory(category, travelers, budgetTier);
+  const priceLevel = (activity as any).priceLevel || (activity as any).price_level;
   
-  // Determine estimate reason based on category
-  const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'coffee', 'cafe'].includes(category.toLowerCase());
-  const estimateReason = isDining 
-    ? `Est. ~$${Math.round(estimated / travelers)}/person for ${category} in this area`
-    : `Est. based on typical ${category} pricing`;
+  const result = estimateCostSync({
+    category,
+    city: destinationCity,
+    country: destinationCountry,
+    travelers,
+    budgetTier: budgetTier as 'budget' | 'moderate' | 'luxury',
+    priceLevel: priceLevel ? Number(priceLevel) : undefined,
+  });
   
   return { 
-    amount: estimated, 
-    isEstimated: true,
-    estimateReason
+    amount: result.amount, 
+    isEstimated: result.isEstimated,
+    estimateReason: result.reason,
+    confidence: result.confidence
   };
 }
 
 function getActivityCost(
   activity: EditorialActivity,
   travelers: number = 1,
-  budgetTier: string = 'moderate'
+  budgetTier: string = 'moderate',
+  destinationCity?: string,
+  destinationCountry?: string
 ): number {
-  return getActivityCostInfo(activity, travelers, budgetTier).amount;
+  return getActivityCostInfo(activity, travelers, budgetTier, destinationCity, destinationCountry).amount;
 }
 
 function getActivityType(activity: EditorialActivity): string {
@@ -667,8 +683,14 @@ function getActivityPhoto(activity: EditorialActivity): string | null {
   return null;
 }
 
-function getDayTotalCost(activities: EditorialActivity[], travelers: number = 1, budgetTier: string = 'moderate'): number {
-  return activities.reduce((sum, act) => sum + getActivityCost(act, travelers, budgetTier), 0);
+function getDayTotalCost(
+  activities: EditorialActivity[], 
+  travelers: number = 1, 
+  budgetTier: string = 'moderate',
+  destinationCity?: string,
+  destinationCountry?: string
+): number {
+  return activities.reduce((sum, act) => sum + getActivityCost(act, travelers, budgetTier, destinationCity, destinationCountry), 0);
 }
 
 // =============================================================================
@@ -814,6 +836,11 @@ export function EditorialItinerary({
     }
   }, [selectedDayIndex]);
 
+  // Preload cost index cache on mount for destination-aware pricing
+  useEffect(() => {
+    preloadCostIndex();
+  }, []);
+
   // Fetch payments on mount
   useEffect(() => {
     async function fetchPayments() {
@@ -854,8 +881,8 @@ export function EditorialItinerary({
     }
   }, [tripId]);
 
-  // Calculate totals with smart estimation
-  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier), 0);
+  // Calculate totals with smart estimation using destination-aware pricing
+  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry), 0);
   const flightCost = (flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0);
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   const totalCost = totalActivityCost + flightCost + hotelCost;
@@ -1935,6 +1962,7 @@ export function EditorialItinerary({
                 tripCurrency={tripCurrency}
                 displayCost={displayCost}
                 destination={destination}
+                destinationCountry={destinationCountry}
                 isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
                 isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                 isEditable={effectiveIsEditable}
@@ -4165,6 +4193,7 @@ interface DayCardProps {
   tripCurrency: string; // Currency for cost formatting
   displayCost: (amountInUSD: number) => number; // Convert USD to display currency
   destination: string; // For real photo lookup
+  destinationCountry?: string; // For cost estimation
   isExpanded: boolean;
   isRegenerating: boolean;
   isEditable: boolean;
@@ -4198,6 +4227,7 @@ function DayCard({
   tripCurrency,
   displayCost,
   destination,
+  destinationCountry,
   isExpanded,
   isRegenerating,
   isEditable,
@@ -4222,7 +4252,7 @@ function DayCard({
   onViewReviews,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = getDayTotalCost(day.activities, travelers, budgetTier);
+  const totalCost = getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);
@@ -4346,6 +4376,7 @@ function DayCard({
                     <ActivityRow
                       activity={activity}
                       destination={cleanDestination}
+                      destinationCountry={destinationCountry}
                       dayIndex={dayIndex}
                       activityIndex={activityIndex}
                       totalActivities={day.activities.length}
@@ -4422,6 +4453,7 @@ function DayCard({
 interface ActivityRowProps {
   activity: EditorialActivity;
   destination: string; // Add destination for real photo lookup
+  destinationCountry?: string; // For cost estimation
   dayIndex: number;
   activityIndex: number;
   totalActivities: number;
@@ -4451,6 +4483,7 @@ interface ActivityRowProps {
 function ActivityRow({
   activity,
   destination,
+  destinationCountry,
   dayIndex,
   activityIndex,
   totalActivities,
@@ -4480,7 +4513,7 @@ function ActivityRow({
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
   const reviewCount = getActivityReviewCount(activity);
-  const costInfo = getActivityCostInfo(activity, travelers, budgetTier);
+  const costInfo = getActivityCostInfo(activity, travelers, budgetTier, destination, destinationCountry);
   const cost = costInfo.amount;
   // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);

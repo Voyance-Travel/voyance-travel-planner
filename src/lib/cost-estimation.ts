@@ -1,0 +1,406 @@
+/**
+ * Defensible Cost Estimation Engine
+ * 
+ * Uses destination_cost_index table for location-aware pricing.
+ * Formula: (Category Base × Budget Multiplier × Destination Index) × (1 + Tax/Tip)
+ * 
+ * Resolution Priority:
+ * 1. Explicit cost from venue data
+ * 2. Google priceLevel mapping
+ * 3. Category base × destination index calculation
+ */
+
+import { supabase } from '@/integrations/supabase/client';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface CostIndex {
+  city: string;
+  country: string;
+  cost_multiplier: number;
+  breakfast_base_usd: number;
+  lunch_base_usd: number;
+  dinner_base_usd: number;
+  coffee_base_usd: number;
+  activity_base_usd: number;
+  museum_base_usd: number;
+  tour_base_usd: number;
+  transport_base_usd: number;
+  tax_tip_buffer: number;
+  confidence_score: number;
+}
+
+export interface CostEstimateResult {
+  amount: number;
+  currency: 'USD';
+  isEstimated: boolean;
+  confidence: 'high' | 'medium' | 'low';
+  source: 'explicit' | 'price_level' | 'category_estimate' | 'fallback';
+  reason: string;
+  perPerson?: number;
+}
+
+export interface EstimateParams {
+  category: string;
+  city?: string;
+  country?: string;
+  travelers?: number;
+  budgetTier?: 'budget' | 'moderate' | 'luxury';
+  priceLevel?: number; // Google Places 1-4
+  explicitCost?: number;
+}
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Budget tier multipliers
+const BUDGET_MULTIPLIERS: Record<string, number> = {
+  budget: 0.7,
+  moderate: 1.0,
+  luxury: 1.5,
+};
+
+// Google priceLevel to USD ranges (per person, moderate budget)
+const PRICE_LEVEL_RANGES: Record<number, { min: number; max: number }> = {
+  1: { min: 5, max: 15 },    // Inexpensive
+  2: { min: 15, max: 30 },   // Moderate
+  3: { min: 30, max: 60 },   // Expensive
+  4: { min: 60, max: 120 },  // Very Expensive
+};
+
+// Category to base field mapping
+const CATEGORY_TO_BASE_FIELD: Record<string, keyof CostIndex> = {
+  breakfast: 'breakfast_base_usd',
+  brunch: 'breakfast_base_usd',
+  lunch: 'lunch_base_usd',
+  dinner: 'dinner_base_usd',
+  dining: 'dinner_base_usd',
+  restaurant: 'dinner_base_usd',
+  coffee: 'coffee_base_usd',
+  cafe: 'coffee_base_usd',
+  activity: 'activity_base_usd',
+  attraction: 'activity_base_usd',
+  sightseeing: 'activity_base_usd',
+  museum: 'museum_base_usd',
+  gallery: 'museum_base_usd',
+  tour: 'tour_base_usd',
+  experience: 'tour_base_usd',
+  transport: 'transport_base_usd',
+  transfer: 'transport_base_usd',
+};
+
+// Default base prices (USD) when no destination index exists
+const DEFAULT_BASE_PRICES: CostIndex = {
+  city: '_default',
+  country: '_default',
+  cost_multiplier: 1.0,
+  breakfast_base_usd: 15,
+  lunch_base_usd: 25,
+  dinner_base_usd: 45,
+  coffee_base_usd: 5,
+  activity_base_usd: 30,
+  museum_base_usd: 20,
+  tour_base_usd: 75,
+  transport_base_usd: 15,
+  tax_tip_buffer: 0.18,
+  confidence_score: 0.5,
+};
+
+// ============================================================================
+// CACHE
+// ============================================================================
+
+// In-memory cache for cost indices (refreshes on page load)
+const costIndexCache = new Map<string, CostIndex>();
+let cacheInitialized = false;
+
+/**
+ * Initialize the cost index cache from Supabase
+ */
+async function initializeCache(): Promise<void> {
+  if (cacheInitialized) return;
+  
+  try {
+    const { data, error } = await supabase
+      .from('destination_cost_index')
+      .select('*');
+    
+    if (error) {
+      console.warn('Failed to load cost index, using defaults:', error);
+      return;
+    }
+    
+    if (data) {
+      data.forEach((row: CostIndex) => {
+        const key = `${row.city.toLowerCase()}|${row.country.toLowerCase()}`;
+        costIndexCache.set(key, row);
+      });
+      cacheInitialized = true;
+      console.log(`Cost index cache loaded: ${costIndexCache.size} destinations`);
+    }
+  } catch (err) {
+    console.warn('Cost index cache init failed:', err);
+  }
+}
+
+/**
+ * Get cost index for a destination (city/country)
+ */
+async function getCostIndex(city?: string, country?: string): Promise<CostIndex> {
+  await initializeCache();
+  
+  if (!city && !country) {
+    return costIndexCache.get('_default|_default') || DEFAULT_BASE_PRICES;
+  }
+  
+  // Try exact match
+  const exactKey = `${(city || '').toLowerCase()}|${(country || '').toLowerCase()}`;
+  if (costIndexCache.has(exactKey)) {
+    return costIndexCache.get(exactKey)!;
+  }
+  
+  // Try city-only match (for city-states like Singapore)
+  if (city) {
+    for (const [key, value] of costIndexCache.entries()) {
+      if (key.startsWith(`${city.toLowerCase()}|`)) {
+        return value;
+      }
+    }
+  }
+  
+  // Try country-only match (use first city in that country as proxy)
+  if (country) {
+    for (const [key, value] of costIndexCache.entries()) {
+      if (key.endsWith(`|${country.toLowerCase()}`)) {
+        return value;
+      }
+    }
+  }
+  
+  // Return default
+  return costIndexCache.get('_default|_default') || DEFAULT_BASE_PRICES;
+}
+
+// ============================================================================
+// MAIN ESTIMATION FUNCTION
+// ============================================================================
+
+/**
+ * Estimate cost for an activity with defensible logic
+ * 
+ * @param params - Estimation parameters
+ * @returns Cost estimate with confidence and explanation
+ */
+export async function estimateCost(params: EstimateParams): Promise<CostEstimateResult> {
+  const {
+    category,
+    city,
+    country,
+    travelers = 1,
+    budgetTier = 'moderate',
+    priceLevel,
+    explicitCost,
+  } = params;
+  
+  // Priority 1: Explicit cost
+  if (explicitCost !== undefined && explicitCost >= 0) {
+    return {
+      amount: explicitCost,
+      currency: 'USD',
+      isEstimated: false,
+      confidence: 'high',
+      source: 'explicit',
+      reason: 'Verified venue pricing',
+    };
+  }
+  
+  // Get destination cost index
+  const costIndex = await getCostIndex(city, country);
+  const destinationName = city || country || 'this area';
+  
+  // Priority 2: Google priceLevel
+  if (priceLevel && priceLevel >= 1 && priceLevel <= 4) {
+    const range = PRICE_LEVEL_RANGES[priceLevel];
+    const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
+    const midpoint = (range.min + range.max) / 2;
+    const perPerson = Math.round(midpoint * budgetMult * costIndex.cost_multiplier);
+    const total = perPerson * travelers;
+    const withTax = Math.round(total * (1 + costIndex.tax_tip_buffer) / 5) * 5;
+    
+    return {
+      amount: withTax,
+      currency: 'USD',
+      isEstimated: true,
+      confidence: 'medium',
+      source: 'price_level',
+      reason: `Based on venue price level (${priceLevel}/4) in ${destinationName}`,
+      perPerson,
+    };
+  }
+  
+  // Priority 3: Category-based estimation
+  const normalizedCategory = category.toLowerCase().trim();
+  const baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  const basePrice = costIndex[baseField] as number;
+  
+  const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
+  const perPerson = Math.round(basePrice * budgetMult * costIndex.cost_multiplier);
+  
+  // Determine if this is a per-person category (dining) or flat fee (museum entry)
+  const isPerPerson = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant', 'coffee', 'cafe'].includes(normalizedCategory);
+  const subtotal = isPerPerson ? perPerson * travelers : perPerson;
+  
+  // Apply tax/tip buffer for dining
+  const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant'].includes(normalizedCategory);
+  const taxMultiplier = isDining ? (1 + costIndex.tax_tip_buffer) : 1.0;
+  const total = Math.round((subtotal * taxMultiplier) / 5) * 5;
+  
+  // Confidence based on destination data quality
+  const confidence: 'high' | 'medium' | 'low' = 
+    costIndex.confidence_score >= 0.8 ? 'high' :
+    costIndex.confidence_score >= 0.6 ? 'medium' : 'low';
+  
+  // Build reason string
+  let reason: string;
+  if (isDining) {
+    reason = `~$${perPerson}/person for ${normalizedCategory} in ${destinationName}`;
+  } else {
+    reason = `Typical ${normalizedCategory} cost in ${destinationName}`;
+  }
+  
+  return {
+    amount: total,
+    currency: 'USD',
+    isEstimated: true,
+    confidence,
+    source: 'category_estimate',
+    reason,
+    perPerson: isPerPerson ? perPerson : undefined,
+  };
+}
+
+/**
+ * Synchronous estimation for immediate use (uses cached data or defaults)
+ * Call initializeCache() early in app lifecycle for best results
+ */
+export function estimateCostSync(params: EstimateParams): CostEstimateResult {
+  const {
+    category,
+    city,
+    country,
+    travelers = 1,
+    budgetTier = 'moderate',
+    priceLevel,
+    explicitCost,
+  } = params;
+  
+  // Priority 1: Explicit cost
+  if (explicitCost !== undefined && explicitCost >= 0) {
+    return {
+      amount: explicitCost,
+      currency: 'USD',
+      isEstimated: false,
+      confidence: 'high',
+      source: 'explicit',
+      reason: 'Verified venue pricing',
+    };
+  }
+  
+  // Get cached cost index or default
+  const exactKey = `${(city || '').toLowerCase()}|${(country || '').toLowerCase()}`;
+  let costIndex = costIndexCache.get(exactKey);
+  
+  // Try partial matches
+  if (!costIndex && city) {
+    for (const [key, value] of costIndexCache.entries()) {
+      if (key.startsWith(`${city.toLowerCase()}|`)) {
+        costIndex = value;
+        break;
+      }
+    }
+  }
+  if (!costIndex && country) {
+    for (const [key, value] of costIndexCache.entries()) {
+      if (key.endsWith(`|${country.toLowerCase()}`)) {
+        costIndex = value;
+        break;
+      }
+    }
+  }
+  costIndex = costIndex || DEFAULT_BASE_PRICES;
+  
+  const destinationName = city || country || 'this area';
+  
+  // Priority 2: Google priceLevel
+  if (priceLevel && priceLevel >= 1 && priceLevel <= 4) {
+    const range = PRICE_LEVEL_RANGES[priceLevel];
+    const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
+    const midpoint = (range.min + range.max) / 2;
+    const perPerson = Math.round(midpoint * budgetMult * costIndex.cost_multiplier);
+    const total = perPerson * travelers;
+    const withTax = Math.round(total * (1 + costIndex.tax_tip_buffer) / 5) * 5;
+    
+    return {
+      amount: withTax,
+      currency: 'USD',
+      isEstimated: true,
+      confidence: 'medium',
+      source: 'price_level',
+      reason: `Based on venue price level (${priceLevel}/4) in ${destinationName}`,
+      perPerson,
+    };
+  }
+  
+  // Priority 3: Category-based estimation
+  const normalizedCategory = category.toLowerCase().trim();
+  const baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  const basePrice = costIndex[baseField] as number;
+  
+  const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
+  const perPerson = Math.round(basePrice * budgetMult * costIndex.cost_multiplier);
+  
+  const isPerPerson = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant', 'coffee', 'cafe'].includes(normalizedCategory);
+  const subtotal = isPerPerson ? perPerson * travelers : perPerson;
+  
+  const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant'].includes(normalizedCategory);
+  const taxMultiplier = isDining ? (1 + costIndex.tax_tip_buffer) : 1.0;
+  const total = Math.round((subtotal * taxMultiplier) / 5) * 5;
+  
+  const confidence: 'high' | 'medium' | 'low' = 
+    costIndex.confidence_score >= 0.8 ? 'high' :
+    costIndex.confidence_score >= 0.6 ? 'medium' : 'low';
+  
+  let reason: string;
+  if (isDining) {
+    reason = `~$${perPerson}/person for ${normalizedCategory} in ${destinationName}`;
+  } else {
+    reason = `Typical ${normalizedCategory} cost in ${destinationName}`;
+  }
+  
+  return {
+    amount: total,
+    currency: 'USD',
+    isEstimated: true,
+    confidence,
+    source: 'category_estimate',
+    reason,
+    perPerson: isPerPerson ? perPerson : undefined,
+  };
+}
+
+/**
+ * Pre-warm the cache (call early in app lifecycle)
+ */
+export async function preloadCostIndex(): Promise<void> {
+  await initializeCache();
+}
+
+/**
+ * Get raw cost index for a destination (for debugging)
+ */
+export async function getDestinationCostIndex(city?: string, country?: string): Promise<CostIndex> {
+  return getCostIndex(city, country);
+}
