@@ -14,6 +14,7 @@ import QuizFeedback from '@/components/quiz/QuizFeedback';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
+import { useJourneyStore } from '@/stores/journey-store';
 import { 
   submitQuizComplete, 
   createQuizSession, 
