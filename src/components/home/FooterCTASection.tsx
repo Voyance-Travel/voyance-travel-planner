@@ -32,16 +32,6 @@ export default function FooterCTASection() {
           transition={{ duration: 0.6 }}
           className="text-center"
         >
-          {/* Playful emoji */}
-          <motion.div
-            initial={{ scale: 0 }}
-            whileInView={{ scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ type: "spring", delay: 0.2 }}
-            className="text-5xl mb-6"
-          >
-            🤔
-          </motion.div>
 
           {/* Headline */}
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground mb-4">
