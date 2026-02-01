@@ -191,6 +191,7 @@ function AnimatedRoutes() {
           <Route path="/trip/dashboard" element={<TripDashboard />} />
           <Route path="/trip/:tripId" element={<TripDetail />} />
           <Route path="/trip/:tripId/active" element={<ActiveTrip />} />
+          <Route path="/trip/:tripId/recap" element={<TripRecap />} />
           <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
           <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
           
