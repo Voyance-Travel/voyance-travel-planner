@@ -19,10 +19,10 @@ import type {
 
 export async function getActivePrompts(): Promise<FeedbackPrompt[]> {
   const { data, error } = await supabase
-    .from('feedback_prompts')
+    .from('feedback_prompts' as 'activity_feedback')
     .select('*')
-    .eq('is_active', true)
-    .order('priority', { ascending: false });
+    .eq('is_active' as never, true)
+    .order('priority' as never, { ascending: false });
 
   if (error) throw error;
   return (data || []) as unknown as FeedbackPrompt[];
