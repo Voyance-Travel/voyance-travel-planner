@@ -29,6 +29,7 @@ export const ROUTES = {
   WELCOME: '/welcome',
   START: '/start',
   QUIZ: '/quiz',
+  ONBOARD_CONVERSATION: '/onboard/conversation',
   
   // Profile
   PROFILE: {
