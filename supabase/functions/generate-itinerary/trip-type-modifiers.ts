@@ -22,6 +22,643 @@ export interface TripTypeModifier {
   upgradeExperiences?: boolean;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SOLO SOCIAL CALIBRATION - Different solo travelers have VERY different needs
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface SoloSocialCalibration {
+  socialLevel: 'high' | 'medium' | 'low' | 'solitude';
+  description: string;
+  include: string[];
+  avoid: string[];
+}
+
+export const soloSocialCalibration: Record<string, SoloSocialCalibration> = {
+  // ─────────────────────────────────────────────────────────────────────────
+  // HIGH SOCIAL - wants to meet people
+  // ─────────────────────────────────────────────────────────────────────────
+  social_butterfly: {
+    socialLevel: 'high',
+    description: 'Solo but SOCIAL - wants to meet people',
+    include: [
+      'Walking tours (meet other travelers)',
+      'Pub crawls',
+      'Hostel social events',
+      'Cooking classes with communal tables',
+      'Group food tours',
+      'Bar seating where you can chat',
+      'Communal dining experiences',
+      'Group day trips'
+    ],
+    avoid: [
+      'Solitary activities',
+      'Private experiences',
+      'Isolated restaurants'
+    ]
+  },
+
+  gap_year_graduate: {
+    socialLevel: 'high',
+    description: 'Classic backpacker solo - hostels, meeting travelers',
+    include: [
+      'Hostel with good social scene',
+      'Free walking tours',
+      'Pub crawls',
+      'Backpacker bars',
+      'Group activities',
+      'Communal kitchen cooking'
+    ],
+    avoid: [
+      'Expensive solo experiences',
+      'Isolating luxury'
+    ]
+  },
+
+  community_builder: {
+    socialLevel: 'high',
+    description: 'Solo but connecting - meaningful interactions',
+    include: [
+      'Volunteering opportunities',
+      'Community events',
+      'Local meetups',
+      'Walking tours with conversation',
+      'Cooking classes',
+      'Workshops with locals'
+    ],
+    avoid: [
+      'Purely solo experiences',
+      'Tourist traps'
+    ]
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // MEDIUM SOCIAL - open to meeting people but not seeking it
+  // ─────────────────────────────────────────────────────────────────────────
+  flexible_wanderer: {
+    socialLevel: 'medium',
+    description: 'Solo freedom with optional social',
+    include: [
+      'Activities that work alone OR social',
+      'Cafes where you might chat or not',
+      'Walking tours (can engage or just follow)',
+      'Markets (social but independent)'
+    ],
+    avoid: [
+      'Forced group bonding',
+      'Structured social activities'
+    ]
+  },
+
+  culinary_cartographer: {
+    socialLevel: 'medium',
+    description: 'Food-focused solo - counter seating, food tours',
+    include: [
+      'Counter seating restaurants (natural solo spot)',
+      'Food tours (social but food-focused)',
+      'Cooking classes (communal)',
+      'Chef\'s counter experiences',
+      'Markets (independent grazing)'
+    ],
+    avoid: [
+      'Romantic fine dining',
+      'Couples cooking classes'
+    ]
+  },
+
+  urban_nomad: {
+    socialLevel: 'medium',
+    description: 'City exploration solo - cafes, neighborhoods',
+    include: [
+      'Cafe culture (solo reading/working)',
+      'Neighborhood walks',
+      'Street food (easy solo)',
+      'Bar counters',
+      'Markets'
+    ],
+    avoid: [
+      'Formal restaurants',
+      'Forced group activities'
+    ]
+  },
+
+  cultural_anthropologist: {
+    socialLevel: 'medium',
+    description: 'Deep solo immersion - own pace, local conversations',
+    include: [
+      'Museums at your pace',
+      'Local neighborhood cafes',
+      'Walking tours with optional chat',
+      'Markets with vendors to talk to',
+      'Historical sites to explore alone'
+    ],
+    avoid: [
+      'Tourist groups that rush',
+      'Cookie-cutter experiences'
+    ]
+  },
+
+  bucket_list_conqueror: {
+    socialLevel: 'medium',
+    description: 'Solo bucket list - doing it MY way',
+    include: [
+      'Skip-the-line solo entry',
+      'Self-paced landmark visits',
+      'Photo spots (other tourists help with photos)',
+      'Efficient solo dining'
+    ],
+    avoid: [
+      'Slow group tours',
+      'Activities requiring partners'
+    ]
+  },
+
+  midlife_explorer: {
+    socialLevel: 'medium',
+    description: 'Solo rediscovery - meeting people optional',
+    include: [
+      'Quality solo experiences',
+      'Nice restaurants with bar seating',
+      'Small group tours',
+      'Wine tastings (social but optional)'
+    ],
+    avoid: [
+      'Youth hostel party scene',
+      'Forced social activities'
+    ]
+  },
+
+  digital_explorer: {
+    socialLevel: 'medium',
+    description: 'Solo but connected online - tech-friendly spaces',
+    include: [
+      'Great wifi cafes',
+      'Co-working spaces',
+      'Tech meetups (optional)',
+      'Gaming cafes',
+      'Solo-friendly unique experiences for content'
+    ],
+    avoid: [
+      'Off-grid experiences',
+      'No-wifi zones'
+    ]
+  },
+
+  adrenaline_architect: {
+    socialLevel: 'medium',
+    description: 'Solo adventure - personal challenge',
+    include: [
+      'Solo-friendly adventure activities',
+      'Self-guided hiking',
+      'Activity centers that cater to individuals',
+      'Challenges you can do alone'
+    ],
+    avoid: [
+      'Tandem activities',
+      'Partner-required experiences'
+    ]
+  },
+
+  balanced_story_collector: {
+    socialLevel: 'medium',
+    description: 'Balanced solo - mix of everything',
+    include: [
+      'Mix of solo and group options',
+      'Walking tours (optional engagement)',
+      'Cafes, markets, museums',
+      'Flexible dining options'
+    ],
+    avoid: [
+      'Rigid group schedules',
+      'Couples-only venues'
+    ]
+  },
+
+  romantic_curator: {
+    socialLevel: 'medium',
+    description: 'Solo self-romance - treating yourself',
+    include: [
+      'Self-care experiences',
+      'Nice dinners at bar seating',
+      'Spa treatments solo',
+      'Beautiful walks',
+      'Self-dates to lovely venues'
+    ],
+    avoid: [
+      'Obviously couples-only spots',
+      'Romantic duo experiences'
+    ]
+  },
+
+  family_architect: {
+    socialLevel: 'medium',
+    description: 'Parent escape - adult solo time',
+    include: [
+      'Adult-only experiences',
+      'Sleep in, brunch alone',
+      'Things you can\'t do with kids',
+      'Peaceful meals',
+      'Cultural experiences at your pace'
+    ],
+    avoid: [
+      'Kid-focused venues',
+      'Family activities (that\'s home)'
+    ]
+  },
+
+  retirement_ranger: {
+    socialLevel: 'medium',
+    description: 'Solo retirement adventure - your terms',
+    include: [
+      'Comfortable solo dining',
+      'Self-paced sightseeing',
+      'Group tours (optional socializing)',
+      'Accessible venues'
+    ],
+    avoid: [
+      'Youth-focused venues',
+      'Physical-demanding group activities'
+    ]
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // LOW SOCIAL - comfortable alone, not seeking interaction
+  // ─────────────────────────────────────────────────────────────────────────
+  slow_traveler: {
+    socialLevel: 'low',
+    description: 'Solo savoring - alone is the point',
+    include: [
+      'Cafes with books',
+      'Long solo lunches',
+      'Museums at own pace',
+      'Parks and gardens',
+      'Quiet restaurants with good solo seating'
+    ],
+    avoid: [
+      'Group tours',
+      'Social activities',
+      'Communal tables (unless wanted)'
+    ]
+  },
+
+  art_aficionado: {
+    socialLevel: 'low',
+    description: 'Solo art immersion - own pace, no conversation',
+    include: [
+      'Museums (hours alone)',
+      'Galleries (no one rushing you)',
+      'Bookshops',
+      'Cafe sketching',
+      'Architecture walks (self-guided)'
+    ],
+    avoid: [
+      'Group museum tours',
+      'Chatty experiences'
+    ]
+  },
+
+  sabbatical_scholar: {
+    socialLevel: 'low',
+    description: 'Solo learning - libraries, courses, thinking',
+    include: [
+      'Libraries',
+      'Bookshops',
+      'Lectures (listening, not socializing)',
+      'Museums',
+      'Cafes for reading/writing'
+    ],
+    avoid: [
+      'Party scenes',
+      'Social-focused activities'
+    ]
+  },
+
+  collection_curator: {
+    socialLevel: 'low',
+    description: 'Solo deep dive - focused on interest, not people',
+    include: [
+      'Specialty museums',
+      'Expert shops',
+      'Focused experiences',
+      'No distraction from passion'
+    ],
+    avoid: [
+      'Generalist group tours',
+      'Social activities unrelated to interest'
+    ]
+  },
+
+  luxury_luminary: {
+    socialLevel: 'low',
+    description: 'Solo luxury - treating yourself',
+    include: [
+      'Chef\'s counter (premium solo spot)',
+      'Spa (solo pampering)',
+      'Private experiences',
+      'Best tables (solo doesn\'t mean bad table)',
+      'Concierge-arranged experiences'
+    ],
+    avoid: [
+      'Group tours',
+      'Budget social options'
+    ]
+  },
+
+  status_seeker: {
+    socialLevel: 'low',
+    description: 'Solo prestige - VIP treatment for one',
+    include: [
+      'VIP experiences',
+      'Premium solo seating',
+      'Exclusive access',
+      'Best of everything for one'
+    ],
+    avoid: [
+      'Group budget options',
+      'Shared experiences'
+    ]
+  },
+
+  eco_ethicist: {
+    socialLevel: 'low',
+    description: 'Solo eco travel - nature and meaning',
+    include: [
+      'Nature experiences',
+      'Sustainable venues',
+      'Eco-lodges',
+      'Conservation activities',
+      'Quiet natural spaces'
+    ],
+    avoid: [
+      'Crowded tourist spots',
+      'Wasteful venues'
+    ]
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SOLITUDE SEEKING - alone time is the point
+  // ─────────────────────────────────────────────────────────────────────────
+  zen_seeker: {
+    socialLevel: 'solitude',
+    description: 'Solo spiritual journey - silence is golden',
+    include: [
+      'Meditation retreats',
+      'Silent walks',
+      'Temple visits (alone)',
+      'Nature solitude',
+      'Mindful solo dining'
+    ],
+    avoid: [
+      'Group activities',
+      'Social dining',
+      'Noise',
+      'Crowds'
+    ]
+  },
+
+  healing_journeyer: {
+    socialLevel: 'solitude',
+    description: 'Solo healing - solitude as medicine',
+    include: [
+      'Nature alone',
+      'Quiet cafes',
+      'Gentle solo activities',
+      'Journaling spots',
+      'Peaceful walks'
+    ],
+    avoid: [
+      'Forced social interaction',
+      'Party scenes',
+      'Crowded activities'
+    ]
+  },
+
+  wilderness_pioneer: {
+    socialLevel: 'solitude',
+    description: 'Solo wilderness - self-reliance',
+    include: [
+      'Solo hiking',
+      'Camping alone',
+      'Nature immersion',
+      'Wildlife watching',
+      'Self-sufficient experiences'
+    ],
+    avoid: [
+      'Group tours',
+      'Social activities',
+      'Urban experiences'
+    ]
+  },
+
+  beach_therapist: {
+    socialLevel: 'solitude',
+    description: 'Solo beach - ocean therapy alone',
+    include: [
+      'Beach lounging (solo)',
+      'Ocean swimming',
+      'Sunset watching',
+      'Casual beachside dining',
+      'Reading by the water'
+    ],
+    avoid: [
+      'Beach parties',
+      'Group water sports',
+      'Social beach clubs'
+    ]
+  },
+
+  retreat_regular: {
+    socialLevel: 'solitude',
+    description: 'Solo wellness - personal restoration',
+    include: [
+      'Spa treatments',
+      'Solo yoga',
+      'Personal wellness',
+      'Quiet healthy dining'
+    ],
+    avoid: [
+      'Group wellness (unless wanted)',
+      'Social retreats'
+    ]
+  }
+};
+
+/**
+ * Build comprehensive solo trip prompt based on archetype
+ */
+export function buildSoloTripPrompt(archetype: string): string {
+  const calibration = soloSocialCalibration[archetype];
+  const socialLevel = calibration?.socialLevel || 'medium';
+  
+  const socialGuidance: Record<string, string> = {
+    'high': `
+THIS SOLO TRAVELER WANTS TO MEET PEOPLE.
+
+Include:
+- Walking tours where they'll meet other travelers
+- Hostel social events or pub crawls
+- Communal dining experiences
+- Group activities
+- Bar seating where conversation happens
+
+They're solo by circumstance or choice, but they're SOCIAL.
+`,
+    'medium': `
+THIS SOLO TRAVELER IS OPEN TO EITHER.
+
+Include:
+- Activities that work alone OR could turn social
+- Walking tours (can engage or just follow)
+- Communal tables (might chat, might not)
+- Bar seating (option to talk or not)
+
+They enjoy their independence but won't avoid people.
+`,
+    'low': `
+THIS SOLO TRAVELER PREFERS INDEPENDENCE.
+
+Include:
+- Self-paced activities (museums, galleries)
+- Quiet cafes with good solo seating
+- Solo-appropriate dining (not awkward alone)
+
+They're not antisocial, just not seeking interaction.
+`,
+    'solitude': `
+THIS SOLO TRAVELER SEEKS SOLITUDE.
+
+Include:
+- Peaceful, quiet activities
+- Nature and contemplative spaces
+- No group activities unless specifically requested
+- Solo dining that doesn't feel exposed
+
+Alone time is the POINT, not a compromise.
+`
+  };
+
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         TRIP TYPE: SOLO                              ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+This person is traveling ALONE. This is not a couples trip with one person.
+
+═══════════════════════════════════════════════════════════════════════
+WHAT SOLO TRAVEL MEANS
+═══════════════════════════════════════════════════════════════════════
+
+SOLO TRAVEL IS:
+✓ Complete freedom - no compromise
+✓ Your exact pace
+✓ Independence celebrated
+✓ Self-discovery
+✓ Flexibility
+
+SOLO TRAVEL IS NOT:
+✗ Lonely or sad
+✗ Needing to be "fixed" with social activities
+✗ A couples trip minus one person
+✗ Settling for less
+
+CELEBRATE their solo travel. Don't apologize for it.
+
+═══════════════════════════════════════════════════════════════════════
+SOCIAL CALIBRATION: ${socialLevel.toUpperCase()}
+═══════════════════════════════════════════════════════════════════════
+
+${socialGuidance[socialLevel] || socialGuidance['medium']}
+
+${calibration?.include ? `
+INCLUDE FOR THIS SOLO TRAVELER:
+${calibration.include.map(i => `• ${i}`).join('\n')}
+` : ''}
+
+${calibration?.avoid ? `
+AVOID FOR THIS SOLO TRAVELER:
+${calibration.avoid.map(a => `• ${a}`).join('\n')}
+` : ''}
+
+═══════════════════════════════════════════════════════════════════════
+SOLO DINING REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+EVERY meal must be solo-friendly. Suggest:
+
+✓ Counter seating (ramen, sushi bars, tapas counters)
+✓ Communal tables (might meet people, no pressure)
+✓ Casual spots (trattorias, bistros - less formal)
+✓ Food markets and street food (no seating pressure)
+✓ Cafes with good solo atmosphere
+✓ Wine bars with bar seating
+✓ Lunch spots (more acceptable solo dining)
+
+NEVER suggest:
+✗ Romantic restaurants with 2-top tables
+✗ Fine dining that feels awkward alone
+✗ Places where everyone is clearly on dates
+✗ "Perfect for couples" venues
+
+When describing restaurants, mention:
+"Counter seating perfect for solo diners"
+"Casual enough to enjoy alone with a book"
+"Communal tables where you might meet other travelers"
+
+═══════════════════════════════════════════════════════════════════════
+SOLO-FRIENDLY ACTIVITIES
+═══════════════════════════════════════════════════════════════════════
+
+GREAT SOLO:
+• Museums (your pace, no one rushing you)
+• Walking tours (can be social or just follow along)
+• Food tours (structured social, easy for solo)
+• Markets (wander alone, graze solo)
+• Cafes (read, write, watch the world)
+• Parks and gardens
+• Self-guided neighborhood walks
+• Yoga/fitness classes (group but independent)
+• Counter-seating restaurants
+• Wine bars
+
+AWKWARD SOLO:
+• Couples cooking classes
+• Romantic boat rides
+• Couples spa packages
+• Activities requiring pairs
+• Fine dining at romantic tables
+• Tandem anything
+
+═══════════════════════════════════════════════════════════════════════
+SAFETY CONSIDERATIONS
+═══════════════════════════════════════════════════════════════════════
+
+For evening activities:
+- Recommend well-lit, populated areas
+- Note safe neighborhoods for walking alone at night
+- Suggest earlier timing if area is less safe late
+- Mention transport options (not walking alone through empty areas)
+
+═══════════════════════════════════════════════════════════════════════
+FREEDOM EMPHASIS
+═══════════════════════════════════════════════════════════════════════
+
+The POINT of solo travel is freedom. Include:
+
+- Unstructured time blocks ("do whatever you want")
+- Permission language ("if you feel like it", "or skip and wander")
+- Flexibility ("stay longer if you love it")
+- No obligation ("no reservations needed")
+
+Phrases to use:
+"Take as long as you want"
+"No one's waiting"
+"Your pace exactly"
+"Change plans if you feel like it"
+"Sleep in if you want"
+
+═══════════════════════════════════════════════════════════════════════
+`;
+}
+
 export const tripTypeModifiers: Record<string, TripTypeModifier> = {
   // ============ CELEBRATIONS ============
 
@@ -153,38 +790,20 @@ DO NOT:
 
   solo: {
     name: "Solo Trip",
-    description: "Traveling alone",
+    description: "Traveling alone - the ultimate freedom",
     mustInclude: [
-      "Solo-friendly restaurants (counter seating, communal tables)",
-      "Safe neighborhoods and transport",
-      "Optional social opportunities (if Social Butterfly) or solitude (if not)"
+      "Solo-friendly dining at EVERY meal (counter seating, communal tables, casual spots)",
+      "Activities that work well for one person",
+      "Safe neighborhoods and well-lit evening routes",
+      "Freedom/unstructured time blocks",
+      "Social calibration based on archetype (social vs solitude)"
     ],
-    atmosphere: "Empowering, safe, flexible. Solo travel is freedom, not loneliness.",
-    promptAddition: `
-=== TRIP TYPE: SOLO ===
-
-This is a SOLO trip. One person traveling alone.
-
-Include:
-- Solo-friendly dining (counter seating, casual spots, food markets)
-- Safe areas and well-lit evening routes
-- Flexible timing (no need to coordinate)
-- Activities that work alone
-
-Adjust based on archetype:
-- Social Butterfly solo = walking tours, group activities, hostel social events, pub crawls
-- Slow Traveler solo = cafes with books, museums at own pace, peaceful wandering
-- Flexible Wanderer solo = maximum freedom, no structure needed
-
-DO NOT:
-- Suggest "romantic sunset" or couples activities
-- Assume they're lonely or need to meet people (unless Social Butterfly)
-- Recommend restaurants that don't seat solo diners well
-- Schedule activities requiring partners
-`,
+    atmosphere: "Empowering, safe, flexible. Solo travel is FREEDOM, not loneliness. Celebrate it.",
+    promptAddition: '', // Will be built dynamically with buildSoloTripPrompt()
     frequency: {
-      soloFriendlyDining: 'all meals',
-      socialOpportunity: 'optional based on archetype'
+      soloFriendlyDining: 'all meals - EVERY meal must have solo-friendly note',
+      freedomBlock: 'daily - unstructured time for spontaneity',
+      safeEvening: 'all evening activities in well-lit, populated areas'
     },
     pacingModifier: 0
   },
@@ -1106,36 +1725,47 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // SOLO - All 27 Archetypes
+    // SOLO - All 27 Archetypes (with rich social calibration)
     // ═══════════════════════════════════════════════════════════════
     solo: {
-      cultural_anthropologist: "Deep solo immersion - museums at own pace, conversations with locals, no compromise.",
-      urban_nomad: "Solo city freedom - complete independence, own discoveries, own timing.",
-      wilderness_pioneer: "Solo wilderness - self-reliance, solo hiking, camping alone, personal challenge.",
-      digital_explorer: "Solo but connected - gaming cafes, sharing online, solo-friendly tech spots.",
-      flexible_wanderer: "Ultimate solo freedom - no compromise ever, complete spontaneity.",
-      social_butterfly: "Solo but social - walking tours, hostel events, pub crawls, meeting travelers.",
-      family_architect: "Parent's solo escape - rest, adult activities, recharge alone.",
-      romantic_curator: "Solo self-romance - treating yourself, self-dates, self-love trip.",
-      community_builder: "Solo volunteering - meaningful connections, giving back alone.",
-      bucket_list_conqueror: "Solo bucket list - doing it YOUR way, no compromise, your pace.",
-      adrenaline_architect: "Solo adventure - personal challenges, self-reliance, proving yourself.",
-      collection_curator: "Solo deep dive - full focus on your interest, no distraction from others.",
-      status_seeker: "Solo luxury - treating yourself, indulgence without sharing.",
-      zen_seeker: "Solo spiritual journey - meditation retreat, silent time, inner focus.",
-      retreat_regular: "Solo wellness - spa alone, yoga retreat, complete self-care.",
-      beach_therapist: "Solo beach - reading, swimming, complete relaxation alone.",
-      slow_traveler: "Solo slow travel - own pace, no negotiation, pure freedom.",
-      culinary_cartographer: "Solo food journey - counter seating, food tours, cooking classes.",
-      art_aficionado: "Solo art immersion - hours in museums, own pace, no rushing for anyone.",
-      luxury_luminary: "Solo luxury - complete self-indulgence, treating yourself to the best.",
-      eco_ethicist: "Solo eco travel - low impact, meaningful connections, nature.",
-      gap_year_graduate: "Classic solo backpacking - hostels, meeting travelers, cheap eats.",
-      midlife_explorer: "Solo rediscovery - finding yourself, new experiences, total freedom.",
-      sabbatical_scholar: "Solo study - libraries, courses, intellectual exploration alone.",
-      healing_journeyer: "Solo healing - solitude as medicine, nature, reflection, space.",
-      retirement_ranger: "Solo adventure - finally doing exactly what YOU want.",
-      balanced_story_collector: "Solo exploration - mix of everything, completely own pace."
+      // EXPLORERS
+      cultural_anthropologist: "Deep solo immersion - museums YOUR pace, conversations with locals, no partner dragging you away from what interests YOU. Counter seating at local spots.",
+      urban_nomad: "Ultimate city freedom - walk where you want, stop when you want, discover YOUR city. Counter seating, cafe people-watching, neighborhood wandering.",
+      wilderness_pioneer: "Solo wilderness challenge - self-reliance, proving yourself, nature on your terms. Hut-to-hut hiking, camping alone, personal triumph.",
+      digital_explorer: "Solo but connected - great wifi cafes, gaming spots that work alone, shareable moments for content. Tech-friendly solo venues.",
+      flexible_wanderer: "Peak solo freedom - zero compromise, follow your whims, change plans whenever. This is what solo travel is FOR. No obligations, total spontaneity.",
+
+      // CONNECTORS
+      social_butterfly: "Solo but MEETING PEOPLE - walking tours, pub crawls, hostel events, food tours. You're alone but you won't be lonely. Communal tables, group activities.",
+      family_architect: "Parent solo escape - adult time, sleep in, eat what YOU want, remember who you were before kids. Adult restaurants, peaceful mornings.",
+      romantic_curator: "Solo self-romance - treating yourself, nice dinners alone (good bar seating), solo spa day. Self-love trip, self-dates to lovely venues.",
+      community_builder: "Solo volunteering - meaningful solo travel, connecting through giving back, locals over tourists. Community kitchens, local projects.",
+
+      // ACHIEVERS  
+      bucket_list_conqueror: "Solo bucket list efficiency - no compromise, YOUR priorities, YOUR pace. Skip what doesn't interest you. Skip-the-line solo entry.",
+      adrenaline_architect: "Solo adventure proving ground - personal challenges, self-reliance, your limits not someone else's. Solo-friendly adventure operators.",
+      collection_curator: "Solo deep dive - FULL focus on your interest. No one bored by your passion. Hours in one museum if you want. Specialty shops at your pace.",
+      status_seeker: "Solo luxury treating yourself - chef's counter (premium solo spot), spa, best experiences for one. VIP doesn't require pairs.",
+
+      // RESTORERS
+      zen_seeker: "Solo spiritual journey - meditation retreat, temple solitude, silence. Alone is the practice. Peaceful cafes, mindful walks, inner focus.",
+      retreat_regular: "Solo wellness reset - spa treatments, yoga, personal restoration. Healing happens alone. No one else's schedule.",
+      beach_therapist: "Solo beach therapy - ocean, book, napping, eating when hungry. Simple solo paradise. Casual beachside cafes, sunset watching alone.",
+      slow_traveler: "Ultimate solo slow travel - no negotiation about pace. YOUR long coffee. YOUR 2-hour lunch. YOUR nap. Cafes with books, parks, gardens.",
+
+      // CURATORS
+      culinary_cartographer: "Solo food journey - counter seating heaven (sushi bars, tapas counters), food tours, markets. Food people understand solo diners. Chef's table for one.",
+      art_aficionado: "Solo art immersion - hours in front of one painting if you want. No one saying 'ready to go?' Museum heaven, gallery wandering, bookshops.",
+      luxury_luminary: "Solo luxury indulgence - treat yourself to the best. Chef's counter, spa day, premium everything for one. Solo doesn't mean lesser experience.",
+
+      // TRANSFORMERS
+      eco_ethicist: "Solo eco travel - minimal footprint, meaningful solo connections with nature and locals. Sustainable lodges, conservation experiences, quiet impact.",
+      gap_year_graduate: "Classic solo backpacking - hostels with social scene, meeting travelers, cheap eats, freedom. Pub crawls, free walking tours, communal spaces.",
+      midlife_explorer: "Solo rediscovery - finding yourself again, new experiences, complete freedom to reinvent. Quality solo dining, thoughtful experiences.",
+      sabbatical_scholar: "Solo intellectual journey - libraries, bookshops, courses. Learning alone is learning best. Quiet cafes for reading/writing.",
+      healing_journeyer: "Solo healing journey - solitude as medicine. Space to feel. Nature. Journaling spots. Gentle cafes. No forced interaction. Peace.",
+      retirement_ranger: "Solo retirement adventure - finally doing exactly what YOU want. No compromise. Your time. Comfortable solo dining, accessible pacing.",
+      balanced_story_collector: "Balanced solo trip - mix of activities, some social options, complete flexibility. Walking tours optional, good cafes, own rhythm."
     },
 
     // ═══════════════════════════════════════════════════════════════
@@ -1477,17 +2107,23 @@ export function buildTripTypePromptSection(
 ): string {
   const modifier = getTripTypeModifier(tripType);
   const interaction = getTripTypeInteraction(tripType || 'none', archetype);
+  const normalizedType = (tripType || '').toLowerCase().replace(/[\s-]+/g, '_');
 
   if (modifier.name === 'Standard Trip' && !interaction) {
     return ''; // No special trip type guidance needed
   }
+
+  // For solo trips, use the comprehensive buildSoloTripPrompt function
+  const promptContent = normalizedType === 'solo' 
+    ? buildSoloTripPrompt(archetype)
+    : modifier.promptAddition;
 
   let section = `
 ══════════════════════════════════════════════════════════════════════
                           TRIP TYPE REQUIREMENTS
 ══════════════════════════════════════════════════════════════════════
 
-${modifier.promptAddition}
+${promptContent}
 `;
 
   // Add frequency rules
@@ -1540,7 +2176,7 @@ Elevate experiences within the stated budget tier. Choose the BEST options at th
   }
 
   // Add critical compliance check based on trip type category
-  const normalizedType = (tripType || '').toLowerCase().replace(/[\s-]+/g, '_');
+  // (normalizedType already defined at start of function)
   
   // Group trips
   const groupTripTypes = ['guys_trip', 'girls_trip', 'family', 'bachelorette', 'bachelor'];
@@ -1640,6 +2276,58 @@ This is a BLEISURE trip. The itinerary MUST:
 ⚠️ VIOLATION CHECK:
 If activities require too much time or travel = REGENERATE
 The LIMITED FREE TIME reality must be respected.
+`;
+  }
+
+  // SOLO trips - comprehensive compliance check
+  if (normalizedType === 'solo') {
+    const calibration = soloSocialCalibration[archetype];
+    const socialLevel = calibration?.socialLevel || 'medium';
+    
+    section += `
+═══════════════════════════════════════════════════════════════════════
+              CRITICAL: SOLO TRIP COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+This is a SOLO trip. Before finalizing, verify:
+
+☐ Are ALL restaurants solo-friendly (counter seating, casual, communal)?
+  - Every meal must have explicit solo-friendly note
+  - No romantic fine dining, no couple-oriented venues
+  
+☐ Are activities appropriate for one person?
+  - No couples cooking classes, romantic boat rides, tandem activities
+  - Activities should feel natural alone, not awkward
+  
+☐ Is social calibration respected (${socialLevel.toUpperCase()})?
+  ${socialLevel === 'high' ? '- Include walking tours, group activities, social opportunities' : ''}
+  ${socialLevel === 'medium' ? '- Activities work alone OR could turn social' : ''}
+  ${socialLevel === 'low' ? '- Self-paced activities, no forced interaction' : ''}
+  ${socialLevel === 'solitude' ? '- Peaceful, quiet activities, solitude preserved' : ''}
+  
+☐ Is there unstructured "freedom" time?
+  - Include phrases like "or skip and wander", "take as long as you want"
+  - At least one "do whatever you want" block daily
+  
+☐ Does the itinerary CELEBRATE solo travel, not apologize for it?
+  - No language suggesting they're "alone" in a sad way
+  - Emphasize freedom, no compromise, their exact pace
+  
+☐ Are evening activities in safe, comfortable areas?
+  - Well-lit, populated neighborhoods
+  - Comfortable for walking alone
+  
+☐ Would a solo traveler look at this and think "this is FOR me"?
+
+⚠️ VIOLATION CHECK:
+- If any restaurant would feel awkward alone = REPLACE
+- If any activity requires a partner = REPLACE  
+- If the itinerary looks like a couples trip minus one person = REGENERATE
+- If there's no freedom/flexibility language = ADD IT
+
+The SOLO nature must be CELEBRATED and VISIBLE throughout.
+Do NOT use language like "romantic", "intimate", "together"
+DO use language like "your pace", "no rush", "freedom", "counter seating"
 `;
   }
 
