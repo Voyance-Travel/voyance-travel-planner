@@ -6,7 +6,13 @@
  * The final scores represent the user's position on each trait dimension.
  */
 
-import quizConfig from '@/config/quiz-questions-v1.json';
+import quizConfigRaw from '@/config/quiz-questions-v2.json';
+
+// Type assertion for the config
+const quizConfig = quizConfigRaw as typeof quizConfigRaw & {
+  traitDefinitions: Record<string, { description: string; dimension: string }>;
+  dimensionWeights: Record<string, { weight: number; description: string }>;
+};
 
 // Type definitions
 export interface TraitMapping {
