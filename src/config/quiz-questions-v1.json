@@ -3,12 +3,12 @@
   "questions": [
     {
       "id": "q1",
-      "prompt": "Your ideal first morning of a trip looks like...",
+      "prompt": "It's your first morning. You're finally here. You...",
       "type": "single",
       "answers": [
         {
           "id": "a1",
-          "label": "A quiet balcony with coffee and silence",
+          "label": "Need that quiet coffee moment before the world starts",
           "mappings": [
             { "trait": "restorationSeeker", "weight": 0.9 },
             { "trait": "solitudeEmbracer", "weight": 0.7 },
@@ -19,7 +19,7 @@
         },
         {
           "id": "a2",
-          "label": "Already out exploring before breakfast",
+          "label": "Are already dressed—you were up before your alarm",
           "mappings": [
             { "trait": "adventureChaser", "weight": 0.9 },
             { "trait": "energySeeker", "weight": 0.7 },
@@ -30,7 +30,7 @@
         },
         {
           "id": "a3",
-          "label": "Researching local food spots while still in bed",
+          "label": "Are in bed googling 'best breakfast near me' (priorities)",
           "mappings": [
             { "trait": "culinaryExplorer", "weight": 0.85 },
             { "trait": "plannerMindset", "weight": 0.6 },
@@ -41,7 +41,7 @@
         },
         {
           "id": "a4",
-          "label": "Whatever the group decides",
+          "label": "Text the group: 'what's the plan?'",
           "mappings": [
             { "trait": "socialConnector", "weight": 0.8 },
             { "trait": "flexibilityEmbracer", "weight": 0.7 },
@@ -105,12 +105,12 @@
     },
     {
       "id": "q3",
-      "prompt": "Your travel budget mindset is...",
+      "prompt": "Someone asks about your travel budget. You think...",
       "type": "single",
       "answers": [
         {
           "id": "c1",
-          "label": "Experiences over expense—I'll stretch every dollar",
+          "label": "I'll make it work. Experiences over expense—every time",
           "mappings": [
             { "trait": "budgetConscious", "weight": 0.9 },
             { "trait": "authenticitySeeker", "weight": 0.6 },
@@ -121,7 +121,7 @@
         },
         {
           "id": "c2",
-          "label": "Balanced—splurge on what matters, save elsewhere",
+          "label": "I'll splurge on what matters and save on what doesn't",
           "mappings": [
             { "trait": "balancedSpender", "weight": 0.85 },
             { "trait": "intentionalTraveler", "weight": 0.7 },
@@ -132,7 +132,7 @@
         },
         {
           "id": "c3",
-          "label": "Comfort is non-negotiable—I invest in quality",
+          "label": "I've worked hard. I'm not skimping on comfort",
           "mappings": [
             { "trait": "comfortPrioritizer", "weight": 0.9 },
             { "trait": "luxurySeeker", "weight": 0.7 },
@@ -143,7 +143,7 @@
         },
         {
           "id": "c4",
-          "label": "Money is no object when I travel",
+          "label": "Budget? When I travel, I don't think about budget",
           "mappings": [
             { "trait": "luxurySeeker", "weight": 0.95 },
             { "trait": "statusSeeker", "weight": 0.6 },
@@ -156,12 +156,12 @@
     },
     {
       "id": "q4",
-      "prompt": "Your ideal travel pace is...",
+      "prompt": "It's 2pm and you're fading. You...",
       "type": "single",
       "answers": [
         {
           "id": "d1",
-          "label": "Slow and immersive—one place, deeply",
+          "label": "Find a café and people-watch for an hour. No rush",
           "mappings": [
             { "trait": "slowTraveler", "weight": 0.95 },
             { "trait": "authenticitySeeker", "weight": 0.7 },
@@ -172,7 +172,7 @@
         },
         {
           "id": "d2",
-          "label": "Active—sunrise to sunset with activities",
+          "label": "Push through—I'll sleep when I'm dead",
           "mappings": [
             { "trait": "energySeeker", "weight": 0.9 },
             { "trait": "adventureChaser", "weight": 0.75 },
@@ -183,7 +183,7 @@
         },
         {
           "id": "d3",
-          "label": "Flexible—some plans, lots of spontaneity",
+          "label": "Coffee, then see what happens",
           "mappings": [
             { "trait": "flexibilityEmbracer", "weight": 0.85 },
             { "trait": "balancedSpender", "weight": 0.5 },
@@ -194,7 +194,7 @@
         },
         {
           "id": "d4",
-          "label": "Relaxed—I'm on vacation, minimal agenda",
+          "label": "Head back to the hotel for a proper nap",
           "mappings": [
             { "trait": "restorationSeeker", "weight": 0.9 },
             { "trait": "comfortPrioritizer", "weight": 0.7 },
@@ -207,12 +207,12 @@
     },
     {
       "id": "q5",
-      "prompt": "When planning a trip, you typically...",
+      "prompt": "You see a long line outside a famous restaurant. You...",
       "type": "single",
       "answers": [
         {
           "id": "e1",
-          "label": "Research everything and create detailed itineraries",
+          "label": "Get in line. It's famous for a reason",
           "mappings": [
             { "trait": "plannerMindset", "weight": 0.95 },
             { "trait": "controlSeeker", "weight": 0.7 },
@@ -223,7 +223,7 @@
         },
         {
           "id": "e2",
-          "label": "Book the basics, figure out the rest on the ground",
+          "label": "Keep walking. Life's too short to wait",
           "mappings": [
             { "trait": "flexibilityEmbracer", "weight": 0.8 },
             { "trait": "adaptableTraveler", "weight": 0.7 },
@@ -234,7 +234,7 @@
         },
         {
           "id": "e3",
-          "label": "Prefer someone else to handle the planning",
+          "label": "Google if there's a reservation hack",
           "mappings": [
             { "trait": "delegator", "weight": 0.85 },
             { "trait": "comfortPrioritizer", "weight": 0.6 },
@@ -245,14 +245,14 @@
         },
         {
           "id": "e4",
-          "label": "Completely spontaneous—book a flight and go",
+          "label": "Wonder what the locals eat instead",
           "mappings": [
             { "trait": "spontaneousTraveler", "weight": 0.95 },
             { "trait": "adventureChaser", "weight": 0.7 },
-            { "trait": "thrillSeeker", "weight": 0.6 }
+            { "trait": "authenticitySeeker", "weight": 0.8 }
           ],
           "toneTags": ["impulsive", "adventurous", "bold"],
-          "emotionalDrivers": ["thrill", "freedom", "unpredictability"]
+          "emotionalDrivers": ["thrill", "freedom", "authenticity"]
         }
       ]
     },
