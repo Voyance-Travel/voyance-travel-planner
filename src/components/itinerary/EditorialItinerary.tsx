@@ -593,22 +593,53 @@ function estimateCostByCategory(
   return Math.round(total / 5) * 5;
 }
 
+interface CostInfo {
+  amount: number;
+  isEstimated: boolean;
+  estimateReason?: string;
+}
+
+function getActivityCostInfo(
+  activity: EditorialActivity,
+  travelers: number = 1,
+  budgetTier: string = 'moderate'
+): CostInfo {
+  // Check cost.amount first - this is explicit pricing
+  if (activity.cost?.amount !== undefined && activity.cost.amount >= 0) {
+    return { amount: activity.cost.amount, isEstimated: false };
+  }
+  // Check estimatedCost - AI provided estimate
+  if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount >= 0) {
+    return { 
+      amount: activity.estimatedCost.amount, 
+      isEstimated: true,
+      estimateReason: 'AI-estimated based on venue type'
+    };
+  }
+  
+  // Smart estimation based on category, travelers, and budget
+  const category = activity.category || activity.type || 'activity';
+  const estimated = estimateCostByCategory(category, travelers, budgetTier);
+  
+  // Determine estimate reason based on category
+  const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'coffee', 'cafe'].includes(category.toLowerCase());
+  const estimateReason = isDining 
+    ? `Est. ~$${Math.round(estimated / travelers)}/person for ${category} in this area`
+    : `Est. based on typical ${category} pricing`;
+  
+  return { 
+    amount: estimated, 
+    isEstimated: true,
+    estimateReason
+  };
+}
+
 function getActivityCost(
   activity: EditorialActivity,
   travelers: number = 1,
   budgetTier: string = 'moderate'
 ): number {
-  // Check cost.amount first, then estimatedCost.amount as fallback
-  if (activity.cost?.amount !== undefined && activity.cost.amount >= 0) {
-    return activity.cost.amount;
-  }
-  if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount >= 0) {
-    return activity.estimatedCost.amount;
-  }
-  
-  // Smart estimation based on category, travelers, and budget
-  const category = activity.category || activity.type || 'activity';
-  return estimateCostByCategory(category, travelers, budgetTier);
+  return getActivityCostInfo(activity, travelers, budgetTier).amount;
 }
 
 function getActivityType(activity: EditorialActivity): string {
@@ -4449,7 +4480,8 @@ function ActivityRow({
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
   const reviewCount = getActivityReviewCount(activity);
-  const cost = getActivityCost(activity, travelers, budgetTier);
+  const costInfo = getActivityCostInfo(activity, travelers, budgetTier);
+  const cost = costInfo.amount;
   // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
@@ -4797,7 +4829,20 @@ function ActivityRow({
 
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
-            <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
+            {costInfo.isEstimated ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="font-medium cursor-help border-b border-dashed border-muted-foreground/40">
+                    ~{formatCurrency(displayCost(cost), tripCurrency)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[200px] text-xs">
+                  <p>{costInfo.estimateReason}</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
+            )}
             {/* Booking state actions - replaces static vendor links */}
             <InlineBookingActions
               activity={{
