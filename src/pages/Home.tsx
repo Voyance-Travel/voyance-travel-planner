@@ -4,7 +4,7 @@ import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import ScrollTarget from '@/components/common/ScrollTarget';
 import BrowseNudge from '@/components/common/BrowseNudge';
-import TravelDNAHero from '@/components/home/TravelDNAHero';
+import ValueFirstHero from '@/components/home/ValueFirstHero';
 import TheProblemSection from '@/components/home/TheProblemSection';
 import TheInsightSection from '@/components/home/TheInsightSection';
 import SampleArchetype from '@/components/home/SampleArchetype';
@@ -51,8 +51,8 @@ export default function Home() {
       <BrowseNudge />
       
       <div className="bg-background overflow-hidden relative">
-        {/* Hero */}
-        <TravelDNAHero />
+        {/* Value-First Interactive Hero */}
+        <ValueFirstHero />
         
         {/* The Problem & Insight - Stranger Welcome */}
         <TheProblemSection />
