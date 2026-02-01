@@ -1,14 +1,14 @@
 import { motion } from 'framer-motion';
 import { strangerCopy } from '@/lib/strangerCopy';
-import { X } from 'lucide-react';
+import { X, UtensilsCrossed, AlertTriangle, ThumbsDown } from 'lucide-react';
 
 export default function TheProblemSection() {
   const { problem } = strangerCopy.homepage;
 
   const frustrations = [
-    { text: 'The "must-see" restaurant was overhyped', icon: '🍽️' },
-    { text: 'The itinerary was way too packed', icon: '😵' },
-    { text: 'Half the recommendations weren\'t your thing', icon: '👎' },
+    { text: 'The "must-see" restaurant was overhyped', Icon: UtensilsCrossed },
+    { text: 'The itinerary was way too packed', Icon: AlertTriangle },
+    { text: 'Half the recommendations weren\'t your thing', Icon: ThumbsDown },
   ];
 
   return (
@@ -75,7 +75,7 @@ export default function TheProblemSection() {
                 transition={{ delay: 0.3 + i * 0.1 }}
                 className="flex items-center gap-4 p-4 bg-background/80 backdrop-blur-sm rounded-xl border border-border/50 shadow-sm"
               >
-                <span className="text-2xl">{item.icon}</span>
+                <item.Icon className="w-6 h-6 text-muted-foreground shrink-0" />
                 <span className="text-foreground font-medium">{item.text}</span>
               </motion.div>
             ))}

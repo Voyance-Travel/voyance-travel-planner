@@ -16,6 +16,11 @@ import {
   ChevronLeft,
   Loader2,
   Sliders,
+  Leaf,
+  Footprints,
+  Zap,
+  Flame,
+  Scale,
 } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -415,8 +420,10 @@ function TravelStyleSection({ preferences, onChange }: SectionProps) {
                   ${isSelected ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground/30'}
                 `}
               >
-                <div className="text-2xl mb-2">
-                  {label.includes('Relaxed') ? '🌴' : label.includes('Moderate') ? '🚶' : '🏃'}
+                <div className="text-2xl mb-2 text-muted-foreground flex justify-center">
+                  {label.includes('Relaxed') ? <Leaf className="w-6 h-6" /> : 
+                   label.includes('Moderate') ? <Footprints className="w-6 h-6" /> : 
+                   <Zap className="w-6 h-6" />}
                 </div>
                 <p className="font-medium text-foreground">{label.split(' (')[0]}</p>
                 <p className="text-xs text-muted-foreground mt-1">{label.match(/\((.*)\)/)?.[1] || ''}</p>
@@ -1061,15 +1068,17 @@ function ItinerarySection({ preferences, onChange }: SectionProps) {
 
       {/* Max Activities Per Day */}
       <div>
-        <h4 className="text-sm font-medium text-foreground mb-2">📅 Activities Per Day</h4>
+        <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+          <Calendar className="w-4 h-4" /> Activities Per Day
+        </h4>
         <p className="text-xs text-muted-foreground mb-4">
           How many planned activities do you prefer in a typical day?
         </p>
         <div className="grid grid-cols-3 gap-3">
           {[
-            { value: 4, label: 'Light', description: '3-4 activities', icon: '🌿' },
-            { value: 6, label: 'Moderate', description: '5-6 activities', icon: '⚖️' },
-            { value: 8, label: 'Packed', description: '7-8 activities', icon: '🔥' },
+            { value: 4, label: 'Light', description: '3-4 activities', Icon: Leaf },
+            { value: 6, label: 'Moderate', description: '5-6 activities', Icon: Scale },
+            { value: 8, label: 'Packed', description: '7-8 activities', Icon: Flame },
           ].map(option => {
             const isSelected = (itineraryPrefs.max_activities_per_day ?? 6) === option.value;
             return (
@@ -1083,7 +1092,9 @@ function ItinerarySection({ preferences, onChange }: SectionProps) {
                   ${isSelected ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground/30'}
                 `}
               >
-                <div className="text-2xl mb-2">{option.icon}</div>
+                <div className="text-2xl mb-2 text-muted-foreground flex justify-center">
+                  <option.Icon className="w-6 h-6" />
+                </div>
                 <p className="font-medium text-foreground">{option.label}</p>
                 <p className="text-xs text-muted-foreground mt-1">{option.description}</p>
               </motion.button>

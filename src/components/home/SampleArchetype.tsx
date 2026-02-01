@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Leaf, Check, Sparkles, ArrowRight } from 'lucide-react';
+import { Leaf, Check, Sparkles, ArrowRight, Snail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -7,7 +7,7 @@ import { ROUTES } from '@/config/routes';
 const SAMPLE_ARCHETYPE = {
   name: 'The Slow Traveler',
   category: 'RESTORER',
-  emoji: '🐌',
+  iconName: 'Snail',
   hookLine: 'Stay long enough to have a favorite café.',
   coreDescription: 
     "You resist the urge to rush. While others check boxes, you put down roots. You understand that knowing a place takes time, and you have all the time in the world.",
@@ -76,8 +76,8 @@ export default function SampleArchetype() {
             <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-accent/10 p-8 md:p-12 border-b border-border">
               <div className="flex items-start gap-6">
                 {/* Icon */}
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-3xl shrink-0">
-                  {SAMPLE_ARCHETYPE.emoji}
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
+                  <Snail className="w-8 h-8 text-white" />
                 </div>
                 
                 <div className="flex-1">

@@ -174,32 +174,32 @@ export function getTimeSlotLabel(slot: TimeSlot): string {
   return labels[slot];
 }
 
-export function getTimeSlotIcon(slot: TimeSlot): string {
+export function getTimeSlotIconName(slot: TimeSlot): string {
   const icons: Record<TimeSlot, string> = {
-    morning: '🌅',
-    afternoon: '☀️',
-    evening: '🌙',
-    all: '🕐',
+    morning: 'Sunrise',
+    afternoon: 'Sun',
+    evening: 'Moon',
+    all: 'Clock',
   };
   return icons[slot];
 }
 
-export function getCategoryIcon(category: string): string {
+export function getCategoryIconName(category: string): string {
   const icons: Record<string, string> = {
-    restaurant: '🍽️',
-    cafe: '☕',
-    bar: '🍸',
-    beach: '🏖️',
-    cultural: '🏛️',
-    shopping: '🛍️',
-    tour: '🚶',
-    entertainment: '🎭',
-    nightlife: '🎉',
-    spa: '💆',
-    adventure: '🏄',
-    nature: '🌿',
+    restaurant: 'UtensilsCrossed',
+    cafe: 'Coffee',
+    bar: 'Wine',
+    beach: 'Umbrella',
+    cultural: 'Landmark',
+    shopping: 'ShoppingBag',
+    tour: 'Footprints',
+    entertainment: 'Palette',
+    nightlife: 'PartyPopper',
+    spa: 'Sparkles',
+    adventure: 'Mountain',
+    nature: 'Leaf',
   };
-  return icons[category.toLowerCase()] || '📍';
+  return icons[category.toLowerCase()] || 'MapPin';
 }
 
 export function formatDistance(distanceKm: number): string {

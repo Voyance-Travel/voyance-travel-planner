@@ -30,7 +30,7 @@ interface DisambiguationQuestion {
   options: Array<{
     id: string;
     label: string;
-    emoji?: string;
+    iconName?: string;
     deltas: Record<string, number>;
   }>;
 }
@@ -55,19 +55,19 @@ const DISAMBIGUATION_QUESTIONS: DisambiguationQuestion[] = [
       { 
         id: 'overplanning', 
         label: 'Over-planning and missing spontaneous moments', 
-        emoji: '📋',
+        iconName: 'ListTodo',
         deltas: { planning: -3, pace: -2 } 
       },
       { 
         id: 'missing_out', 
         label: 'Not planning enough and missing must-see spots', 
-        emoji: '😰',
+        iconName: 'AlertCircle',
         deltas: { planning: 3, pace: 2 } 
       },
       { 
         id: 'both_equally', 
         label: 'Both equally - I like balance', 
-        emoji: '⚖️',
+        iconName: 'Scale',
         deltas: { planning: 0, pace: 0 } 
       },
     ],
@@ -79,19 +79,19 @@ const DISAMBIGUATION_QUESTIONS: DisambiguationQuestion[] = [
       { 
         id: 'few_activities', 
         label: '1-2 activities with lots of downtime', 
-        emoji: '🌿',
+        iconName: 'Leaf',
         deltas: { pace: -4, comfort: 2 } 
       },
       { 
         id: 'balanced', 
         label: '3-4 activities with some rest', 
-        emoji: '☀️',
+        iconName: 'Sun',
         deltas: { pace: 0 } 
       },
       { 
         id: 'packed', 
         label: '5+ activities - maximize every moment!', 
-        emoji: '🚀',
+        iconName: 'Zap',
         deltas: { pace: 5, adventure: 2 } 
       },
     ],
@@ -103,19 +103,19 @@ const DISAMBIGUATION_QUESTIONS: DisambiguationQuestion[] = [
       { 
         id: 'solo', 
         label: 'Traveling solo and meeting locals', 
-        emoji: '🧭',
+        iconName: 'Compass',
         deltas: { social: -3, authenticity: 3 } 
       },
       { 
         id: 'small_group', 
         label: 'With a close friend or partner', 
-        emoji: '👫',
+        iconName: 'Users',
         deltas: { social: 0 } 
       },
       { 
         id: 'larger_group', 
         label: 'With a group of friends or guided tour', 
-        emoji: '👥',
+        iconName: 'UsersRound',
         deltas: { social: 4 } 
       },
     ],
@@ -127,19 +127,19 @@ const DISAMBIGUATION_QUESTIONS: DisambiguationQuestion[] = [
       { 
         id: 'yes_definitely', 
         label: 'Absolutely - discomfort is part of adventure!', 
-        emoji: '🏕️',
+        iconName: 'Tent',
         deltas: { comfort: -4, adventure: 3, authenticity: 2 } 
       },
       { 
         id: 'depends', 
         label: 'Sometimes, if the experience is truly special', 
-        emoji: '🤔',
+        iconName: 'HelpCircle',
         deltas: { comfort: 0, adventure: 1 } 
       },
       { 
         id: 'no', 
         label: 'No - comfort is non-negotiable for me', 
-        emoji: '✨',
+        iconName: 'Sparkles',
         deltas: { comfort: 4, adventure: -2 } 
       },
     ],
@@ -296,13 +296,12 @@ export default function MicroDisambiguation({
                   "w-full justify-start h-auto py-3 px-4 text-left",
                   selectedAnswer === option.id && "ring-2 ring-primary/20"
                 )}
-              >
-                <span className="mr-2 text-lg">{option.emoji}</span>
-                <span className="flex-1 whitespace-normal">{option.label}</span>
-                {selectedAnswer === option.id && (
-                  <Check className="h-4 w-4 ml-2 flex-shrink-0" />
-                )}
-              </Button>
+                >
+                  <span className="flex-1 whitespace-normal">{option.label}</span>
+                  {selectedAnswer === option.id && (
+                    <Check className="h-4 w-4 ml-2 flex-shrink-0" />
+                  )}
+                </Button>
             ))}
           </div>
 

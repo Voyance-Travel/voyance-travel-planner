@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Plane, Star, Heart, Sparkles, 
-  ChevronRight, ChevronLeft, Check, Send
+  ChevronRight, ChevronLeft, Check, Send,
+  Target, ThumbsUp, HelpCircle, Frown, type LucideIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,12 +25,12 @@ interface DepartureReflectionProps {
   onComplete: () => void;
 }
 
-const archetypeFitOptions = [
-  { value: 'nailed_it', label: 'Nailed it', emoji: '🎯' },
-  { value: 'mostly', label: 'Mostly', emoji: '👍' },
-  { value: 'somewhat', label: 'Somewhat', emoji: '🤔' },
-  { value: 'missed_the_mark', label: 'Missed the mark', emoji: '😕' },
-] as const;
+const archetypeFitOptions: { value: string; label: string; Icon: LucideIcon }[] = [
+  { value: 'nailed_it', label: 'Nailed it', Icon: Target },
+  { value: 'mostly', label: 'Mostly', Icon: ThumbsUp },
+  { value: 'somewhat', label: 'Somewhat', Icon: HelpCircle },
+  { value: 'missed_the_mark', label: 'Missed the mark', Icon: Frown },
+];
 
 const changeOptions = [
   'Less packed days',
@@ -172,7 +173,7 @@ export function DepartureReflection({
                     Did the experiences match your travel style?
                   </p>
                   <div className="grid grid-cols-2 gap-3 mt-6">
-                    {archetypeFitOptions.map(({ value, label, emoji }) => (
+                    {archetypeFitOptions.map(({ value, label, Icon }) => (
                       <button
                         key={value}
                         onClick={() => setArchetypeFit(value)}
@@ -183,7 +184,7 @@ export function DepartureReflection({
                             : 'border-border hover:border-teal-500/50'
                         )}
                       >
-                        <span className="text-2xl">{emoji}</span>
+                        <Icon className="w-6 h-6 text-muted-foreground" />
                         <span className="text-sm font-medium">{label}</span>
                       </button>
                     ))}

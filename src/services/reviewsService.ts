@@ -112,12 +112,12 @@ export async function fetchReviews(params: FetchReviewsParams): Promise<ReviewsR
 export function getSourceInfo(source: 'google' | 'tripadvisor' | 'foursquare'): {
   name: string;
   color: string;
-  icon: string;
+  iconName: string;
 } {
   const sources = {
-    google: { name: 'Google', color: 'bg-blue-500', icon: '🔍' },
-    tripadvisor: { name: 'TripAdvisor', color: 'bg-green-600', icon: '🦉' },
-    foursquare: { name: 'Foursquare', color: 'bg-pink-500', icon: '📍' },
+    google: { name: 'Google', color: 'bg-blue-500', iconName: 'Search' },
+    tripadvisor: { name: 'TripAdvisor', color: 'bg-green-600', iconName: 'Sparkles' },
+    foursquare: { name: 'Foursquare', color: 'bg-pink-500', iconName: 'MapPin' },
   };
   return sources[source];
 }

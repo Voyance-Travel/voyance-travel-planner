@@ -1,12 +1,17 @@
 import { motion } from 'framer-motion';
-import { Clock, MapPin, DollarSign, Lock, LockOpen, ExternalLink } from 'lucide-react';
+import { Clock, MapPin, DollarSign, Lock, LockOpen, ExternalLink, Target, Landmark, UtensilsCrossed, Building2, Plane, Bus, Coffee, Moon, Leaf, Mountain, Palette, Heart, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { getActivityIcon, getActivityColor, formatDuration } from '@/utils/plannerUtils';
+import { getActivityIconName, getActivityColor, formatDuration } from '@/utils/plannerUtils';
 import { trackActivityClick } from '@/services/behaviorTrackingService';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { ExplainableActivity } from '@/components/itinerary/ExplainableActivity';
 import type { TripActivity } from '@/types/trip';
+
+// Map icon names to Lucide components
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  Target, Landmark, UtensilsCrossed, Building2, Plane, Bus, Coffee, Moon, Leaf, Mountain, Palette, Heart, ShoppingBag, MapPin
+};
 
 interface TripActivityCardProps {
   activity: TripActivity;
@@ -36,7 +41,8 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
   showExplain = false
 }) => {
   const categoryColor = getActivityColor(activity.category || activity.type);
-  const icon = getActivityIcon(activity.type);
+  const iconName = getActivityIconName(activity.type);
+  const IconComponent = iconMap[iconName] || MapPin;
 
   const handleCardClick = () => {
     // Track activity interaction for personalization
@@ -56,8 +62,8 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
     >
       <div className="flex items-start gap-4" onClick={(e) => e.stopPropagation()}>
         {/* Icon */}
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${categoryColor}`}>
-          {icon}
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${categoryColor}`}>
+          <IconComponent className="w-5 h-5" />
         </div>
 
         {/* Content */}
