@@ -635,7 +635,7 @@ async function cacheImage(
 // =============================================================================
 
 // Clean activity title to extract searchable venue name
-function extractVenueName(activityTitle: string): { cleanName: string; shouldSkip: boolean } {
+function extractVenueName(activityTitle: string): { cleanName: string; shouldSkip: boolean; inferredCategory?: string } {
   const title = activityTitle.trim();
   
   // Activities that should use category fallback instead of search
@@ -645,45 +645,96 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
     /^(hotel\s+check[\-\s]?(in|out)|check[\-\s]?(in|out)\s+at)/i,
     /^(arrival|departure|transfer|airport)/i,
     /^(pack|unpack|settle\s+in)/i,
-    /^(breakfast|lunch|dinner|brunch)\s+(break|time)$/i, // Just "Lunch break" not "Lunch at Café X"
-    // Generic meal descriptors without a venue name tend to return terrible images
+    /^(breakfast|lunch|dinner|brunch)\s+(break|time)$/i,
+    // Generic meal descriptors without a venue name
     /^(?:organic|vegetarian|vegan|local|seasonal|farm[\-\s]?to[\-\s]?table|tasting|traditional|street|authentic|gourmet|artisan|homemade|rustic|contemporary|modern|classic|regional|coastal)\b.*\b(?:breakfast|brunch|lunch|dinner|meal|cuisine|food|fare)\b/i,
     /^(?:breakfast|brunch|lunch|dinner|meal)\b(?!.*\b(?:at|@|:)\b).*/i,
-    // Catch more generic patterns
     /^(?:morning|afternoon|evening|late|early)\s+(?:breakfast|brunch|lunch|dinner|meal|snack)/i,
     /^(?:quick|light|leisurely|relaxed|casual|formal)\s+(?:breakfast|brunch|lunch|dinner|meal)/i,
-    // Things like "Roman Cuisine Experience" with no venue name
     /^[A-Z][a-z]+\s+(?:cuisine|culinary|gastronomy|food)\s+(?:experience|adventure|exploration|journey|tour)/i,
+    // ENHANCED: More generic patterns
+    /^(?:wander|stroll|walk)\s+(?:around|through|along)/i,
+    /^(?:relax|unwind|chill)\s+(?:at\s+the\s+)?(?:hotel|room|pool)/i,
+    /^(?:pack\s+up|get\s+ready|prepare)/i,
   ];
   
   for (const pattern of skipPatterns) {
     if (pattern.test(title)) {
-      return { cleanName: title, shouldSkip: true };
+      // Infer category from skip pattern for better fallback
+      const inferredCat = inferCategoryFromTitle(title);
+      return { cleanName: title, shouldSkip: true, inferredCategory: inferredCat };
     }
   }
   
-  // Extract venue from patterns like "Dinner at X", "Visit X", "Tour of X", etc.
+  // ENHANCED: Extract venue from more patterns
   const extractPatterns = [
-    /^(?:dinner|lunch|breakfast|brunch|meal)\s+(?:at|@)\s+(.+)/i,
-    /^(?:check[\-\s]?in|stay)\s+(?:at|@)\s+(.+)/i,
-    /^(?:visit|explore|tour|see|experience)\s+(?:the\s+)?(.+)/i,
-    /^(?:shopping|browse)\s+(?:at|@)\s+(.+)/i,
-    /^(.+?)\s+(?:exploration|experience|tour|visit)$/i,
-    /^(.+?)\s+(?:for\s+(?:dinner|lunch|breakfast))$/i,
+    // Dining patterns
+    { pattern: /^(?:dinner|lunch|breakfast|brunch|meal)\s+(?:at|@)\s+(.+)/i, category: 'dining' },
+    { pattern: /^(?:coffee|drinks?|cocktails?)\s+(?:at|@)\s+(.+)/i, category: 'cafe' },
+    { pattern: /^(?:tasting|wine\s+tasting|food\s+tour)\s+(?:at|@)\s+(.+)/i, category: 'dining' },
+    // Accommodation
+    { pattern: /^(?:check[\-\s]?in|stay|night)\s+(?:at|@)\s+(.+)/i, category: 'hotel' },
+    { pattern: /^(.+?)\s+(?:hotel|resort|inn|hostel|lodge|villa|boutique\s+stay)$/i, category: 'hotel' },
+    // Attractions
+    { pattern: /^(?:visit|explore|tour|see|experience|discover)\s+(?:the\s+)?(.+)/i, category: 'sightseeing' },
+    { pattern: /^(?:hike|trek|climb)\s+(?:to|up|through)\s+(.+)/i, category: 'nature' },
+    { pattern: /^(?:swim|snorkel|dive)\s+(?:at|in)\s+(.+)/i, category: 'beach' },
+    { pattern: /^(?:shopping|browse|shop)\s+(?:at|@|in)\s+(.+)/i, category: 'shopping' },
+    // Reverse patterns
+    { pattern: /^(.+?)\s+(?:exploration|experience|tour|visit)$/i, category: 'sightseeing' },
+    { pattern: /^(.+?)\s+(?:for\s+(?:dinner|lunch|breakfast))$/i, category: 'dining' },
+    { pattern: /^(.+?)\s+(?:museum|gallery|exhibition)$/i, category: 'museum' },
+    { pattern: /^(.+?)\s+(?:market|bazaar|souk)$/i, category: 'shopping' },
+    { pattern: /^(.+?)\s+(?:temple|shrine|church|cathedral|mosque)$/i, category: 'cultural' },
+    { pattern: /^(.+?)\s+(?:park|garden|gardens|beach|waterfall)$/i, category: 'nature' },
+    { pattern: /^(.+?)\s+(?:spa|massage|wellness)$/i, category: 'spa' },
   ];
   
-  for (const pattern of extractPatterns) {
+  for (const { pattern, category } of extractPatterns) {
     const match = title.match(pattern);
     if (match && match[1]) {
       const extracted = match[1].trim();
-      // Only use if it looks like a venue name (not generic)
-      if (extracted.length > 3 && !/^(the|a|an|some|good)$/i.test(extracted)) {
-        return { cleanName: extracted, shouldSkip: false };
+      // Only use if it looks like a proper venue name
+      if (extracted.length > 3 && !/^(the|a|an|some|good|local|nearby)$/i.test(extracted)) {
+        return { cleanName: extracted, shouldSkip: false, inferredCategory: category };
       }
     }
   }
   
-  return { cleanName: title, shouldSkip: false };
+  // Final attempt: infer category even without extraction
+  const inferredCat = inferCategoryFromTitle(title);
+  return { cleanName: title, shouldSkip: false, inferredCategory: inferredCat };
+}
+
+// NEW: Infer category from keywords in title
+function inferCategoryFromTitle(title: string): string {
+  const lower = title.toLowerCase();
+  
+  const categoryKeywords: Record<string, string[]> = {
+    dining: ['dinner', 'lunch', 'breakfast', 'brunch', 'restaurant', 'bistro', 'trattoria', 'eatery', 'food', 'cuisine', 'meal', 'dine', 'supper'],
+    cafe: ['coffee', 'cafe', 'café', 'tea', 'bakery', 'patisserie', 'espresso', 'latte'],
+    hotel: ['hotel', 'resort', 'check-in', 'check in', 'check-out', 'accommodation', 'lodge', 'inn', 'hostel', 'villa', 'stay', 'suite'],
+    museum: ['museum', 'gallery', 'exhibition', 'art', 'collection', 'exhibit'],
+    cultural: ['temple', 'shrine', 'church', 'cathedral', 'mosque', 'monastery', 'palace', 'castle', 'historic', 'heritage', 'ancient', 'ruins'],
+    nature: ['park', 'garden', 'hike', 'trail', 'mountain', 'lake', 'river', 'forest', 'waterfall', 'canyon', 'valley', 'scenic', 'viewpoint', 'sunrise', 'sunset'],
+    beach: ['beach', 'ocean', 'sea', 'coast', 'swim', 'snorkel', 'dive', 'surf', 'sand', 'bay', 'cove', 'island'],
+    shopping: ['market', 'shop', 'shopping', 'bazaar', 'souk', 'mall', 'boutique', 'store', 'vintage', 'antique'],
+    nightlife: ['bar', 'pub', 'club', 'nightlife', 'cocktail', 'lounge', 'rooftop', 'jazz', 'live music'],
+    spa: ['spa', 'massage', 'wellness', 'onsen', 'hammam', 'sauna', 'relax', 'thermal'],
+    entertainment: ['show', 'concert', 'theater', 'theatre', 'performance', 'cinema', 'movie', 'festival'],
+    activity: ['tour', 'adventure', 'experience', 'class', 'workshop', 'lesson', 'cooking', 'craft'],
+    transport: ['flight', 'train', 'bus', 'ferry', 'taxi', 'transfer', 'airport', 'station', 'departure', 'arrival'],
+  };
+  
+  for (const [category, keywords] of Object.entries(categoryKeywords)) {
+    for (const keyword of keywords) {
+      if (lower.includes(keyword)) {
+        return category;
+      }
+    }
+  }
+  
+  return 'sightseeing'; // Default fallback
 }
 
 // High-quality category fallback images (curated Unsplash photos)
@@ -817,14 +868,17 @@ async function fetchImageTiered(
   skipCache?: boolean
 ): Promise<DestinationImage> {
   // Step 1: Clean the venue name and check if we should skip API search
-  const { cleanName, shouldSkip } = extractVenueName(venueName);
+  const { cleanName, shouldSkip, inferredCategory } = extractVenueName(venueName);
+  
+  // Use inferred category if no explicit category provided
+  const effectiveCategory = category || inferredCategory || 'activity';
   
   if (shouldSkip) {
-    console.log(`[Images] Skipping API search for generic activity: "${venueName}", using category fallback`);
-    return getCategoryFallbackImage(category || 'activity', venueName);
+    console.log(`[Images] Skipping API search for generic activity: "${venueName}", using category fallback (${effectiveCategory})`);
+    return getCategoryFallbackImage(effectiveCategory, venueName);
   }
   
-  console.log(`[Images] Searching for: "${cleanName}" (original: "${venueName}")`);
+  console.log(`[Images] Searching for: "${cleanName}" (original: "${venueName}", category: ${effectiveCategory})`);
   
   const candidates: DestinationImage[] = [];
 
@@ -838,7 +892,7 @@ async function fetchImageTiered(
 
   // TIER 2: Google Places (best for real venue photos)
   if (googleApiKey) {
-    const googleImage = await getGooglePlacesPhoto(cleanName, destination, googleApiKey, category);
+    const googleImage = await getGooglePlacesPhoto(cleanName, destination, googleApiKey, effectiveCategory);
     if (googleImage) {
       candidates.push(googleImage);
     }
@@ -878,14 +932,7 @@ async function fetchImageTiered(
     return bestImage;
   }
 
-  // TIER 5: Category-specific fallback (high-quality curated images)
-  // Skip AI generation for most cases - curated fallbacks are faster and more reliable
-  if (category) {
-    console.log(`[Images] No API results, using category fallback for: "${venueName}" (category: ${category})`);
-    return getCategoryFallbackImage(category, venueName);
-  }
-
-  // TIER 6: AI Generation (only if no category fallback available)
+  // TIER 5: AI Generation (try before category fallback for better quality)
   if (lovableApiKey) {
     const aiImage = await generateAIImage(cleanName, destination, lovableApiKey);
     if (aiImage) {
@@ -895,9 +942,9 @@ async function fetchImageTiered(
     }
   }
 
-  // TIER 7: Gradient fallback (absolute last resort)
-  console.log("[Images] Using gradient fallback for:", venueName);
-  return generateFallbackGradient(venueName);
+  // TIER 6: Category-specific fallback (high-quality curated images)
+  console.log(`[Images] No API results, using category fallback for: "${venueName}" (category: ${effectiveCategory})`);
+  return getCategoryFallbackImage(effectiveCategory, venueName);
 }
 
 // =============================================================================
