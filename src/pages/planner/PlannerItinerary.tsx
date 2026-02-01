@@ -46,13 +46,24 @@ export default function PlannerItinerary() {
 
   // Build trip details from context (works for both anonymous and authenticated users)
   // Include flight_selection data to avoid re-asking for times
-  const [tripDetails, setTripDetails] = useState({
+  const [tripDetails, setTripDetails] = useState<{
+    name: string;
+    destination: string;
+    departureCity: string;
+    startDate: string;
+    endDate: string;
+    travelers: number;
+    tripType?: string;
+    flightSelection?: any;
+    hotelLocation?: string;
+  }>({
     name: state.basics.destination ? `Trip to ${state.basics.destination}` : '',
     destination: state.basics.destination || '',
     departureCity: state.basics.originCity || '',
     startDate: state.basics.startDate || '',
     endDate: state.basics.endDate || '',
     travelers: state.basics.travelers || 1,
+    tripType: state.basics.tripType || undefined,
     flightSelection: state.flights ? (state.flights as any) : undefined,
     hotelLocation: state.hotel?.name || state.hotel?.neighborhood || undefined,
   });
@@ -67,6 +78,7 @@ export default function PlannerItinerary() {
         startDate: state.basics.startDate || '',
         endDate: state.basics.endDate || '',
         travelers: state.basics.travelers || 1,
+        tripType: state.basics.tripType || undefined,
         flightSelection: state.flights ? (state.flights as any) : undefined,
         hotelLocation: state.hotel?.name || state.hotel?.neighborhood || undefined,
       });
@@ -98,6 +110,7 @@ export default function PlannerItinerary() {
             startDate: data.start_date,
             endDate: data.end_date,
             travelers: data.travelers || 1,
+            tripType: data.trip_type || undefined,
             flightSelection: flightSelection || undefined,
             hotelLocation: primaryHotel?.name || primaryHotel?.neighborhood || undefined,
           });

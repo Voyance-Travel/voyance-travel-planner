@@ -55,6 +55,7 @@ interface ItineraryPreviewProps {
     startDate: string;
     endDate: string;
     travelers: number;
+    tripType?: string;
     flightSelection?: FlightSelectionData;
     hotelLocation?: string;
   };
@@ -348,6 +349,7 @@ export default function ItineraryPreview({
             dayNumber,
             totalDays: localDays.length, // CRITICAL: Required for isFirstDay/isLastDay logic
             destination: tripDetails.destination,
+            tripType: tripDetails.tripType,
             keepActivities,
             currentActivities: backendActivities, // Backend format with isLocked
             preferences: {
