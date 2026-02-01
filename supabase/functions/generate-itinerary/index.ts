@@ -5190,6 +5190,69 @@ async function validateAuth(req: Request, supabase: any): Promise<{ userId: stri
 }
 
 // =============================================================================
+// TRIP ACCESS VERIFICATION HELPER
+// Verifies user has access to trip (owner or accepted collaborator with edit permission)
+// =============================================================================
+interface TripAccessResult {
+  allowed: boolean;
+  isOwner: boolean;
+  reason?: string;
+}
+
+async function verifyTripAccess(
+  supabase: any,
+  tripId: string,
+  userId: string,
+  requireEditPermission: boolean = false
+): Promise<TripAccessResult> {
+  if (!tripId || !userId) {
+    return { allowed: false, isOwner: false, reason: "Missing tripId or userId" };
+  }
+  
+  // Check if user is the trip owner
+  const { data: trip, error: tripError } = await supabase
+    .from('trips')
+    .select('user_id')
+    .eq('id', tripId)
+    .single();
+  
+  if (tripError || !trip) {
+    return { allowed: false, isOwner: false, reason: "Trip not found" };
+  }
+  
+  // Owner has full access
+  if (trip.user_id === userId) {
+    return { allowed: true, isOwner: true };
+  }
+  
+  // Check collaborator access
+  const { data: collab } = await supabase
+    .from('trip_collaborators')
+    .select('permission')
+    .eq('trip_id', tripId)
+    .eq('user_id', userId)
+    .not('accepted_at', 'is', null)
+    .maybeSingle();
+  
+  if (!collab) {
+    return { allowed: false, isOwner: false, reason: "Access denied - not a collaborator" };
+  }
+  
+  // If we need edit permission, check the permission level
+  if (requireEditPermission) {
+    const hasEditPermission = collab.permission === 'edit' || 
+                              collab.permission === 'admin' ||
+                              collab.permission === 'editor' ||
+                              collab.permission === 'contributor';
+    if (!hasEditPermission) {
+      return { allowed: false, isOwner: false, reason: "Viewer access only - cannot generate itinerary" };
+    }
+  }
+  
+  return { allowed: true, isOwner: false };
+}
+
+// =============================================================================
 // MAIN HANDLER
 // =============================================================================
 
@@ -5251,7 +5314,32 @@ serve(async (req) => {
     // ACTION: generate-full - Complete 7-stage pipeline
     // ==========================================================================
     if (action === 'generate-full') {
-      const { tripId, userId, tripData } = params;
+      const { tripId, tripData } = params;
+      
+      // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
+      // This fixes missing personalization and hardens security (prevents userId spoofing)
+      const userId = authResult.userId;
+      
+      // Security guard: if request body includes userId that differs from auth token, log and reject
+      if (params.userId && params.userId !== userId) {
+        console.warn(`[generate-full] userId mismatch! auth=${userId}, params=${params.userId} - rejecting`);
+        return new Response(
+          JSON.stringify({ error: "User ID mismatch. Please re-authenticate." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Verify trip access: user must be owner or accepted collaborator with edit permission
+      const tripAccessResult = await verifyTripAccess(supabase, tripId, userId, true);
+      if (!tripAccessResult.allowed) {
+        console.warn(`[generate-full] Access denied: user=${userId}, trip=${tripId}, reason=${tripAccessResult.reason}`);
+        return new Response(
+          JSON.stringify({ error: tripAccessResult.reason || "Trip not found or access denied" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`[generate-full] ✓ Using authenticated userId: ${userId} (trip owner: ${tripAccessResult.isOwner})`);
 
       // STAGE 1: Context Preparation (supports direct trip data for localStorage/demo mode)
       const directTripData = tripData ? {
@@ -5263,7 +5351,7 @@ serve(async (req) => {
         travelers: tripData.travelers,
         tripType: tripData.tripType,
         budgetTier: tripData.budgetTier,
-        userId: tripData.userId || userId,
+        userId: userId, // Always use authenticated userId
       } : undefined;
 
       const context = await prepareContext(supabase, tripId, userId, directTripData);
@@ -6232,7 +6320,37 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
     // ACTION: generate-day / regenerate-day - Single day generation with flight/hotel awareness
     // ==========================================================================
     if (action === 'generate-day' || action === 'regenerate-day') {
-      const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, userId, keepActivities, currentActivities } = params;
+      // Extract params BUT NOT userId from request body
+      const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, keepActivities, currentActivities } = params;
+      
+      // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
+      // This is the critical fix - frontend calls often omit userId, but auth token is always present
+      const userId = authResult.userId;
+      
+      // Security guard: if request body includes userId that differs from auth token, log and reject
+      if (params.userId && params.userId !== userId) {
+        console.warn(`[generate-day] userId mismatch! auth=${userId}, params=${params.userId} - rejecting`);
+        return new Response(
+          JSON.stringify({ error: "User ID mismatch. Please re-authenticate." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Verify trip access: user must be owner or accepted collaborator with edit permission
+      if (tripId) {
+        const tripAccessResult = await verifyTripAccess(supabase, tripId, userId, true);
+        if (!tripAccessResult.allowed) {
+          console.warn(`[generate-day] Access denied: user=${userId}, trip=${tripId}, reason=${tripAccessResult.reason}`);
+          return new Response(
+            JSON.stringify({ error: tripAccessResult.reason || "Trip not found or access denied" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (trip owner: ${tripAccessResult.isOwner})`);
+      } else {
+        console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
+      }
+
 
       // =======================================================================
       // STEP 1: LOAD LOCKED ACTIVITIES **BEFORE** AI CALL
