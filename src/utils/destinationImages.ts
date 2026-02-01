@@ -108,9 +108,64 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=1200',
     'https://images.unsplash.com/photo-1546874177-9e664107314e?w=1200',
   ],
+  'busan': [
+    'https://images.unsplash.com/photo-1538485399081-7191377e8241?w=1200', // Haeundae Beach
+    'https://images.unsplash.com/photo-1578037571214-25e07a2f91ef?w=1200', // Gamcheon Culture Village
+    'https://images.unsplash.com/photo-1596422846543-75c6fc197f11?w=1200', // Busan coastal view
+  ],
+  'jeju': [
+    'https://images.unsplash.com/photo-1597668889648-f6c85fe33c57?w=1200', // Jeju landscape
+    'https://images.unsplash.com/photo-1623083500086-8a7cd5a8f4a6?w=1200', // Jeju coast
+    'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?w=1200', // Jeju nature
+  ],
+  'osaka': [
+    'https://images.unsplash.com/photo-1590559899731-a382839e5549?w=1200', // Osaka Castle
+    'https://images.unsplash.com/photo-1556731740-e9f6b0b7f8f5?w=1200', // Dotonbori
+    'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=1200', // Osaka night
+  ],
+  'taipei': [
+    'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200', // Taipei 101
+    'https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=1200', // Temple
+    'https://images.unsplash.com/photo-1553653924-39b70295f8da?w=1200', // Jiufen
+  ],
+  'hong kong': [
+    'https://images.unsplash.com/photo-1536599018102-9f803c979b2d?w=1200', // Victoria Harbour
+    'https://images.unsplash.com/photo-1531259683007-016a7b628fc3?w=1200', // Hong Kong skyline
+    'https://images.unsplash.com/photo-1518599904199-0ca897819ddb?w=1200', // Street view
+  ],
+  'hong-kong': [
+    'https://images.unsplash.com/photo-1536599018102-9f803c979b2d?w=1200',
+    'https://images.unsplash.com/photo-1531259683007-016a7b628fc3?w=1200',
+    'https://images.unsplash.com/photo-1518599904199-0ca897819ddb?w=1200',
+  ],
+  'kuala lumpur': [
+    'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=1200', // Petronas Towers
+    'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200', // KL skyline
+    'https://images.unsplash.com/photo-1519677100203-a0e668c92439?w=1200', // Batu Caves
+  ],
+  'kuala-lumpur': [
+    'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=1200',
+    'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200',
+    'https://images.unsplash.com/photo-1519677100203-a0e668c92439?w=1200',
+  ],
   'hanoi': [
     'https://images.unsplash.com/photo-1557750255-c76072a7aad1?w=1200',
     'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=1200',
+    'https://images.unsplash.com/photo-1555921015-5532091f6026?w=1200',
+  ],
+  'ho chi minh': [
+    'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=1200',
+    'https://images.unsplash.com/photo-1557750255-c76072a7aad1?w=1200',
+    'https://images.unsplash.com/photo-1555921015-5532091f6026?w=1200',
+  ],
+  'ho-chi-minh': [
+    'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=1200',
+    'https://images.unsplash.com/photo-1557750255-c76072a7aad1?w=1200',
+    'https://images.unsplash.com/photo-1555921015-5532091f6026?w=1200',
+  ],
+  'saigon': [
+    'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=1200',
+    'https://images.unsplash.com/photo-1557750255-c76072a7aad1?w=1200',
     'https://images.unsplash.com/photo-1555921015-5532091f6026?w=1200',
   ],
 
