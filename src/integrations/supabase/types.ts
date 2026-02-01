@@ -2121,6 +2121,69 @@ export type Database = {
         }
         Relationships: []
       }
+      destination_cost_index: {
+        Row: {
+          activity_base_usd: number | null
+          breakfast_base_usd: number | null
+          city: string
+          coffee_base_usd: number | null
+          confidence_score: number | null
+          cost_multiplier: number
+          country: string
+          created_at: string
+          dinner_base_usd: number | null
+          id: string
+          last_verified_at: string | null
+          lunch_base_usd: number | null
+          museum_base_usd: number | null
+          source: string | null
+          tax_tip_buffer: number | null
+          tour_base_usd: number | null
+          transport_base_usd: number | null
+          updated_at: string
+        }
+        Insert: {
+          activity_base_usd?: number | null
+          breakfast_base_usd?: number | null
+          city: string
+          coffee_base_usd?: number | null
+          confidence_score?: number | null
+          cost_multiplier?: number
+          country: string
+          created_at?: string
+          dinner_base_usd?: number | null
+          id?: string
+          last_verified_at?: string | null
+          lunch_base_usd?: number | null
+          museum_base_usd?: number | null
+          source?: string | null
+          tax_tip_buffer?: number | null
+          tour_base_usd?: number | null
+          transport_base_usd?: number | null
+          updated_at?: string
+        }
+        Update: {
+          activity_base_usd?: number | null
+          breakfast_base_usd?: number | null
+          city?: string
+          coffee_base_usd?: number | null
+          confidence_score?: number | null
+          cost_multiplier?: number
+          country?: string
+          created_at?: string
+          dinner_base_usd?: number | null
+          id?: string
+          last_verified_at?: string | null
+          lunch_base_usd?: number | null
+          museum_base_usd?: number | null
+          source?: string | null
+          tax_tip_buffer?: number | null
+          tour_base_usd?: number | null
+          transport_base_usd?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       destinations: {
         Row: {
           airport_codes: Json | null
