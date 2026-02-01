@@ -3,8 +3,11 @@ import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
+import { strangerCopy } from '@/lib/strangerCopy';
 
 export default function TravelDNAHero() {
+  const { hero } = strangerCopy.homepage;
+
   const scrollToFeatures = () => {
     document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -50,10 +53,8 @@ export default function TravelDNAHero() {
           </motion.div>
 
           {/* Main Headline - Editorial Typography */}
-          <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl font-normal mb-8 leading-[0.95] tracking-tight">
-            <span className="block">Your perfect trip,</span>
-            <span className="block italic">planned in</span>
-            <span className="block">minutes</span>
+          <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl font-normal mb-6 leading-[0.95] tracking-tight">
+            {hero.headline}
           </h1>
 
           {/* Subheadline - Clean editorial copy */}
@@ -61,10 +62,9 @@ export default function TravelDNAHero() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.8 }}
-            className="text-lg md:text-xl text-white/75 mb-12 max-w-lg font-sans font-light leading-relaxed"
+            className="text-lg md:text-xl text-white/80 mb-12 max-w-xl font-sans font-light leading-relaxed"
           >
-            Tell us how you travel. Our AI builds a personalized day-by-day itinerary 
-            crafted around your style, interests, and pace.
+            {hero.subhead}
           </motion.p>
 
           {/* CTA - Editorial Button */}
@@ -80,7 +80,7 @@ export default function TravelDNAHero() {
               className="text-base px-10 py-6 bg-white text-foreground hover:bg-white/90 font-sans font-medium tracking-wide"
             >
               <Link to={ROUTES.ARCHETYPES}>
-                Discover Your Travel DNA
+                {hero.cta}
                 <ArrowRight className="ml-3 h-4 w-4" />
               </Link>
             </Button>
@@ -91,10 +91,20 @@ export default function TravelDNAHero() {
               asChild
             >
               <Link to={ROUTES.DEMO}>
-                See How It Works
+                {hero.secondaryCta}
               </Link>
             </Button>
           </motion.div>
+
+          {/* Trust signal */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.9, duration: 0.8 }}
+            className="mt-4 text-sm text-white/50 font-sans"
+          >
+            {hero.ctaSubtext}
+          </motion.p>
 
           {/* Editorial Detail - Issue marker */}
           <motion.div

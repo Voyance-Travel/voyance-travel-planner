@@ -35,12 +35,13 @@ export default function FinalCTA() {
 
             {/* Headline */}
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground mb-6 leading-tight">
-              Stop planning, <em className="font-normal">start traveling</em>
+              Stop planning,{' '}
+              <em className="font-normal">start traveling</em>
             </h2>
 
             {/* Subhead */}
             <p className="text-lg text-muted-foreground font-sans font-light mb-10 max-w-md leading-relaxed">
-              Our AI handles the research, timing, and logistics. You get a beautiful, personalized itinerary ready to follow or customize.
+              We've done the research. We know what works. All we need to know is who you are.
             </p>
 
             {/* CTA Button */}
