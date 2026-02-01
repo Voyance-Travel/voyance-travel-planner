@@ -101,3 +101,9 @@ verify_jwt = false
 
 [functions.parse-travel-story]
 verify_jwt = false
+
+[functions.generate-quick-preview]
+verify_jwt = false
+
+[functions.analyze-itinerary]
+verify_jwt = false
