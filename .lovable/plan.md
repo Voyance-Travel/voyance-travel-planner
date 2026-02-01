@@ -1,326 +1,296 @@
 
-# The Living Site System
-## Making Voyance Feel Alive Without Breaking What Works
+# AI Integration Plan: Brain, Not Face
+## Adding Natural Language Without Breaking What Works
 
 ---
 
 ## Executive Summary
 
-This plan adds an interactive, responsive layer to Voyance that makes every user action feel acknowledged. The site will notice cursor movement, respond to scrolling, guide navigation intelligently, and provide warm feedback at every step. All changes are **additive** - we're enhancing existing components, not replacing them.
+Voyance already uses AI for itinerary **generation**. This plan adds AI for **input parsing** (natural language → same data structure) and **post-generation interaction** (explain + modify). The 27-archetype rules engine, trip type modifiers, and personalization matrix remain unchanged—AI becomes a better interface TO this intelligence, not a replacement.
 
 ---
 
-## Current State Analysis
-
-### What Already Exists (Don't Break These)
-- **CompanionContext** - State-aware messaging system (stranger → loyal)
-- **useCompanionFeedback** - Micro-feedback hooks for actions
-- **QuizFeedback** - Inline answer acknowledgments
-- **TripSetupFeedback** - Destination/date responses
-- **PersonalizedLoadingProgress** - Context-aware loading messages
-- **BrowseNudge** - Session-aware floating prompts
-- **Framer Motion** - Already installed and used throughout
-
-### Missing Components
-- No magnetic buttons or cursor awareness
-- No page transitions between routes
-- No scroll-based progress indicators
-- No journey tracking across pages
-- No contextual help system
-- Loading states are component-specific, not system-wide
-
----
-
-## Implementation Plan
-
-### System 1: Cursor & Hover Awareness
-
-**New Components:**
+## Current System Architecture (Preserved)
 
 ```text
-src/components/ui/
-├── magnetic-button.tsx      # Buttons that reach toward cursor
-├── interactive-card.tsx     # Cards with progressive hover reveals
-└── cursor-glow.tsx          # Subtle ambient cursor glow
+┌─────────────────────────────────────────────────────────────────────┐
+│                         EXISTING SYSTEM                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  INPUT (Structured Forms)           INTELLIGENCE (Rules Engine)    │
+│  ─────────────────────────          ──────────────────────────     │
+│  • Start.tsx                        • 27 Archetype definitions     │
+│  • ItineraryContextForm.tsx         • 14 Trip type modifiers       │
+│  • Quiz.tsx (27 questions)          • 378 Interaction matrix       │
+│  • Date/traveler selectors          • Pacing/budget/forced slots   │
+│                                     • Destination essentials       │
+│                                                                     │
+│  GENERATION (Already AI)            OUTPUT (Static Display)        │
+│  ─────────────────────────          ──────────────────────────     │
+│  • generate-itinerary edge fn       • EditorialItinerary.tsx       │
+│  • prompt-library.ts                • DayTimeline components       │
+│  • profile-loader.ts                • Activity cards               │
+│  • archetype-data.ts                                               │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**MagneticButton** - Wraps existing Button for primary CTAs
-- Uses `onMouseMove` to track cursor position relative to button center
-- Applies subtle transform (15% of cursor delta) using framer-motion
-- Springs back on mouse leave
-- Usage: Replace `<Button>` with `<MagneticButton>` on key CTAs
-
-**InteractiveCard** - Enhanced card with hover reveal
-- Shows preview text normally
-- On hover: Fades preview, reveals full content + CTA
-- Subtle lift animation (translateY: -4px)
-- Internal glow effect with accent color
-
-**CursorGlow** - Global ambient effect (optional, performance-gated)
-- 256px gradient circle follows cursor with spring physics
-- Only renders on desktop (media query)
-- 3% opacity teal radial gradient
-- Mounted once in App.tsx
+**What stays unchanged:**
+- All archetype definitions and constraints
+- Trip type modifier logic 
+- Pacing, budget, forced slot rules
+- Profile loader and prompt library
+- Existing forms (as fallback option)
+- Generation pipeline
 
 ---
 
-### System 2: Scroll-Based Storytelling
+## What We're Adding
 
-**New Components:**
+### 1. Natural Language Trip Input (Alternative to Form)
+
+**Location:** New edge function + new UI component on Start page
+
+**How it works:**
+```text
+User types: "Beach trip in March, 2 kids (6 and 9), somewhere warm, around $4k"
+
+AI extracts → TripInput structure:
+{
+  tripType: "family",
+  childrenAges: [6, 9],
+  season: "march",
+  vibe: "beach",
+  budget: 4000,
+  travelers: 4
+}
+
+Same structure the form produces → Same generation pipeline
+```
+
+**Components:**
+- `supabase/functions/parse-trip-input/index.ts` - AI parsing endpoint
+- `src/components/planner/NaturalTripInput.tsx` - Text input with suggestions
+- Modification to `Start.tsx` - Dual mode toggle (natural | form)
+
+---
+
+### 2. Natural Language Itinerary Modification (Enhanced)
+
+**Existing:** `itinerary-chat` edge function already handles structured modifications
+
+**Enhancement:** Make it smarter, expose it better in UI
+
+**Current flow:**
+```text
+User clicks chat icon → Types "make day 3 lighter" → Gets structured action → Clicks approve
+```
+
+**Enhanced flow:**
+```text
+User types in inline input → Sees preview of changes → One click to apply
+
+"Make day 3 lighter"
+→ AI: "Moving museum to Day 4, pushing dinner back 1hr. Day 3 now has free afternoon."
+→ [Apply] [Undo]
+```
+
+**Components:**
+- `src/components/itinerary/InlineModifier.tsx` - Text input on itinerary page
+- Enhance `itinerary-chat` to return diff previews
+- No new edge function needed
+
+---
+
+### 3. Explainable Recommendations
+
+**Location:** Activity cards in itinerary
+
+**How it works:**
+```text
+Activity card shows: "Trattoria da Enzo"
+User clicks: "Why this?"
+
+AI generates explanation using:
+- User's archetype (from profile-loader)
+- Trip context (honeymoon, budget, etc.)
+- The activity metadata
+
+Returns: "This family-run spot since 1935 is where Romans actually eat. 
+You mentioned avoiding tourist traps—this qualifies. It's walkable from 
+your hotel in Trastevere, and their cacio e pepe is the real thing."
+```
+
+**Components:**
+- `supabase/functions/explain-recommendation/index.ts` - New edge function
+- `src/components/itinerary/ExplainableActivity.tsx` - Wraps activity card
+- Add `onExplain` callback to existing `TripActivityCard.tsx`
+
+---
+
+### 4. Alternative Quiz Path (Conversational)
+
+**Location:** New page parallel to existing Quiz
+
+**How it works:**
+```text
+User selects: "Just tell us how you like to travel"
+
+Prompt: "Describe a trip you loved. What made it great?"
+
+User writes: "Japan was amazing but exhausting. Best day was getting lost 
+in Kyoto and finding a tiny soba shop. Wish the whole trip was like that."
+
+AI extracts:
+- Pace: slow (exhaustion from over-scheduling)
+- Style: wandering, discovery
+- Dining: local spots, long meals
+- What went wrong: too packed
+
+Maps to archetype: "Slow Traveler" (same as quiz would produce)
+```
+
+**Components:**
+- `supabase/functions/parse-travel-story/index.ts` - Story → archetype
+- `src/pages/OnboardConversation.tsx` - Conversational alternative
+- Modification to Quiz landing to offer choice
+
+---
+
+## File Structure
 
 ```text
-src/components/common/
-├── scroll-reveal.tsx        # Wrapper for progressive content reveal
-├── story-progress.tsx       # Right-side scroll progress indicator
-└── parallax-layer.tsx       # Depth effect for hero sections
+NEW FILES:
+├── supabase/functions/
+│   ├── parse-trip-input/index.ts        # NL → TripInput structure
+│   ├── explain-recommendation/index.ts  # Activity explanations
+│   └── parse-travel-story/index.ts      # Story → archetype
+│
+├── src/components/planner/
+│   └── NaturalTripInput.tsx             # "Just tell us" input
+│
+├── src/components/itinerary/
+│   ├── InlineModifier.tsx               # Inline modification input
+│   └── ExplainableActivity.tsx          # "Why this?" wrapper
+│
+└── src/pages/
+    └── OnboardConversation.tsx          # Alternative to quiz
+
+MODIFIED FILES:
+├── src/pages/Start.tsx                  # Add mode toggle
+├── src/pages/Quiz.tsx                   # Add choice at start
+├── src/components/planner/TripActivityCard.tsx  # Add onExplain
+└── src/components/itinerary/EditorialItinerary.tsx  # Add InlineModifier
 ```
-
-**ScrollReveal** - Progressive content appearance
-- Uses `useInView` from framer-motion with margin="-100px"
-- Animates opacity (0→1) and y (30→0) with staggered delays
-- Already partially implemented inline; this extracts to reusable component
-
-**StoryProgress** - Desktop-only section navigator
-- Fixed right position, vertically centered
-- Shows section dots with labels on hover
-- Highlights current section based on scroll position
-- Click to jump to section
-- Pages with scroll stories: Home, HowItWorks, Archetypes
-
-**ParallaxLayer** - Subtle depth on hero sections
-- Wrapper that moves content at different scroll speeds
-- `speed` prop: 0.2 (slow bg), 0.4 (mid elements), 1.0 (content)
-- Uses `useTransform` with scroll progress
 
 ---
 
-### System 3: Page Transitions
+## Technical Details
 
-**New Component:**
+### Parse Trip Input Edge Function
 
-```text
-src/components/layout/
-└── page-transition.tsx      # AnimatePresence wrapper for routes
+```typescript
+// supabase/functions/parse-trip-input/index.ts
+
+interface ParsedTripInput {
+  destination?: string;
+  dates?: { start: string; end: string };
+  travelers?: number;
+  childrenAges?: number[];
+  tripType?: string;
+  budget?: number;
+  vibe?: string[];
+  constraints?: string[];
+  needsClarification?: { field: string; question: string }[];
+}
+
+// Uses Lovable AI to extract structure from natural language
+// Returns SAME shape that Start.tsx form produces
+// If ambiguous, returns clarification questions
 ```
 
-**Implementation:**
-- Wrap routes in `AnimatePresence mode="wait"`
-- Each page uses shared layout animation with:
-  - `initial={{ opacity: 0, y: 8 }}`
-  - `animate={{ opacity: 1, y: 0 }}`
-  - `exit={{ opacity: 0, y: -8 }}`
-- Duration: 300ms with easeInOut
+### Explain Recommendation Edge Function
 
-**Integration:**
-- Modify `App.tsx` to wrap `<Routes>` with transition provider
-- Add `key={pathname}` to route container
+```typescript
+// supabase/functions/explain-recommendation/index.ts
+
+// Loads user profile using profile-loader.ts (reuse existing)
+// Gets archetype context using archetype-data.ts (reuse existing)
+// Generates 2-3 sentence explanation specific to THIS user
+// References their traits, trip type, stated preferences
+```
+
+### UI Integration Points
+
+**Start.tsx modification:**
+```tsx
+// Add toggle at top of form
+<div className="flex gap-2 mb-6">
+  <button 
+    onClick={() => setMode('natural')}
+    className={mode === 'natural' ? 'active' : ''}
+  >
+    Just tell us
+  </button>
+  <button 
+    onClick={() => setMode('form')}
+    className={mode === 'form' ? 'active' : ''}
+  >
+    Use form
+  </button>
+</div>
+
+{mode === 'natural' && <NaturalTripInput onExtracted={setTripData} />}
+{mode === 'form' && <ExistingFormComponents />}
+```
+
+**Activity card modification:**
+```tsx
+// Add to TripActivityCard.tsx
+<button 
+  onClick={() => onExplain?.(activity)}
+  className="text-sm text-muted-foreground"
+>
+  Why this?
+</button>
+```
 
 ---
 
-### System 4: Enhanced Acknowledgment Layer
+## What This Does NOT Change
 
-**Existing:** `useCompanionFeedback` provides toast messages
-**Enhancement:** Add inline feedback and button state feedback
-
-**New Components:**
-
-```text
-src/components/ui/
-├── inline-feedback.tsx      # Small feedback right where action happened
-└── responsive-button.tsx    # Button with loading/success states
-```
-
-**InlineFeedback**
-- Shows beside or below the element that was interacted with
-- AnimatePresence with scale + opacity transition
-- Auto-dismisses after 1.5s
-- Types: success (teal), info (blue), warning (amber)
-
-**ResponsiveButton**
-- States: idle → loading → success → idle
-- Loading: Spinner + "Working..." text
-- Success: Checkmark + "Done!" text (1.5s)
-- Prevents double-clicks during loading
-- Extends existing Button with same variants
-
-**Integration Points:**
-- Quiz answer selection → InlineFeedback appears
-- Save actions → ResponsiveButton shows completion
-- Form submissions → Button state feedback
-
----
-
-### System 5: Journey Awareness
-
-**New Store:**
-
-```text
-src/stores/
-└── journey-store.ts         # Zustand store for session tracking
-```
-
-**journeyStore** tracks:
-- `pagesViewed: string[]` - Pages visited this session
-- `actionsCompleted: string[]` - Key milestones (quiz_started, quiz_completed, trip_created)
-- `timeOnSite: number` - Session duration
-- `getJourneyStage()` - Returns: new | curious | exploring | in-quiz | post-quiz
-- `getSuggestedNextStep()` - Returns contextual CTA based on stage
-
-**JourneyAwareCTA** component:
-- Reads from journey store
-- Adjusts urgency styling (outline → filled → prominent)
-- Changes label based on what user has/hasn't done
-
-**Integration:**
-- Track page views in `useEffect` in App.tsx or layout
-- Update BrowseNudge to use journey store
-- TopNav CTA becomes journey-aware
-
----
-
-### System 6: Contextual Guidance
-
-**New Components:**
-
-```text
-src/components/common/
-├── smart-tooltip.tsx        # Tooltips that appear contextually
-└── contextual-helper.tsx    # Floating help button + panel
-```
-
-**SmartTooltip**
-- Props: `showOn: 'hover' | 'first-visit' | 'idle'`
-- `first-visit`: Shows once automatically, then never again
-- `idle`: Shows after X seconds without interaction
-- Uses session storage to track "seen" state
-
-**ContextualHelper**
-- Floating help button (bottom-right, above BrowseNudge)
-- Opens slide-in panel with page-specific suggestions
-- Auto-offers help after 30s on complex pages (quiz, planner)
-- Content defined per-page in config object
-
----
-
-### System 7: Personality & Polish
-
-**Enhancements to existing components:**
-
-**Loading State Personalities**
-- Update `PersonalizedLoadingProgress` with visual variants:
-  - `travel`: Animated plane following dotted path
-  - `pulse`: Breathing icon animation
-  - `minimal`: Simple spinner
-
-**Empty State Personalities**
-- Create `EmptyState` component with:
-  - Floating animated illustration
-  - Warm headline + body
-  - Companion note (italic, smaller)
-  - Optional CTA button
-
-**Error State Personalities**
-- Warm error messages from `strangerCopy.micro`
-- Retry button with ResponsiveButton behavior
-
----
-
-## File Structure Summary
-
-```text
-New files to create:
-├── src/components/ui/
-│   ├── magnetic-button.tsx
-│   ├── interactive-card.tsx
-│   ├── cursor-glow.tsx
-│   ├── inline-feedback.tsx
-│   └── responsive-button.tsx
-├── src/components/common/
-│   ├── scroll-reveal.tsx
-│   ├── story-progress.tsx
-│   ├── parallax-layer.tsx
-│   ├── smart-tooltip.tsx
-│   ├── contextual-helper.tsx
-│   └── empty-state.tsx
-├── src/components/layout/
-│   └── page-transition.tsx
-└── src/stores/
-    └── journey-store.ts
-
-Files to modify:
-├── src/App.tsx                  # Add page transitions, journey tracking
-├── src/components/common/TopNav.tsx  # Journey-aware CTA
-├── src/pages/Home.tsx           # Add ScrollReveal, StoryProgress
-├── src/pages/Quiz.tsx           # Add InlineFeedback integration
-└── src/pages/Start.tsx          # Add ResponsiveButton, SmartTooltip
-```
+| Component | Status |
+|-----------|--------|
+| 27 Archetype definitions | Unchanged |
+| 14 Trip type modifiers | Unchanged |
+| Archetype × Trip Type matrix | Unchanged |
+| Pacing/budget/forced slot rules | Unchanged |
+| Profile loader logic | Reused, not modified |
+| Prompt library | Reused, not modified |
+| Generation pipeline | Unchanged |
+| Existing forms | Kept as option |
+| Existing quiz | Kept as option |
 
 ---
 
 ## Implementation Priority
 
-| Phase | Components | Impact | Effort |
-|-------|-----------|--------|--------|
-| 1 | ScrollReveal, InlineFeedback | High - immediate feel | 2 hrs |
-| 2 | ResponsiveButton, journey-store | High - action feedback | 2 hrs |
-| 3 | MagneticButton, page-transition | Medium - polish | 2 hrs |
-| 4 | StoryProgress, SmartTooltip | Medium - guidance | 2 hrs |
-| 5 | InteractiveCard, ParallaxLayer | Medium - depth | 2 hrs |
-| 6 | ContextualHelper, CursorGlow | Lower - advanced | 2 hrs |
-| 7 | EmptyState, error polish | Lower - edge cases | 1 hr |
-
-**Total estimated effort: ~13 hours**
+| Phase | What | Why First |
+|-------|------|-----------|
+| **1** | Explain recommendations | Highest value, no risk to core flow |
+| **2** | Inline modifications | Enhances existing chat, users have itineraries |
+| **3** | Natural trip input | Alternative path, form stays as fallback |
+| **4** | Conversational onboarding | Nice-to-have, quiz works well |
 
 ---
 
-## Technical Notes
+## Key Principle
 
-### Performance Considerations
-- CursorGlow only renders on desktop (check `window.matchMedia`)
-- ParallaxLayer uses `will-change: transform`
-- Page transitions are 300ms max (perceptually instant)
-- ScrollReveal uses `once: true` to avoid re-triggering
+**AI is a better interface to the same intelligence.**
 
-### Accessibility
-- MagneticButton only animates visually, doesn't affect click target
-- All animations respect `prefers-reduced-motion`
-- Tooltips remain keyboard-accessible
-- Focus states preserved on all interactive elements
+Your rules engine (archetypes, trip types, matrices, pacing, forced slots) IS the intelligence. AI just makes it easier to:
+- **Tell** the system what you want (input)
+- **Understand** why it recommended something (explain)
+- **Change** it without rebuilding (modify)
 
-### Mobile Considerations
-- Cursor effects disabled on touch devices
-- StoryProgress hidden on mobile
-- Page transitions work but are simplified
-- Touch feedback via `:active` states preserved
-
----
-
-## Success Criteria
-
-After implementation, the site should pass these tests:
-
-1. **Click any primary button** → Subtle magnetic pull toward cursor before click
-2. **Answer a quiz question** → Inline feedback appears at selection point
-3. **Submit a form** → Button shows loading → success state
-4. **Scroll homepage** → Content reveals progressively, progress dots update
-5. **Navigate between pages** → Smooth fade/slide transitions
-6. **Idle for 30s on complex page** → Help panel offers assistance
-7. **Hover on key cards** → Additional content reveals with warm animation
-
-The experience should feel like: *"The site is paying attention to me."*
-
----
-
-## The Before/After
-
-| Before | After |
-|--------|-------|
-| Pages you read | Conversation you have |
-| Forms to fill | Questions to answer |
-| Buttons to click | Actions that respond |
-| Navigate yourself | Be guided through |
-| Generic loading | "Building your trip..." |
-| Static illustrations | Living, breathing elements |
-| Hard page cuts | Flowing transitions |
-| Silent errors | "Let's try that again." |
-
+The brain stays the same. AI is a better mouth and ears.
