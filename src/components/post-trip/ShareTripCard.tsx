@@ -1,0 +1,149 @@
+/**
+ * Share Trip Card Component
+ * Beautiful shareable card for social media and referrals
+ */
+
+import { useState, useRef } from 'react';
+import { 
+  Copy, Mail, Share2, 
+  Instagram, Twitter, Check, Link2, Users
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import type { TripPhoto } from '@/hooks/useTripPhotos';
+
+interface ShareTripCardProps {
+  isOpen: boolean;
+  onClose: () => void;
+  trip: { id: string; destination: string; start_date?: string; name?: string };
+  photos: TripPhoto[];
+  highlights: { activity: string; why?: string }[];
+}
+
+export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: ShareTripCardProps) {
+  const [friendEmail, setFriendEmail] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const shareUrl = `${window.location.origin}/share/trip/${trip.id}`;
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    toast.success('Link copied!');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareNative = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `My ${trip.destination} Trip`,
+          text: `Check out my trip to ${trip.destination}! Planned with Voyance.`,
+          url: shareUrl,
+        });
+      } catch (e) {
+        // User cancelled
+      }
+    } else {
+      copyLink();
+    }
+  };
+
+  const sendToFriend = () => {
+    if (!friendEmail) return;
+    
+    const subject = encodeURIComponent(`You need to see ${trip.destination}`);
+    const body = encodeURIComponent(
+      `Hey!\n\nI just got back from ${trip.destination} and thought you'd love it.\n\n` +
+      `Check out my trip: ${shareUrl}\n\n` +
+      `Planned with Voyance.`
+    );
+    
+    window.open(`mailto:${friendEmail}?subject=${subject}&body=${body}`);
+    setFriendEmail('');
+    toast.success('Opening email...');
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle className="flex items-center gap-2">
+            <Share2 className="w-5 h-5" />
+            Share Your Trip
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="p-6 space-y-6">
+          {/* Preview Card */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            {photos.length > 0 ? (
+              <div className="grid grid-cols-3 gap-0.5 h-32">
+                {photos.slice(0, 3).map((photo) => (
+                  <div key={photo.id} className="overflow-hidden">
+                    <img src={photo.publicUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-32 bg-gradient-to-br from-primary/60 to-primary/20" />
+            )}
+            
+            <div className="p-4 text-white">
+              <h3 className="text-lg font-semibold mb-1">{trip.destination}</h3>
+              <p className="text-white/70 text-sm mb-3">
+                {trip.start_date && new Date(trip.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+              </p>
+              
+              {highlights.length > 0 && (
+                <div className="border-t border-white/20 pt-3 mt-3">
+                  <p className="text-xs text-white/60 mb-2">Highlights:</p>
+                  {highlights.slice(0, 3).map((h, idx) => (
+                    <p key={idx} className="text-sm text-white/90 truncate">• {h.activity}</p>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex items-center gap-1.5 mt-4 text-xs text-white/50">
+                <span>Planned with</span>
+                <span className="font-medium text-white/80">Voyance</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Share Options */}
+          <div className="grid grid-cols-4 gap-2">
+            <button onClick={copyLink} className={cn("flex flex-col items-center gap-1 p-3 rounded-lg transition-colors", copied ? "bg-green-500/10 text-green-600" : "bg-muted hover:bg-muted/80")}>
+              {copied ? <Check className="w-5 h-5" /> : <Link2 className="w-5 h-5" />}
+              <span className="text-xs">{copied ? 'Copied!' : 'Copy'}</span>
+            </button>
+            <button onClick={shareNative} className="flex flex-col items-center gap-1 p-3 rounded-lg bg-muted hover:bg-muted/80">
+              <Share2 className="w-5 h-5" />
+              <span className="text-xs">Share</span>
+            </button>
+            <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Just got back from ${trip.destination}!`)}&url=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1 p-3 rounded-lg bg-muted hover:bg-muted/80">
+              <Twitter className="w-5 h-5" />
+              <span className="text-xs">Twitter</span>
+            </a>
+            <button onClick={() => toast.info('Instagram sharing coming soon!')} className="flex flex-col items-center gap-1 p-3 rounded-lg bg-muted hover:bg-muted/80">
+              <Instagram className="w-5 h-5" />
+              <span className="text-xs">Story</span>
+            </button>
+          </div>
+
+          {/* Send to Friend */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium flex items-center gap-2"><Users className="w-4 h-4" />Send to a friend</p>
+            <div className="flex gap-2">
+              <Input type="email" placeholder="friend@email.com" value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendToFriend()} />
+              <Button onClick={sendToFriend} disabled={!friendEmail}><Mail className="w-4 h-4" /></Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
