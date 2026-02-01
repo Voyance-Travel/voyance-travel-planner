@@ -116,6 +116,15 @@ import {
 } from './archetype-data.ts';
 
 // =============================================================================
+// PHASE 14: TRIP TYPE MODIFIERS - First-class input for celebration/group/purpose trips
+// =============================================================================
+import {
+  buildTripTypePromptSection,
+  getTripTypeModifier,
+  getTripTypeInteraction,
+} from './trip-type-modifiers.ts';
+
+// =============================================================================
 // PHASE 13B: UNIFIED PROFILE LOADER - Single Source of Truth for Traveler Data
 // =============================================================================
 import {
@@ -6138,12 +6147,25 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       );
       console.log(`[Stage 1.99] ✓ Generated unified archetype constraints for ${unifiedProfile.archetype} (${generationHierarchy.length} chars, dynamic=${!!destinationId})`);
       
+      // =======================================================================
+      // STAGE 1.995: Trip Type Modifiers - First-class input for celebrations/groups/purpose
+      // =======================================================================
+      const tripTypePrompt = buildTripTypePromptSection(
+        context.tripType,
+        unifiedProfile.archetype,
+        context.totalDays
+      );
+      if (tripTypePrompt) {
+        console.log(`[Stage 1.995] ✓ Trip type "${context.tripType}" prompt built (${tripTypePrompt.length} chars)`);
+      } else {
+        console.log(`[Stage 1.995] No special trip type - using standard generation`);
+      }
       
       // Combine all context for maximum personalization
-      // Order: ARCHETYPE CONSTRAINTS → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
+      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
@@ -7295,6 +7317,16 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       
       console.log(`[generate-day] Full guidance built: ${generationHierarchy.length} chars (dynamic=${!!destinationId})`);
       
+      // Build trip type prompt section (first-class input for celebrations/groups/purpose)
+      const tripTypePrompt = buildTripTypePromptSection(
+        tripType,
+        primaryArchetype,
+        totalDays
+      );
+      if (tripTypePrompt) {
+        console.log(`[generate-day] Trip type "${tripType}" prompt built (${tripTypePrompt.length} chars)`);
+      }
+      
       // Get archetype context for activity limits and other settings
       const archetypeContext = getFullArchetypeContext(
         primaryArchetype, 
@@ -7307,6 +7339,8 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
 
 ${generationHierarchy}
+
+${tripTypePrompt}
 
 ${timingInstructions}
 ${lockedSlotsInstruction}
