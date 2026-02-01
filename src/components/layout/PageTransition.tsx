@@ -5,7 +5,6 @@
 
 import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { useLocation } from 'react-router-dom';
 
 interface PageTransitionProps {
   children: ReactNode;
@@ -30,10 +29,9 @@ const variants = {
 
 export function PageTransition({
   children,
-  variant = 'slide',
-  duration = 0.3,
+  variant = 'fade', // Changed default to 'fade' for better performance
+  duration = 0.2, // Reduced duration for snappier feel
 }: PageTransitionProps) {
-  const location = useLocation();
   const motionVariant = variants[variant];
 
   // Check for reduced motion preference
@@ -47,13 +45,12 @@ export function PageTransition({
 
   return (
     <motion.div
-      key={location.pathname}
       initial={motionVariant.initial}
       animate={motionVariant.animate}
       exit={motionVariant.exit}
       transition={{ 
         duration, 
-        ease: [0.25, 0.1, 0.25, 1], // Custom easing
+        ease: 'easeOut',
       }}
     >
       {children}
