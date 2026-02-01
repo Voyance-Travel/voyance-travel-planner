@@ -36,8 +36,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useAuth } from '@/contexts/AuthContext';
 import { useDraftLimitCheck } from '@/hooks/useDraftLimitCheck';
 import { supabase } from '@/integrations/supabase/client';
-import { getDestinationImage, getDestinationImages } from '@/utils/destinationImages';
-import { handleImageError } from '@/hooks/useImageWithFallback';
+import { useTripHeroImage } from '@/hooks/useTripHeroImage';
+import { getDestinationImage } from '@/utils/destinationImages';
 
 // Extract base destination name (e.g., "Rome (FCO)" -> "Rome", "Paris, France" -> "Paris")
 function getBaseDestination(destination: string): string {
@@ -197,36 +197,17 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
   const status = statusConfig[displayStatus];
   const StatusIcon = status.icon;
   
-  // Prefer trip-specific hero image when available (e.g., demo/seeded trips)
-  // Fallback to curated destination images with robust chain.
+  // Use smart hero image hook with API fallback for uncurated destinations
   const seededHero = (trip.metadata && typeof trip.metadata === 'object')
     ? (trip.metadata as Record<string, unknown>).hero_image
     : null;
   const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
 
-  const allImages = getDestinationImages(trip.destination);
-  const [seededHeroFailed, setSeededHeroFailed] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const imageUrl = (!seededHeroFailed && seededHeroUrl)
-    ? seededHeroUrl
-    : (allImages[currentImageIndex] || getDestinationImage(trip.destination));
-  
-  // Handle image load error - try next image in the list
-  const onImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    // If a seeded hero exists but failed, disable it and let the curated chain render.
-    if (seededHeroUrl && !seededHeroFailed) {
-      setSeededHeroFailed(true);
-      return;
-    }
-
-    // Try next image in the fallback chain
-    if (currentImageIndex < allImages.length - 1) {
-      setCurrentImageIndex(prev => prev + 1);
-    } else {
-      // All destination images failed, use generic fallback handler
-      handleImageError(e, undefined, trip.destination);
-    }
-  }, [currentImageIndex, allImages.length, trip.destination, seededHeroUrl, seededHeroFailed]);
+  const { imageUrl, onError: onImageError } = useTripHeroImage({
+    destination: trip.destination,
+    seededHeroUrl,
+    tripId: trip.id,
+  });
   
   // Check for booking status - use direct properties
   const hasItinerary = !!trip.hasItineraryData;

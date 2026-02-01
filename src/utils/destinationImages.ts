@@ -371,6 +371,32 @@ export function hasCuratedImages(destination: string): boolean {
   );
 }
 
+/**
+ * Generate a deterministic gradient data URL for a destination
+ * Used as the final fallback when all image sources fail
+ */
+export function generateDestinationGradient(seed: string): string {
+  // Generate deterministic hue from seed
+  const hash = seed.toLowerCase().split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+  const hue1 = hash % 360;
+  const hue2 = (hue1 + 40) % 360; // Complementary-ish offset
+  
+  // Create a canvas-free SVG gradient as data URL
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800">
+      <defs>
+        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:hsl(${hue1}, 60%, 45%)"/>
+          <stop offset="100%" style="stop-color:hsl(${hue2}, 50%, 35%)"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#g)"/>
+    </svg>
+  `.replace(/\s+/g, ' ').trim();
+  
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 export {
   CURATED_DESTINATION_IMAGES,
   GENERIC_TRAVEL_IMAGES,
@@ -380,6 +406,7 @@ export default {
   getDestinationImage,
   getDestinationImages,
   hasCuratedImages,
+  generateDestinationGradient,
   CURATED_DESTINATION_IMAGES,
   GENERIC_TRAVEL_IMAGES,
 };

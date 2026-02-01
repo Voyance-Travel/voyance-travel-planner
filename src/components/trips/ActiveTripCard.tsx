@@ -3,7 +3,7 @@
  * Features: day progress, current activity preview, quick actions, feedback prompts
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
@@ -26,8 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { getDestinationImage, getDestinationImages } from '@/utils/destinationImages';
-import { handleImageError } from '@/hooks/useImageWithFallback';
+import { useTripHeroImage } from '@/hooks/useTripHeroImage';
 
 interface ActiveTripCardProps {
   trip: {
@@ -63,27 +62,16 @@ function getTimeOfDayGreeting() {
 
 export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
   const navigate = useNavigate();
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [seededHeroFailed, setSeededHeroFailed] = useState(false);
   
+  // Use smart hero image hook with API fallback for uncurated destinations
   const seededHero = trip.metadata?.hero_image;
   const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
-  const allImages = getDestinationImages(trip.destination);
-  const imageUrl = (!seededHeroFailed && seededHeroUrl)
-    ? seededHeroUrl
-    : (allImages[currentImageIndex] || getDestinationImage(trip.destination));
-
-  const onImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    if (seededHeroUrl && !seededHeroFailed) {
-      setSeededHeroFailed(true);
-      return;
-    }
-    if (currentImageIndex < allImages.length - 1) {
-      setCurrentImageIndex(prev => prev + 1);
-    } else {
-      handleImageError(e, undefined, trip.destination);
-    }
-  }, [currentImageIndex, allImages.length, trip.destination, seededHeroUrl, seededHeroFailed]);
+  
+  const { imageUrl, isLoading, onError: onImageError } = useTripHeroImage({
+    destination: trip.destination,
+    seededHeroUrl,
+    tripId: trip.id,
+  });
 
   // Calculate trip progress
   const now = new Date();
