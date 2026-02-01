@@ -916,106 +916,325 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
   const normalizedTripType = tripType?.toLowerCase().replace(/[_\s-]+/g, '_') || 'none';
 
   const combinations: Record<string, Record<string, string>> = {
-    // Birthday combinations
-    birthday: {
-      slow_traveler: "Birthday celebration through quality, not quantity. One very special experience done slowly and savored.",
-      adrenaline_architect: "Birthday = that bucket list adventure activity they've been wanting. Make it happen.",
-      culinary_cartographer: "Birthday dinner at THE restaurant they've been dying to try. Food is the celebration.",
-      luxury_luminary: "Full VIP birthday treatment. Champagne, upgrades, the works.",
-      flexible_wanderer: "Birthday surprise hidden in a day of wandering. Low-key celebration, big discovery.",
-      beach_therapist: "Sunset birthday moment on the beach. Simple but perfect. Maybe a special beachside dinner.",
-      social_butterfly: "Birthday with friends/group vibe. Celebration dinner with laughter and connection.",
-      cultural_anthropologist: "Birthday immersed in local culture. Special experience that teaches something new.",
-      bucket_list_conqueror: "Birthday checking off a major item. Make it significant and memorable."
-    },
-
-    // Anniversary combinations
-    anniversary: {
-      adrenaline_architect: "Adventure anniversary - shared thrills build memories. But include recovery romance time.",
-      slow_traveler: "Ultimate slow anniversary. Long meals, no rushing, pure quality time together.",
-      bucket_list_conqueror: "Anniversary at dream destination. Still see the sites, but with romantic lens.",
-      culinary_cartographer: "Food-focused anniversary. Cooking together, long dinners, wine tastings.",
-      beach_therapist: "Beach anniversary - sunset walks, seafood dinners, relaxed togetherness.",
-      luxury_luminary: "Elevated anniversary experience. VIP treatment, special touches throughout."
-    },
-
-    // Honeymoon combinations
-    honeymoon: {
-      adrenaline_architect: "Adventure honeymoon - shared thrills build memories. But include recovery and romance time.",
-      slow_traveler: "Ultimate slow honeymoon. Long meals, no rushing, pure quality time. They're exhausted - let them rest.",
-      bucket_list_conqueror: "Dream destination honeymoon. See the sites, but with romantic lens and rest time.",
-      culinary_cartographer: "Food-focused honeymoon. Cooking together, long dinners, wine tastings.",
-      beach_therapist: "Beach honeymoon paradise - they need to recover from wedding stress. Sun, rest, togetherness.",
-      luxury_luminary: "Full luxury honeymoon. This is their moment - spare nothing within budget.",
-      flexible_wanderer: "Wander together honeymoon. Discover places as a newly married couple. Low structure, high romance."
-    },
-
-    // Solo trip combinations
-    solo: {
-      social_butterfly: "Solo but social. Walking tours, group activities, hostel events, pub crawls. Meet people!",
-      slow_traveler: "Ultimate solo freedom. Own pace, own choices, no compromise. Pure self-indulgence.",
-      flexible_wanderer: "Solo wandering. Complete freedom. Go where the day takes you. No schedule needed.",
-      healing_journeyer: "Solo healing journey. Solitude is the point, not loneliness. Meaningful alone time.",
-      cultural_anthropologist: "Deep solo cultural immersion. No distractions from learning and absorbing.",
-      adrenaline_architect: "Solo adventure - take risks only you want. No group consensus needed.",
-      bucket_list_conqueror: "Solo bucket list mission. Focus entirely on what YOU want to see and do."
-    },
-
-    // Family combinations  
-    family: {
-      bucket_list_conqueror: "Family bucket list - but at kid pace. Prioritize ruthlessly. Quality over quantity.",
-      adrenaline_architect: "Family adventure - age-appropriate thrills. Water parks, easy hikes, bike rides.",
-      culinary_cartographer: "Foodie family - kid-friendly food tours, cooking classes, ice cream missions.",
-      beach_therapist: "Beach family vacation - pool time, sandcastles, easy seafood. Kids need downtime.",
-      slow_traveler: "Very slow family pace. Kids need even more rest than you do. Accept it.",
-      cultural_anthropologist: "Family cultural exploration - kid-friendly museums, interactive history, stories."
-    },
-
-    // Girls/Guys trip combinations
-    girls_trip: {
-      beach_therapist: "Beach girls trip - beach club, sunset cocktails, casual seafood, pool time.",
-      culinary_cartographer: "Foodie girls trip - wine tastings, cooking class, long group dinners.",
-      social_butterfly: "Social girls trip - nightlife, group activities, meeting new people.",
-      adrenaline_architect: "Adventure girls trip - group activity, water sports, shared thrills.",
-      luxury_luminary: "Luxe girls trip - spa day, fine dining, VIP treatment."
-    },
-
+    // ═══════════════════════════════════════════════════════════════
+    // GUYS TRIP - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
     guys_trip: {
-      adrenaline_architect: "Adventure guys trip - outdoor activities, sports, shared challenges.",
-      culinary_cartographer: "Foodie guys trip - brewery tours, BBQ, local specialties, hearty meals.",
-      social_butterfly: "Social guys trip - sports bars, pub crawls, meeting locals.",
-      beach_therapist: "Beach guys trip - water sports, beach bars, casual seafood.",
-      cultural_anthropologist: "Cultural guys trip - historical pubs, local sports match, authentic experiences."
+      // EXPLORERS
+      cultural_anthropologist: "Historical pub crawl, local sports culture, traditional games locals play, authentic neighborhood bars.",
+      urban_nomad: "Neighborhood bar hopping on foot, discovering local hangouts, street food crawl, rooftop beers.",
+      wilderness_pioneer: "Group hiking, outdoor adventure day, kayaking or rafting, campfire vibes if possible.",
+      digital_explorer: "Gaming bar, VR experiences, eSports venue, arcade night, tech district with craft beer.",
+      flexible_wanderer: "Spontaneous pub discoveries, stumble into perfect local bars, group freedom to explore, no rigid plans.",
+      // CONNECTORS
+      social_butterfly: "Pub crawls, group tours, meeting locals, sports bar with atmosphere, maximum social energy.",
+      family_architect: "Dad's trip away - sports, good food, relaxed pace, guilt-free guy time.",
+      romantic_curator: "N/A - redirect to couples trip",
+      community_builder: "Local community spots, neighborhood bars where regulars go, authentic local experience.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Legendary stadium visit, famous brewery, iconic guys trip experience they've talked about.",
+      adrenaline_architect: "Group adventure - skydiving, bungee, white water rafting, extreme shared experience.",
+      collection_curator: "Brewery tour, whiskey tasting trail, sports memorabilia hunt, whatever the group geeks out on.",
+      status_seeker: "VIP table, exclusive club, hard-to-get sports tickets, brag-worthy experience.",
+      // RESTORERS
+      zen_seeker: "Morning wellness solo, then join the guys. Balance personal practice with group evening.",
+      retreat_regular: "Golf trip vibes, spa morning then guys activities, wellness-adjacent bonding.",
+      beach_therapist: "Beach day, boat trip, sunset beers, casual seafood, low-key guys trip.",
+      slow_traveler: "Long lunches, craft beer tastings, no rushing anywhere. Quality hang time over packed schedule.",
+      // CURATORS
+      culinary_cartographer: "Food and beer tour, BBQ pilgrimage, local specialty hunt, brewery crawl, hearty meals.",
+      art_aficionado: "Architecture walk then drinks, design district then rooftop bar, culture by day, bars by night.",
+      luxury_luminary: "Premium everything - VIP sports box, high-end steakhouse, exclusive lounge, top-shelf whiskey.",
+      // TRANSFORMERS
+      eco_ethicist: "Sustainable brewery, farm-to-table group dinner, eco-adventure activity, local craft producers.",
+      gap_year_graduate: "Budget pub crawl, hostel social, cheap eats challenge, backpacker bar scene, maximum fun minimum cost.",
+      midlife_explorer: "Grown-up guys trip - good restaurants, nice bars, one adventure activity, quality over quantity.",
+      sabbatical_scholar: "Historical drinking tour, literary pub crawl, intellectual bonding over beers.",
+      healing_journeyer: "Supportive friends trip - nature walks, meaningful conversations, gentle pace with the guys.",
+      retirement_ranger: "Golf, wine tasting, comfortable pace, early dinners, quality time with old friends.",
+      balanced_story_collector: "Mix of activities - some sports, some food, some nightlife, memorable shared experience."
     },
 
-    // Babymoon combinations
+    // ═══════════════════════════════════════════════════════════════
+    // GIRLS TRIP - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    girls_trip: {
+      // EXPLORERS
+      cultural_anthropologist: "Art galleries, cultural walking tour, women-owned businesses, meaningful local experiences.",
+      urban_nomad: "Neighborhood exploration, cute cafes, boutique shopping streets, rooftop cocktails.",
+      wilderness_pioneer: "Adventure retreat - hiking then wine, outdoor spa, glamping, nature bonding.",
+      digital_explorer: "Instagram spots, trendy cafes, photo-worthy murals, aesthetic everything, night markets.",
+      flexible_wanderer: "Wandering together, stumbling upon cute spots, spontaneous shopping finds, no rigid plans.",
+      // CONNECTORS
+      social_butterfly: "Group classes, wine tours, meeting locals, maximum social activities, evening out.",
+      family_architect: "Mom's escape - spa day, wine, adult conversation, sleep in, no kids menu.",
+      romantic_curator: "N/A - redirect to couples trip",
+      community_builder: "Women's cooperatives, female artisan workshops, meaningful female-owned business visits.",
+      // ACHIEVERS
+      bucket_list_conqueror: "The bucket list destination, iconic photo spots, must-do experiences checked off.",
+      adrenaline_architect: "Group adventure - surfing lesson, hiking, zip-lining, paddleboarding together.",
+      collection_curator: "Shopping for their passion, specialty boutiques, curated finds, themed experiences.",
+      status_seeker: "Influencer spots, exclusive brunches, VIP treatment, impressive venues, shareable moments.",
+      // RESTORERS
+      zen_seeker: "Wellness retreat vibes - yoga morning, healthy brunch, meditation, peaceful group activities.",
+      retreat_regular: "Full spa day, wellness activities, healthy dining, treatments, relaxation focus.",
+      beach_therapist: "Beach club day, pool lounging, sunset cocktails, casual beachwear shopping.",
+      slow_traveler: "Long brunches, leisurely boutique browsing, no rushing, quality girlfriend time.",
+      // CURATORS
+      culinary_cartographer: "Food tour, cooking class together, wine tasting, restaurant hopping, market visit.",
+      art_aficionado: "Gallery hopping, design districts, art-focused experiences, creative workshops.",
+      luxury_luminary: "Spa day, fine dining, luxury shopping, champagne everything, five-star treatment.",
+      // TRANSFORMERS
+      eco_ethicist: "Sustainable fashion shopping, eco-spa, farm-to-table experiences, ethical brands.",
+      gap_year_graduate: "Budget-friendly fun, hostels with style, cheap eats, backpacker adventures, thrift shopping.",
+      midlife_explorer: "Grown-up girls trip - nice hotels, good food, meaningful experiences, celebrating friendship.",
+      sabbatical_scholar: "Bookshop crawl, museum visits, intellectual cafes, cultural deep dives together.",
+      healing_journeyer: "Supportive friends trip - gentle activities, nature walks, meaningful talks, holding space.",
+      retirement_ranger: "Comfortable pace, nice restaurants, easy activities, celebrating years of friendship.",
+      balanced_story_collector: "Mix of everything - shopping, culture, food, drinks, photos, memories."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // BIRTHDAY - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    birthday: {
+      // EXPLORERS
+      cultural_anthropologist: "Birthday at meaningful historical site, special cultural experience, museum they love.",
+      urban_nomad: "Birthday neighborhood discovery, surprise in a hidden local spot, urban exploration gift.",
+      wilderness_pioneer: "Birthday summit hike, outdoor celebration, campfire birthday, nature experience.",
+      digital_explorer: "Birthday at unique/viral venue, photo-worthy celebration, shareable moment.",
+      flexible_wanderer: "Low-key birthday wander, stumble upon something special, no forced celebration.",
+      // CONNECTORS
+      social_butterfly: "Big birthday party, group dinner, festive atmosphere, all their friends energy.",
+      family_architect: "Family birthday celebration, kid-friendly venue if with children, multi-generational.",
+      romantic_curator: "Romantic birthday dinner, surprise experience planned by partner, intimate celebration.",
+      community_builder: "Birthday giving back, celebration with local community, meaningful over material.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Birthday bucket list item - THE thing they've always wanted to do. Make it happen.",
+      adrenaline_architect: "Birthday adventure - skydiving, bungee, that thrilling thing they've wanted.",
+      collection_curator: "Birthday related to their passion, adding to their collection, specialty experience.",
+      status_seeker: "VIP birthday treatment, impressive venue, exclusive experience, show-stopping.",
+      // RESTORERS
+      zen_seeker: "Peaceful birthday - sunrise meditation, meaningful quiet celebration, spiritual significance.",
+      retreat_regular: "Spa birthday, full pampering day, wellness celebration, treatments.",
+      beach_therapist: "Beach birthday - sunset celebration, toes in sand, simple and perfect.",
+      slow_traveler: "Leisurely birthday - long special lunch, no rushing, savoring the day.",
+      // CURATORS
+      culinary_cartographer: "Birthday at THE restaurant they've wanted, food-focused celebration.",
+      art_aficionado: "Birthday at special gallery, private museum experience, art-related celebration.",
+      luxury_luminary: "Full luxury birthday - champagne, VIP everything, the works, make them feel royal.",
+      // TRANSFORMERS
+      eco_ethicist: "Sustainable celebration, nature birthday experience, eco-conscious and meaningful.",
+      gap_year_graduate: "Fun budget birthday, hostel party vibes, creative celebration, experience over expense.",
+      midlife_explorer: "Meaningful milestone birthday, quality celebration, marking the moment.",
+      sabbatical_scholar: "Birthday at meaningful historical or intellectual site, thoughtful celebration.",
+      healing_journeyer: "Gentle birthday, peaceful celebration, self-care day, honoring the journey.",
+      retirement_ranger: "Comfortable birthday celebration, quality over chaos, celebrating life.",
+      balanced_story_collector: "Classic birthday - nice dinner, special moment, cake, making a memory."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // ANNIVERSARY - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    anniversary: {
+      // EXPLORERS
+      cultural_anthropologist: "Anniversary exploring together, meaningful cultural site, learning as a couple.",
+      urban_nomad: "City anniversary - romantic neighborhood walks, discovering spots together.",
+      wilderness_pioneer: "Adventure anniversary - hiking, nature, outdoor romance, campfire under stars.",
+      digital_explorer: "Modern anniversary - unique experiences, photo-worthy moments, shareable romance.",
+      flexible_wanderer: "Wandering anniversary - no agenda, discover together, spontaneous romance.",
+      // CONNECTORS
+      social_butterfly: "Anniversary with friends nearby, celebratory energy, sharing the love.",
+      family_architect: "Anniversary escape from kids, adult time, remembering why you fell in love.",
+      romantic_curator: "Ultimate romantic anniversary - every detail planned, maximum romance.",
+      community_builder: "Anniversary volunteering together, meaningful shared experience, giving back.",
+      // ACHIEVERS
+      bucket_list_conqueror: "Anniversary at dream destination, checking off together, romantic achievement.",
+      adrenaline_architect: "Adventure anniversary - shared thrills, bonding through excitement.",
+      collection_curator: "Anniversary focused on shared interest - wine region, art capitals together.",
+      status_seeker: "Impressive anniversary - luxury, VIP, the kind others envy.",
+      // RESTORERS
+      zen_seeker: "Peaceful anniversary - meditation together, spiritual sites, quiet romance.",
+      retreat_regular: "Spa anniversary - couple's treatments, wellness focus, relaxation.",
+      beach_therapist: "Beach anniversary - ocean sunsets, simple romance, toes in sand together.",
+      slow_traveler: "Slow anniversary - long meals, no rushing, savoring each moment together.",
+      // CURATORS
+      culinary_cartographer: "Food anniversary - cooking class together, restaurant tour, wine tasting.",
+      art_aficionado: "Art anniversary - museums together, design experiences, cultural romance.",
+      luxury_luminary: "Luxury anniversary - five-star everything, private experiences, premium romance.",
+      // TRANSFORMERS
+      eco_ethicist: "Eco anniversary - sustainable resort, nature, responsible romance.",
+      gap_year_graduate: "Budget anniversary - backpacker romance, meaningful over expensive.",
+      midlife_explorer: "Mature anniversary - quality experiences, celebrating years together.",
+      sabbatical_scholar: "Learning anniversary - exploring together, intellectual couple time.",
+      healing_journeyer: "Healing anniversary - gentle, restorative, reconnecting.",
+      retirement_ranger: "Later-life anniversary - comfortable, quality, no rushing.",
+      balanced_story_collector: "Classic anniversary - romantic dinner, sunset, celebrating together."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // HONEYMOON - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    honeymoon: {
+      cultural_anthropologist: "Immersive honeymoon - learning together, cultural depth, meaningful sites.",
+      urban_nomad: "City honeymoon - exploring neighborhoods together, romantic urban discovery.",
+      wilderness_pioneer: "Adventure honeymoon - hiking, nature, outdoor romance, wilderness together.",
+      digital_explorer: "Modern honeymoon - unique experiences, photo-worthy, aesthetically perfect.",
+      flexible_wanderer: "Wandering honeymoon - no agenda, discover together, spontaneous romance.",
+      social_butterfly: "Social honeymoon - cooking classes, tours with others, meeting couples.",
+      family_architect: "N/A pre-kids, or blended family honeymoon with thoughtful kid inclusion.",
+      romantic_curator: "Ultimate romantic honeymoon - every detail curated for maximum romance.",
+      community_builder: "Meaningful honeymoon - volunteering together, starting marriage with purpose.",
+      bucket_list_conqueror: "Dream destination honeymoon - must-sees with romantic lens.",
+      adrenaline_architect: "Adventure honeymoon - shared thrills, building memories through excitement.",
+      collection_curator: "Honeymoon around shared passion - wine region, art capitals, food tour.",
+      status_seeker: "Impressive honeymoon - the kind that makes others jealous, VIP everything.",
+      zen_seeker: "Peaceful honeymoon - meditation together, spiritual sites, quiet romance.",
+      retreat_regular: "Spa honeymoon - couple's treatments, wellness focus, deep relaxation.",
+      beach_therapist: "Beach honeymoon - ultimate relaxation, ocean, simple perfect romance.",
+      slow_traveler: "Slow honeymoon - long meals, no rushing, savoring every newlywed moment.",
+      culinary_cartographer: "Food honeymoon - cooking classes together, restaurant exploration.",
+      art_aficionado: "Art honeymoon - museums together, design hotels, cultural romance.",
+      luxury_luminary: "Luxury honeymoon - five-star everything, private experiences, premium.",
+      eco_ethicist: "Eco honeymoon - sustainable resorts, nature, responsible romance.",
+      gap_year_graduate: "Budget honeymoon - backpacker romance, meaningful over expensive.",
+      midlife_explorer: "Mature honeymoon - quality over flash, meaningful experiences.",
+      sabbatical_scholar: "Learning honeymoon - courses together, intellectual exploration.",
+      healing_journeyer: "Healing honeymoon - gentle start to marriage, restorative.",
+      retirement_ranger: "Later-life honeymoon - comfortable, quality, no rushing.",
+      balanced_story_collector: "Classic honeymoon - mix of romance, sightseeing, relaxation."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // SOLO - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    solo: {
+      cultural_anthropologist: "Deep solo immersion - museums at own pace, conversations with locals, no compromise.",
+      urban_nomad: "Solo city freedom - complete independence, own discoveries, own timing.",
+      wilderness_pioneer: "Solo wilderness - self-reliance, solo hiking, camping alone, personal challenge.",
+      digital_explorer: "Solo but connected - gaming cafes, sharing online, solo-friendly tech spots.",
+      flexible_wanderer: "Ultimate solo freedom - no compromise ever, complete spontaneity.",
+      social_butterfly: "Solo but social - walking tours, hostel events, pub crawls, meeting travelers.",
+      family_architect: "Parent's solo escape - rest, adult activities, recharge alone.",
+      romantic_curator: "Solo self-romance - treating yourself, self-dates, self-love trip.",
+      community_builder: "Solo volunteering - meaningful connections, giving back alone.",
+      bucket_list_conqueror: "Solo bucket list - doing it YOUR way, no compromise, your pace.",
+      adrenaline_architect: "Solo adventure - personal challenges, self-reliance, proving yourself.",
+      collection_curator: "Solo deep dive - full focus on your interest, no distraction from others.",
+      status_seeker: "Solo luxury - treating yourself, indulgence without sharing.",
+      zen_seeker: "Solo spiritual journey - meditation retreat, silent time, inner focus.",
+      retreat_regular: "Solo wellness - spa alone, yoga retreat, complete self-care.",
+      beach_therapist: "Solo beach - reading, swimming, complete relaxation alone.",
+      slow_traveler: "Solo slow travel - own pace, no negotiation, pure freedom.",
+      culinary_cartographer: "Solo food journey - counter seating, food tours, cooking classes.",
+      art_aficionado: "Solo art immersion - hours in museums, own pace, no rushing for anyone.",
+      luxury_luminary: "Solo luxury - complete self-indulgence, treating yourself to the best.",
+      eco_ethicist: "Solo eco travel - low impact, meaningful connections, nature.",
+      gap_year_graduate: "Classic solo backpacking - hostels, meeting travelers, cheap eats.",
+      midlife_explorer: "Solo rediscovery - finding yourself, new experiences, total freedom.",
+      sabbatical_scholar: "Solo study - libraries, courses, intellectual exploration alone.",
+      healing_journeyer: "Solo healing - solitude as medicine, nature, reflection, space.",
+      retirement_ranger: "Solo adventure - finally doing exactly what YOU want.",
+      balanced_story_collector: "Solo exploration - mix of everything, completely own pace."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // FAMILY - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
+    family: {
+      cultural_anthropologist: "Educational family trip - kid-friendly history, interactive museums, learning fun.",
+      urban_nomad: "Family city exploration - parks, playgrounds, kid-friendly neighborhoods.",
+      wilderness_pioneer: "Family outdoor adventure - easy hikes, nature centers, age-appropriate camping.",
+      digital_explorer: "Family tech fun - science museums, aquariums, interactive digital exhibits.",
+      flexible_wanderer: "Flexible family - go with kid energy, spontaneous park stops, no rigid schedule.",
+      social_butterfly: "Social family trip - activities with other families, kid-friendly group tours.",
+      family_architect: "Ultimate family trip - perfectly planned for all ages, everyone considered.",
+      romantic_curator: "Family trip with couple moments - one parents' date night, babysitter arranged.",
+      community_builder: "Family volunteering - age-appropriate giving back, teaching kids to help.",
+      bucket_list_conqueror: "Family bucket list - theme parks, zoos, must-do family experiences.",
+      adrenaline_architect: "Adventure family - age-appropriate thrills, water parks, easy adventures.",
+      collection_curator: "Family learning trip - focused on kids' interests, what they love.",
+      status_seeker: "Impressive family trip - best resorts, VIP family experiences, kids club.",
+      zen_seeker: "Calm family trip - nature, peaceful activities, mindful family time.",
+      retreat_regular: "Family wellness - kid-friendly resort, family spa, healthy activities.",
+      beach_therapist: "Beach family trip - sandcastles, swimming, ice cream, simple kid fun.",
+      slow_traveler: "Slow family trip - no rushing, long beach days, relaxed kid pace.",
+      culinary_cartographer: "Foodie family - cooking classes, food tours, teaching kids about food.",
+      art_aficionado: "Art family - kid-friendly museums, hands-on art activities, creative fun.",
+      luxury_luminary: "Luxury family - five-star family resorts, kids clubs, family suites.",
+      eco_ethicist: "Eco family - teaching sustainability, nature, conservation experiences.",
+      gap_year_graduate: "Budget family - camping, picnics, free activities, creative fun.",
+      midlife_explorer: "Multi-gen family - activities for all ages, quality family time.",
+      sabbatical_scholar: "Educational family - learning experiences, historical sites, curious kids.",
+      healing_journeyer: "Gentle family trip - nature, bonding, peaceful family activities.",
+      retirement_ranger: "Grandparent trip - comfortable pace, making memories with grandkids.",
+      balanced_story_collector: "Classic family vacation - mix of everything, something for everyone."
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // BABYMOON - All 27 Archetypes
+    // ═══════════════════════════════════════════════════════════════
     babymoon: {
-      beach_therapist: "Beach babymoon - pool, gentle beach time, prenatal massage, rest.",
-      slow_traveler: "Ultimate rest babymoon - no schedule, just togetherness before baby.",
-      culinary_cartographer: "Gentle foodie babymoon - nice dinners (no raw fish), cooking class.",
-      luxury_luminary: "Pampered babymoon - spa, room service, being taken care of."
+      cultural_anthropologist: "Gentle cultural babymoon - easy museums, no long walks, comfortable pace.",
+      urban_nomad: "City babymoon - comfortable neighborhoods, frequent rest stops, gentle exploration.",
+      wilderness_pioneer: "Nature babymoon - scenic drives, easy walks, nature viewing, no strenuous activity.",
+      digital_explorer: "Modern babymoon - comfortable unique experiences, easy photo spots.",
+      flexible_wanderer: "Relaxed babymoon - no plans, rest when needed, gentle wandering.",
+      social_butterfly: "Connected babymoon - comfortable group activities, prenatal yoga class.",
+      family_architect: "N/A - this IS the pre-family trip.",
+      romantic_curator: "Romantic babymoon - last couple trip before baby, intimate and gentle.",
+      community_builder: "Meaningful babymoon - gentle volunteering, comfortable connections.",
+      bucket_list_conqueror: "Bucket list babymoon - comfortable must-sees before baby arrives.",
+      adrenaline_architect: "MODIFIED - no adventure activities. Redirect to scenic, easy experiences.",
+      collection_curator: "Gentle interest babymoon - easy version of their passion.",
+      status_seeker: "Luxury babymoon - premium pampering, first-class comfort.",
+      zen_seeker: "Peaceful babymoon - prenatal yoga, meditation, spiritual preparation.",
+      retreat_regular: "Spa babymoon - prenatal treatments, ultimate pampering, rest.",
+      beach_therapist: "Beach babymoon - lounging, gentle swimming, relaxation.",
+      slow_traveler: "Ultimate slow babymoon - no rushing ever, complete rest.",
+      culinary_cartographer: "Food babymoon - pregnancy-safe dining focus, gentle food tours.",
+      art_aficionado: "Art babymoon - museums at easy pace, seated viewing options.",
+      luxury_luminary: "Luxury babymoon - five-star pampering, every comfort anticipated.",
+      eco_ethicist: "Eco babymoon - sustainable resort, gentle nature, peaceful.",
+      gap_year_graduate: "Budget babymoon - comfortable basics, rest focus over activities.",
+      midlife_explorer: "Meaningful babymoon - quality rest before this new chapter.",
+      sabbatical_scholar: "Gentle learning babymoon - easy cultural experiences.",
+      healing_journeyer: "Restful babymoon - preparing body and mind, peaceful.",
+      retirement_ranger: "N/A - not typical demographic.",
+      balanced_story_collector: "Classic babymoon - mix of rest and gentle activities."
     },
 
-    // Retirement combinations
+    // ═══════════════════════════════════════════════════════════════
+    // OTHER TRIP TYPES (keeping existing patterns)
+    // ═══════════════════════════════════════════════════════════════
     retirement: {
       bucket_list_conqueror: "Finally checking off that big dream destination. No work constraints!",
       slow_traveler: "Ultimate slow retirement trip - no clock, no rush, pure enjoyment.",
       cultural_anthropologist: "Deep cultural immersion they never had time for while working.",
-      luxury_luminary: "Well-deserved luxury retirement celebration."
+      luxury_luminary: "Well-deserved luxury retirement celebration.",
+      flexible_wanderer: "Retirement freedom - wander without schedule, pure spontaneity.",
+      adrenaline_architect: "Retirement adventure - bucket list thrills finally possible.",
+      beach_therapist: "Beach retirement - endless relaxation, simple pleasures.",
+      culinary_cartographer: "Foodie retirement - explore cuisines without rushing home.",
+      balanced_story_collector: "Retirement celebration - quality experiences, comfortable pace."
     },
 
-    // Wellness combinations
     wellness: {
       slow_traveler: "Natural wellness fit - already values slow, restorative experiences.",
       adrenaline_architect: "Wellness recovery - they need it even if they resist. Balance the energy.",
-      bucket_list_conqueror: "Wellness as reset before next big adventure."
+      bucket_list_conqueror: "Wellness as reset before next big adventure.",
+      zen_seeker: "Deep wellness immersion - meditation, yoga, spiritual practices.",
+      retreat_regular: "Full wellness retreat - spa, treatments, healthy living.",
+      beach_therapist: "Wellness by the water - beach yoga, swimming, gentle restoration."
     },
 
-    // Adventure combinations
     adventure: {
       slow_traveler: "Adventure at their pace - not rushed, quality over quantity of activities.",
       culinary_cartographer: "Adventure + food - fuel the adventure with great local eating.",
-      social_butterfly: "Group adventures - shared experiences create connection."
+      social_butterfly: "Group adventures - shared experiences create connection.",
+      adrenaline_architect: "Full adventure mode - maximum thrills, challenge seeking.",
+      wilderness_pioneer: "Outdoor adventure focus - hiking, camping, nature immersion.",
+      bucket_list_conqueror: "Adventure bucket list - checking off epic experiences."
     }
   };
 
@@ -1116,6 +1335,30 @@ HARD LIMIT: Maximum ${modifier.maxActivitiesPerDay} scheduled activities per day
     section += `
 === UPGRADE WITHIN BUDGET ===
 Elevate experiences within the stated budget tier. Choose the BEST options at their price point.
+`;
+  }
+
+  // Add critical compliance check for group trips
+  const groupTripTypes = ['guys_trip', 'guys-trip', 'girls_trip', 'girls-trip', 'family', 'bachelorette', 'bachelor'];
+  const normalizedType = (tripType || '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (groupTripTypes.some(g => normalizedType.includes(g.replace(/-/g, '_')))) {
+    section += `
+═══════════════════════════════════════════════════════════════════════
+              CRITICAL: GROUP TRIP COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+This is a GROUP trip. The itinerary MUST include:
+✓ At least ONE group-focused activity (not something done alone)
+✓ At least ONE evening/social option (bar, pub, dinner out, nightlife)
+✓ Group-friendly dining (shareable food, not intimate couple spots)
+✓ Downtime for group hanging out
+
+⚠️ VIOLATION CHECK:
+If this itinerary looks like a SOLO trip or COUPLE trip = REGENERATE
+The GROUP nature MUST be OBVIOUS in activity selection and language.
+
+Do NOT use language like "intimate", "romantic", "quiet solo moment"
+DO use language like "group-friendly", "perfect for friends", "shared experience"
 `;
   }
 
