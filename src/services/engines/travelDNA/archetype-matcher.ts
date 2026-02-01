@@ -1,12 +1,47 @@
 /**
- * Archetype Matcher v3
+ * Archetype Matcher v3.1
  * Matches user trait scores to the 27 travel archetypes
+ * 
+ * This module implements the scoring algorithm from the Travel DNA Quiz specification:
+ * 1. Calculate trait scores from quiz answers (0-1 scale)
+ * 2. Check required traits for each archetype
+ * 3. Apply boosters for matching traits
+ * 4. Apply penalties for incompatible traits
+ * 5. Apply life stage bonuses
+ * 6. Rank archetypes by total score
  */
 
 import quizConfig from '@/config/quiz-questions-v3.json';
 
+// Type definitions
 export interface TraitScores {
-  [trait: string]: number;
+  pace: number;
+  morning_energy: number;
+  restoration_need: number;
+  planning: number;
+  flexibility: number;
+  social_energy: number;
+  group_size_pref: number;
+  romance_focus: number;
+  family_focus: number;
+  budget_tier: number;
+  quality_intrinsic: number;
+  status_seeking: number;
+  food_focus: number;
+  art_focus: number;
+  photo_focus: number;
+  niche_interest: number;
+  nature_orientation: number;
+  adventure: number;
+  cultural_depth: number;
+  novelty_seeking: number;
+  bucket_list: number;
+  spirituality: number;
+  healing_focus: number;
+  learning_focus: number;
+  ethics_focus: number;
+  life_stage: 'early' | 'building' | 'established' | 'free' | 'na';
+  [key: string]: number | string;
 }
 
 export interface ArchetypeMatch {
@@ -14,7 +49,7 @@ export interface ArchetypeMatch {
   name: string;
   category: string;
   score: number;
-  confidence: number;
+  confidence: 'high' | 'medium' | 'low';
   matchedRequirements: string[];
   penalties: string[];
 }
@@ -27,26 +62,83 @@ export interface MatchResult {
   lifeStage: string | null;
 }
 
+interface TraitRequirement {
+  min?: number;
+  max?: number;
+}
+
+interface PenaltyRule {
+  above?: number;
+  below?: number;
+  weight: number;
+}
+
 interface ArchetypeProfile {
   name: string;
   category: string;
-  required?: Record<string, { min?: number; max?: number; range?: [number, number] }>;
-  preferred?: Record<string, { min?: number; max?: number; range?: [number, number] }>;
-  penalties?: Record<string, { above?: number; below?: number; weight: number }>;
+  required: Record<string, TraitRequirement>;
+  boosters: Record<string, number>;
+  penalties: Record<string, PenaltyRule>;
   lifeStageBonus?: Record<string, number>;
   isDefault?: boolean;
   maxTraitSpread?: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const archetypeProfiles: Record<string, ArchetypeProfile> = quizConfig.archetypeProfiles as any;
+// Type assertion for the config
+const archetypeProfiles = quizConfig.archetypeProfiles as unknown as Record<string, ArchetypeProfile>;
+const traitDefinitions = quizConfig.traitDefinitions as Record<string, { default: number }>;
+
+/**
+ * Initialize default trait scores from config
+ */
+function initializeTraits(): TraitScores {
+  const traits: TraitScores = {
+    pace: 0.5,
+    morning_energy: 0.5,
+    restoration_need: 0.5,
+    planning: 0.5,
+    flexibility: 0.5,
+    social_energy: 0.5,
+    group_size_pref: 0.5,
+    romance_focus: 0,
+    family_focus: 0,
+    budget_tier: 0.5,
+    quality_intrinsic: 0.5,
+    status_seeking: 0.3,
+    food_focus: 0.3,
+    art_focus: 0.2,
+    photo_focus: 0.2,
+    niche_interest: 0.2,
+    nature_orientation: 0.5,
+    adventure: 0.5,
+    cultural_depth: 0.5,
+    novelty_seeking: 0.5,
+    bucket_list: 0.3,
+    spirituality: 0.2,
+    healing_focus: 0,
+    learning_focus: 0.3,
+    ethics_focus: 0.3,
+    life_stage: 'na',
+  };
+
+  // Override with config defaults if available
+  for (const [key, def] of Object.entries(traitDefinitions)) {
+    if (key in traits && 'default' in def) {
+      (traits as Record<string, number | string>)[key] = def.default;
+    }
+  }
+
+  return traits;
+}
 
 /**
  * Calculate trait scores from quiz answers
+ * Each answer directly sets trait values (0-1 scale)
  */
 export function calculateTraitScores(
   answers: Record<string, string>
 ): { scores: TraitScores; lifeStage: string | null } {
+  const traits = initializeTraits();
   const traitAccumulator: Record<string, number[]> = {};
   let lifeStage: string | null = null;
 
@@ -62,9 +154,11 @@ export function calculateTraitScores(
       // Handle life_stage specially
       if (trait === 'life_stage') {
         lifeStage = value as string;
+        traits.life_stage = value as TraitScores['life_stage'];
         continue;
       }
 
+      // Accumulate trait values for averaging
       if (!traitAccumulator[trait]) {
         traitAccumulator[trait] = [];
       }
@@ -72,14 +166,17 @@ export function calculateTraitScores(
     }
   }
 
-  // Average the trait scores
-  const scores: TraitScores = {};
+  // Average the accumulated trait values
   for (const [trait, values] of Object.entries(traitAccumulator)) {
-    const sum = values.reduce((a, b) => a + b, 0);
-    scores[trait] = sum / values.length;
+    if (trait in traits && typeof traits[trait] === 'number') {
+      const sum = values.reduce((a, b) => a + b, 0);
+      const avg = sum / values.length;
+      // Clamp to 0-1 range
+      (traits as Record<string, number | string>)[trait] = Math.max(0, Math.min(1, avg));
+    }
   }
 
-  return { scores, lifeStage };
+  return { scores: traits, lifeStage };
 }
 
 /**
@@ -87,15 +184,12 @@ export function calculateTraitScores(
  */
 function meetsRequirement(
   score: number | undefined,
-  requirement: { min?: number; max?: number; range?: [number, number] }
+  requirement: TraitRequirement
 ): boolean {
   if (score === undefined) return false;
 
   if (requirement.min !== undefined && score < requirement.min) return false;
   if (requirement.max !== undefined && score > requirement.max) return false;
-  if (requirement.range) {
-    if (score < requirement.range[0] || score > requirement.range[1]) return false;
-  }
 
   return true;
 }
@@ -118,7 +212,8 @@ function calculateArchetypeScore(
   const required = profile.required || {};
   
   for (const [trait, requirement] of Object.entries(required)) {
-    if (meetsRequirement(scores[trait], requirement)) {
+    const traitValue = scores[trait];
+    if (typeof traitValue === 'number' && meetsRequirement(traitValue, requirement)) {
       matchedRequirements.push(trait);
       score += 30; // Base points for meeting required traits
     } else {
@@ -131,48 +226,50 @@ function calculateArchetypeScore(
     score -= 50;
   }
 
-  // Check preferred traits (bonus points)
-  const preferred = profile.preferred || {};
-  for (const [trait, requirement] of Object.entries(preferred)) {
-    if (meetsRequirement(scores[trait], requirement)) {
-      score += 15; // Bonus for preferred traits
-      matchedRequirements.push(`${trait} (preferred)`);
+  // Apply booster scores
+  const boosters = profile.boosters || {};
+  for (const [trait, weight] of Object.entries(boosters)) {
+    const traitValue = scores[trait];
+    if (typeof traitValue === 'number') {
+      score += traitValue * weight * 10;
     }
   }
 
   // Apply penalties
   const penaltyRules = profile.penalties || {};
   for (const [trait, penalty] of Object.entries(penaltyRules)) {
-    const traitScore = scores[trait];
-    if (traitScore === undefined) continue;
+    const traitValue = scores[trait];
+    if (typeof traitValue !== 'number') continue;
 
-    if (penalty.above !== undefined && traitScore > penalty.above) {
-      score += penalty.weight * 100; // Penalties are negative weights
+    if (penalty.above !== undefined && traitValue > penalty.above) {
+      score += penalty.weight * 10;
       penalties.push(`${trait} too high`);
     }
-    if (penalty.below !== undefined && traitScore < penalty.below) {
-      score += penalty.weight * 100;
+    if (penalty.below !== undefined && traitValue < penalty.below) {
+      score += penalty.weight * 10;
       penalties.push(`${trait} too low`);
     }
   }
 
   // Apply life stage bonus
   if (lifeStage && profile.lifeStageBonus?.[lifeStage]) {
-    score += profile.lifeStageBonus[lifeStage] * 100;
+    score += profile.lifeStageBonus[lifeStage] * 20;
     matchedRequirements.push(`life stage: ${lifeStage}`);
   }
 
   // Handle default archetype (Balanced Story Collector)
   if (profile.isDefault) {
-    // Check if traits are well-distributed (no extreme values)
-    const traitValues = Object.values(scores);
-    if (traitValues.length > 0) {
-      const max = Math.max(...traitValues);
-      const min = Math.min(...traitValues);
-      const spread = max - min;
+    // Calculate variance - lower variance = better match for balanced
+    const numericTraits = Object.entries(scores)
+      .filter(([key, value]) => typeof value === 'number' && key !== 'life_stage')
+      .map(([, value]) => value as number);
+
+    if (numericTraits.length > 0) {
+      const mean = numericTraits.reduce((a, b) => a + b, 0) / numericTraits.length;
+      const variance = numericTraits.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / numericTraits.length;
       
-      // If spread is low (balanced), boost this archetype
-      if (profile.maxTraitSpread && spread <= profile.maxTraitSpread) {
+      // Lower variance = higher score (more balanced)
+      if (profile.maxTraitSpread && Math.sqrt(variance) <= profile.maxTraitSpread) {
         score += 20;
         matchedRequirements.push('balanced traits');
       }
@@ -181,12 +278,13 @@ function calculateArchetypeScore(
     score += 10;
   }
 
-  // Calculate confidence based on how many traits contributed
-  const totalTraits = Object.keys(scores).length;
-  const contributingTraits = matchedRequirements.length;
-  const confidence = totalTraits > 0 
-    ? Math.min(100, Math.round((contributingTraits / Math.max(totalTraits, 5)) * 100))
-    : 50;
+  // Calculate confidence based on score and how many traits contributed
+  let confidence: 'high' | 'medium' | 'low' = 'medium';
+  if (score > 50 && matchedRequirements.length >= 2) {
+    confidence = 'high';
+  } else if (score < 20 || penalties.length > matchedRequirements.length) {
+    confidence = 'low';
+  }
 
   return {
     id: archetypeId,
@@ -216,6 +314,21 @@ export function matchArchetypes(
   // Sort by score descending
   matches.sort((a, b) => b.score - a.score);
 
+  // Update confidence based on score gaps
+  if (matches.length >= 2) {
+    const topScore = matches[0].score;
+    const secondScore = matches[1].score;
+    const gap = topScore - secondScore;
+
+    if (gap > 20) {
+      matches[0].confidence = 'high';
+    } else if (gap > 10) {
+      matches[0].confidence = 'medium';
+    } else {
+      matches[0].confidence = 'low';
+    }
+  }
+
   // Get primary and secondary
   const primary = matches[0];
   const secondary = matches.length > 1 && matches[1].score > 0 ? matches[1] : null;
@@ -235,6 +348,22 @@ export function matchArchetypes(
 export function determineArchetype(answers: Record<string, string>): MatchResult {
   const { scores, lifeStage } = calculateTraitScores(answers);
   return matchArchetypes(scores, lifeStage);
+}
+
+/**
+ * Get primary archetype ID from answers
+ */
+export function getPrimaryArchetype(answers: Record<string, string>): string {
+  const result = determineArchetype(answers);
+  return result.primary?.id || 'balanced_story_collector';
+}
+
+/**
+ * Get top N archetypes from answers
+ */
+export function getTopArchetypes(answers: Record<string, string>, count: number = 3): ArchetypeMatch[] {
+  const result = determineArchetype(answers);
+  return result.allMatches.slice(0, count);
 }
 
 /**
@@ -266,7 +395,7 @@ export function explainMatch(
   
   const lines = [
     `${profile.name} (${profile.category})`,
-    `Score: ${match.score} | Confidence: ${match.confidence}%`,
+    `Score: ${match.score.toFixed(1)} | Confidence: ${match.confidence}`,
     '',
     'Matched:',
     ...match.matchedRequirements.map(r => `  ✓ ${r}`),
@@ -282,7 +411,7 @@ export function explainMatch(
     .filter(([trait]) => !match.matchedRequirements.includes(trait))
     .map(([trait, req]) => {
       const actual = scores[trait];
-      return `  ✗ ${trait}: ${actual?.toFixed(2) ?? 'missing'} (need: ${JSON.stringify(req)})`;
+      return `  ✗ ${trait}: ${typeof actual === 'number' ? actual.toFixed(2) : 'missing'} (need: ${JSON.stringify(req)})`;
     });
 
   if (missed.length > 0) {
