@@ -1,0 +1,266 @@
+/**
+ * ActiveTripCard - Enhanced card for trips currently in progress
+ * Features: day progress, current activity preview, quick actions, feedback prompts
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  Plane, 
+  Calendar, 
+  MapPin, 
+  Clock, 
+  ChevronRight,
+  Sparkles,
+  MessageSquare,
+  Star,
+  Navigation,
+  Sun,
+  Moon,
+  Coffee,
+  Utensils,
+  Camera
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
+import { getDestinationImage, getDestinationImages } from '@/utils/destinationImages';
+import { handleImageError } from '@/hooks/useImageWithFallback';
+
+interface ActiveTripCardProps {
+  trip: {
+    id: string;
+    destination: string;
+    name?: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    hasItineraryData?: boolean;
+    flightSelection?: unknown;
+    hotelSelection?: unknown;
+    travelers?: number;
+    departureCity?: string | null;
+    metadata?: Record<string, unknown>;
+  };
+}
+
+function getTimeOfDayIcon() {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 12) return Coffee;
+  if (hour >= 12 && hour < 17) return Sun;
+  if (hour >= 17 && hour < 21) return Utensils;
+  return Moon;
+}
+
+function getTimeOfDayGreeting() {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 21) return 'Good evening';
+  return 'Night owl mode';
+}
+
+export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
+  const navigate = useNavigate();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [seededHeroFailed, setSeededHeroFailed] = useState(false);
+  
+  const seededHero = trip.metadata?.hero_image;
+  const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
+  const allImages = getDestinationImages(trip.destination);
+  const imageUrl = (!seededHeroFailed && seededHeroUrl)
+    ? seededHeroUrl
+    : (allImages[currentImageIndex] || getDestinationImage(trip.destination));
+
+  const onImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    if (seededHeroUrl && !seededHeroFailed) {
+      setSeededHeroFailed(true);
+      return;
+    }
+    if (currentImageIndex < allImages.length - 1) {
+      setCurrentImageIndex(prev => prev + 1);
+    } else {
+      handleImageError(e, undefined, trip.destination);
+    }
+  }, [currentImageIndex, allImages.length, trip.destination, seededHeroUrl, seededHeroFailed]);
+
+  // Calculate trip progress
+  const now = new Date();
+  const startDate = trip.startDate ? new Date(trip.startDate) : null;
+  const endDate = trip.endDate ? new Date(trip.endDate) : null;
+  
+  let currentDay = 1;
+  let totalDays = 1;
+  let progressPercent = 0;
+  let daysRemaining = 0;
+  
+  if (startDate && endDate) {
+    totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    currentDay = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    currentDay = Math.max(1, Math.min(currentDay, totalDays));
+    progressPercent = (currentDay / totalDays) * 100;
+    daysRemaining = totalDays - currentDay;
+  }
+
+  const TimeIcon = getTimeOfDayIcon();
+  const greeting = getTimeOfDayGreeting();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative bg-card rounded-3xl overflow-hidden border-2 border-green-500/30 shadow-lg"
+    >
+      {/* Animated glow effect */}
+      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-accent/5 pointer-events-none" />
+      
+      {/* Hero Image Section */}
+      <div className="relative h-64 overflow-hidden">
+        <img 
+          src={imageUrl} 
+          alt={trip.destination} 
+          className="w-full h-full object-cover"
+          onError={onImageError}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
+        
+        {/* Live Badge */}
+        <div className="absolute top-4 left-4 flex items-center gap-2">
+          <Badge className="bg-green-500 text-white border-0 gap-1.5 shadow-lg animate-pulse">
+            <span className="w-2 h-2 bg-white rounded-full" />
+            LIVE
+          </Badge>
+          <Badge className="bg-black/50 text-white border-0 backdrop-blur-sm">
+            Day {currentDay} of {totalDays}
+          </Badge>
+        </div>
+
+        {/* Time of Day Greeting */}
+        <div className="absolute top-4 right-4">
+          <div className="flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 text-white text-sm">
+            <TimeIcon className="h-4 w-4 text-amber-400" />
+            <span>{greeting}</span>
+          </div>
+        </div>
+        
+        {/* Destination Title */}
+        <div className="absolute bottom-4 left-4 right-4">
+          <p className="text-white/70 text-sm mb-1 flex items-center gap-1.5">
+            <Navigation className="h-3 w-3" />
+            You're currently in
+          </p>
+          <h2 className="font-serif text-3xl font-bold text-white drop-shadow-lg">
+            {trip.destination}
+          </h2>
+          {trip.name && trip.name !== trip.destination && (
+            <p className="text-white/80 text-sm mt-1">{trip.name}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Content Section */}
+      <div className="p-6 space-y-5">
+        {/* Trip Progress */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Trip progress</span>
+            <span className="font-medium text-foreground">
+              {daysRemaining === 0 
+                ? 'Last day!' 
+                : `${daysRemaining} day${daysRemaining > 1 ? 's' : ''} remaining`}
+            </span>
+          </div>
+          <Progress value={progressPercent} className="h-2 bg-muted" />
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>{trip.startDate ? new Date(trip.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Start'}</span>
+            <span>{trip.endDate ? new Date(trip.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'End'}</span>
+          </div>
+        </div>
+
+        {/* Quick Actions Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <Button 
+            onClick={() => navigate(`/itinerary/${trip.id}`)}
+            variant="default"
+            className="h-auto py-4 flex-col gap-2"
+          >
+            <Calendar className="h-5 w-5" />
+            <span className="text-sm font-medium">Today's Plan</span>
+          </Button>
+          
+          <Button 
+            onClick={() => navigate(`/trip/${trip.id}/map`)}
+            variant="outline"
+            className="h-auto py-4 flex-col gap-2 border-border/60"
+          >
+            <MapPin className="h-5 w-5" />
+            <span className="text-sm font-medium">Open Map</span>
+          </Button>
+        </div>
+
+        {/* Feedback Prompt */}
+        <motion.div 
+          className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl p-4"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <Camera className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-sm text-foreground">
+                How's your trip going?
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Share a quick update or rate today's activities
+              </p>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="flex-shrink-0 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+              onClick={() => navigate(`/trip/${trip.id}/feedback`)}
+            >
+              Share
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </motion.div>
+
+        {/* Quick Rating */}
+        <div className="flex items-center justify-between py-2 border-t border-border/50">
+          <span className="text-sm text-muted-foreground">Rate today</span>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map((rating) => (
+              <button
+                key={rating}
+                className="p-1.5 rounded-full hover:bg-muted transition-colors group"
+                onClick={() => {
+                  // TODO: Implement quick rating
+                  console.log('Rate day:', rating);
+                }}
+              >
+                <Star className={cn(
+                  "h-5 w-5 transition-colors",
+                  "text-muted-foreground/40 group-hover:text-amber-400 group-hover:fill-amber-400"
+                )} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* View Full Details */}
+        <Link 
+          to={`/trip/${trip.id}`}
+          className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors pt-2"
+        >
+          <span>View full trip details</span>
+          <ChevronRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </motion.div>
+  );
+}

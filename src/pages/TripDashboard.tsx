@@ -19,8 +19,10 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  FolderOpen
+  FolderOpen,
+  Zap
 } from 'lucide-react';
+import ActiveTripCard from '@/components/trips/ActiveTripCard';
 
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -122,7 +124,7 @@ interface TripGroup {
   region: string;
 }
 
-type TabValue = 'all' | 'upcoming' | 'completed';
+type TabValue = 'all' | 'active' | 'upcoming' | 'completed';
 type TripStatus = 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
 type DisplayStatus = 'upcoming' | 'active' | 'completed' | 'canceled';
 
@@ -381,6 +383,8 @@ function EmptyState({ tab }: { tab: TabValue }) {
         <h2 className="font-serif text-3xl font-bold mb-4">
           {tab === 'all' 
             ? "Your Next Adventure Awaits" 
+            : tab === 'active'
+            ? "No Active Trips Right Now"
             : tab === 'upcoming' 
             ? "No Upcoming Trips Yet"
             : "No Past Adventures"}
@@ -389,6 +393,8 @@ function EmptyState({ tab }: { tab: TabValue }) {
         <p className="text-muted-foreground text-lg mb-8 max-w-md mx-auto">
           {tab === 'all' 
             ? "Start planning your dream vacation with personalized itineraries crafted just for you."
+            : tab === 'active'
+            ? "You're not on a trip at the moment. Plan your next adventure!"
             : tab === 'upcoming'
             ? "All your planned trips will appear here. Start planning your next getaway!"
             : "Completed adventures will be stored here as cherished memories."}
@@ -526,6 +532,15 @@ export default function TripDashboard() {
   const filterTrips = (tab: TabValue): Trip[] => {
     const now = new Date();
     switch (tab) {
+      case 'active':
+        // Currently happening trips
+        return trips.filter(t => {
+          if (t.status === 'completed' || t.status === 'cancelled') return false;
+          if (!t.startDate || !t.endDate) return false;
+          const start = new Date(t.startDate);
+          const end = new Date(t.endDate);
+          return start <= now && end >= now;
+        });
       case 'upcoming': 
         // All future trips regardless of status (draft, planning, booked)
         return trips.filter(t => {
@@ -533,6 +548,12 @@ export default function TripDashboard() {
           if (t.status === 'completed' || t.status === 'cancelled') return false;
           // Exclude past trips
           if (t.endDate && new Date(t.endDate) < now) return false;
+          // Exclude currently active trips (they have their own section)
+          if (t.startDate && t.endDate) {
+            const start = new Date(t.startDate);
+            const end = new Date(t.endDate);
+            if (start <= now && end >= now) return false;
+          }
           return true;
         });
       case 'completed': 
@@ -546,8 +567,10 @@ export default function TripDashboard() {
   };
 
   const filteredTrips = filterTrips(activeTab);
+  const activeCount = filterTrips('active').length;
   const upcomingCount = filterTrips('upcoming').length;
   const completedCount = filterTrips('completed').length;
+  const activeTrips = filterTrips('active');
 
   // Group trips by destination
   const groupedTrips = useMemo(() => {
@@ -637,6 +660,13 @@ export default function TripDashboard() {
                     <Badge variant="secondary" className="text-xs">{trips.length}</Badge>
                   )}
                 </TabsTrigger>
+                {activeCount > 0 && (
+                  <TabsTrigger value="active" className="gap-2 px-4 py-2.5">
+                    <Zap className="h-4 w-4 text-green-500" />
+                    <span className="text-green-600 font-medium">Live Now</span>
+                    <Badge className="bg-green-500 text-white border-0 text-xs">{activeCount}</Badge>
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="upcoming" className="gap-2 px-4 py-2.5">
                   <Clock className="h-4 w-4" />
                   Upcoming
@@ -689,13 +719,56 @@ export default function TripDashboard() {
                   <EmptyState tab="all" />
                 </motion.div>
               ) : (
-                <TabsContent key={activeTab} value={activeTab} className="mt-0">
-                  {filteredTrips.length > 0 ? (
+                <>
+                  {/* Active Trips Section - Prominent display at top when on 'all' tab */}
+                  {activeTab === 'all' && activeTrips.length > 0 && (
                     <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="space-y-6"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mb-8"
                     >
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        <h2 className="font-serif text-xl font-semibold">Happening Now</h2>
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {activeTrips.map((trip) => (
+                          <ActiveTripCard key={trip.id} trip={trip} />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Active Tab Content - When specifically on 'active' tab */}
+                  {activeTab === 'active' && (
+                    <TabsContent key="active" value="active" className="mt-0">
+                      {activeTrips.length > 0 ? (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="space-y-6"
+                        >
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {activeTrips.map((trip) => (
+                              <ActiveTripCard key={trip.id} trip={trip} />
+                            ))}
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <EmptyState tab={activeTab} />
+                      )}
+                    </TabsContent>
+                  )}
+
+                  {/* Regular Tab Content */}
+                  {activeTab !== 'active' && (
+                    <TabsContent key={activeTab} value={activeTab} className="mt-0">
+                      {filteredTrips.length > 0 ? (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="space-y-6"
+                        >
                       {hasMultipleSameDestination ? (
                         // Grouped view
                         groupedTrips.map((group, groupIndex) => (
@@ -772,6 +845,8 @@ export default function TripDashboard() {
                     <EmptyState tab={activeTab} />
                   )}
                 </TabsContent>
+                  )}
+                </>
               )}
             </AnimatePresence>
           </Tabs>
