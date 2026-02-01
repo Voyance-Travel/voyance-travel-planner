@@ -659,6 +659,1113 @@ Phrases to use:
 `;
 }
 
+/**
+ * Build comprehensive honeymoon prompt with REST emphasis
+ */
+export function buildHoneymoonPrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         TRIP TYPE: HONEYMOON                         ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+This couple JUST GOT MARRIED. They are:
+- EXHAUSTED from wedding planning (months/years of stress)
+- On their most special trip ever (high expectations)
+- Wanting romance but also REST
+- Probably sleep-deprived from the wedding weekend
+
+THIS IS NOT just "romantic vacation." It's POST-WEDDING recovery + romance.
+
+═══════════════════════════════════════════════════════════════════════
+HONEYMOON REST REQUIREMENTS (NON-NEGOTIABLE)
+═══════════════════════════════════════════════════════════════════════
+
+They just survived a wedding. They're running on fumes.
+
+MUST INCLUDE:
+✓ Late start times (10am+) - they need sleep
+✓ Afternoon rest blocks (pool, nap, spa)
+✓ NO packed schedules - they're exhausted
+✓ Buffer time everywhere
+✓ At least one "do nothing" day
+
+PACING: Subtract 2 from normal pace score.
+Even a Bucket List Conqueror honeymooner needs rest.
+
+NEVER:
+✗ 7am departures
+✗ Back-to-back activities
+✗ "Efficient" itineraries
+✗ More than 2-3 activities per day
+
+═══════════════════════════════════════════════════════════════════════
+HONEYMOON ROMANCE REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+This should FEEL like a honeymoon, not a regular couples trip.
+
+MUST INCLUDE:
+✓ At least 2 special romantic dinners (not every night - that's exhausting)
+✓ At least 1 sunset/sunrise moment together
+✓ Private/intimate experiences over group tours
+✓ Couples activities (massage, cooking class, private tour)
+✓ Language that acknowledges they just got married
+
+PHRASES TO USE:
+"Perfect for newlyweds"
+"Celebrate your new marriage"
+"Start your married life with..."
+"Honeymoon-worthy"
+
+AVOID:
+✗ Group tours with strangers
+✗ Hostel recommendations
+✗ Budget-focused language
+✗ Anything that feels generic
+
+═══════════════════════════════════════════════════════════════════════
+HONEYMOON UPGRADE PRINCIPLE
+═══════════════════════════════════════════════════════════════════════
+
+Within their budget tier, lean toward the nicer option.
+
+Budget honeymoon: Best-value romantic spots, not cheapest
+Moderate honeymoon: Splurge on 1-2 special experiences
+Luxury honeymoon: Full premium treatment
+
+This trip should feel ELEVATED compared to their normal travel.
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Do start times allow sleeping in? (10am+ most days)
+☐ Is there rest time daily? (pool, spa, nap)
+☐ Are there at least 2 romantic dinner highlights?
+☐ Is there at least 1 romantic moment (sunset, etc.)?
+☐ Is pacing relaxed (2-3 activities max per day)?
+☐ Does it feel SPECIAL, not generic?
+☐ Would exhausted newlyweds actually enjoy this?
+☐ Are activities intimate, not group-focused?
+
+⚠️ If this looks like a packed sightseeing trip = REGENERATE
+`;
+}
+
+/**
+ * Build comprehensive family trip prompt with kid logistics
+ */
+export function buildFamilyPrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         TRIP TYPE: FAMILY                            ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+This trip includes CHILDREN. Everything must work for families.
+
+KIDS ARE NOT SMALL ADULTS. They:
+- Get tired (meltdowns happen)
+- Need frequent breaks (bathrooms, snacks, rest)
+- Have shorter attention spans
+- Need to EAT on schedule (hangry is real)
+- Can't walk for 6 hours straight
+- Need engaging activities (not just "looking at old stuff")
+
+═══════════════════════════════════════════════════════════════════════
+FAMILY TIMING REQUIREMENTS (NON-NEGOTIABLE)
+═══════════════════════════════════════════════════════════════════════
+
+MEAL TIMES (kids can't wait):
+- Breakfast: 7:30-8:30
+- Lunch: 12:00-13:00 (NOT 2pm - kids will melt down)
+- Dinner: 17:30-18:30 (NOT 8pm - kids need to sleep)
+
+REST TIME (non-negotiable):
+- 13:00-15:00: Back to hotel OR low-key activity
+- This is for naps, pool time, or just decompression
+- NEVER schedule a museum at 2pm
+
+DAY END:
+- Evening activities must end by 19:00-20:00
+- Kids need wind-down time before bed
+- No 10pm dinners
+
+MORNING START:
+- Not too early (families are slow to mobilize)
+- Not too late (waste of day)
+- 9:00-10:00 for first activity is ideal
+
+═══════════════════════════════════════════════════════════════════════
+FAMILY ACTIVITY REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+GOOD FOR KIDS:
+✓ Interactive (touch, do, not just look)
+✓ Short duration (60-90 min max per activity)
+✓ Bathroom accessible
+✓ Snack breaks built in
+✓ Some movement/running around
+✓ Engaging for their age
+✓ Mix of education and fun
+
+EXAMPLES:
+- Zoo/Aquarium (interactive, can leave when tired)
+- Parks with playgrounds (burn energy)
+- Easy hikes (nature, movement)
+- Kid-friendly museums (science, interactive)
+- Beach time (entertainment + rest)
+- Cooking classes for families (hands-on)
+- Boat rides (contained, novel)
+
+AVOID:
+✗ Long museum visits (hours of looking)
+✗ Formal tours where kids must be quiet
+✗ Fine dining (long waits, quiet expectations)
+✗ Long walking days (6+ hours)
+✗ Adult-focused activities
+✗ Late-night anything
+✗ Very early morning departures
+
+═══════════════════════════════════════════════════════════════════════
+FAMILY DINING REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+RESTAURANTS MUST BE:
+✓ Kid-friendly (tolerant of noise/mess)
+✓ Flexible on timing (not "seating at 8pm only")
+✓ Have quick options (kids can't wait 45 min for food)
+✓ Casual atmosphere
+✓ High chairs/kid seating available
+
+GOOD OPTIONS:
+- Casual trattorias
+- Pizza places
+- Outdoor seating (kids can move)
+- Fast-casual spots
+- Food markets (everyone picks their own)
+- Early dinner reservations
+
+NEVER:
+✗ Michelin restaurants (unless explicitly kid-friendly)
+✗ Romantic/intimate venues
+✗ Places with long waits
+✗ Very late dinner reservations
+✗ Tasting menus (too long)
+
+═══════════════════════════════════════════════════════════════════════
+FAMILY PACING
+═══════════════════════════════════════════════════════════════════════
+
+MAX 2-3 activities per day (not 5-6)
+
+IDEAL FAMILY DAY:
+- Morning: 1 activity (museum, zoo, etc.)
+- Lunch: Kid-friendly spot, not rushed
+- Afternoon: REST (pool, nap, playground) 13:00-15:00
+- Late afternoon: 1 light activity (park, easy walk)
+- Early dinner: Casual spot by 18:00
+- Evening: Back to hotel, wind down
+
+NEVER:
+- Museum → Museum → Museum
+- 5 activities in one day
+- Activities during rest time (13:00-15:00)
+- Anything after 20:00
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Are meals at kid-appropriate times (lunch by 13:00, dinner by 18:30)?
+☐ Is there rest time 13:00-15:00?
+☐ Do activities end by 19:00-20:00?
+☐ Are restaurants kid-friendly (not fine dining)?
+☐ Are activities interactive (not just looking)?
+☐ Max 2-3 activities per day?
+☐ Are there bathroom/snack considerations?
+☐ Would a parent look at this and think "this would actually work"?
+
+⚠️ FAILURE: If a parent would say "my kid would melt down," fix it.
+`;
+}
+
+/**
+ * Build comprehensive babymoon prompt with pregnancy specifics
+ */
+export function buildBabymoonPrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         TRIP TYPE: BABYMOON                          ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+This is a couple's LAST TRIP BEFORE BABY. The pregnant person is:
+- Possibly exhausted (growing a human is tiring)
+- Possibly nauseous (especially first trimester)
+- Limited in activities (no adventure, no extreme heat)
+- May have food restrictions
+- Needs more rest than normal
+- Needs comfortable everything
+
+This is NOT a regular romantic trip with "prenatal massage added."
+The entire trip must accommodate pregnancy.
+
+═══════════════════════════════════════════════════════════════════════
+BABYMOON ACTIVITY REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+SAFE FOR PREGNANCY:
+✓ Gentle walking (not hiking)
+✓ Swimming (excellent for pregnancy)
+✓ Prenatal spa treatments (certified safe)
+✓ Easy sightseeing (with sitting options)
+✓ Relaxation (pool, beach, garden)
+✓ Gentle yoga (prenatal)
+✓ Scenic drives (if no motion sickness)
+
+ABSOLUTELY NOT:
+✗ Adventure activities (zip-line, etc.)
+✗ Hot tubs/saunas (dangerous in pregnancy)
+✗ Strenuous hiking
+✗ Extreme heat exposure
+✗ High altitude (check with doctor)
+✗ Scuba diving
+✗ Horseback riding
+✗ Anything with fall risk
+✗ Long periods without bathrooms
+✗ Very long walks
+
+═══════════════════════════════════════════════════════════════════════
+BABYMOON DINING REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+PREGNANCY FOOD CONSIDERATIONS:
+- No raw fish (sushi) unless cooked options available
+- No unpasteurized cheese
+- No undercooked meat
+- No high-mercury fish
+- Caffeine limits (note decaf options)
+- No alcohol focus (partner can drink, don't center activities on it)
+
+WHEN RECOMMENDING RESTAURANTS:
+✓ Note pregnancy-safe options
+✓ Include variety (cravings change)
+✓ Don't center on wine/cocktails
+✓ Note if they accommodate dietary restrictions
+
+PHRASES TO USE:
+"Plenty of pregnancy-safe options"
+"Cooked sushi available"
+"Can accommodate dietary needs"
+
+═══════════════════════════════════════════════════════════════════════
+BABYMOON PACING (SLOWEST TRIP TYPE)
+═══════════════════════════════════════════════════════════════════════
+
+REQUIREMENTS:
+✓ Very late starts (10am+) - she's tired
+✓ Max 1-2 activities per day
+✓ Long rest blocks (afternoon nap/pool)
+✓ Early dinners (pregnancy exhaustion hits at night)
+✓ Short walking distances
+✓ Frequent bathroom access
+✓ Sitting/rest options throughout
+
+PACING ADJUSTMENT: Subtract 3 from normal pace.
+Even an Adrenaline Architect needs to rest on a babymoon.
+
+IDEAL BABYMOON DAY:
+- 10:00: Slow breakfast
+- 11:00: One gentle activity (garden, easy museum)
+- 13:00: Lunch
+- 14:00-17:00: REST (pool, nap, spa)
+- 18:00: Early dinner
+- 20:00: Back to hotel
+
+NEVER:
+✗ Full day excursions
+✗ Packed schedules
+✗ Strenuous anything
+✗ Late nights
+
+═══════════════════════════════════════════════════════════════════════
+BABYMOON COMFORT REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+CONSIDERATIONS:
+- Pool access (swimming feels amazing pregnant)
+- Shade available (overheating risk)
+- Seating everywhere
+- Bathroom frequency
+- Air conditioning (pregnant = running hot)
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Are all activities pregnancy-safe? (no adventure, no heat, no risk)
+☐ Is pacing very slow? (max 1-2 activities/day)
+☐ Are there long rest blocks? (afternoon rest daily)
+☐ Are dining options pregnancy-friendly? (no raw fish focus)
+☐ Is there pool/water access? (swimming is best for pregnancy)
+☐ Are walking distances short?
+☐ Is bathroom access considered?
+☐ Would an exhausted pregnant person actually enjoy this?
+
+⚠️ FAILURE: If it would be uncomfortable or risky for a pregnant person, fix it.
+`;
+}
+
+/**
+ * Build comprehensive birthday prompt with personalization
+ */
+export function buildBirthdayPrompt(archetype: string): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                        TRIP TYPE: BIRTHDAY                           ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Someone is CELEBRATING A BIRTHDAY. The trip should honor THEM.
+
+KEY INSIGHT: Birthday trip ≠ "birthday activities everywhere."
+It means: the trip is designed around what THEY want.
+
+A birthday for a Slow Traveler ≠ party party party.
+A birthday for an Introvert ≠ group celebration.
+
+The birthday person's archetype (${archetype}) determines HOW to celebrate.
+
+═══════════════════════════════════════════════════════════════════════
+BIRTHDAY CELEBRATION REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+MUST INCLUDE:
+✓ ONE special "birthday dinner" (doesn't have to be fancy, has to be THEM)
+✓ ONE "birthday moment" or surprise
+✓ Activities that feel like gifts to them (based on archetype)
+
+MODERATION:
+- Not EVERY meal is "birthday dinner"
+- Not EVERY activity has "birthday" in the name
+- Celebrate without overwhelming
+
+PHRASES:
+- "Birthday [activity]" - use once, not repeatedly
+- "Celebrate with" - use sparingly
+- "Special" - for the actual special thing
+
+AVOID:
+✗ Forced birthday activities they wouldn't enjoy
+✗ Generic "birthday = fancy dinner" when they're Budget/Casual
+✗ Labeling everything "birthday"
+
+═══════════════════════════════════════════════════════════════════════
+BIRTHDAY PERSONALIZATION
+═══════════════════════════════════════════════════════════════════════
+
+The birthday celebration should match their ARCHETYPE.
+
+Examples:
+- Slow Traveler birthday: Long leisurely special lunch, no rush
+- Adrenaline Architect birthday: That adventure activity they've always wanted
+- Culinary Cartographer birthday: THE restaurant they've been dying to try
+- Flexible Wanderer birthday: Discovery of something unexpected
+- Social Butterfly birthday: Celebration with people, energy
+- Zen Seeker birthday: Meaningful, peaceful, possibly solo moment
+- Budget Backpacker birthday: Fun experience, not expensive dinner
+
+ASK: What would THIS person want for their birthday?
+NOT: What does a generic "birthday" look like?
+
+═══════════════════════════════════════════════════════════════════════
+BIRTHDAY VS REGULAR TRIP
+═══════════════════════════════════════════════════════════════════════
+
+Most of the trip = normal great trip for their archetype
+Birthday elements = 1-2 special moments that mark the occasion
+
+Don't make every day "birthday day."
+The birthday dinner IS the birthday dinner.
+The rest is just a great trip.
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Is there ONE special birthday dinner/meal (not every meal)?
+☐ Is there ONE birthday moment/surprise?
+☐ Does the celebration style match their archetype?
+☐ Is the rest of the trip normal (not birthday-overload)?
+☐ Would the birthday person feel celebrated without overwhelmed?
+☐ Does it feel personalized to THEM, not generic "birthday"?
+
+⚠️ FAILURE: If it's generic "birthday activities" that don't match who they are, fix it.
+`;
+}
+
+/**
+ * Build comprehensive anniversary prompt
+ */
+export function buildAnniversaryPrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                       TRIP TYPE: ANNIVERSARY                         ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+This couple is celebrating a RELATIONSHIP MILESTONE.
+The trip should honor their history together and create new memories.
+
+Unlike honeymoon (which is post-wedding exhaustion + romance),
+anniversary is about:
+- Celebrating how far they've come
+- Quality time together
+- Romance without exhaustion
+- Making new memories as a couple
+
+═══════════════════════════════════════════════════════════════════════
+ANNIVERSARY ROMANCE REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+MUST INCLUDE:
+✓ At least 1 special romantic dinner (THE anniversary meal)
+✓ At least 1 romantic moment (sunset, view, special spot)
+✓ Couples-focused activities (not group tours)
+✓ Intimate atmosphere over crowds
+
+PHRASES TO USE:
+"Perfect for celebrating"
+"Romantic setting"
+"Intimate atmosphere"
+"Couples [activity]"
+
+DINING FOR ANNIVERSARY:
+- THE dinner should feel special
+- Request "anniversary" to restaurant
+- Consider: view, atmosphere, significance
+- Doesn't have to be most expensive, but should be meaningful
+
+═══════════════════════════════════════════════════════════════════════
+ANNIVERSARY BALANCE
+═══════════════════════════════════════════════════════════════════════
+
+Unlike honeymoon, anniversary travelers aren't exhausted.
+They can do more, but romance should thread through.
+
+GOOD BALANCE:
+- Morning: Activity together (museum, walk, etc.)
+- Afternoon: Leisure time, maybe spa
+- Evening: Romantic dinner
+
+Romance doesn't mean "only candles and roses."
+Anniversary for an Adrenaline Architect couple = adventure TOGETHER.
+Anniversary for Culinary Cartographers = food tour TOGETHER.
+
+The key is: TOGETHER, celebrating.
+
+═══════════════════════════════════════════════════════════════════════
+ACKNOWLEDGE THE MILESTONE
+═══════════════════════════════════════════════════════════════════════
+
+The itinerary should feel like it knows this is an anniversary.
+
+INCLUDE:
+✓ One "toast-worthy" moment
+✓ Activities framed as "celebrating X years"
+✓ At least one special experience
+
+DON'T:
+✗ Make it generic "couples trip"
+✗ Forget to mark the occasion
+✗ Treat it like friends traveling together
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Is there a special anniversary dinner?
+☐ Is there at least one romantic moment/setting?
+☐ Are activities couples-focused (not group)?
+☐ Does itinerary acknowledge this is a celebration?
+☐ Would a couple say "this feels like an anniversary trip"?
+☐ Is romance present without being cheesy/forced?
+
+⚠️ FAILURE: If this could be any random couples trip, add anniversary elements.
+`;
+}
+
+/**
+ * Build comprehensive guys trip prompt
+ */
+export function buildGuysTripPrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                        TRIP TYPE: GUYS TRIP                          ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+A group of male friends traveling together.
+The vibe is: bonding, fun, shared experiences, maybe some adventure.
+
+NOT: A solo trip that happens to have multiple people.
+The GROUP NATURE should be visible throughout.
+
+═══════════════════════════════════════════════════════════════════════
+GUYS TRIP ACTIVITY REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+GOOD FOR GUYS GROUPS:
+✓ Sports (watching or playing)
+✓ Adventure activities (group adrenaline)
+✓ Tours that work for groups (beer tour, food tour)
+✓ Active experiences (hiking, water sports)
+✓ Competitive elements (golf, go-karts, etc.)
+✓ Shared experiences that create stories
+
+EXAMPLES BY INTEREST:
+- Sports fans: Local sports match, sports bar
+- Food guys: Brewery tour, BBQ pilgrimage
+- Adventure guys: Group activity (rafting, hiking)
+- Chill guys: Golf, beach, pool, cards
+
+DINING FOR GUYS:
+- Group-friendly tables
+- Shareable food (not tasting menus)
+- Casual atmosphere
+- Good beer/drinks selection
+- Not romantic/intimate venues
+
+═══════════════════════════════════════════════════════════════════════
+GUYS TRIP EVENING
+═══════════════════════════════════════════════════════════════════════
+
+At least ONE evening should have bar/pub/nightlife option.
+
+OPTIONS:
+- Sports bar (especially if game on)
+- Pub crawl / bar hopping
+- Live music venue
+- Casino (where appropriate)
+- Rooftop bar with views
+- Local dive bar (authentic)
+
+NOTE: Not all guys trips are party trips.
+Calibrate to archetype:
+- Zen Seeker guys = might skip nightlife
+- Retirement Ranger guys = early dinner, one nice bar
+- Gap Year Graduate guys = maximum nightlife
+
+But generally, at least ONE evening option should be there.
+
+═══════════════════════════════════════════════════════════════════════
+GUYS TRIP BONDING
+═══════════════════════════════════════════════════════════════════════
+
+The trip should include activities that build group memories.
+
+AT LEAST ONE:
+- Shared adventure/challenge
+- Group meal with stories
+- Something they'll talk about later
+
+"Remember when we..." is the goal.
+
+═══════════════════════════════════════════════════════════════════════
+GUYS TRIP PACING
+═══════════════════════════════════════════════════════════════════════
+
+Groups are slower than individuals.
+Add buffer time everywhere.
+
+CONSIDERATIONS:
+- Morning mobilization is slow (late starts)
+- Decisions take longer (consensus needed)
+- Someone always needs something
+- +15-20min buffer between activities
+- Don't over-schedule (group energy varies)
+
+═══════════════════════════════════════════════════════════════════════
+AVOID FOR GUYS TRIP
+═══════════════════════════════════════════════════════════════════════
+
+✗ Romantic restaurants
+✗ Couples activities
+✗ Spa (unless golf-trip vibe)
+✗ Intimate venues
+✗ Solo-focused experiences
+✗ Activities that split the group
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Is there at least ONE group bonding activity?
+☐ Is there at least ONE evening/bar option?
+☐ Are restaurants group-friendly (not romantic)?
+☐ Is it OBVIOUS this is a group trip (not solo)?
+☐ Does pacing account for group dynamics?
+☐ Would a group of guys look at this and get excited?
+
+⚠️ FAILURE: If this looks like a solo trip or couples trip, fix it.
+`;
+}
+
+/**
+ * Build comprehensive girls trip prompt
+ */
+export function buildGirlsTripPrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                        TRIP TYPE: GIRLS TRIP                         ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+A group of female friends traveling together.
+The vibe is: bonding, fun, shared experiences, celebration of friendship.
+
+The GROUP NATURE and FEMALE FRIENDSHIP should be visible throughout.
+
+═══════════════════════════════════════════════════════════════════════
+GIRLS TRIP ACTIVITY REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+CLASSIC GIRLS TRIP ACTIVITIES:
+✓ Wine/cocktail tasting
+✓ Spa day
+✓ Cooking class
+✓ Shopping (with group energy)
+✓ Beach/pool day
+✓ Brunch (mandatory!)
+✓ Photo-worthy experiences
+✓ Group classes (yoga, dance, etc.)
+
+DINING FOR GIRLS GROUPS:
+- Shareable food (tapas, mezze, family style)
+- Cute/aesthetic atmosphere
+- Good cocktail menu
+- Brunch spots (essential)
+- Rooftop/view options
+- Instagram-worthy presentation
+
+NOT:
+✗ Dark, dingy pubs
+✗ Super casual (unless that's their vibe)
+✗ Romantic couples spots
+✗ Sports-focused venues
+
+═══════════════════════════════════════════════════════════════════════
+GIRLS TRIP PHOTO MOMENTS
+═══════════════════════════════════════════════════════════════════════
+
+Photo-worthy experiences are important for many girls trips.
+
+INCLUDE AT LEAST 1-2:
+- Scenic viewpoint
+- Aesthetic cafe/restaurant
+- Pretty street/area
+- Landmark photo spot
+- Sunset/sunrise spot
+
+Note when something is "great for photos."
+
+═══════════════════════════════════════════════════════════════════════
+GIRLS TRIP PAMPERING
+═══════════════════════════════════════════════════════════════════════
+
+Many (not all) girls trips include pampering.
+
+OPTIONS:
+- Spa day/half day
+- Mani/pedi outing
+- Pool/beach relaxation
+- Wine tasting
+- Afternoon tea
+
+NOTE: Calibrate to archetype.
+- Adrenaline Architect girls = adventure first, maybe spa after
+- Wellness girls = spa heavy
+- Budget girls = skip spa, DIY pampering
+
+═══════════════════════════════════════════════════════════════════════
+GIRLS TRIP BONDING
+═══════════════════════════════════════════════════════════════════════
+
+Include activities that foster conversation and connection.
+
+GOOD FOR BONDING:
+- Long meals (talking time)
+- Wine tasting (relaxed, conversational)
+- Pool/beach lounging (chatting)
+- Walking together (side-by-side talk)
+- Cooking class (doing together)
+
+Activities should allow TALKING, not just doing.
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Is there at least ONE photo-worthy experience?
+☐ Is there brunch? (Often expected)
+☐ Are restaurants cute/shareable food?
+☐ Is there at least ONE evening out option?
+☐ Is it OBVIOUS this is a girls trip (not solo or couples)?
+☐ Would a group of women look at this and get excited?
+
+⚠️ FAILURE: If this looks like a solo trip or couples trip, fix it.
+`;
+}
+
+/**
+ * Build comprehensive adventure trip prompt
+ */
+export function buildAdventurePrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                      TRIP TYPE: ADVENTURE TRIP                       ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Adventure is the PURPOSE of this trip.
+The itinerary should center on adventure activities, not add them as one-offs.
+
+This effectively makes them an Adrenaline Architect for this trip,
+regardless of their base archetype.
+
+═══════════════════════════════════════════════════════════════════════
+ADVENTURE TRIP ACTIVITY REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+ADVENTURE MUST DOMINATE:
+- Adventure activity every day (or every other day with recovery)
+- Trip should be 60%+ adventure activities
+- Non-adventure activities are supporting (meals, recovery)
+
+TYPES OF ADVENTURE:
+- Water: Surfing, diving, kayaking, rafting, kiteboarding
+- Mountain: Hiking, climbing, mountaineering, via ferrata
+- Air: Skydiving, paragliding, zip-lining, bungee
+- Land: Mountain biking, ATV, motorcycling, canyoning
+- Snow: Skiing, snowboarding, ice climbing
+
+INTENSITY CALIBRATION:
+Match to their actual ability level.
+"Adventure" for a beginner ≠ "Adventure" for an expert.
+
+Include:
+✓ At least ONE marquee adventure (the big one)
+✓ Supporting adventures (variety)
+✓ Progression if multi-day (build skills)
+
+═══════════════════════════════════════════════════════════════════════
+ADVENTURE TRIP RECOVERY
+═══════════════════════════════════════════════════════════════════════
+
+Adventure is physically demanding. Build in recovery.
+
+REQUIREMENTS:
+- After major activity: recovery block (pool, massage, rest)
+- Every 2-3 intense days: one lighter day
+- Adequate sleep time (adventure is tiring)
+- Protein/fuel-focused dining (not just pretty food)
+
+SAMPLE RHYTHM:
+Day 1: Arrive, light activity
+Day 2: BIG adventure
+Day 3: Medium adventure + recovery
+Day 4: BIG adventure
+Day 5: Light adventure or rest day
+Day 6: Depart
+
+═══════════════════════════════════════════════════════════════════════
+ADVENTURE LOGISTICS
+═══════════════════════════════════════════════════════════════════════
+
+TIMING:
+- Many adventures are morning activities (weather, energy)
+- Allow time for gear, briefing, transport
+- Don't schedule tight connections after adventures
+
+CONSIDERATIONS:
+- Note what's provided vs what to bring
+- Note physical requirements
+- Note fitness prerequisites
+- Weather dependencies
+
+═══════════════════════════════════════════════════════════════════════
+ADVENTURE DINING
+═══════════════════════════════════════════════════════════════════════
+
+Focus on FUEL, not fancy.
+
+GOOD:
+- Hearty breakfast (energy for activity)
+- Quick lunch OR packed lunch
+- Recovery dinner (protein, carbs)
+- Hydration-focused
+- Casual atmosphere (tired people)
+
+NOT:
+- Tasting menus (too long, too light)
+- Fancy dress code (no energy)
+- Very late dinners (exhausted)
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Is adventure 60%+ of activities?
+☐ Is there at least ONE marquee adventure?
+☐ Is there recovery time built in?
+☐ Is dining fuel-focused (not foodie-focused)?
+☐ Would an adventure lover be excited by this?
+☐ Is it obvious this is an ADVENTURE trip, not tourism with one activity?
+
+⚠️ FAILURE: If adventure isn't dominant, fix it.
+`;
+}
+
+/**
+ * Build comprehensive foodie trip prompt
+ */
+export function buildFoodiePrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                     TRIP TYPE: FOOD & CULINARY                       ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Food is the PURPOSE of this trip.
+Meals aren't interruptions to sightseeing - they ARE the main events.
+
+This effectively makes them a Culinary Cartographer for this trip.
+
+═══════════════════════════════════════════════════════════════════════
+FOODIE TRIP STRUCTURE
+═══════════════════════════════════════════════════════════════════════
+
+Food should be 60%+ of the experience.
+
+TYPICAL FOODIE DAY:
+- 09:00: Market visit or food neighborhood walk
+- 12:00-14:00: LUNCH - main event, researched spot
+- 15:00: Food-related activity (cooking class, producer visit, food tour)
+- 16:30: Light snack / rest
+- 19:30-22:00: DINNER - highlight meal
+
+Every meal is intentional, not "grab something quick."
+
+═══════════════════════════════════════════════════════════════════════
+FOODIE EXPERIENCES (REQUIRED)
+═══════════════════════════════════════════════════════════════════════
+
+MUST INCLUDE (over a trip):
+✓ At least ONE market visit
+✓ At least ONE cooking class or food-making experience
+✓ At least ONE "signature restaurant" (THE meal of the trip)
+✓ Multiple discovery meals (trying local specialties)
+✓ Food shopping/sourcing experience
+
+EXAMPLES:
+- Markets: Central market, farmers market, specialty food market
+- Classes: Cooking class, wine/coffee/chocolate making
+- Discovery: Food tour, local specialties hunt, neighborhood grazing
+- Signature: THE restaurant, chef's table, special dining experience
+- Shopping: Deli/cheese shop, spice market, local producers
+
+═══════════════════════════════════════════════════════════════════════
+FOODIE DINING REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+EVERY meal matters. No "just grab something."
+
+LUNCH:
+- Not quick/casual unless intentionally so
+- Often 1-2 hour affair
+- Researched, intentional
+
+DINNER:
+- Main event of evening
+- Researched, often reserved
+- Allow 2+ hours
+
+VARIETY:
+- Mix of fancy and casual
+- Mix of cuisines/neighborhoods
+- Street food AND restaurants
+- Different experiences (counter, table, market, etc.)
+
+RESERVATIONS:
+- Book key meals in advance
+- Note which need reservations
+- Note which are walk-in
+
+═══════════════════════════════════════════════════════════════════════
+FOODIE PACING
+═══════════════════════════════════════════════════════════════════════
+
+Food trips are SLOW. You can't rush digestion.
+
+REQUIREMENTS:
+- 2-3 hours for lunch
+- 2-3 hours for dinner
+- Rest time between meals (digestion)
+- Not too many activities between meals
+- Room for spontaneous food discoveries
+
+DANGER: Over-scheduling non-food activities.
+Leave room to:
+- Linger at markets
+- Get second helpings
+- Discover a spot and stay
+- Food coma recovery
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Is food 60%+ of the experience?
+☐ Is there a market visit?
+☐ Is there a cooking class or food activity?
+☐ Is there a signature dinner (THE meal)?
+☐ Are meals given proper time (2+ hours for sit-down)?
+☐ Is there variety (street food to fancy, multiple cuisines)?
+☐ Would a food lover be excited by every meal?
+☐ Is it obvious this is a FOOD trip, not tourism with good restaurants?
+
+⚠️ FAILURE: If food isn't dominant, fix it.
+`;
+}
+
+/**
+ * Build comprehensive wellness retreat prompt
+ */
+export function buildWellnessPrompt(): string {
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                     TRIP TYPE: WELLNESS RETREAT                      ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Wellness is the PURPOSE of this trip.
+This is not "vacation with spa added." Wellness IS the agenda.
+
+This effectively makes them a Retreat Regular or Zen Seeker for this trip.
+
+═══════════════════════════════════════════════════════════════════════
+WELLNESS RETREAT STRUCTURE
+═══════════════════════════════════════════════════════════════════════
+
+Wellness should dominate every day.
+
+TYPICAL WELLNESS DAY:
+- 07:00: Morning practice (yoga, meditation, walk)
+- 08:30: Healthy breakfast
+- 10:00: Wellness activity or treatment
+- 12:00: Healthy lunch
+- 13:00-15:00: Rest/integration time
+- 15:00: Afternoon treatment or activity
+- 18:00: Evening practice or reflection
+- 19:00: Healthy dinner
+- 21:00: Wind down, sleep
+
+WELLNESS ELEMENTS:
+- Movement: yoga, pilates, tai chi, gentle hiking
+- Stillness: meditation, breathwork, journaling
+- Treatment: massage, spa, healing treatments
+- Nature: time outdoors, grounding, fresh air
+- Rest: sleep, naps, doing nothing
+
+═══════════════════════════════════════════════════════════════════════
+WELLNESS ACTIVITIES (REQUIRED)
+═══════════════════════════════════════════════════════════════════════
+
+INCLUDE DAILY:
+✓ Morning practice (yoga, meditation, walk)
+✓ At least one treatment or wellness activity
+✓ Nature/outdoor time
+✓ Rest/integration time
+
+EXAMPLES:
+- Yoga (various styles, adjust to level)
+- Meditation (guided, silent, walking)
+- Spa treatments (massage, facial, body work)
+- Breathwork
+- Sound healing
+- Forest bathing
+- Gentle hiking
+- Swimming/water therapy
+- Journaling/reflection time
+
+═══════════════════════════════════════════════════════════════════════
+WELLNESS DINING
+═══════════════════════════════════════════════════════════════════════
+
+Food should support wellness goals.
+
+REQUIREMENTS:
+- Healthy, whole foods focus
+- Plant-forward options
+- Organic/local where possible
+- Mindful eating atmosphere
+- No rushed meals
+
+INCLUDE:
+- Clear/fresh breakfasts
+- Light, nourishing lunches
+- Early, balanced dinners
+- Hydration emphasis
+- Juice/smoothie options
+
+NOT:
+- Heavy, rich food
+- Late dinners
+- Alcohol-focused
+- Processed food
+- Rushed eating
+
+═══════════════════════════════════════════════════════════════════════
+WELLNESS PACING (VERY SLOW)
+═══════════════════════════════════════════════════════════════════════
+
+Wellness is SLOW. This is the slowest trip type besides babymoon.
+
+REQUIREMENTS:
+- No rushing anywhere
+- Lots of white space
+- Integration time after treatments
+- Early bedtimes (sleep is wellness)
+- Late, gentle mornings OK
+
+AVOID:
+- Packed schedules
+- Back-to-back activities
+- Rushing between things
+- Late nights
+- Early flights
+
+═══════════════════════════════════════════════════════════════════════
+WELLNESS ENVIRONMENT
+═══════════════════════════════════════════════════════════════════════
+
+Setting matters for wellness.
+
+PRIORITIZE:
+- Quiet accommodations
+- Nature access
+- Peaceful atmosphere
+- Away from crowds/noise
+- Digital detox friendly
+
+═══════════════════════════════════════════════════════════════════════
+COMPLIANCE CHECK
+═══════════════════════════════════════════════════════════════════════
+
+☐ Is there morning wellness practice daily?
+☐ Is there at least one treatment per day?
+☐ Is dining health-focused (not indulgent)?
+☐ Is pacing very slow with integration time?
+☐ Are activities wellness-focused (not sightseeing)?
+☐ Would someone feel restored, not tired, after this?
+☐ Is it obvious this is a WELLNESS trip, not vacation with spa?
+
+⚠️ FAILURE: If wellness isn't dominant, fix it.
+`;
+}
+
 export const tripTypeModifiers: Record<string, TripTypeModifier> = {
   // ============ CELEBRATIONS ============
 
@@ -668,30 +1775,10 @@ export const tripTypeModifiers: Record<string, TripTypeModifier> = {
     mustInclude: [
       "ONE special celebration dinner (not every dinner)",
       "ONE surprise or special moment",
-      "Activity the birthday person specifically loves"
+      "Activity the birthday person specifically loves (based on archetype)"
     ],
     atmosphere: "Celebratory but not over-the-top. Focus on what THEY want, not generic 'birthday' activities.",
-    promptAddition: `
-=== TRIP TYPE: BIRTHDAY CELEBRATION ===
-
-This is a BIRTHDAY trip. Include:
-- ONE special dinner (can be nice restaurant, rooftop, or meaningful spot)
-- ONE "birthday moment" (sunset at special viewpoint, surprise activity, etc.)
-- Activities aligned with what this specific traveler loves (based on archetype)
-
-DO NOT:
-- Make every meal a "birthday dinner"
-- Add generic birthday activities they wouldn't enjoy
-- Force celebration into every day
-- Add cake/balloons unless it fits their personality
-- Use the word "birthday" in every activity description
-
-A Flexible Wanderer's birthday = discovering a hidden neighborhood gem
-A Luxury Luminary's birthday = VIP treatment and fine dining
-An Adrenaline Architect's birthday = that skydiving they've always wanted
-
-Match the celebration to WHO they are.
-`,
+    promptAddition: '', // Built dynamically with buildBirthdayPrompt()
     frequency: {
       specialDinner: 1,
       celebrationMoment: 1,
@@ -704,33 +1791,13 @@ Match the celebration to WHO they are.
     name: "Anniversary Trip",
     description: "Celebrating a relationship milestone",
     mustInclude: [
-      "ONE special romantic dinner",
+      "ONE special romantic dinner (THE anniversary meal)",
       "Sunset or sunrise moment together",
-      "Couples-focused activities"
+      "Couples-focused activities (not group tours)",
+      "Acknowledgment that this is a milestone celebration"
     ],
-    atmosphere: "Romantic, intimate, meaningful. Quality time over quantity of activities.",
-    promptAddition: `
-=== TRIP TYPE: ANNIVERSARY ===
-
-This is an ANNIVERSARY trip. The focus is ROMANCE and TOGETHERNESS.
-
-Include:
-- ONE special dinner (romantic atmosphere, good food, not rushed)
-- Sunset or sunrise moment at a scenic spot
-- Activities done TOGETHER (not side-by-side but actually shared)
-- Intimate venues over crowded ones
-
-Adjust based on archetype:
-- Slow Traveler anniversary = long lunches, park strolls, no rushing
-- Adrenaline Architect anniversary = adventure they do together (tandem skydive, couples surf lesson)
-- Culinary Cartographer anniversary = cooking class together, food tour, special dinner
-
-DO NOT:
-- Make it cheesy or generic "romantic"
-- Add spa unless they're Retreat Regular or Luxury Luminary
-- Force roses/champagne unless it fits
-- Schedule them apart
-`,
+    atmosphere: "Romantic, intimate, meaningful. Quality time over quantity of activities. Celebrating their history.",
+    promptAddition: '', // Built dynamically with buildAnniversaryPrompt()
     frequency: {
       specialDinner: 1,
       romanticMoment: 2,
@@ -746,36 +1813,11 @@ DO NOT:
       "Elevated experiences throughout",
       "Privacy and intimacy prioritized",
       "Special romantic moments",
-      "Relaxation time (they just had a wedding)"
+      "Relaxation time (they just had a wedding)",
+      "REST - they are EXHAUSTED from wedding planning"
     ],
     atmosphere: "Luxurious, romantic, restful. They're exhausted from wedding planning. Pamper them.",
-    promptAddition: `
-=== TRIP TYPE: HONEYMOON ===
-
-This is a HONEYMOON. Different from anniversary:
-- They just survived wedding planning - they're EXHAUSTED
-- This is likely their most special trip ever
-- Elevated everything (within their budget tier)
-- More relaxation than a normal trip
-
-Include:
-- Upgraded dining experiences (1-2 special dinners)
-- Romantic moments (sunset, private experiences)
-- REST TIME - don't pack the schedule
-- Privacy over crowds
-- "Once in a lifetime" experiences appropriate to budget
-
-Even a budget honeymoon should feel special:
-- Budget tier: best-value romantic spots, sunset picnic, special local dinner
-- Moderate tier: one splurge dinner, couples experience, scenic accommodations
-- Luxury tier: full luxury treatment, VIP access, spa, fine dining
-
-DO NOT:
-- Pack the schedule like a normal trip
-- Forget they need rest
-- Make it generic tourist itinerary
-- Skip romantic atmosphere
-`,
+    promptAddition: '', // Built dynamically with buildHoneymoonPrompt()
     frequency: {
       specialDinner: 2,
       romanticMoment: 'daily',
@@ -813,45 +1855,18 @@ DO NOT:
     description: "Friends getaway (women)",
     mustInclude: [
       "Group-friendly activities",
-      "Shareable food experiences",
-      "Photo opportunities",
-      "Evening out option"
+      "Shareable food experiences (tapas, mezze, family-style)",
+      "Photo-worthy moments and locations",
+      "BRUNCH (mandatory for most girls trips)",
+      "At least ONE evening out option",
+      "Cute/aesthetic restaurant atmosphere"
     ],
-    atmosphere: "Fun, bonding, celebratory. Shared experiences and memories.",
-    promptAddition: `
-=== TRIP TYPE: GIRLS TRIP ===
-
-This is a GROUP FRIENDS trip. Focus on SHARED FUN.
-
-Include:
-- Activities the whole group can do together
-- Shareable food (tapas, family-style, food tours)
-- Photo-worthy moments and locations
-- At least one "night out" option
-- Experiences that create stories
-
-Good for groups:
-- Wine/cocktail tastings
-- Cooking classes
-- Beach clubs
-- Rooftop bars
-- Walking food tours
-- Spa day (if it fits the archetype)
-
-DO NOT:
-- Suggest solo activities
-- Over-schedule (groups move slower)
-- Forget photo opportunities
-- Make it all about nightlife (unless that's their archetype)
-
-Adjust to archetype:
-- Adrenaline Architect group = group adventure activity
-- Culinary Cartographer group = food tour, cooking class, long group dinners
-- Beach Therapist group = beach club, sunset drinks, casual seafood
-`,
+    atmosphere: "Fun, bonding, celebratory. Shared experiences and memories. Photo-worthy.",
+    promptAddition: '', // Built dynamically with buildGirlsTripPrompt()
     frequency: {
       groupActivity: 'daily',
       photoOp: 'daily',
+      brunch: 'at least one',
       nightOut: '1-2 per trip'
     },
     pacingModifier: -1,
@@ -862,45 +1877,17 @@ Adjust to archetype:
     name: "Guys Trip",
     description: "Friends getaway (men)",
     mustInclude: [
-      "Group-friendly activities",
-      "Good food and drinks",
-      "Activity-based bonding",
-      "Evening entertainment"
+      "Group-friendly activities that build memories",
+      "Activity-based bonding (sports, adventures, tours)",
+      "At least ONE evening bar/pub option",
+      "Good food spots (not necessarily fancy, often casual)",
+      "Something memorable/story-worthy ('remember when we...')"
     ],
-    atmosphere: "Active, fun, bonding through shared experiences.",
-    promptAddition: `
-=== TRIP TYPE: GUYS TRIP ===
-
-This is a GROUP FRIENDS trip. Focus on SHARED EXPERIENCES.
-
-Include:
-- Activity-based bonding (sports, adventures, tours)
-- Good food spots (not necessarily fancy)
-- Bar/pub scene
-- Something memorable/story-worthy
-
-Good for groups:
-- Sporting events
-- Outdoor adventures (hiking, water sports)
-- Brewery/distillery tours
-- Local sports participation
-- Food tours
-- Evening bar scene
-
-DO NOT:
-- Over-schedule (groups move slower)
-- Make it all museums and culture (unless that's their archetype)
-- Forget downtime for group hanging out
-- Assume heavy drinking is required
-
-Adjust to archetype:
-- Cultural Anthropologist group = historical pub crawl, local sports match
-- Adrenaline Architect group = adventure activity, active experiences
-- Culinary Cartographer group = food tour, local specialties, brewery visits
-`,
+    atmosphere: "Active, fun, bonding through shared experiences. Group energy visible throughout.",
+    promptAddition: '', // Built dynamically with buildGuysTripPrompt()
     frequency: {
       groupActivity: 'daily',
-      activityBonding: 'daily',
+      bondingActivity: 'at least one major',
       nightOut: '1-2 per trip'
     },
     pacingModifier: -1,
@@ -911,47 +1898,18 @@ Adjust to archetype:
     name: "Family Trip",
     description: "Traveling with children",
     mustInclude: [
-      "Kid-friendly activities",
-      "Family-friendly dining (flexible timing, kid menus)",
-      "Rest time / pool time / downtime",
-      "Mix of adult and kid interests"
+      "Kid-friendly activities (interactive, not just looking)",
+      "Family-friendly dining at KID times (lunch 12-13:00, dinner 17:30-18:30)",
+      "REST TIME 13:00-15:00 daily (naps, pool, decompression)",
+      "Activities END by 19:00-20:00",
+      "Snack and bathroom considerations built in"
     ],
-    atmosphere: "Fun for everyone, manageable logistics, creating family memories.",
-    promptAddition: `
-=== TRIP TYPE: FAMILY WITH KIDS ===
-
-This trip includes CHILDREN. Everything must work for families.
-
-Include:
-- Kid-friendly activities (interactive, not just "looking")
-- Family-friendly restaurants (flexible, not fancy)
-- REST TIME - kids need breaks
-- Mix of kid activities and things parents enjoy
-- Easy logistics (not too much transport)
-
-Timing adjustments:
-- Earlier dinners (17:30-18:30)
-- Afternoon break (13:00-15:00) for rest/pool/nap
-- Not too early mornings
-- End activities by 19:00-20:00
-
-DO NOT:
-- Schedule fine dining
-- Plan late-night activities
-- Forget snack/bathroom breaks
-- Pack the schedule (kids melt down)
-- Include adult-only venues
-- Require long walks without breaks
-
-Adjust to archetype:
-- Bucket List Conqueror family = must-see landmarks but at kid pace
-- Beach Therapist family = beach time, pool time, easy seafood dinners
-- Cultural Anthropologist family = kid-friendly museums, interactive history
-`,
+    atmosphere: "Fun for everyone, manageable logistics, creating family memories. Kids are NOT small adults.",
+    promptAddition: '', // Built dynamically with buildFamilyPrompt()
     frequency: {
       kidActivity: 'daily',
-      restTime: 'daily',
-      familyMeal: 'all meals'
+      restTime: 'daily 13:00-15:00',
+      familyMeal: 'all meals at kid-appropriate times'
     },
     pacingModifier: -2,
     bufferModifier: 30,
@@ -1233,36 +2191,17 @@ This essentially makes them Retreat Regular for this trip, regardless of base ar
     name: "Adventure Trip",
     description: "Focused on adventure activities",
     mustInclude: [
-      "Adventure activity daily",
-      "Physical challenges",
-      "Outdoor experiences",
-      "Recovery time between big activities"
+      "Adventure activity EVERY day (or every other day with recovery)",
+      "At least ONE marquee adventure (THE experience of the trip)",
+      "Recovery time after major activities",
+      "Fuel-focused dining (energy, not ambiance)",
+      "Trip should be 60%+ adventure activities"
     ],
-    atmosphere: "Active, thrilling, challenging. Adventure is the point.",
-    promptAddition: `
-=== TRIP TYPE: ADVENTURE TRIP ===
-
-This trip's PURPOSE is ADVENTURE. Not sightseeing with one activity added.
-
-Include:
-- Adventure activity every day (or every other day with recovery)
-- Outdoor experiences
-- Physical challenges matching their ability
-- Proper recovery between big activities
-- Fuel-focused dining (energy, not ambiance)
-
-DO NOT:
-- Fill days with museums and cultural sites
-- Forget recovery needs
-- Exceed physical ability
-- Skip safety considerations
-- Make it all extreme (varied adventure levels)
-
-This essentially makes them Adrenaline Architect for this trip, regardless of base archetype.
-`,
+    atmosphere: "Active, thrilling, challenging. Adventure IS the point, not sightseeing with one activity.",
+    promptAddition: '', // Built dynamically with buildAdventurePrompt()
     frequency: {
       adventureActivity: 'daily or every other day',
-      outdoorTime: 'daily',
+      marqueeAdventure: 'at least 1',
       recoveryTime: 'after major activities'
     },
     overrideArchetypeFor: ['activity_selection'],
@@ -1273,38 +2212,20 @@ This essentially makes them Adrenaline Architect for this trip, regardless of ba
     name: "Food & Culinary Trip",
     description: "Focused on culinary experiences",
     mustInclude: [
-      "Food experiences multiple times daily",
-      "Markets, classes, tours",
-      "Researched dining reservations",
-      "Local specialties"
+      "Food experiences 60%+ of itinerary",
+      "At least ONE market visit",
+      "At least ONE cooking class or food-making experience",
+      "At least ONE signature restaurant (THE meal of the trip)",
+      "EVERY meal intentional (no 'grab something quick')",
+      "2-3 hours for sit-down meals"
     ],
-    atmosphere: "Delicious, discovery, culinary immersion. Food IS the itinerary.",
-    promptAddition: `
-=== TRIP TYPE: FOOD & CULINARY TRIP ===
-
-This trip's PURPOSE is FOOD. Meals aren't interruptions, they're the main events.
-
-Include:
-- Morning: market visit or food activity
-- Lunch: researched restaurant or food tour
-- Afternoon: cooking class, food shopping, or rest before dinner
-- Dinner: highlight meal of the day
-- Multiple food experiences daily
-
-DO NOT:
-- Treat meals as afterthoughts
-- Suggest "grab something quick"
-- Pack non-food activities that conflict with meal times
-- Miss local specialties
-- Forget reservations for popular spots
-
-This essentially makes them Culinary Cartographer for this trip, regardless of base archetype.
-`,
+    atmosphere: "Delicious, discovery, culinary immersion. Meals ARE the main events, not interruptions.",
+    promptAddition: '', // Built dynamically with buildFoodiePrompt()
     frequency: {
       foodExperience: '2-3 daily',
       marketVisit: 'at least once',
       cookingClass: 'at least once',
-      signatureMeal: 'daily'
+      signatureMeal: '1-2 per trip'
     },
     overrideArchetypeFor: ['dining', 'activity_selection'],
     pacingModifier: -1
@@ -2113,10 +3034,49 @@ export function buildTripTypePromptSection(
     return ''; // No special trip type guidance needed
   }
 
-  // For solo trips, use the comprehensive buildSoloTripPrompt function
-  const promptContent = normalizedType === 'solo' 
-    ? buildSoloTripPrompt(archetype)
-    : modifier.promptAddition;
+  // Build dynamic prompt content based on trip type
+  let promptContent = '';
+  
+  switch (normalizedType) {
+    case 'solo':
+      promptContent = buildSoloTripPrompt(archetype);
+      break;
+    case 'honeymoon':
+      promptContent = buildHoneymoonPrompt();
+      break;
+    case 'family':
+      promptContent = buildFamilyPrompt();
+      break;
+    case 'babymoon':
+      promptContent = buildBabymoonPrompt();
+      break;
+    case 'birthday':
+      promptContent = buildBirthdayPrompt(archetype);
+      break;
+    case 'anniversary':
+      promptContent = buildAnniversaryPrompt();
+      break;
+    case 'guys_trip':
+      promptContent = buildGuysTripPrompt();
+      break;
+    case 'girls_trip':
+      promptContent = buildGirlsTripPrompt();
+      break;
+    case 'adventure':
+      promptContent = buildAdventurePrompt();
+      break;
+    case 'foodie':
+    case 'culinary':
+      promptContent = buildFoodiePrompt();
+      break;
+    case 'wellness':
+    case 'wellness_retreat':
+      promptContent = buildWellnessPrompt();
+      break;
+    default:
+      // Use the existing promptAddition from the modifier
+      promptContent = modifier.promptAddition || '';
+  }
 
   let section = `
 ══════════════════════════════════════════════════════════════════════
