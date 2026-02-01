@@ -346,31 +346,40 @@ export default function MultiCitySelector({
 
                       {/* Transport Selector */}
                       {index < destinations.length - 1 && transports[index] && (
-                        <div className="flex items-center gap-2 mt-2 ml-4">
+                        <div className="flex items-center gap-2.5 mt-3 ml-4 py-1.5">
+                          <ArrowDown className="h-3 w-3 text-muted-foreground/50" />
                           <Select
                             value={transports[index].type}
                             onValueChange={(value) => handleTransportTypeChange(index, value as InterCityTransport['type'])}
                           >
-                            <SelectTrigger className="w-auto h-7 text-xs border-0 bg-muted/50 gap-1 rounded-full px-3">
+                            <SelectTrigger className="w-auto h-8 text-xs border border-border/50 bg-card hover:bg-muted/50 gap-2 rounded-lg px-3 shadow-sm transition-colors">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="bg-card border-border shadow-lg">
                               <SelectItem value="train">
                                 <span className="flex items-center gap-2">
-                                  <Train className="h-3 w-3" /> Train
+                                  <Train className="h-3.5 w-3.5 text-accent" /> Train
                                 </span>
                               </SelectItem>
                               <SelectItem value="flight">
                                 <span className="flex items-center gap-2">
-                                  <PlaneIcon className="h-3 w-3" /> Flight
+                                  <PlaneIcon className="h-3.5 w-3.5 text-accent" /> Flight
                                 </span>
                               </SelectItem>
-                              <SelectItem value="bus">🚌 Bus</SelectItem>
-                              <SelectItem value="car">🚗 Car</SelectItem>
+                              <SelectItem value="bus">
+                                <span className="flex items-center gap-2">
+                                  <Bus className="h-3.5 w-3.5 text-accent" /> Bus
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="car">
+                                <span className="flex items-center gap-2">
+                                  <Car className="h-3.5 w-3.5 text-accent" /> Car
+                                </span>
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                           <span className="text-xs text-muted-foreground">
-                            to {destinations[index + 1].city}
+                            to <span className="font-medium text-foreground/80">{destinations[index + 1].city}</span>
                           </span>
                         </div>
                       )}
