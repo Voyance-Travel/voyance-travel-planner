@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.explain-recommendation]
 verify_jwt = false
+
+[functions.parse-travel-story]
+verify_jwt = false

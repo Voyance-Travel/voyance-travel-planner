@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, ArrowRight, Check, Sparkles, Compass, Plane, Hotel, Utensils, 
   Sun, Heart, Clock, Users, MapPin, Wand2, DollarSign, Briefcase, Glasses,
-  UserCircle2, Palette, Mountain, Coffee, Luggage, Globe, Star, AlertCircle
+  UserCircle2, Palette, Mountain, Coffee, Luggage, Globe, Star, AlertCircle, MessageCircle
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -378,19 +378,36 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
             </motion.div>
           </div>
           
-          <motion.div
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <Button
-              size="lg"
-              onClick={onStart}
-              className="h-14 px-10 text-lg shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-shadow"
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <Wand2 className="w-5 h-5 mr-2" />
-              Begin Discovery
-            </Button>
-          </motion.div>
+              <Button
+                size="lg"
+                onClick={onStart}
+                className="h-14 px-10 text-lg shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-shadow"
+              >
+                <Wand2 className="w-5 h-5 mr-2" />
+                Begin Discovery
+              </Button>
+            </motion.div>
+            
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => window.location.href = ROUTES.ONBOARD_CONVERSATION}
+                className="h-14 px-8 text-lg"
+              >
+                <MessageCircle className="w-5 h-5 mr-2" />
+                Just Tell Us
+              </Button>
+            </motion.div>
+          </div>
           
           {/* Skip Option */}
           <AnimatePresence mode="wait">

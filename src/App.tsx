@@ -46,6 +46,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import Welcome from "./pages/Welcome";
 import Start from "./pages/Start";
 import Quiz from "./pages/Quiz";
+import OnboardConversation from "./pages/OnboardConversation";
 
 // Pages - Profile
 import Profile from "./pages/Profile";
@@ -169,6 +170,7 @@ function AnimatedRoutes() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/start" element={<Start />} />
           <Route path="/quiz" element={<Quiz />} />
+          <Route path="/onboard/conversation" element={<OnboardConversation />} />
           
           {/* Profile Routes */}
           <Route path="/profile" element={<Profile />} />
