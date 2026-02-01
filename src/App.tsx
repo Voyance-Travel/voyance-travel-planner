@@ -71,6 +71,7 @@ import TripConfirmation from "./pages/TripConfirmation";
 import ItineraryView from "./pages/ItineraryView";
 import SampleItinerary from "./pages/SampleItinerary";
 import ActiveTrip from "./pages/ActiveTrip";
+import TripRecap from "./pages/TripRecap";
 import Demo from "./pages/Demo";
 
 // Pages - Legal
