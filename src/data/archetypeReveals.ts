@@ -28,13 +28,13 @@ export const ARCHETYPE_REVEALS: Record<string, ArchetypeReveal> = {
     id: 'cultural_anthropologist',
     name: 'The Cultural Anthropologist',
     category: 'EXPLORER',
-    revealParagraph: `You don't visit places. You try to understand them.
+    revealParagraph: `You've never been satisfied with just seeing a place. You want to understand it.
 
-While others are taking photos of the landmark, you're watching the local grandmother who walks past it every day without looking up. You want to know why she doesn't look. What does she see instead? What's the story this place tells to the people who actually live here?
+While others are checking off sights, you're noticing how people greet each other, what they eat for breakfast, why the streets are laid out the way they are. You've probably annoyed travel companions by spending an hour in a local market that "wasn't on the itinerary." You don't care. That market taught you more than any museum could.
 
-You've probably annoyed travel companions by spending too long talking to shopkeepers, asking questions that aren't in any guidebook. You've definitely felt frustrated by tours that skim the surface when you wanted to go deep.
+You ask questions that other tourists don't think to ask. You learn a few words of the language—not because you have to, but because it changes how people respond to you. You've left places feeling like you actually know something about how people live there, not just what the buildings look like.
 
-Travel for you isn't about seeing. It's about understanding.`,
+Your trips will prioritize depth over breadth. We'll build in time for wandering, for conversations, for the moments that can't be scheduled. Less "top ten attractions," more "how this place actually works."`,
     youProbably: [
       "Have learned basic phrases in languages you'll only use once",
       "Spent an hour talking to a local when you only meant to ask for directions",
@@ -58,13 +58,13 @@ Travel for you isn't about seeing. It's about understanding.`,
     id: 'urban_nomad',
     name: 'The Urban Nomad',
     category: 'EXPLORER',
-    revealParagraph: `Cities are your natural habitat.
+    revealParagraph: `Cities are your wilderness.
 
-You don't need beaches or mountains to feel alive. Give you a new city with good coffee, interesting streets, and things happening at 2am, and you're home. You navigate by instinct—the good neighborhood just feels different. The right café finds you.
+You come alive in urban environments—the energy of crowded streets, the endless options, the feeling that something is always happening. Mountains and beaches are fine, but they don't pull at you the way a new city does. You want to get lost in neighborhoods, find the bar where locals actually go, eat dinner at 10pm because that's when things get interesting.
 
-You've walked cities until your feet hurt and called it the best day of the trip. You've found your favorite bar in a foreign city by wandering down an alley that looked interesting. You've spent entire afternoons watching a neighborhood go about its day.
+You probably have a list of cities you need to see—Tokyo, Buenos Aires, Istanbul, Berlin—and each one feels like a different world to explore. You're not there to relax. You're there to absorb.
 
-For you, a city isn't a checklist. It's a living thing to explore.`,
+Your trips will be city-focused, neighborhood-deep, and paced for someone who wants to experience urban life, not observe it from a tour bus. We'll find the late-night spots, the local haunts, the parts of the city that don't show up on the first page of search results.`,
     youProbably: [
       "Judge cities by their coffee culture",
       "Have found your best meals by following your nose down an alley",
