@@ -327,9 +327,9 @@ export default function DynamicDestinationPhotos({
             {/* Source indicator */}
             {heroImage.source && heroImage.source !== 'fallback' && (
               <div className="text-white/50 text-xs">
-                {heroImage.source === 'lovable_ai' && '✨ AI Generated'}
-                {heroImage.source === 'google_places' && '📍 Places'}
-                {heroImage.source === 'pexels' && '📷 Pexels'}
+                {heroImage.source === 'lovable_ai' && 'AI Generated'}
+                {heroImage.source === 'google_places' && 'Places'}
+                {heroImage.source === 'pexels' && 'Pexels'}
               </div>
             )}
           </div>

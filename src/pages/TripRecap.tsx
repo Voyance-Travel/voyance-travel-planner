@@ -9,7 +9,8 @@ import { motion } from 'framer-motion';
 import { 
   MapPin, Calendar, Users, Star, Heart, Share2, 
   Camera, MessageSquare, ChevronRight, Download,
-  Sparkles, ArrowLeft, Plus, BookmarkPlus, Image as ImageIcon
+  Sparkles, ArrowLeft, Plus, BookmarkPlus, Image as ImageIcon,
+  ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -305,8 +306,12 @@ export default function TripRecap() {
                 )}
                 {learning.would_return !== null && (
                   <div className="bg-card rounded-xl border p-4 text-center">
-                    <div className="text-2xl mb-1">
-                      {learning.would_return ? '👍' : '👎'}
+                    <div className="flex justify-center mb-1">
+                      {learning.would_return ? (
+                        <ThumbsUp className="w-6 h-6 text-primary" />
+                      ) : (
+                        <ThumbsDown className="w-6 h-6 text-muted-foreground" />
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {learning.would_return ? "Would return" : "One-time visit"}

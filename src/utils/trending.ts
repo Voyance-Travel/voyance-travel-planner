@@ -105,28 +105,28 @@ export function getPersonalizedTags(
 export function getTrendingBadgeInfo(type: TrendingBadgeType): {
   label: string;
   color: string;
-  icon: string;
+  iconName: string;
 } {
-  const badges: Record<TrendingBadgeType, { label: string; color: string; icon: string }> = {
+  const badges: Record<TrendingBadgeType, { label: string; color: string; iconName: string }> = {
     'most-booked': {
       label: 'Most Booked',
       color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-      icon: '🔥',
+      iconName: 'Flame',
     },
     trending: {
       label: 'Trending',
       color: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
-      icon: '📈',
+      iconName: 'TrendingUp',
     },
     'editor-choice': {
       label: "Editor's Choice",
       color: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
-      icon: '⭐',
+      iconName: 'Star',
     },
     new: {
       label: 'New',
       color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-      icon: '✨',
+      iconName: 'Sparkles',
     },
   };
 

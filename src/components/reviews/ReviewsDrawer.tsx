@@ -242,22 +242,22 @@ export default function ReviewsDrawer({
                   <span className="text-xs text-muted-foreground">Data from:</span>
                   {sources.google && (
                     <Badge variant="secondary" className="text-xs">
-                      {getSourceInfo('google').icon} Google
+                      Google
                     </Badge>
                   )}
                   {sources.tripadvisor && (
                     <Badge variant="secondary" className="text-xs">
-                      {getSourceInfo('tripadvisor').icon} TripAdvisor
+                      TripAdvisor
                     </Badge>
                   )}
                   {sources.foursquare && (
                     <Badge variant="secondary" className="text-xs">
-                      {getSourceInfo('foursquare').icon} Foursquare
+                      Foursquare
                     </Badge>
                   )}
                   {(sources as any).opentripmap && (
                     <Badge variant="secondary" className="text-xs">
-                      📍 OpenTripMap
+                      OpenTripMap
                     </Badge>
                   )}
                 </div>
@@ -357,7 +357,7 @@ export default function ReviewsDrawer({
                               <span className="font-medium">{review.rating}</span>
                             </div>
                             <Badge variant="outline" className="text-xs">
-                              {sourceInfo.icon}
+                              {sourceInfo.name}
                             </Badge>
                           </div>
                         </div>

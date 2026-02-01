@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Star, MapPin, ThumbsUp, ThumbsDown, Clock, Hotel, 
   Lightbulb, Plus, Trash2, ChevronRight, ChevronLeft, Sparkles,
-  Sun, Sunset, Moon, RotateCcw, Check
+  Sun, Sunset, Moon, RotateCcw, Check, Heart, RefreshCw, Car
 } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -354,10 +354,10 @@ export function TripDebriefModal({
               <Label>How was your accommodation?</Label>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { value: 'loved_it', label: 'Loved it', icon: '❤️' },
-                  { value: 'good_location', label: 'Great location', icon: '📍' },
-                  { value: 'would_change', label: "Would change", icon: '🔄' },
-                  { value: 'too_far', label: 'Too far out', icon: '🚗' },
+                  { value: 'loved_it', label: 'Loved it', Icon: Heart },
+                  { value: 'good_location', label: 'Great location', Icon: MapPin },
+                  { value: 'would_change', label: "Would change", Icon: RefreshCw },
+                  { value: 'too_far', label: 'Too far out', Icon: Car },
                 ].map((option) => (
                   <Button
                     key={option.value}
@@ -365,7 +365,7 @@ export function TripDebriefModal({
                     onClick={() => setAccommodationFeedback(option.value as AccommodationFeedback)}
                     className="justify-start gap-2"
                   >
-                    <span>{option.icon}</span>
+                    <option.Icon className="w-4 h-4" />
                     {option.label}
                   </Button>
                 ))}

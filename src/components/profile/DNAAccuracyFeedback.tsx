@@ -14,7 +14,13 @@ import {
   Check,
   MessageSquare,
   Send,
-  Loader2
+  Loader2,
+  Frown,
+  HelpCircle,
+  Smile,
+  SmilePlus,
+  Target,
+  type LucideIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -61,12 +67,12 @@ const CORRECTION_CHIPS: CorrectionChip[] = [
   { id: 'authenticity_low', label: 'Too touristy', trait: 'authenticity', direction: 'too_low' },
 ];
 
-const RATING_OPTIONS = [
-  { value: 1, label: 'Not at all', emoji: '😕' },
-  { value: 2, label: 'Slightly', emoji: '🤔' },
-  { value: 3, label: 'Somewhat', emoji: '😊' },
-  { value: 4, label: 'Very', emoji: '😄' },
-  { value: 5, label: 'Perfectly', emoji: '🎯' },
+const RATING_OPTIONS: { value: number; label: string; Icon: LucideIcon }[] = [
+  { value: 1, label: 'Not at all', Icon: Frown },
+  { value: 2, label: 'Slightly', Icon: HelpCircle },
+  { value: 3, label: 'Somewhat', Icon: Smile },
+  { value: 4, label: 'Very', Icon: SmilePlus },
+  { value: 5, label: 'Perfectly', Icon: Target },
 ];
 
 // ============================================================================
@@ -191,7 +197,7 @@ export default function DNAAccuracyFeedback({
               }}
               className="gap-1.5"
             >
-              <span>{option.emoji}</span>
+              <option.Icon className="w-4 h-4" />
               <span className="hidden sm:inline">{option.label}</span>
               <span className="sm:hidden">{option.value}</span>
             </Button>

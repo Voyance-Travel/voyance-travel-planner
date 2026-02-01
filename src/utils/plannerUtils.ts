@@ -24,28 +24,28 @@ export const parseDuration = (duration: string): number => {
 };
 
 /**
- * Get activity icon based on type
+ * Get activity icon name (Lucide icon) based on type
  */
-export const getActivityIcon = (type: string): string => {
+export const getActivityIconName = (type: string): string => {
   const icons: Record<string, string> = {
-    activity: '🎯',
-    attraction: '🏛️',
-    restaurant: '🍽️',
-    food: '🍽️',
-    meal: '🍽️',
-    hotel: '🏨',
-    accommodation: '🏨',
-    transport: '✈️',
-    transit: '🚌',
-    break: '☕',
-    rest: '😴',
-    nature: '🌿',
-    adventure: '🧗',
-    culture: '🎭',
-    wellness: '🧘',
-    nightlife: '🌙',
-    shopping: '🛍️',
-    default: '📍'
+    activity: 'Target',
+    attraction: 'Landmark',
+    restaurant: 'UtensilsCrossed',
+    food: 'UtensilsCrossed',
+    meal: 'UtensilsCrossed',
+    hotel: 'Building2',
+    accommodation: 'Building2',
+    transport: 'Plane',
+    transit: 'Bus',
+    break: 'Coffee',
+    rest: 'Moon',
+    nature: 'Leaf',
+    adventure: 'Mountain',
+    culture: 'Palette',
+    wellness: 'Heart',
+    nightlife: 'Moon',
+    shopping: 'ShoppingBag',
+    default: 'MapPin'
   };
   return icons[type.toLowerCase()] || icons.default;
 };

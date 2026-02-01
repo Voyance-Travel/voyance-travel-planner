@@ -34,12 +34,12 @@ interface WhatsNearbyProps {
   className?: string;
 }
 
-const CATEGORIES: { id: NearbyCategory; label: string; icon: React.ReactNode; emoji: string }[] = [
-  { id: 'coffee', label: 'Coffee', icon: <Coffee className="w-4 h-4" />, emoji: '☕' },
-  { id: 'food', label: 'Food', icon: <Utensils className="w-4 h-4" />, emoji: '🍜' },
-  { id: 'wander', label: 'Wander', icon: <Compass className="w-4 h-4" />, emoji: '🚶' },
-  { id: 'drinks', label: 'Drinks', icon: <Wine className="w-4 h-4" />, emoji: '🍷' },
-  { id: 'snacks', label: 'Snacks', icon: <Cookie className="w-4 h-4" />, emoji: '🍦' },
+const CATEGORIES: { id: NearbyCategory; label: string; icon: React.ReactNode }[] = [
+  { id: 'coffee', label: 'Coffee', icon: <Coffee className="w-4 h-4" /> },
+  { id: 'food', label: 'Food', icon: <Utensils className="w-4 h-4" /> },
+  { id: 'wander', label: 'Wander', icon: <Compass className="w-4 h-4" /> },
+  { id: 'drinks', label: 'Drinks', icon: <Wine className="w-4 h-4" /> },
+  { id: 'snacks', label: 'Snacks', icon: <Cookie className="w-4 h-4" /> },
 ];
 
 function getTimeOfDay(): 'morning' | 'afternoon' | 'evening' | 'night' {
@@ -233,7 +233,7 @@ export default function WhatsNearby({ archetype, className }: WhatsNearbyProps) 
                   "disabled:opacity-50 disabled:cursor-not-allowed"
                 )}
               >
-                <span className="text-xl">{cat.emoji}</span>
+                <span className="text-muted-foreground">{cat.icon}</span>
                 <span className="text-xs font-medium">{cat.label}</span>
               </button>
             ))}
@@ -251,8 +251,8 @@ export default function WhatsNearby({ archetype, className }: WhatsNearbyProps) 
               <Button variant="ghost" size="sm" onClick={handleBack}>
                 ← Back
               </Button>
-              <Badge variant="secondary">
-                {CATEGORIES.find(c => c.id === selectedCategory)?.emoji}{' '}
+              <Badge variant="secondary" className="flex items-center gap-1.5">
+                {CATEGORIES.find(c => c.id === selectedCategory)?.icon}
                 {CATEGORIES.find(c => c.id === selectedCategory)?.label}
               </Badge>
             </div>

@@ -11,9 +11,9 @@ const questions = [
     title: "What's your ideal travel pace?",
     subtitle: 'How do you like to experience new places?',
     options: [
-      { value: 'relaxed', label: 'Relaxed Explorer', description: 'Take it slow, savor every moment', icon: '🌴' },
-      { value: 'balanced', label: 'Balanced Adventurer', description: 'Mix of activities and downtime', icon: '⚖️' },
-      { value: 'active', label: 'Go-Getter', description: 'Pack in as much as possible', icon: '🚀' },
+      { value: 'relaxed', label: 'Relaxed Explorer', description: 'Take it slow, savor every moment', iconName: 'Leaf' },
+      { value: 'balanced', label: 'Balanced Adventurer', description: 'Mix of activities and downtime', iconName: 'Scale' },
+      { value: 'active', label: 'Go-Getter', description: 'Pack in as much as possible', iconName: 'Zap' },
     ],
   },
   {
@@ -22,12 +22,12 @@ const questions = [
     subtitle: 'Select all that apply',
     multiple: true,
     options: [
-      { value: 'culture', label: 'Culture & History', icon: '🏛️' },
-      { value: 'food', label: 'Food & Cuisine', icon: '🍜' },
-      { value: 'nature', label: 'Nature & Outdoors', icon: '🏔️' },
-      { value: 'adventure', label: 'Adventure & Thrills', icon: '🎢' },
-      { value: 'relaxation', label: 'Relaxation & Wellness', icon: '🧘' },
-      { value: 'nightlife', label: 'Nightlife & Entertainment', icon: '🎭' },
+      { value: 'culture', label: 'Culture & History', iconName: 'Landmark' },
+      { value: 'food', label: 'Food & Cuisine', iconName: 'UtensilsCrossed' },
+      { value: 'nature', label: 'Nature & Outdoors', iconName: 'Mountain' },
+      { value: 'adventure', label: 'Adventure & Thrills', iconName: 'Flame' },
+      { value: 'relaxation', label: 'Relaxation & Wellness', iconName: 'Heart' },
+      { value: 'nightlife', label: 'Nightlife & Entertainment', iconName: 'Music' },
     ],
   },
   {
@@ -35,9 +35,9 @@ const questions = [
     title: "What's your typical travel budget?",
     subtitle: 'Per person, per day',
     options: [
-      { value: 'budget', label: 'Budget Traveler', description: 'Under $100/day', icon: '💰' },
-      { value: 'moderate', label: 'Comfort Seeker', description: '$100-300/day', icon: '💳' },
-      { value: 'luxury', label: 'Luxury Explorer', description: '$300+/day', icon: '💎' },
+      { value: 'budget', label: 'Budget Traveler', description: 'Under $100/day', iconName: 'Wallet' },
+      { value: 'moderate', label: 'Comfort Seeker', description: '$100-300/day', iconName: 'CreditCard' },
+      { value: 'luxury', label: 'Luxury Explorer', description: '$300+/day', iconName: 'Gem' },
     ],
   },
   {
@@ -45,9 +45,9 @@ const questions = [
     title: 'Where do you prefer to stay?',
     subtitle: 'Your home away from home',
     options: [
-      { value: 'hostel', label: 'Hostels & Shared', description: 'Social and affordable', icon: '🛏️' },
-      { value: 'hotel', label: 'Hotels & Resorts', description: 'Comfort and amenities', icon: '🏨' },
-      { value: 'unique', label: 'Unique Stays', description: 'Airbnbs, treehouses, boats', icon: '🏡' },
+      { value: 'hostel', label: 'Hostels & Shared', description: 'Social and affordable', iconName: 'Users' },
+      { value: 'hotel', label: 'Hotels & Resorts', description: 'Comfort and amenities', iconName: 'Building2' },
+      { value: 'unique', label: 'Unique Stays', description: 'Airbnbs, treehouses, boats', iconName: 'Home' },
     ],
   },
   {
@@ -55,9 +55,9 @@ const questions = [
     title: 'How do you like to plan?',
     subtitle: 'Your approach to itineraries',
     options: [
-      { value: 'spontaneous', label: 'Spontaneous', description: 'Go with the flow', icon: '🎲' },
-      { value: 'flexible', label: 'Flexible Framework', description: 'Key plans, room to wander', icon: '📋' },
-      { value: 'detailed', label: 'Detailed Planner', description: 'Every hour accounted for', icon: '📅' },
+      { value: 'spontaneous', label: 'Spontaneous', description: 'Go with the flow', iconName: 'Shuffle' },
+      { value: 'flexible', label: 'Flexible Framework', description: 'Key plans, room to wander', iconName: 'ListTodo' },
+      { value: 'detailed', label: 'Detailed Planner', description: 'Every hour accounted for', iconName: 'CalendarCheck' },
     ],
   },
 ];

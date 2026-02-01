@@ -28,11 +28,14 @@ import {
   Sun,
   Moon,
   Users,
+  Mountain,
+  Flame,
+  Music,
+  Landmark,
+  UtensilsCrossed,
   Compass,
   Coffee,
-  Mountain,
   Camera,
-  Music,
   Book,
   ShoppingBag,
   Waves,
@@ -395,12 +398,12 @@ interface SectionProps {
 function TravelStyleSection({ preferences, onUpdate, isSaving }: SectionProps) {
   // Interest options that match quiz options
   const interestOptions = [
-    { value: 'culture', label: 'Culture & History', icon: '🏛️' },
-    { value: 'food', label: 'Food & Cuisine', icon: '🍜' },
-    { value: 'nature', label: 'Nature & Outdoors', icon: '🏔️' },
-    { value: 'adventure', label: 'Adventure & Thrills', icon: '🎢' },
-    { value: 'relaxation', label: 'Relaxation & Wellness', icon: '🧘' },
-    { value: 'nightlife', label: 'Nightlife & Entertainment', icon: '🎭' },
+    { value: 'culture', label: 'Culture & History', Icon: Landmark },
+    { value: 'food', label: 'Food & Cuisine', Icon: UtensilsCrossed },
+    { value: 'nature', label: 'Nature & Outdoors', Icon: Mountain },
+    { value: 'adventure', label: 'Adventure & Thrills', Icon: Flame },
+    { value: 'relaxation', label: 'Relaxation & Wellness', Icon: Heart },
+    { value: 'nightlife', label: 'Nightlife & Entertainment', Icon: Music },
   ];
 
   const toggleInterest = (value: string) => {
@@ -453,7 +456,7 @@ function TravelStyleSection({ preferences, onUpdate, isSaving }: SectionProps) {
                     <Check className="h-4 w-4 text-primary" />
                   </div>
                 )}
-                <span className="text-2xl mb-2 block">{option.icon}</span>
+                <option.Icon className="w-6 h-6 mb-2 text-muted-foreground" />
                 <span className="text-sm font-medium">{option.label}</span>
               </button>
             );
