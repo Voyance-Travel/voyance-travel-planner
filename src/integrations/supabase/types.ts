@@ -4821,6 +4821,57 @@ export type Database = {
           },
         ]
       }
+      trip_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json | null
+          notification_type: string
+          sent: boolean | null
+          sent_at: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          notification_type: string
+          sent?: boolean | null
+          sent_at?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          notification_type?: string
+          sent?: boolean | null
+          sent_at?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_notifications_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_notifications_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_payments: {
         Row: {
           amount_cents: number
