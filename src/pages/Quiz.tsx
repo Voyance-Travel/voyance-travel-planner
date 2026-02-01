@@ -203,7 +203,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
               whileHover={{ scale: 1.05 }}
             >
               <Star className="w-4 h-4 text-primary" />
-              <span>10 questions</span>
+              <span>21 questions</span>
             </motion.div>
           </div>
           
@@ -443,7 +443,7 @@ export default function Quiz() {
   const { user, setPreferences } = useAuth();
   const navigate = useNavigate();
 
-  const stepQuestions = getQuestionsForStep(currentStep + 1);
+  const stepQuestions = getQuestionsForStep(currentStep);
 
   // Initialize quiz session when user is available and quiz starts
   useEffect(() => {
