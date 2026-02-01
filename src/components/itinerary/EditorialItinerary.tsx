@@ -285,6 +285,156 @@ function formatTime(time: string | undefined): string {
   return `${displayHours}:${minutes} ${period}`;
 }
 
+// Exchange rates relative to USD (1 USD = X units of target currency)
+// These are approximate rates - updated periodically
+const EXCHANGE_RATES_FROM_USD: Record<string, number> = {
+  USD: 1,
+  EUR: 0.92,
+  GBP: 0.79,
+  JPY: 149.5,
+  CHF: 0.88,
+  CAD: 1.36,
+  AUD: 1.53,
+  NZD: 1.64,
+  CNY: 7.24,
+  HKD: 7.82,
+  SGD: 1.34,
+  THB: 35.8,
+  MXN: 17.2,
+  BRL: 4.97,
+  INR: 83.1,
+  KRW: 1320,
+  ZAR: 18.9,
+  SEK: 10.45,
+  NOK: 10.62,
+  DKK: 6.87,
+  PLN: 4.02,
+  CZK: 23.1,
+  HUF: 358,
+  ILS: 3.65,
+  AED: 3.67,
+  SAR: 3.75,
+  TRY: 30.5,
+  RUB: 92,
+  PHP: 55.8,
+  IDR: 15650,
+  MYR: 4.72,
+  VND: 24500,
+  TWD: 31.5,
+  ARS: 850,
+  CLP: 920,
+  COP: 3950,
+  PEN: 3.72,
+  EGP: 30.9,
+  MAD: 10.1,
+  NGN: 1200,
+  KES: 154,
+  PKR: 278,
+  BDT: 110,
+  UAH: 37.5,
+  RON: 4.58,
+  BGN: 1.80,
+  HRK: 6.93, // Legacy, Croatia uses EUR now
+  ISK: 138,
+  NIO: 36.7,
+  GTQ: 7.82,
+  CRC: 530,
+  PAB: 1,
+  DOP: 57,
+  JMD: 155,
+  TTD: 6.78,
+  BBD: 2,
+  BSD: 1,
+  BZD: 2,
+  XCD: 2.70,
+  AWG: 1.79,
+  ANG: 1.79,
+  BMD: 1,
+  KYD: 0.82,
+  FJD: 2.23,
+  PGK: 3.72,
+  WST: 2.72,
+  TOP: 2.36,
+  VUV: 119,
+  SBD: 8.46,
+  SCR: 13.5,
+  MUR: 45.5,
+  MVR: 15.4,
+  LKR: 325,
+  NPR: 133,
+  BND: 1.34,
+  KHR: 4100,
+  LAK: 20800,
+  MMK: 2100,
+  MNT: 3450,
+  KZT: 450,
+  UZS: 12300,
+  GEL: 2.65,
+  AMD: 405,
+  AZN: 1.70,
+  BYN: 3.27,
+  MDL: 17.8,
+  BAM: 1.80,
+  MKD: 56.5,
+  RSD: 108,
+  ALL: 95,
+  XOF: 603,
+  XAF: 603,
+  GHS: 12.5,
+  TZS: 2500,
+  UGX: 3800,
+  ZMW: 23.5,
+  BWP: 13.6,
+  NAD: 18.9,
+  MZN: 63.5,
+  AOA: 830,
+  ETB: 56.5,
+  SOS: 571,
+  DJF: 178,
+  ERN: 15,
+  GMD: 67,
+  GNF: 8600,
+  LRD: 188,
+  SLL: 22500,
+  CVE: 101,
+  MWK: 1685,
+  STN: 22.5,
+  SZL: 18.9,
+  LSL: 18.9,
+  QAR: 3.64,
+  KWD: 0.31,
+  BHD: 0.377,
+  OMR: 0.385,
+  JOD: 0.71,
+  LBP: 89500,
+  SYP: 13000,
+  IQD: 1310,
+  YER: 250,
+  AFN: 72,
+  IRR: 42000,
+  TMT: 3.50,
+  TJS: 10.9,
+  KGS: 89,
+};
+
+/**
+ * Convert an amount from USD to the target currency
+ */
+function convertFromUSD(amountInUSD: number, targetCurrency: string): number {
+  const rate = EXCHANGE_RATES_FROM_USD[targetCurrency.toUpperCase()];
+  if (!rate) return amountInUSD; // Fallback to USD if rate not found
+  return amountInUSD * rate;
+}
+
+/**
+ * Convert an amount from the source currency to USD
+ */
+function convertToUSD(amount: number, sourceCurrency: string): number {
+  const rate = EXCHANGE_RATES_FROM_USD[sourceCurrency.toUpperCase()];
+  if (!rate || rate === 0) return amount; // Fallback if rate not found
+  return amount / rate;
+}
+
 function formatCurrency(amount: number | null | undefined, currency: string = 'USD'): string {
   if (amount === null || amount === undefined) {
     return '-'; // Should never happen with smart estimation
@@ -298,6 +448,7 @@ function formatCurrency(amount: number | null | undefined, currency: string = 'U
       style: 'currency',
       currency: currency.toUpperCase(),
       minimumFractionDigits: 0,
+      maximumFractionDigits: currency.toUpperCase() === 'JPY' || currency.toUpperCase() === 'KRW' ? 0 : 0,
     }).format(amount);
   } catch {
     // Fallback if currency code is invalid
@@ -696,6 +847,15 @@ export function EditorialItinerary({
   
   // Display currency based on user preference toggle
   const tripCurrency = showLocalCurrency ? localCurrency : 'USD';
+  
+  // Convert costs from USD to display currency when needed
+  // All internal costs are calculated in USD, this converts for display
+  const displayCost = useCallback((amountInUSD: number): number => {
+    if (!showLocalCurrency || localCurrency === 'USD') {
+      return amountInUSD;
+    }
+    return convertFromUSD(amountInUSD, localCurrency);
+  }, [showLocalCurrency, localCurrency]);
 
   const toggleDay = (dayNumber: number) => {
     setExpandedDays(prev =>
@@ -1504,7 +1664,7 @@ export function EditorialItinerary({
               </button>
               <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-r-md bg-primary/10 border border-primary/20 text-xs sm:text-sm">
                 <span className="text-muted-foreground hidden sm:inline">Total:</span>
-                <span className="font-semibold text-primary">{formatCurrency(totalCost, tripCurrency)}</span>
+                <span className="font-semibold text-primary">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
               </div>
             </div>
             
@@ -1849,7 +2009,7 @@ export function EditorialItinerary({
                   {flightCost > 0 && (
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Total</p>
-                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(flightCost, tripCurrency)}</p>
+                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(displayCost(flightCost), tripCurrency)}</p>
                     </div>
                   )}
                 </div>
@@ -2065,7 +2225,7 @@ export function EditorialItinerary({
                   {hotelCost > 0 && (
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Total</p>
-                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(hotelCost, tripCurrency)}</p>
+                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(displayCost(hotelCost), tripCurrency)}</p>
                     </div>
                   )}
                 </div>
