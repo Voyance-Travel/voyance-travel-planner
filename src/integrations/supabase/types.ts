@@ -2216,6 +2216,108 @@ export type Database = {
         }
         Relationships: []
       }
+      day_balances: {
+        Row: {
+          active_tier: string | null
+          created_at: string
+          free_days: number
+          free_days_expires_at: string | null
+          id: string
+          last_free_day_earned_at: string | null
+          monthly_regenerates_used: number
+          monthly_reset_at: string
+          monthly_swaps_used: number
+          purchased_days: number
+          regenerates_remaining: number | null
+          swaps_remaining: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_tier?: string | null
+          created_at?: string
+          free_days?: number
+          free_days_expires_at?: string | null
+          id?: string
+          last_free_day_earned_at?: string | null
+          monthly_regenerates_used?: number
+          monthly_reset_at?: string
+          monthly_swaps_used?: number
+          purchased_days?: number
+          regenerates_remaining?: number | null
+          swaps_remaining?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_tier?: string | null
+          created_at?: string
+          free_days?: number
+          free_days_expires_at?: string | null
+          id?: string
+          last_free_day_earned_at?: string | null
+          monthly_regenerates_used?: number
+          monthly_reset_at?: string
+          monthly_swaps_used?: number
+          purchased_days?: number
+          regenerates_remaining?: number | null
+          swaps_remaining?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      day_ledger: {
+        Row: {
+          amount_cents: number | null
+          created_at: string
+          days_delta: number
+          id: string
+          is_free_day: boolean
+          notes: string | null
+          package_days: number | null
+          package_tier: string | null
+          price_id: string | null
+          stripe_product_id: string | null
+          stripe_session_id: string | null
+          transaction_type: string
+          trip_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_cents?: number | null
+          created_at?: string
+          days_delta: number
+          id?: string
+          is_free_day?: boolean
+          notes?: string | null
+          package_days?: number | null
+          package_tier?: string | null
+          price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_session_id?: string | null
+          transaction_type: string
+          trip_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number | null
+          created_at?: string
+          days_delta?: number
+          id?: string
+          is_free_day?: boolean
+          notes?: string | null
+          package_days?: number | null
+          package_tier?: string | null
+          price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_session_id?: string | null
+          transaction_type?: string
+          trip_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       destination_cost_index: {
         Row: {
           activity_base_usd: number | null
