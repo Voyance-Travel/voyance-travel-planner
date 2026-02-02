@@ -103,6 +103,30 @@ export default function Pricing() {
         </div>
       </section>
 
+      {/* What Credits Buy */}
+      <section className="py-12 -mt-8">
+        <div className="max-w-4xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="flex flex-wrap justify-center gap-3 text-sm"
+          >
+            {[
+              'Unlock days',
+              'Swap activities',
+              'Regenerate itineraries',
+              'AI restaurant picks',
+              'Trip companion chat',
+            ].map((item) => (
+              <span key={item} className="px-4 py-2 bg-card border border-border rounded-full text-muted-foreground">
+                {item}
+              </span>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
       {/* Credit Packs */}
       <section className="py-16 -mt-8">
         <div className="max-w-5xl mx-auto px-4">
