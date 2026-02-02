@@ -111,67 +111,8 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* Add Days Section */}
+      {/* Packages Section - LEAD */}
       <section className="py-12 -mt-8">
-        <div className="max-w-4xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-8"
-          >
-            <h2 className="text-2xl font-serif font-bold text-foreground mb-2">Add Days</h2>
-            <p className="text-muted-foreground">Perfect for quick trips</p>
-          </motion.div>
-
-          <div className="flex justify-center gap-6 flex-wrap">
-            {/* 1 Day */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-card rounded-2xl border border-border p-6 w-48 text-center"
-            >
-              <h3 className="text-xl font-bold text-foreground mb-2">1 Day</h3>
-              <div className="text-3xl font-bold text-foreground mb-4">${STRIPE_PRODUCTS.DAY_1.price}</div>
-              <Button 
-                variant="outline"
-                className="w-full"
-                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_1.priceId, 'payment', 'day_1', '1 Day')}
-                disabled={loadingPlan === 'day_1'}
-              >
-                {loadingPlan === 'day_1' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add Day'}
-              </Button>
-            </motion.div>
-
-            {/* 2 Days */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.05 }}
-              className="bg-card rounded-2xl border border-border p-6 w-48 text-center relative"
-            >
-              <Badge variant="secondary" className="absolute -top-2 left-1/2 -translate-x-1/2 text-xs">
-                Save $2
-              </Badge>
-              <h3 className="text-xl font-bold text-foreground mb-2 mt-1">2 Days</h3>
-              <div className="text-3xl font-bold text-foreground mb-4">${STRIPE_PRODUCTS.DAY_2.price}</div>
-              <Button 
-                variant="outline"
-                className="w-full"
-                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_2.priceId, 'payment', 'day_2', '2 Days')}
-                disabled={loadingPlan === 'day_2'}
-              >
-                {loadingPlan === 'day_2' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add 2'}
-              </Button>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Packages Section */}
-      <section className="py-16 bg-muted/30">
         <div className="max-w-6xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -264,6 +205,67 @@ export default function Pricing() {
                 </motion.div>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Add Days Section - ADD-ON */}
+      <section className="py-12 bg-muted/30">
+        <div className="max-w-4xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-8"
+          >
+            <h2 className="text-xl font-serif font-bold text-foreground mb-2">Need just a few days?</h2>
+            <p className="text-muted-foreground text-sm">Add days à la carte for quick trips</p>
+          </motion.div>
+
+          <div className="flex justify-center gap-6 flex-wrap">
+            {/* 1 Day */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-card rounded-2xl border border-border p-6 w-40 text-center"
+            >
+              <h3 className="text-lg font-bold text-foreground mb-1">1 Day</h3>
+              <div className="text-2xl font-bold text-foreground mb-3">${STRIPE_PRODUCTS.DAY_1.price}</div>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_1.priceId, 'payment', 'day_1', '1 Day')}
+                disabled={loadingPlan === 'day_1'}
+              >
+                {loadingPlan === 'day_1' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+              </Button>
+            </motion.div>
+
+            {/* 2 Days */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.05 }}
+              className="bg-card rounded-2xl border border-border p-6 w-40 text-center relative"
+            >
+              <Badge variant="secondary" className="absolute -top-2 left-1/2 -translate-x-1/2 text-xs">
+                Save $2
+              </Badge>
+              <h3 className="text-lg font-bold text-foreground mb-1 mt-1">2 Days</h3>
+              <div className="text-2xl font-bold text-foreground mb-3">${STRIPE_PRODUCTS.DAY_2.price}</div>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_2.priceId, 'payment', 'day_2', '2 Days')}
+                disabled={loadingPlan === 'day_2'}
+              >
+                {loadingPlan === 'day_2' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+              </Button>
+            </motion.div>
           </div>
         </div>
       </section>
