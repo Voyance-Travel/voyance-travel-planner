@@ -1,95 +1,65 @@
 /**
  * Draft Limit Check Hook
  * 
- * Enforces itinerary build limits based on user's subscription plan.
- * All tiers: 5 itineraries/month (free users see Day 1 only)
+ * Enforces itinerary build limits based on user's credit balance.
+ * Users can build unlimited itineraries, but need credits to unlock days.
  */
 
 import { useMemo } from 'react';
-import { useEntitlements } from './useEntitlements';
-import { FREE_TIER_LIMITS } from '@/config/pricing';
+import { useCredits } from './useCredits';
+import { CREDIT_COSTS } from '@/config/pricing';
 
 interface DraftLimitResult {
-  /** Whether user can create a new itinerary */
+  /** Whether user can create a new itinerary (always true - credits just gate day unlocks) */
   canCreateDraft: boolean;
-  /** Current number of itineraries built this month */
-  currentDrafts: number;
-  /** Maximum allowed itineraries per month (-1 = unlimited) */
-  maxDrafts: number;
-  /** Remaining itinerary slots available */
-  remaining: number;
-  /** User-friendly message explaining the limit */
+  /** Current credit balance */
+  currentCredits: number;
+  /** Whether user can unlock at least one day */
+  canUnlockDay: boolean;
+  /** User-friendly message */
   message: string;
   /** Whether data is still loading */
   isLoading: boolean;
-  /** Suggested upgrade path if at limit */
-  upgradePath: 'trip_pass' | 'credits' | null;
-  /** Whether user is on free tier */
-  isFreeUser: boolean;
+  /** Whether user needs more credits */
+  needsCredits: boolean;
 }
 
 export function useDraftLimitCheck(): DraftLimitResult {
-  const { data, isLoading, isPaid } = useEntitlements();
+  const { data, isLoading } = useCredits();
 
   return useMemo(() => {
     if (isLoading || !data) {
       return {
-        canCreateDraft: true, // Optimistic during loading
-        currentDrafts: 0,
-        maxDrafts: FREE_TIER_LIMITS.maxItinerariesPerMonth,
-        remaining: FREE_TIER_LIMITS.maxItinerariesPerMonth,
+        canCreateDraft: true,
+        currentCredits: 0,
+        canUnlockDay: false,
         message: 'Loading...',
         isLoading: true,
-        upgradePath: null,
-        isFreeUser: true,
+        needsCredits: false,
       };
     }
 
-    const isFreeUser = !isPaid && !(data?.is_paid ?? false);
-    
-    // Paid users have unlimited itineraries
-    if (!isFreeUser) {
-      return {
-        canCreateDraft: true,
-        currentDrafts: 0,
-        maxDrafts: -1,
-        remaining: -1,
-        message: 'Unlimited itineraries available',
-        isLoading: false,
-        upgradePath: null,
-        isFreeUser: false,
-      };
-    }
+    const currentCredits = data.totalCredits;
+    const canUnlockDay = currentCredits >= CREDIT_COSTS.UNLOCK_DAY;
 
-    // Free tier: 5 itineraries/month
-    const maxDrafts = FREE_TIER_LIMITS.maxItinerariesPerMonth;
-    const itinerariesUsed = data?.usage?.itinerary_builds ?? 0;
-    const remaining = Math.max(0, maxDrafts - itinerariesUsed);
-    const canCreateDraft = remaining > 0;
-
-    // Build message
+    // Users can always create drafts - credits just gate day unlocks
     let message = '';
-    if (canCreateDraft) {
-      if (remaining === 1) {
-        message = `Last free itinerary this month. Upgrade for full access.`;
-      } else {
-        message = `${remaining} free itineraries remaining this month`;
-      }
+    if (canUnlockDay) {
+      const daysAffordable = Math.floor(currentCredits / CREDIT_COSTS.UNLOCK_DAY);
+      message = `You can unlock ${daysAffordable} day${daysAffordable !== 1 ? 's' : ''} with your credits`;
     } else {
-      message = "You've used all 5 free itineraries this month. Upgrade to continue.";
+      message = `You need ${CREDIT_COSTS.UNLOCK_DAY} credits to unlock a day. You have ${currentCredits}.`;
     }
 
     return {
-      canCreateDraft,
-      currentDrafts: itinerariesUsed,
-      maxDrafts,
-      remaining,
+      canCreateDraft: true, // Always allow draft creation
+      currentCredits,
+      canUnlockDay,
       message,
       isLoading: false,
-      upgradePath: canCreateDraft ? null : 'trip_pass',
-      isFreeUser: true,
+      needsCredits: !canUnlockDay,
     };
-  }, [data, isLoading, isPaid]);
+  }, [data, isLoading]);
 }
 
 export default useDraftLimitCheck;

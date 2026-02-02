@@ -529,7 +529,7 @@ export default function Start() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { canCreateDraft, isFreeUser } = useDraftLimitCheck();
+  const { canCreateDraft, needsCredits } = useDraftLimitCheck();
   const [showLimitBlocker, setShowLimitBlocker] = useState(false);
   
   // Check for destination from query params

@@ -1,15 +1,16 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Sparkles, Zap, Crown } from 'lucide-react';
+import { ArrowRight, Sparkles, Zap, Ticket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
-import { STRIPE_PRODUCTS } from '@/config/pricing';
+import { CREDIT_PACKS, formatCredits } from '@/config/pricing';
 
 interface UpgradePromptProps {
   isOpen: boolean;
   onClose: () => void;
   featureName?: string;
-  context?: 'regenerate' | 'route' | 'budget' | 'general';
+  context?: 'regenerate' | 'route' | 'budget' | 'general' | 'credits';
+  creditsNeeded?: number;
 }
 
 export function UpgradePrompt({
@@ -17,30 +18,46 @@ export function UpgradePrompt({
   onClose,
   featureName = 'this feature',
   context = 'general',
+  creditsNeeded = 0,
 }: UpgradePromptProps) {
 
   const getContextMessage = () => {
+    if (creditsNeeded > 0) {
+      return `You need ${formatCredits(creditsNeeded)} credits to continue. Get more credits to unlock this feature.`;
+    }
     switch (context) {
       case 'regenerate':
-        return 'You have used your free itinerary build for this month. Upgrade to regenerate days and rebuild itineraries as often as you like.';
+        return 'You need more credits to regenerate this day. Get credits to continue.';
       case 'route':
-        return 'You have used your route optimizations for this month. Upgrade for unlimited route planning.';
+        return 'Route optimization is free! But you need credits to unlock days first.';
       case 'budget':
-        return 'You have used your group budget setup for this month. Upgrade to manage budgets across all your trips.';
+        return 'Group budgeting is included with any unlocked trip.';
+      case 'credits':
+        return 'You\'re running low on credits. Top up to keep planning.';
       default:
-        return `To use ${featureName}, upgrade your plan for unlimited access.`;
+        return `To use ${featureName}, you need more credits.`;
     }
   };
+
+  // Get recommended pack based on credits needed
+  const getRecommendedPack = () => {
+    if (creditsNeeded <= 200) return CREDIT_PACKS[0]; // Single
+    if (creditsNeeded <= 500) return CREDIT_PACKS[1]; // Starter
+    if (creditsNeeded <= 1200) return CREDIT_PACKS[2]; // Explorer
+    return CREDIT_PACKS[3]; // Adventurer
+  };
+
+  const recommended = getRecommendedPack();
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-2">
-            <Sparkles className="h-6 w-6 text-primary" />
+            <Ticket className="h-6 w-6 text-primary" />
           </div>
           <DialogTitle className="text-center text-xl font-serif">
-            Upgrade to Continue
+            Get More Credits
           </DialogTitle>
           <DialogDescription className="text-center">
             {getContextMessage()}
@@ -48,50 +65,52 @@ export function UpgradePrompt({
         </DialogHeader>
 
         <div className="space-y-3 pt-4">
-          {/* Trip Pass */}
-          <div className="rounded-lg border border-border p-4 hover:border-primary/50 transition-colors">
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" />
-                <h4 className="font-medium text-sm">Trip Pass</h4>
-              </div>
-              <span className="text-sm font-semibold">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
-            </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Unlimited rebuilds for this one trip. Best for planning a specific trip.
-            </p>
-            <Button asChild size="sm" variant="outline" className="w-full">
-              <Link to={ROUTES.PRICING}>
-                Get Trip Pass
-                <ArrowRight className="ml-2 h-3 w-3" />
-              </Link>
-            </Button>
-          </div>
-
-          {/* Monthly */}
+          {/* Recommended Pack */}
           <div className="rounded-lg border-2 border-primary p-4 bg-primary/5">
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <h4 className="font-medium text-sm">Monthly</h4>
-                <span className="text-[10px] px-1.5 py-0.5 bg-primary text-primary-foreground rounded">Popular</span>
+                <h4 className="font-medium text-sm">{recommended.name}</h4>
+                <span className="text-[10px] px-1.5 py-0.5 bg-primary text-primary-foreground rounded">Recommended</span>
               </div>
-              <span className="text-sm font-semibold">${STRIPE_PRODUCTS.MONTHLY.price}/mo</span>
+              <span className="text-sm font-semibold">${recommended.price}</span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Unlimited everything. Plan multiple trips with smart recommendations.
+              {formatCredits(recommended.credits)} credits — covers {recommended.description}
             </p>
             <Button asChild size="sm" className="w-full">
               <Link to={ROUTES.PRICING}>
-                Go Monthly
+                Get {recommended.name}
                 <ArrowRight className="ml-2 h-3 w-3" />
               </Link>
             </Button>
           </div>
 
-          {/* Yearly mention */}
+          {/* Smaller Option */}
+          {recommended.id !== 'single' && (
+            <div className="rounded-lg border border-border p-4 hover:border-primary/50 transition-colors">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  <h4 className="font-medium text-sm">Single</h4>
+                </div>
+                <span className="text-sm font-semibold">$12</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                200 credits — 1 day + extras
+              </p>
+              <Button asChild size="sm" variant="outline" className="w-full">
+                <Link to={ROUTES.PRICING}>
+                  Get Single
+                  <ArrowRight className="ml-2 h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          )}
+
+          {/* View all options */}
           <p className="text-center text-xs text-muted-foreground">
-            Or save 48% with <Link to={ROUTES.PRICING} className="text-primary hover:underline">Yearly at ${STRIPE_PRODUCTS.YEARLY.price}/year</Link>
+            <Link to={ROUTES.PRICING} className="text-primary hover:underline">View all credit packs →</Link>
           </p>
         </div>
       </DialogContent>
