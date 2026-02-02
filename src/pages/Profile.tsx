@@ -45,43 +45,14 @@ import FriendsSection from '@/components/profile/FriendsSection';
 import MemoryLane from '@/components/profile/MemoryLane';
 import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
 import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
-import { AddCreditsModal } from '@/components/checkout';
-import { useUserCredits, formatCredits } from '@/hooks/useUserCredits';
-import { Wallet } from 'lucide-react';
+import DayBalanceCard from '@/components/profile/DayBalanceCard';
+import { useDayBalance } from '@/hooks/useDayBalance';
 import { getTripStats, TripStats } from '@/services/userAPI';
 import { getArchetypeNarrative } from '@/data/archetypeNarratives';
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
 
 // Use the centralized pricing config from src/config/pricing.ts
 // New pricing model: Day-based packages (Essential/Complete)
-
-// Product options for display in subscription tab - updated to new day-based model
-const PURCHASE_OPTIONS = {
-  weekEssential: {
-    name: STRIPE_PRODUCTS.WEEK_ESSENTIAL.name,
-    description: 'Full itinerary access with 5 swaps and 2 regenerates',
-    price: STRIPE_PRODUCTS.WEEK_ESSENTIAL.price,
-    priceId: STRIPE_PRODUCTS.WEEK_ESSENTIAL.priceId,
-    productId: STRIPE_PRODUCTS.WEEK_ESSENTIAL.productId,
-    features: ['7 days unlocked', '5 activity swaps', '2 day regenerates', 'PDF export'],
-  },
-  weekComplete: {
-    name: STRIPE_PRODUCTS.WEEK_COMPLETE.name,
-    description: 'Unlimited modifications plus AI companion features',
-    price: STRIPE_PRODUCTS.WEEK_COMPLETE.price,
-    priceId: STRIPE_PRODUCTS.WEEK_COMPLETE.priceId,
-    productId: STRIPE_PRODUCTS.WEEK_COMPLETE.productId,
-    features: ['7 days unlocked', 'Unlimited swaps', 'AI companion', 'Route optimization'],
-  },
-  day1: {
-    name: STRIPE_PRODUCTS.DAY_1.name,
-    description: 'Add a single day to any trip',
-    price: STRIPE_PRODUCTS.DAY_1.price,
-    priceId: STRIPE_PRODUCTS.DAY_1.priceId,
-    productId: STRIPE_PRODUCTS.DAY_1.productId,
-    features: ['1 day unlocked', 'Never expires'],
-  },
-};
 
 
 interface SubscriptionStatus {
@@ -147,8 +118,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [trips, setTrips] = useState<DisplayTrip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
-  const [showCreditsModal, setShowCreditsModal] = useState(false);
-  const { data: userCredits, refetch: refetchCredits } = useUserCredits();
+  const { data: dayBalanceData, refetch: refetchDayBalance } = useDayBalance();
   const [tripStats, setTripStats] = useState<TripStats | null>(null);
   const [actualTravelDNA, setActualTravelDNA] = useState<{ archetype: string; category?: string } | null>(null);
   // Redirect if not authenticated
@@ -242,13 +212,12 @@ export default function Profile() {
       checkSubscription();
     } else if (searchParams.get('canceled') === 'true') {
       toast.info('Checkout canceled');
-    } else if (searchParams.get('credits_added') === 'true') {
-      const amount = searchParams.get('amount');
-      toast.success(amount ? `$${(parseInt(amount) / 100).toFixed(2)} added to your wallet!` : 'Credits added!');
+    } else if (searchParams.get('days_added') === 'true') {
+      toast.success('Days added to your balance!');
       setActiveTab('subscription');
-      refetchCredits();
+      refetchDayBalance();
     }
-  }, [searchParams, refetchCredits]);
+  }, [searchParams, refetchDayBalance]);
 
   // Check subscription status
   const checkSubscription = async () => {
@@ -977,49 +946,17 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Credit Wallet Card */}
-            <div className="relative">
-              <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-accent/50 via-primary/30 to-transparent" />
-              <div className="pl-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Wallet className="h-4 w-4 text-accent" />
-                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                    Credit Wallet
-                  </span>
-                </div>
-                
-                <div className="bg-card rounded-xl border border-border p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
-                      <p className="text-3xl font-serif font-medium text-foreground">
-                        {formatCredits(userCredits?.balance_cents ?? 0)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Use credits for route optimization, day builds, and more
-                      </p>
-                    </div>
-                    <Button 
-                      onClick={() => setShowCreditsModal(true)}
-                      variant="outline"
-                      className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Credits
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Day Balance Card */}
+            <DayBalanceCard onBuyDays={() => navigate(ROUTES.PRICING)} />
 
-            {/* One-Time AI Purchase - Editorial Feature Card */}
+            {/* Quick Add Days */}
             <div className="relative">
               <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-primary/50 via-accent/30 to-transparent" />
               <div className="pl-8">
                 <div className="flex items-center gap-2 mb-4">
                   <Zap className="h-4 w-4 text-primary" />
                   <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                    One-Time Purchase
+                    Quick Purchase
                   </span>
                 </div>
                 
@@ -1039,16 +976,16 @@ export default function Profile() {
                           </div>
                           <div>
                             <h4 className="text-xl font-serif font-medium text-foreground">
-                              {PURCHASE_OPTIONS.weekComplete.name}
+                              {STRIPE_PRODUCTS.WEEK_COMPLETE.name}
                             </h4>
                             <p className="text-sm text-muted-foreground">
-                              {PURCHASE_OPTIONS.weekComplete.description}
+                              7 days with unlimited swaps, AI companion & more
                             </p>
                           </div>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-2 mt-4">
-                          {PURCHASE_OPTIONS.weekComplete.features.map((feature) => (
+                          {['7 days unlocked', 'Unlimited swaps', 'AI companion', 'Route optimization'].map((feature) => (
                             <span key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                               {feature}
@@ -1060,16 +997,16 @@ export default function Profile() {
                       <div className="flex flex-col items-center md:items-end gap-3 shrink-0">
                         <div className="text-center md:text-right">
                           <span className="text-3xl font-serif font-medium text-foreground">
-                            ${PURCHASE_OPTIONS.weekComplete.price}
+                            ${STRIPE_PRODUCTS.WEEK_COMPLETE.price}
                           </span>
                           <p className="text-xs text-muted-foreground mt-0.5">one-time</p>
                         </div>
                         <Button 
-                          onClick={() => handleCheckout(PURCHASE_OPTIONS.weekComplete.priceId, 'payment')}
-                          disabled={isCheckingOut === PURCHASE_OPTIONS.weekComplete.priceId}
+                          onClick={() => handleCheckout(STRIPE_PRODUCTS.WEEK_COMPLETE.priceId, 'payment')}
+                          disabled={isCheckingOut === STRIPE_PRODUCTS.WEEK_COMPLETE.priceId}
                           className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
                         >
-                          {isCheckingOut === PURCHASE_OPTIONS.weekComplete.priceId ? (
+                          {isCheckingOut === STRIPE_PRODUCTS.WEEK_COMPLETE.priceId ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <>
@@ -1085,104 +1022,19 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Day Packages */}
-            <div>
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium block mb-1">
-                    Add More Days
-                  </span>
-                  <h3 className="text-xl font-serif text-foreground">Need More Days?</h3>
-                </div>
-              </div>
-              
-              <div className="grid md:grid-cols-2 gap-6">
-                {[PURCHASE_OPTIONS.weekEssential, PURCHASE_OPTIONS.day1].map((pack, idx) => {
-                  const isPackage = idx === 0;
-                  
-                  return (
-                    <motion.div
-                      key={pack.name}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: isPackage ? 0 : 0.1 }}
-                      className={cn(
-                        "group relative bg-card rounded-lg overflow-hidden transition-all duration-300",
-                        "border border-border hover:shadow-medium hover:border-muted-foreground/30"
-                      )}
-                    >
-                      {isPackage && (
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-accent to-primary/60" />
-                      )}
-                      
-                      <div className="p-6 md:p-8">
-                        <div className="flex items-start justify-between mb-6">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              {isPackage && (
-                                <span className="text-[9px] uppercase tracking-wider text-primary font-semibold px-2 py-0.5 bg-primary/10 rounded">
-                                  Best Value
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="text-2xl font-serif font-medium text-foreground mt-1">
-                              {pack.name}
-                            </h4>
-                            <p className="text-sm text-muted-foreground mt-1">{pack.description}</p>
-                          </div>
-                        </div>
-                        
-                        <div className="mb-8 pb-6 border-b border-border">
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-4xl font-serif font-medium text-foreground tracking-tight">
-                              ${pack.price}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              one-time
-                            </span>
-                          </div>
-                          {isPackage && (
-                            <p className="text-xs text-primary mt-2 font-medium">
-                              $7/day — saves vs buying days separately
-                            </p>
-                          )}
-                        </div>
-                        
-                        <ul className="space-y-3 mb-8">
-                          {pack.features.map((feature) => (
-                            <li key={feature} className="flex items-start gap-3 text-sm">
-                              <div className="w-4 h-4 rounded-full border border-muted-foreground/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                <Check className="h-2.5 w-2.5 text-foreground" />
-                              </div>
-                              <span className="text-foreground/80">{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        
-                        <Button 
-                          className={cn(
-                            "w-full h-11 text-sm font-medium transition-all",
-                            isPackage 
-                              ? "bg-gradient-to-r from-slate to-slate/90 hover:from-slate/90 hover:to-slate text-slate-foreground" 
-                              : ""
-                          )}
-                          onClick={() => handleCheckout(pack.priceId, 'payment')}
-                          disabled={isCheckingOut === pack.priceId}
-                        >
-                          {isCheckingOut === pack.priceId ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>Buy {pack.name} - ${pack.price}</>
-                          )}
-                        </Button>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
+            {/* Browse All Packages */}
+            <div className="text-center py-6">
+              <Button 
+                variant="outline" 
+                onClick={() => navigate(ROUTES.PRICING)}
+                className="group"
+              >
+                <Plane className="h-4 w-4 mr-2 group-hover:translate-x-1 transition-transform" />
+                Browse All Packages
+              </Button>
             </div>
 
-            {/* Active Subscriber Section */}
+            {/* Billing Portal (for legacy subscribers) */}
             {subscription?.subscribed && (
               <div className="border-t border-border pt-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-lg bg-muted/30">
@@ -1223,12 +1075,6 @@ export default function Profile() {
       </main>
 
       <Footer />
-
-      <AddCreditsModal
-        isOpen={showCreditsModal}
-        onClose={() => setShowCreditsModal(false)}
-        currentBalance={userCredits?.balance_cents ?? 0}
-      />
     </div>
   );
 }
