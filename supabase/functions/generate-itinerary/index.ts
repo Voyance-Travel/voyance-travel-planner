@@ -5513,6 +5513,79 @@ serve(async (req) => {
       
       console.log(`[generate-full] ✓ Using authenticated userId: ${userId} (trip owner: ${tripAccessResult.isOwner})`);
 
+      // =========================================================================
+      // FREE TIER CHECK: Only generate Day 1 for free users (cost optimization)
+      // Full itinerary is generated only after Trip Pass purchase or if paid user
+      // =========================================================================
+      let isFreeUser = true; // Default to free
+      let hasTripPass = false;
+      let originalTotalDays = 0; // Track requested days for metadata
+      
+      try {
+        // Check if user has an active subscription
+        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+        if (stripeKey && userId) {
+          // Get user email from auth
+          const { data: userData } = await supabase.auth.admin.getUserById(userId);
+          const userEmail = userData?.user?.email;
+          
+          if (userEmail) {
+            const Stripe = (await import("https://esm.sh/stripe@18.5.0")).default;
+            const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+            const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+            
+            if (customers.data.length > 0) {
+              const customerId = customers.data[0].id;
+              const subscriptions = await stripe.subscriptions.list({
+                customer: customerId,
+                status: "active",
+                limit: 1,
+              });
+              
+              if (subscriptions.data.length > 0) {
+                isFreeUser = false;
+                console.log(`[generate-full] ✓ User has active subscription - generating full itinerary`);
+              }
+            }
+          }
+        }
+        
+        // Check for Trip Pass on this specific trip
+        if (isFreeUser && tripId) {
+          const { data: tripPurchase } = await supabase
+            .from('trip_purchases')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('trip_id', tripId)
+            .eq('purchase_type', 'trip_pass')
+            .maybeSingle();
+          
+          if (tripPurchase) {
+            hasTripPass = true;
+            isFreeUser = false;
+            console.log(`[generate-full] ✓ Trip has Trip Pass - generating full itinerary`);
+          }
+        }
+        
+        // Check for credit balance sufficient for full trip
+        if (isFreeUser && userId) {
+          const { data: credits } = await supabase
+            .from('user_credits')
+            .select('balance_cents')
+            .eq('user_id', userId)
+            .single();
+          
+          // $9.99 = 999 cents for full trip
+          if (credits?.balance_cents && credits.balance_cents >= 999) {
+            isFreeUser = false;
+            console.log(`[generate-full] ✓ User has sufficient credits (${credits.balance_cents}c) - generating full itinerary`);
+          }
+        }
+      } catch (entitlementErr) {
+        console.warn(`[generate-full] Entitlement check failed, defaulting to free tier:`, entitlementErr);
+        // Continue with free tier generation
+      }
+
       // STAGE 1: Context Preparation (supports direct trip data for localStorage/demo mode)
       const directTripData = tripData ? {
         tripId,
@@ -5532,6 +5605,13 @@ serve(async (req) => {
           JSON.stringify({ error: "Trip not found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+      
+      // Store original total days and limit for free users
+      originalTotalDays = context.totalDays;
+      if (isFreeUser) {
+        context.totalDays = 1; // Only generate Day 1 for free users
+        console.log(`[generate-full] 🔒 FREE USER: Limiting generation to Day 1 only (original: ${originalTotalDays} days)`);
       }
 
       // Get user preferences for personalization
@@ -6493,7 +6573,7 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       // STAGE 6: Final Save
       await finalSaveItinerary(supabase, tripId, enrichedItinerary, context);
 
-      // Return complete response
+      // Return complete response with free tier metadata
       return new Response(
         JSON.stringify({
           success: true,
@@ -6505,7 +6585,15 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
             days: enrichedDays,
             overview
           },
-          enrichmentMetadata: enrichedItinerary.enrichmentMetadata
+          enrichmentMetadata: enrichedItinerary.enrichmentMetadata,
+          // Free tier metadata for frontend upgrade prompts
+          freeTierInfo: isFreeUser ? {
+            isFreeTier: true,
+            daysGenerated: context.totalDays,
+            totalDaysRequested: originalTotalDays,
+            remainingDaysLocked: originalTotalDays - context.totalDays,
+            upgradeMessage: `Unlock ${originalTotalDays - 1} more days with a Trip Pass`
+          } : undefined
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
