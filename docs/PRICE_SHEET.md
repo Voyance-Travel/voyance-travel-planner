@@ -131,6 +131,44 @@
 
 ## 4. Feature-Level Cost Breakdown
 
+### Homepage Entry Points (3 Main CTAs)
+
+| Entry Point | What Happens | APIs Called | Cost |
+|-------------|--------------|-------------|------|
+| **1. Plan a Trip** | Quick 3-day preview generation | `generate-quick-preview` (gemini-2.5-flash) | **$0.003-0.01** |
+| **2. Find My Style** | Travel DNA quiz + calculation | Frontend quiz ($0) + `calculate-travel-dna` (gpt-5-mini) | **$0.01-0.03** |
+| **3. Fix My Itinerary** | Paste text → AI "roasts" it | `analyze-itinerary` (gemini-2.5-flash) | **$0.003-0.01** |
+
+#### Detailed Breakdown:
+
+**Plan a Trip (Destination Entry)**
+| Step | API | Model | Tokens (est.) | Cost |
+|------|-----|-------|---------------|------|
+| User enters destination | None | - | - | $0 |
+| Quick preview generated | `generate-quick-preview` | gemini-2.5-flash | ~500 in / ~300 out | **$0.003-0.01** |
+| User sees 3-day teaser | None | - | - | $0 |
+| **Total** | | | | **$0.003-0.01** |
+
+**Find My Style (Travel DNA Quiz)**
+| Step | API | Model | Tokens (est.) | Cost |
+|------|-----|-------|---------------|------|
+| 21 quiz questions | None (frontend) | - | - | $0 |
+| Calculate DNA score | `calculate-travel-dna` | gpt-5-mini | ~500-1.5k in / ~300-800 out | **$0.01-0.03** |
+| Display archetype reveal | None (frontend) | - | - | $0 |
+| **Total** | | | | **$0.01-0.03** |
+
+**Retake Quiz** = Same cost: **$0.01-0.03**
+
+**Fix My Itinerary (Roast)**
+| Step | API | Model | Tokens (est.) | Cost |
+|------|-----|-------|---------------|------|
+| User pastes itinerary text | None | - | - | $0 |
+| AI analyzes & roasts | `analyze-itinerary` | gemini-2.5-flash | ~500-1k in / ~500-800 out | **$0.003-0.01** |
+| Display issues/suggestions | None (frontend) | - | - | $0 |
+| **Total** | | | | **$0.003-0.01** |
+
+---
+
 ### Homepage & Static Pages
 
 | Page | APIs Used | Cost/Load |
@@ -140,22 +178,7 @@
 | Archetypes Page | None | **$0** |
 | Blog | None | **$0** |
 
-### Travel DNA Quiz
-
-| Step | APIs Used | Cost |
-|------|-----------|------|
-| Quiz UI | None | **$0** |
-| Scoring (Frontend) | None | **$0** |
-| DNA Calculation | Lovable AI (gpt-5-mini) | **$0.01-0.03** |
-| Retake Quiz | Same as above | **$0.01-0.03** |
-
-### Trip Planning Flow
-
-| Step | APIs Used | Cost |
-|------|-----------|------|
-| Plan a Trip Form | None | **$0** |
-| Destination Search | None (local data) | **$0** |
-| Quick Preview | Lovable AI (gpt-5-mini) | **$0.003-0.01** |
+### Travel DNA Quiz (Full Flow)
 
 ### Itinerary Generation
 
