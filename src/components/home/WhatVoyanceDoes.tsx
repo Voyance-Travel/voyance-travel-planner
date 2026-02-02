@@ -128,7 +128,7 @@ export default function WhatVoyanceDoes() {
 
               <div className="mt-6 pt-6 border-t border-border">
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Why?</span> We believe you should have full control over your flights. Book with your preferred airline, use your points, find the best deal—then let us handle the rest.
+                  <span className="font-medium text-foreground">Why?</span> We believe you should have full control over your flights. Book with your preferred airline, use your points, find the best deal. Then let us handle the rest.
                 </p>
               </div>
             </div>

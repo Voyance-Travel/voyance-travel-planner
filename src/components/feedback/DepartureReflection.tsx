@@ -42,7 +42,7 @@ const changeOptions = [
   'Lower budget options',
   'More adventure',
   'More relaxation',
-  'Nothing—it was perfect',
+  'Nothing. It was perfect',
 ];
 
 export function DepartureReflection({
@@ -91,13 +91,13 @@ export function DepartureReflection({
   };
 
   const toggleChange = (option: string) => {
-    if (option === 'Nothing—it was perfect') {
+    if (option === 'Nothing. It was perfect') {
       setWouldChange(prev => 
         prev.includes(option) ? [] : [option]
       );
     } else {
       setWouldChange(prev => {
-        const filtered = prev.filter(c => c !== 'Nothing—it was perfect');
+        const filtered = prev.filter(c => c !== 'Nothing. It was perfect');
         return filtered.includes(option)
           ? filtered.filter(c => c !== option)
           : [...filtered, option];
@@ -270,7 +270,7 @@ export function DepartureReflection({
                         className={cn(
                           'px-4 py-2 rounded-full border transition-all text-sm',
                           wouldChange.includes(option)
-                            ? option === 'Nothing—it was perfect'
+                            ? option === 'Nothing. It was perfect'
                               ? 'bg-emerald-500 text-white border-emerald-500'
                               : 'bg-primary text-primary-foreground border-primary'
                             : 'border-border hover:border-primary/50'

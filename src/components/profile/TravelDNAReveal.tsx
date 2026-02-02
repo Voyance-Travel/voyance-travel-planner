@@ -539,7 +539,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Your Travel DNA is calculated by scoring your quiz responses across 8 core traits: 
                 Planning, Social, Comfort, Pace, Authenticity, Adventure, Budget, and Transformation. 
-                Each archetype has specific trait requirements—your responses are matched against these 
+                Each archetype has specific trait requirements. Your responses are matched against these 
                 to find your primary and secondary archetypes.
               </p>
             </div>

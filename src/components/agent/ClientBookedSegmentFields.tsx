@@ -53,7 +53,7 @@ export default function ClientBookedSegmentFields({
               <div>
                 <Label className="text-base font-medium">Client-Booked / Informational</Label>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Enable for bookings where you're not managing finances—just tracking for the itinerary
+                  Enable for bookings where you're not managing finances, just tracking for the itinerary
                 </p>
               </div>
             </div>

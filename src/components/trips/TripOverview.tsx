@@ -174,7 +174,7 @@ export function TripOverview({
         <div>
           <h2 className="text-2xl font-serif font-bold">{destination}</h2>
           <p className="text-muted-foreground">
-            {format(parseISO(startDate), 'MMM d')} — {format(parseISO(endDate), 'MMM d, yyyy')}
+            {format(parseISO(startDate), 'MMM d')} - {format(parseISO(endDate), 'MMM d, yyyy')}
           </p>
         </div>
 

@@ -250,7 +250,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     ],
     perfectTripPreview: "You taste your way to understanding.",
     emoji: "🍜",
-    revealParagraph: `You've been known to plan entire trips around a single restaurant reservation. Food isn't just fuel for you—it's the point. The market at 7am. The hole-in-the-wall only locals know. The thing you ate that you still think about years later. Other people see eating as an interruption to sightseeing. You see sightseeing as what you do between meals.`,
+    revealParagraph: `You've been known to plan entire trips around a single restaurant reservation. Food isn't just fuel for you. It's the point. The market at 7am. The hole-in-the-wall only locals know. The thing you ate that you still think about years later. Other people see eating as an interruption to sightseeing. You see sightseeing as what you do between meals.`,
     youProbably: [
       "Have a list of restaurants in cities you haven't even booked yet",
       "Know the difference between 'authentic' and 'touristy' by smell alone",
@@ -337,7 +337,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     ],
     perfectTripPreview: "Your heart races in the most beautiful settings.",
     emoji: "🪂",
-    revealParagraph: `You don't understand "relaxing" vacations. Lying on a beach sounds like punishment. You need to do something. The best trips leave you with stories—the time you almost didn't make it, the thing that scared you until you did it, the moment you surprised yourself. Other people need to "recover" from vacation. You come back feeling more alive than when you left.`,
+    revealParagraph: `You don't understand "relaxing" vacations. Lying on a beach sounds like punishment. You need to do something. The best trips leave you with stories: the time you almost didn't make it, the thing that scared you until you did it, the moment you surprised yourself. Other people need to "recover" from vacation. You come back feeling more alive than when you left.`,
     youProbably: [
       "Have a story that starts with 'So I signed the waiver...'",
       "Feel restless after two hours on a beach",

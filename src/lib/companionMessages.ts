@@ -31,7 +31,7 @@ export const strangerMessages = {
   },
   
   browse: {
-    prompt: "Looking around? Smart. Take the quiz when you're ready—it changes everything.",
+    prompt: "Looking around? Smart. Take the quiz when you're ready. It changes everything.",
     pricing: "See what's included. Then find out who you are.",
     about: "We built this because every other travel site treats everyone the same. You're not everyone.",
   },
@@ -137,7 +137,7 @@ export const planningMessages = {
   dates: {
     prompt: "When?",
     responses: {
-      weekend: (days: number) => `${days} days. Quick trip—we'll make every hour count.`,
+      weekend: (days: number) => `${days} days. Quick trip. We'll make every hour count.`,
       short: (days: number) => `${days} days. Short and sweet.`,
       week: (days: number) => `${days} days. Nice length. Room to breathe.`,
       extended: (days: number) => `${days} days. Proper trip. We'll pace it right.`,
@@ -157,7 +157,7 @@ export const planningMessages = {
     responses: {
       solo: "Solo. Total freedom. We'll find the best spots for one.",
       couple: "Just the two of you. We'll make it special.",
-      honeymoon: "Congratulations! We'll build in rest—you just survived a wedding.",
+      honeymoon: "Congratulations! We'll build in rest. You just survived a wedding.",
       anniversary: "Celebrating the journey. Love that.",
       birthday: "Birthday trip! We'll make it memorable.",
       family: "Family mode activated. We've got the kids covered.",

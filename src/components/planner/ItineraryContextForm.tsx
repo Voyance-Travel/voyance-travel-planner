@@ -237,7 +237,7 @@ export default function ItineraryContextForm({
             <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Optional</span>
           </div>
           <p className="text-xs text-muted-foreground -mt-1">
-            Skip this if you don't have flights booked yet — we'll plan a full day for arrival and departure.
+            Skip this if you don't have flights booked yet. We'll plan a full day for arrival and departure.
           </p>
           
           <div className="grid grid-cols-2 gap-4">
@@ -291,7 +291,7 @@ export default function ItineraryContextForm({
             className="min-h-[80px] resize-none"
           />
           <p className="text-xs text-muted-foreground">
-            Tell us what you absolutely can't miss — we'll make sure it's in your itinerary
+            Tell us what you absolutely can't miss. We'll make sure it's in your itinerary.
           </p>
         </div>
 
@@ -318,7 +318,7 @@ export default function ItineraryContextForm({
           </div>
           
           <p className="text-xs text-muted-foreground -mt-1">
-            Tickets, reservations, or events you've already booked — we'll plan around them
+            Tickets, reservations, or events you've already booked. We'll plan around them.
           </p>
 
           {/* Existing commitments */}

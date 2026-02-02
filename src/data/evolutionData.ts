@@ -110,7 +110,7 @@ export const CATEGORY_EVOLUTION: Record<string, {
       { label: 'Return visitor status', description: 'Has deep knowledge of favorite destinations', icon: 'heart' },
       { label: 'Local network builder', description: 'Maintains friendships across borders', icon: 'star' }
     ],
-    evolutionTip: 'Your curiosity is your compass—follow it deeper, not just wider.'
+    evolutionTip: 'Your curiosity is your compass. Follow it deeper, not just wider.'
   },
   CONNECTOR: {
     growthAreas: [

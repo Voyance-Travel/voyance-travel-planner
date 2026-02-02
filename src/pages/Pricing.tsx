@@ -145,7 +145,7 @@ export default function Pricing() {
                 </div>
                 <h3 className="font-medium text-foreground mb-1 group-hover:text-primary transition-colors">27 Archetypes</h3>
                 <p className="text-sm text-muted-foreground">
-                  From "Slow Traveler" to "Adrenaline Chaser" — we find your match
+                  From "Slow Traveler" to "Adrenaline Chaser" - we find your match
                 </p>
                 <span className="text-xs text-primary mt-2 inline-block opacity-0 group-hover:opacity-100 transition-opacity">
                   See all archetypes →
@@ -272,7 +272,7 @@ export default function Pricing() {
                 onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Trip Pass')} 
                 disabled={loadingPlan === 'trip_pass'}
               >
-                {loadingPlan === 'trip_pass' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Unlock Trip — ${STRIPE_PRODUCTS.TRIP_PASS.price}</>}
+                {loadingPlan === 'trip_pass' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Unlock Trip - ${STRIPE_PRODUCTS.TRIP_PASS.price}</>}
               </Button>
             </motion.div>
 

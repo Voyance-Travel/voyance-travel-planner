@@ -221,7 +221,7 @@ export function ReservationCard({
                     {format(parseISO(reservation.date), 'EEEE, MMM d')}
                     {reservation.time && ` at ${reservation.time}`}
                     {reservation.endDate && reservation.endDate !== reservation.date && (
-                      <> — {format(parseISO(reservation.endDate), 'MMM d')}</>
+                      <> - {format(parseISO(reservation.endDate), 'MMM d')}</>
                     )}
                   </p>
                 </div>

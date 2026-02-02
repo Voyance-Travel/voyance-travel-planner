@@ -31,7 +31,7 @@
         },
         {
           "id": "q1b",
-          "label": "Are already dressed—you were up before your alarm",
+          "label": "Are already dressed. You were up before your alarm",
           "traits": {
             "pace": 0.8,
             "morning_energy": 0.9,
@@ -189,7 +189,7 @@
         },
         {
           "id": "q4b",
-          "label": "Push through—I'll sleep when I'm dead.",
+          "label": "Push through. I'll sleep when I'm dead.",
           "traits": {
             "pace": 0.9,
             "restoration_need": 0.15,
@@ -281,7 +281,7 @@
       "answers": [
         {
           "id": "q6a",
-          "label": "I'm in. Group trips are the best—shared chaos, inside jokes, someone else handles logistics.",
+          "label": "I'm in. Group trips are the best. Shared chaos, inside jokes, someone else handles logistics.",
           "traits": {
             "social_energy": 0.9,
             "group_size_pref": 0.9,
@@ -368,7 +368,7 @@
         },
         {
           "id": "q7d",
-          "label": "A specific interest—architecture, sports venues, music history, something niche. I know what I'm looking for.",
+          "label": "A specific interest: architecture, sports venues, music history, something niche. I know what I'm looking for.",
           "traits": {
             "niche_interest": 0.9,
             "learning_focus": 0.7
@@ -407,7 +407,7 @@
       "id": "q8_accommodation",
       "step": 4,
       "category": "Accommodation",
-      "prompt": "You're booking a place to stay. Be honest—what actually matters most to you?",
+      "prompt": "You're booking a place to stay. Be honest. What actually matters most to you?",
       "type": "single",
       "feedback": {
         "q8a": "Time is the real currency.",
@@ -558,7 +558,7 @@
         },
         {
           "id": "q10c",
-          "label": "I want to see things before they're gone—or before I am. Time is short.",
+          "label": "I want to see things before they're gone, or before I am. Time is short.",
           "traits": {
             "bucket_list": 0.85,
             "pace": 0.7
@@ -857,7 +857,7 @@
       "answers": [
         {
           "id": "q15a",
-          "label": "I recharge in solitude—other travelers often drain me.",
+          "label": "I recharge in solitude. Other travelers often drain me.",
           "traits": {
             "social_energy": 0.1,
             "group_size_pref": 0.1
@@ -874,7 +874,7 @@
         },
         {
           "id": "q15c",
-          "label": "I enjoy casual connections—hostel chats, tour group banter, easy conversation.",
+          "label": "I enjoy casual connections. Hostel chats, tour group banter, easy conversation.",
           "traits": {
             "social_energy": 0.7,
             "group_size_pref": 0.6,
@@ -973,7 +973,7 @@
         },
         {
           "id": "q17b",
-          "label": "My partner—and romance is the point. Intimate dinners, beautiful settings, reconnection.",
+          "label": "My partner, and romance is the point. Intimate dinners, beautiful settings, reconnection.",
           "traits": {
             "romance_focus": 0.9,
             "social_energy": 0.4,
@@ -982,7 +982,7 @@
         },
         {
           "id": "q17c",
-          "label": "My partner—as adventure buddies, not a romantic escape.",
+          "label": "My partner, as adventure buddies, not a romantic escape.",
           "traits": {
             "romance_focus": 0.3,
             "adventure": 0.6,
@@ -1042,7 +1042,7 @@
         },
         {
           "id": "q18b",
-          "label": "Spiritual. I travel for inner work—meditation, contemplation, maybe something I can't fully articulate.",
+          "label": "Spiritual. I travel for inner work: meditation, contemplation, maybe something I can't fully articulate.",
           "traits": {
             "spirituality": 0.9,
             "restoration_need": 0.6
@@ -1059,7 +1059,7 @@
         },
         {
           "id": "q18d",
-          "label": "Physical. Moving my body is how I recharge—hiking, swimming, staying active.",
+          "label": "Physical. Moving my body is how I recharge: hiking, swimming, staying active.",
           "traits": {
             "adventure": 0.75,
             "nature_orientation": 0.6,
@@ -1101,7 +1101,7 @@
       "answers": [
         {
           "id": "q19a",
-          "label": "Early days—building my career, watching my budget, but hungry for experiences.",
+          "label": "Early days. Building my career, watching my budget, but hungry for experiences.",
           "traits": {
             "life_stage": "early",
             "budget_tier": 0.25
@@ -1109,7 +1109,7 @@
         },
         {
           "id": "q19b",
-          "label": "In the thick of it—career, maybe family, lots of obligations. Travel is how I breathe.",
+          "label": "In the thick of it. Career, maybe family, lots of obligations. Travel is how I breathe.",
           "traits": {
             "life_stage": "building",
             "restoration_need": 0.6
@@ -1117,7 +1117,7 @@
         },
         {
           "id": "q19c",
-          "label": "Established—I know what I like. I've earned the right to travel exactly how I want.",
+          "label": "Established. I know what I like. I've earned the right to travel exactly how I want.",
           "traits": {
             "life_stage": "established",
             "quality_intrinsic": 0.7
@@ -1125,7 +1125,7 @@
         },
         {
           "id": "q19d",
-          "label": "Freer now—fewer obligations, more time. Ready to see what I've been putting off.",
+          "label": "Freer now. Fewer obligations, more time. Ready to see what I've been putting off.",
           "traits": {
             "life_stage": "free",
             "bucket_list": 0.7,
@@ -1157,7 +1157,7 @@
       "answers": [
         {
           "id": "q20a",
-          "label": "I want the best. Quality matters to me intrinsically—not to impress anyone, just because it's better.",
+          "label": "I want the best. Quality matters to me intrinsically. Not to impress anyone, just because it's better.",
           "traits": {
             "quality_intrinsic": 0.9,
             "budget_tier": 0.7
@@ -1230,7 +1230,7 @@
         },
         {
           "id": "q21c",
-          "label": "I appreciate authenticity—real experiences over tourist traps—but I don't stress about the ethics of every choice.",
+          "label": "I appreciate authenticity. Real experiences over tourist traps. But I don't stress about the ethics of every choice.",
           "traits": {
             "cultural_depth": 0.6,
             "ethics_focus": 0.3

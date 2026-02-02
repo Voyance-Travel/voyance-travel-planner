@@ -5,12 +5,12 @@
 
 export const tripTypeResponses: Record<string, string> = {
   solo: "Solo trips are the best. Total freedom. We'll make sure every restaurant has good bar seating.",
-  honeymoon: "Congratulations! We'll build in plenty of rest—you just survived a wedding.",
+  honeymoon: "Congratulations! We'll build in plenty of rest. You just survived a wedding.",
   family: "Got it. We'll plan around nap time and find places where kids can be kids.",
   guys_trip: "We'll make sure there's at least one great bar and something you'll all remember.",
   girls_trip: "Brunch, something photo-worthy, and at least one great night out. We got you.",
   anniversary: "We'll make sure there's a special moment to celebrate your journey together.",
-  birthday: "We'll make sure there's a proper celebration—but just one, not birthday overload.",
+  birthday: "We'll make sure there's a proper celebration, but just one, not birthday overload.",
   babymoon: "We'll keep it gentle. No early mornings, nothing strenuous, all pregnancy-safe.",
   foodie: "Finally, someone who gets it. We'll build this trip around the meals.",
   adventure: "We'll find the experiences that make your heart race.",
@@ -26,7 +26,7 @@ export const tripTypeResponses: Record<string, string> = {
 
 export const visitorTypeResponses = {
   firstTime: (destination: string) => 
-    `First time in ${destination}! We'll include the icons—you should see them. But we'll also show you some spots the guidebooks miss.`,
+    `First time in ${destination}! We'll include the icons. You should see them. But we'll also show you some spots the guidebooks miss.`,
   returning: (destination: string) => 
     `Welcome back to ${destination}. We'll skip the obvious stuff and show you a different side of the city.`,
 };
@@ -50,14 +50,14 @@ export const budgetResponses: Record<string, string> = {
 export const paceResponses: Record<string, string> = {
   relaxed: "Slow and steady. We'll leave room to breathe between everything.",
   balanced: "A bit of both. Enough to feel accomplished, enough to feel rested.",
-  active: "You want to see it all. We'll pack it in—but smartly.",
+  active: "You want to see it all. We'll pack it in, but smartly.",
   intense: "Full send. We'll maximize every hour.",
 };
 
 export const groupSizeResponses = {
   solo: "Just you. The most honest way to travel.",
   couple: "Two is the perfect number for exploring.",
-  small: (count: number) => `${count} people—small enough to be nimble, big enough to share the fun.`,
+  small: (count: number) => `${count} people. Small enough to be nimble, big enough to share the fun.`,
   medium: (count: number) => `${count} travelers. We'll find places that can handle you all.`,
   large: (count: number) => `${count} people! We'll look for group-friendly experiences and maybe some reservation magic.`,
 };

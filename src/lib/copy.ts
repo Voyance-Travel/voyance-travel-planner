@@ -52,7 +52,7 @@ export const copy = {
 
   // Validation messages (friendly, not scary)
   validation: {
-    dateConflict: "Those dates don't quite work—want to adjust?",
+    dateConflict: "Those dates don't quite work. Want to adjust?",
     missingDestination: "Where are we going?",
     missingDates: "When's this happening?",
     invalidEmail: "That email doesn't look quite right.",

@@ -30,7 +30,7 @@ const STEPS = [
     number: '4',
     icon: RefreshCw,
     title: 'Refine over time',
-    description: "Your Travel DNA evolves. Rate activities, save favorites, and watch your profile—and recommendations—get even more accurate.",
+    description: "Your Travel DNA evolves. Rate activities, save favorites, and watch your profile and recommendations get even more accurate.",
     highlight: 'Learns from you',
   },
 ];

@@ -91,7 +91,7 @@ Most of that time is wasted on the wrong things.
 
 We've done the research. We know what works.
 All we need to know is who you are.`,
-      cta: "Take the Quiz — 4 minutes",
+      cta: "Take the Quiz - 4 minutes",
     },
     
     footerCta: {
