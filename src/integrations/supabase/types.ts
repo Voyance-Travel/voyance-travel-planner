@@ -2120,6 +2120,93 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_balances: {
+        Row: {
+          created_at: string
+          free_credits: number
+          free_credits_expires_at: string | null
+          id: string
+          last_free_credit_at: string | null
+          purchased_credits: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          free_credits?: number
+          free_credits_expires_at?: string | null
+          id?: string
+          last_free_credit_at?: string | null
+          purchased_credits?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          free_credits?: number
+          free_credits_expires_at?: string | null
+          id?: string
+          last_free_credit_at?: string | null
+          purchased_credits?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credit_ledger: {
+        Row: {
+          action_type: string | null
+          activity_id: string | null
+          amount_cents: number | null
+          created_at: string
+          credits_delta: number
+          id: string
+          is_free_credit: boolean
+          metadata: Json | null
+          notes: string | null
+          price_id: string | null
+          stripe_product_id: string | null
+          stripe_session_id: string | null
+          transaction_type: string
+          trip_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type?: string | null
+          activity_id?: string | null
+          amount_cents?: number | null
+          created_at?: string
+          credits_delta: number
+          id?: string
+          is_free_credit?: boolean
+          metadata?: Json | null
+          notes?: string | null
+          price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_session_id?: string | null
+          transaction_type: string
+          trip_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string | null
+          activity_id?: string | null
+          amount_cents?: number | null
+          created_at?: string
+          credits_delta?: number
+          id?: string
+          is_free_credit?: boolean
+          metadata?: Json | null
+          notes?: string | null
+          price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_session_id?: string | null
+          transaction_type?: string
+          trip_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           action_key: string | null

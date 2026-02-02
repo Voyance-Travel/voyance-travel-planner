@@ -433,6 +433,83 @@ serve(async (req) => {
           }
         }
 
+        // ========================================
+        // Credit Pack Purchase Fulfillment
+        // ========================================
+        if (metadata.type === "credit_purchase") {
+          const userId = metadata.user_id;
+          const priceId = metadata.price_id;
+          const productId = metadata.product_id;
+          const creditsToAdd = parseInt(metadata.credits || "0", 10);
+          const amountCents = session.amount_total || 0;
+
+          if (userId && creditsToAdd > 0) {
+            log("Processing credit purchase", { userId, creditsToAdd, priceId });
+
+            // IDEMPOTENCY CHECK: Skip if this session already processed
+            const { data: existingLedger } = await supabaseAdmin
+              .from("credit_ledger")
+              .select("id")
+              .eq("stripe_session_id", session.id)
+              .eq("transaction_type", "purchase")
+              .maybeSingle();
+
+            if (existingLedger) {
+              log("Duplicate credit purchase event, skipping", { sessionId: session.id });
+              break;
+            }
+
+            // Get or create credit balance record
+            const { data: existingBalance } = await supabaseAdmin
+              .from("credit_balances")
+              .select("*")
+              .eq("user_id", userId)
+              .maybeSingle();
+
+            // Calculate new values
+            const currentPurchased = existingBalance?.purchased_credits || 0;
+            const newPurchased = currentPurchased + creditsToAdd;
+
+            // Upsert credit balance
+            const { error: balanceError } = await supabaseAdmin
+              .from("credit_balances")
+              .upsert({
+                user_id: userId,
+                purchased_credits: newPurchased,
+                free_credits: existingBalance?.free_credits || 0,
+                free_credits_expires_at: existingBalance?.free_credits_expires_at || null,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: "user_id" });
+
+            if (balanceError) {
+              log("Error upserting credit balance", balanceError);
+            } else {
+              log("Credit balance updated", { userId, newPurchased });
+            }
+
+            // Create ledger entry
+            const { error: ledgerError } = await supabaseAdmin
+              .from("credit_ledger")
+              .insert({
+                user_id: userId,
+                transaction_type: 'purchase',
+                credits_delta: creditsToAdd,
+                is_free_credit: false,
+                stripe_session_id: session.id,
+                stripe_product_id: productId,
+                price_id: priceId,
+                amount_cents: amountCents,
+                notes: `Credit pack purchase - ${creditsToAdd} credits`,
+              });
+
+            if (ledgerError) {
+              log("Error creating credit ledger entry", ledgerError);
+            } else {
+              log("Credit ledger entry created", { userId, creditsToAdd });
+            }
+          }
+        }
+
         break;
       }
 

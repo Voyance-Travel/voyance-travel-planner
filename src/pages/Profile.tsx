@@ -45,8 +45,8 @@ import FriendsSection from '@/components/profile/FriendsSection';
 import MemoryLane from '@/components/profile/MemoryLane';
 import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
 import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
-import DayBalanceCard from '@/components/profile/DayBalanceCard';
-import { useDayBalance } from '@/hooks/useDayBalance';
+import CreditBalanceCard from '@/components/profile/CreditBalanceCard';
+import { useCredits, useRefreshCredits } from '@/hooks/useCredits';
 import { getTripStats, TripStats } from '@/services/userAPI';
 import { getArchetypeNarrative } from '@/data/archetypeNarratives';
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
@@ -118,7 +118,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [trips, setTrips] = useState<DisplayTrip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
-  const { data: dayBalanceData, refetch: refetchDayBalance } = useDayBalance();
+  const { data: creditData, refetch: refetchCredits } = useCredits();
   const [tripStats, setTripStats] = useState<TripStats | null>(null);
   const [actualTravelDNA, setActualTravelDNA] = useState<{ archetype: string; category?: string } | null>(null);
   // Redirect if not authenticated
@@ -212,12 +212,12 @@ export default function Profile() {
       checkSubscription();
     } else if (searchParams.get('canceled') === 'true') {
       toast.info('Checkout canceled');
-    } else if (searchParams.get('days_added') === 'true') {
-      toast.success('Days added to your balance!');
+    } else if (searchParams.get('credits_added') === 'true') {
+      toast.success('Credits added to your balance!');
       setActiveTab('subscription');
-      refetchDayBalance();
+      refetchCredits();
     }
-  }, [searchParams, refetchDayBalance]);
+  }, [searchParams, refetchCredits]);
 
   // Check subscription status
   const checkSubscription = async () => {
@@ -946,8 +946,8 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Day Balance Card */}
-            <DayBalanceCard onBuyDays={() => navigate(ROUTES.PRICING)} />
+            {/* Credit Balance Card */}
+            <CreditBalanceCard onBuyCredits={() => navigate(ROUTES.PRICING)} />
 
             {/* Quick Add Credits */}
             <div className="relative">
