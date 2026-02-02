@@ -18,6 +18,16 @@ export const CREDIT_COSTS = {
 
 // Credit Packs - Stripe Products
 export const STRIPE_PRODUCTS = {
+  // Top-Up (convenience pack)
+  CREDITS_50: {
+    productId: 'prod_TuLUpxk0w1BUys',
+    priceId: 'price_1SwWnkFYxIg9jcJUk8440bf7',
+    name: 'Top-Up',
+    credits: 50,
+    price: 5,
+    description: 'Quick top-up for swaps & AI',
+    mode: 'payment' as const,
+  },
   // Credit Packs
   CREDITS_200: {
     productId: 'prod_TuL4pcyakcLNzu',
@@ -76,7 +86,14 @@ export const FREE_TIER = {
   referralBonus: 200,            // 200 credits per referral
 } as const;
 
-// Credit Pack Definitions for Display
+// Top-Up Pack (for insufficient credits prompts)
+export const TOPUP_PACK = {
+  id: 'topup' as const,
+  ...STRIPE_PRODUCTS.CREDITS_50,
+  perCredit: (5 / 50).toFixed(3), // $0.10
+} as const;
+
+// Credit Pack Definitions for Display (main packs, excludes top-up)
 export const CREDIT_PACKS = [
   {
     id: 'single' as const,
@@ -102,6 +119,12 @@ export const CREDIT_PACKS = [
     perCredit: (89 / 2500).toFixed(3), // ~$0.036
     featured: false,
   },
+] as const;
+
+// All packs including top-up (for full display)
+export const ALL_CREDIT_PACKS = [
+  TOPUP_PACK,
+  ...CREDIT_PACKS,
 ] as const;
 
 // Trip cost examples (for pricing page)
