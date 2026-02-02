@@ -61,12 +61,12 @@ export const CREDIT_COSTS = {
   SWAP_ACTIVITY: 1,        // 1 credit to swap an activity
 } as const;
 
-// Free tier limits - 5 itineraries/month, Day 1 only, 3 regenerates
+// Free tier limits - 5 itineraries/month, Day 1 only, 3 swaps, 1 regenerate
 export const FREE_TIER_LIMITS = {
   maxVisibleDays: 1,           // Can only see Day 1 of itinerary
   maxItinerariesPerMonth: 5,   // 5 itineraries per month
-  maxActivitySwaps: 3,         // Can only swap 3 activities total
-  maxRegenerates: 3,           // 3 regenerates per trip
+  maxActivitySwaps: 3,         // Can swap 3 activities per month
+  maxRegenerates: 1,           // 1 regenerate per month
   canRegenerateDay: true,      // Can regenerate (up to limit)
   canBuildFullTrip: true,      // Can build trips (to see Day 1)
   canExport: false,
@@ -79,19 +79,19 @@ export const PLAN_FEATURES = {
     id: 'free',
     name: 'Free',
     headline: 'Discover your Travel DNA.',
-    subheadline: 'Build up to 5 itineraries per month, preview Day 1, and get 3 regenerates to refine your trip.',
+    subheadline: 'Build up to 5 arrival-day previews per month. See Day 1 of your trip—unlock the rest when ready.',
     bestFor: 'Exploring what personalized travel planning feels like.',
     price: 0,
     priceDetail: 'forever',
     features: [
       'Travel DNA quiz & archetype',
-      '5 itineraries per month',
-      'View Day 1 of each trip',
-      '3 activity swaps per trip',
-      '3 regenerates per trip',
+      '5 itineraries per month (Day 1 only)',
+      'Preview your arrival day',
+      '3 activity swaps per month',
+      '1 day regenerate per month',
     ],
     notIncluded: [
-      'View Days 2+ (requires upgrade)',
+      'Days 2+ (blurred until upgrade)',
       'Unlimited swaps & regenerates',
       'Export / print',
       'Collaboration',
@@ -340,10 +340,10 @@ export const COMPARISON_TABLE = {
   headers: ['Feature', 'Free', 'Trip Pass', '5 Credits', '10 Credits'],
   rows: [
     { feature: 'Travel DNA Quiz', free: '✓', tripPass: '✓', credits5: '✓', credits10: '✓' },
-    { feature: 'Itineraries/Month', free: '5 (Day 1 only)', tripPass: '1 trip', credits5: '5 trips', credits10: '10 trips' },
-    { feature: 'View All Days', free: 'Day 1 only', tripPass: 'All days', credits5: 'All days', credits10: 'All days' },
-    { feature: 'Activity Swaps', free: '3/trip', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
-    { feature: 'Regenerate Days', free: '3/month', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
+    { feature: 'Itineraries/Month', free: '5 (Day 1 only)', tripPass: '1 full trip', credits5: '5 full trips', credits10: '10 full trips' },
+    { feature: 'Days Visible', free: 'Day 1 only', tripPass: 'All days', credits5: 'All days', credits10: 'All days' },
+    { feature: 'Activity Swaps', free: '3/month', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
+    { feature: 'Regenerate Days', free: '1/month', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
     { feature: 'Export (PDF)', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
     { feature: 'Route Optimization', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
   ],

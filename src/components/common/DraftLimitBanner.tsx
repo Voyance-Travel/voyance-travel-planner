@@ -96,7 +96,7 @@ export function DraftLimitBanner({ className = '', compact = false }: DraftLimit
           </p>
           <p className="text-sm text-muted-foreground">
             {message}
-            {isFreeUser && !isAtLimit && ' · Day 1 only, 3 regenerates'}
+            {isFreeUser && !isAtLimit && ' · Day 1 only, 3 swaps, 1 regenerate'}
           </p>
         </div>
       </div>
