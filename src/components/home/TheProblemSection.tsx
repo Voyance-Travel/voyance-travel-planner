@@ -12,7 +12,7 @@ export default function TheProblemSection() {
   ];
 
   return (
-    <section className="py-24 md:py-32 relative overflow-hidden">
+    <section className="py-16 sm:py-24 md:py-32 relative overflow-hidden">
       {/* Split background */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-br from-muted/50 via-muted/30 to-background" />
@@ -27,7 +27,7 @@ export default function TheProblemSection() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 md:px-16 relative z-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-16 relative z-10">
         <div className="max-w-2xl">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -46,12 +46,12 @@ export default function TheProblemSection() {
             </div>
 
             {/* Headline */}
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground mb-6 leading-tight">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground mb-4 sm:mb-6 leading-tight">
               {problem.headline}
             </h2>
 
             {/* Intro paragraph */}
-            <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-10">
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground leading-relaxed mb-8 sm:mb-10">
               You spend hours researching. Reading blogs. Watching videos. Building a spreadsheet that gets more complicated every day.
             </p>
           </motion.div>

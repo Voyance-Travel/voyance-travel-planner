@@ -32,7 +32,7 @@ const YOU_HANDLE = {
 
 export default function WhatVoyanceDoes() {
   return (
-    <section className="py-20 md:py-24 bg-background relative overflow-hidden">
+    <section className="py-14 sm:py-20 md:py-24 bg-background relative overflow-hidden">
       {/* Top curved divider */}
       <div className="absolute top-0 left-0 right-0 h-24 -translate-y-full">
         <svg viewBox="0 0 1440 96" fill="none" className="absolute bottom-0 w-full h-24" preserveAspectRatio="none">
@@ -42,27 +42,27 @@ export default function WhatVoyanceDoes() {
       
       {/* Decorative vertical line */}
       <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent hidden lg:block" />
-      <div className="max-w-5xl mx-auto px-8 md:px-16">
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 md:px-16">
         {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-16"
+          className="text-center mb-10 sm:mb-16"
         >
-          <div className="flex items-center justify-center gap-4 mb-4">
-            <div className="w-8 h-px bg-primary" />
-            <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
+          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4">
+            <div className="w-6 sm:w-8 h-px bg-primary" />
+            <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
               Clear Expectations
             </span>
-            <div className="w-8 h-px bg-primary" />
+            <div className="w-6 sm:w-8 h-px bg-primary" />
           </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground">
             What Voyance <em className="font-normal">does</em>
           </h2>
         </motion.div>
 
-        <div className="grid lg:grid-cols-2 gap-12">
+        <div className="grid lg:grid-cols-2 gap-8 sm:gap-12">
           {/* What Voyance Handles */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}

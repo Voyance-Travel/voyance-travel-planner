@@ -37,35 +37,35 @@ const STEPS = [
 
 export default function DNAHowItWorks() {
   return (
-    <section className="py-20 md:py-24 bg-muted/30 relative overflow-hidden">
+    <section className="py-14 sm:py-20 md:py-24 bg-muted/30 relative overflow-hidden">
       {/* Top curved divider */}
       <div className="absolute top-0 left-0 right-0 h-24 -translate-y-full">
         <svg viewBox="0 0 1440 96" fill="none" className="absolute bottom-0 w-full h-24" preserveAspectRatio="none">
           <path d="M0 96L1440 96L1440 0C1440 0 1080 96 720 96C360 96 0 0 0 0L0 96Z" className="fill-muted/30" />
         </svg>
       </div>
-      <div className="max-w-6xl mx-auto px-8 md:px-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 md:px-16">
         {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-16"
+          className="text-center mb-10 sm:mb-16"
         >
-          <div className="flex items-center justify-center gap-4 mb-4">
-            <div className="w-8 h-px bg-primary" />
-            <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
+          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4">
+            <div className="w-6 sm:w-8 h-px bg-primary" />
+            <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
               The Process
             </span>
-            <div className="w-8 h-px bg-primary" />
+            <div className="w-6 sm:w-8 h-px bg-primary" />
           </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground">
             How it <em className="font-normal">works</em>
           </h2>
         </motion.div>
 
         {/* Steps Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
           {STEPS.map((step, index) => (
             <motion.div
               key={step.number}

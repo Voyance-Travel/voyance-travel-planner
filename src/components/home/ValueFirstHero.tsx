@@ -31,18 +31,18 @@ export default function ValueFirstHero() {
       </div>
 
       {/* Content */}
-      <div className="relative z-10 w-full max-w-3xl mx-auto px-6 py-12">
+      <div className="relative z-10 w-full max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* Mode tabs - subtle navigation */}
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="flex justify-center gap-6 mb-16"
+          className="flex justify-center gap-3 sm:gap-6 mb-8 sm:mb-16 flex-wrap"
         >
           <button
             onClick={() => setMode('destination')}
             className={cn(
-              "pb-1 text-sm font-medium transition-all duration-300",
+              "pb-1 text-xs sm:text-sm font-medium transition-all duration-300",
               "border-b-2",
               mode === 'destination' 
                 ? "border-white text-white" 
@@ -54,7 +54,7 @@ export default function ValueFirstHero() {
           <button
             onClick={() => setMode('question')}
             className={cn(
-              "pb-1 text-sm font-medium transition-all duration-300",
+              "pb-1 text-xs sm:text-sm font-medium transition-all duration-300",
               "border-b-2",
               mode === 'question' 
                 ? "border-white text-white" 
@@ -66,7 +66,7 @@ export default function ValueFirstHero() {
           <button
             onClick={() => setMode('fix')}
             className={cn(
-              "pb-1 text-sm font-medium transition-all duration-300",
+              "pb-1 text-xs sm:text-sm font-medium transition-all duration-300",
               "border-b-2",
               mode === 'fix' 
                 ? "border-white text-white" 
@@ -115,25 +115,25 @@ export default function ValueFirstHero() {
         </AnimatePresence>
       </div>
 
-      {/* Editorial Detail - Issue marker */}
+      {/* Editorial Detail - Issue marker - hidden on mobile for cleaner look */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1, duration: 0.8 }}
-        className="absolute bottom-8 left-6 md:left-16 text-white/40 text-xs tracking-[0.2em] uppercase font-sans"
+        className="absolute bottom-6 sm:bottom-8 left-4 sm:left-6 md:left-16 text-white/40 text-[10px] sm:text-xs tracking-[0.2em] uppercase font-sans hidden sm:block"
       >
         AI-Powered Planning
       </motion.div>
 
-      {/* Scroll indicator */}
+      {/* Scroll indicator - positioned better on mobile */}
       <motion.div
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/60"
+        className="absolute bottom-4 sm:bottom-8 left-1/2 -translate-x-1/2 text-white/60"
         animate={{ y: [0, 6, 0] }}
         transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
       >
-        <div className="flex flex-col items-center gap-2">
-          <span className="text-xs tracking-wide uppercase">Scroll to learn more</span>
-          <div className="w-px h-8 bg-gradient-to-b from-white/50 to-transparent" />
+        <div className="flex flex-col items-center gap-1 sm:gap-2">
+          <span className="text-[10px] sm:text-xs tracking-wide uppercase">Scroll</span>
+          <div className="w-px h-6 sm:h-8 bg-gradient-to-b from-white/50 to-transparent" />
         </div>
       </motion.div>
     </section>

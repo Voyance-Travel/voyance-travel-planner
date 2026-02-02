@@ -16,7 +16,7 @@ export default function FooterCTASection() {
   const { footerCta } = strangerCopy.homepage;
 
   return (
-    <section className="py-24 md:py-32 bg-gradient-to-b from-muted/30 via-background to-background relative overflow-hidden">
+    <section className="py-16 sm:py-24 md:py-32 bg-gradient-to-b from-muted/30 via-background to-background relative overflow-hidden">
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -left-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
@@ -24,7 +24,7 @@ export default function FooterCTASection() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-radial from-primary/3 to-transparent rounded-full" />
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 md:px-12 relative z-10">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 md:px-12 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -34,17 +34,17 @@ export default function FooterCTASection() {
         >
 
           {/* Headline */}
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground mb-4">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground mb-3 sm:mb-4">
             {footerCta.headline}
           </h2>
 
           {/* Subheadline */}
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-12">
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 sm:mb-12">
             You're either very thorough (we respect that) or not quite sure yet (also fair).
           </p>
 
           {/* Promise Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8 sm:mb-12">
             {promises.map((promise, index) => {
               const Icon = promise.icon;
               return (
@@ -54,12 +54,12 @@ export default function FooterCTASection() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.3 + index * 0.1 }}
-                  className="group p-4 md:p-5 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/50 hover:border-primary/30 hover:bg-card transition-all"
+                  className="group p-3 sm:p-4 md:p-5 rounded-xl sm:rounded-2xl bg-card/60 backdrop-blur-sm border border-border/50 hover:border-primary/30 hover:bg-card transition-all"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-primary/20 transition-colors">
-                    <Icon className="w-5 h-5 text-primary" />
+                  <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-lg sm:rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:bg-primary/20 transition-colors">
+                    <Icon className="w-4 sm:w-5 h-4 sm:h-5 text-primary" />
                   </div>
-                  <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                  <p className="text-xs sm:text-sm text-muted-foreground group-hover:text-foreground transition-colors">
                     {promise.text}
                   </p>
                 </motion.div>
@@ -73,12 +73,12 @@ export default function FooterCTASection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.6 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center"
+            className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center"
           >
             <Button 
               asChild 
               size="lg" 
-              className="text-base px-10 py-6 font-medium shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all group"
+              className="text-sm sm:text-base px-8 sm:px-10 py-5 sm:py-6 font-medium shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all group w-full sm:w-auto"
             >
               <Link to={ROUTES.QUIZ}>
                 {footerCta.ctaPrimary}
@@ -90,7 +90,7 @@ export default function FooterCTASection() {
               asChild 
               size="lg" 
               variant="outline" 
-              className="text-base px-10 py-6 hover:bg-muted/50"
+              className="text-sm sm:text-base px-8 sm:px-10 py-5 sm:py-6 hover:bg-muted/50 w-full sm:w-auto"
             >
               <Link to={ROUTES.DEMO}>
                 {footerCta.ctaSecondary}
