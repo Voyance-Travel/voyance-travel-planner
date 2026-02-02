@@ -7,7 +7,7 @@ import { Check, ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { CREDIT_PACKS, ALL_CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
+import { CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -43,7 +43,7 @@ export default function Pricing() {
   }, [searchParams, setSearchParams, toast]);
 
   const openCheckout = async (
-    pack: typeof CREDIT_PACKS[number],
+    pack: { priceId: string; productId: string; credits: number; name: string },
     planKey: string
   ) => {
     setLoadingPlan(planKey);
@@ -129,12 +129,10 @@ export default function Pricing() {
 
       {/* Credit Packs */}
       <section className="py-16 -mt-8">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid md:grid-cols-5 gap-4">
-            {ALL_CREDIT_PACKS.map((pack, index) => {
-              const isTopup = pack.id === 'topup';
-              const isFeatured = 'featured' in pack && pack.featured;
-              
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="grid md:grid-cols-4 gap-5">
+            {CREDIT_PACKS.map((pack, index) => {
+              const isFeatured = pack.featured;
               return (
                 <motion.div
                   key={pack.id}
@@ -142,66 +140,39 @@ export default function Pricing() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05 }}
-                  className={`rounded-2xl p-5 relative ${
-                    isTopup
-                      ? 'bg-muted/50 border border-dashed border-border'
-                      : isFeatured 
-                        ? 'bg-primary/5 border-2 border-primary' 
-                        : 'bg-card border border-border'
+                  className={`rounded-2xl p-6 relative ${
+                    isFeatured 
+                      ? 'bg-primary/5 border-2 border-primary' 
+                      : 'bg-card border border-border'
                   }`}
                 >
                   {isFeatured && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px]">
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">
                       <Sparkles className="w-3 h-3 mr-1" />
-                      Popular
+                      Most Popular
                     </Badge>
                   )}
                   
-                  <div className="text-center mb-3">
-                    <h3 className={`font-bold text-foreground ${isTopup ? 'text-base' : 'text-lg'}`}>
-                      {pack.name}
-                    </h3>
-                    <div className={`font-bold text-foreground mt-1 ${isTopup ? 'text-2xl' : 'text-3xl'}`}>
-                      ${pack.price}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-center mb-4">
+                    <h3 className="text-lg font-bold text-foreground">{pack.name}</h3>
+                    <div className="text-3xl font-bold text-foreground mt-2">${pack.price}</div>
+                    <div className="text-sm text-muted-foreground mt-1">
                       {formatCredits(pack.credits)} credits
                     </div>
                   </div>
 
-                  <p className={`text-muted-foreground text-center mb-4 ${isTopup ? 'text-xs' : 'text-sm'}`}>
-                    {isTopup ? 'Quick refill for swaps and AI' : pack.description}
-                  </p>
-
                   <Button 
                     className="w-full"
-                    size={isTopup ? 'sm' : 'default'}
-                    variant={isFeatured ? 'default' : isTopup ? 'ghost' : 'outline'}
-                    onClick={() => openCheckout(pack as typeof CREDIT_PACKS[number], pack.id)}
+                    variant={isFeatured ? 'default' : 'outline'}
+                    onClick={() => openCheckout(pack, pack.id)}
                     disabled={loadingPlan === pack.id}
                   >
-                    {loadingPlan === pack.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : isTopup ? (
-                      'Quick Top-Up'
-                    ) : (
-                      'Get Started'
-                    )}
+                    {loadingPlan === pack.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Get Started'}
                   </Button>
-                  
-                  {/* Per-credit rate */}
-                  <div className="text-center mt-3 text-[10px] text-muted-foreground">
-                    ${pack.perCredit}/credit
-                  </div>
                 </motion.div>
               );
             })}
           </div>
-          
-          {/* Value hint */}
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            Bigger packs = better value. Top-up is for quick refills.
-          </p>
         </div>
       </section>
 
@@ -283,6 +254,30 @@ export default function Pricing() {
                 </Link>
               </Button>
             </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Quick Top-Up */}
+      <section className="py-12 bg-muted/30">
+        <div className="max-w-md mx-auto px-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h3 className="text-lg font-medium text-foreground mb-2">Need a quick refill?</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              50 credits for $5. Good for swaps and AI features.
+            </p>
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => openCheckout(TOPUP_PACK, 'topup')}
+              disabled={loadingPlan === 'topup'}
+            >
+              {loadingPlan === 'topup' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Quick Top-Up'}
+            </Button>
           </motion.div>
         </div>
       </section>
