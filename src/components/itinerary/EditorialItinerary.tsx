@@ -68,6 +68,9 @@ import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
 import { InlineModifier } from './InlineModifier';
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
+import { ItineraryValueHeader } from './ItineraryValueHeader';
+import { WhyWeSkippedSection } from './WhyWeSkippedSection';
+import { calculateItineraryValueStats, getDestinationSkippedItems } from '@/utils/intelligenceAnalytics';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -820,6 +823,10 @@ export function EditorialItinerary({
   
   // Determine effective editability based on permission
   const effectiveIsEditable = isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
+
+  // Calculate intelligence value stats for the itinerary
+  const skippedItems = useMemo(() => getDestinationSkippedItems(destination), [destination]);
+  const valueStats = useMemo(() => calculateItineraryValueStats(days, skippedItems), [days, skippedItems]);
 
   // Fetch 2 destination images for hero and mid-page sections
   const { heroImage, midImage, isLoading: imagesLoading } = useDestinationImages(
@@ -1847,6 +1854,19 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+            {/* Itinerary Value Header - Shows the hidden value */}
+            <ItineraryValueHeader
+              stats={valueStats}
+              destination={destination}
+              archetype={style}
+            />
+
+            {/* What We Skipped - Tourist traps avoided */}
+            <WhyWeSkippedSection
+              skippedItems={skippedItems}
+              destination={destination}
+            />
+
             {/* Flight Sync Warning - Show if flight times don't match Day 1 */}
             {flightSelection?.outbound?.arrival?.time && days[0]?.activities?.[0] && (
               <FlightSyncWarning
