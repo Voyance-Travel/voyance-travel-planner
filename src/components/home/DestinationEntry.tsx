@@ -133,7 +133,7 @@ export default function DestinationEntry() {
           animate={{ opacity: 1 }}
           className="mt-6 text-white/70"
         >
-          Building you a taste...
+          Creating your preview...
         </motion.p>
       )}
 
