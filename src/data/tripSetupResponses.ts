@@ -35,9 +35,9 @@ export const childrenAgeResponses: Record<string, string> = {
   infant: "👶 Traveling with a baby. We'll build in flexibility and find the family-friendly spots.",
   toddler: "👶 Toddler detected. Nap time is sacred. We'll build the whole day around it.",
   young: "🧒 Young kids on board. We'll keep activities short and snack breaks frequent.",
-  elementary: "🎒 School-age kids coming. We'll mix education with fun—they won't even notice they're learning.",
+  elementary: "🎒 School-age kids coming. We'll mix education with fun. They won't even notice they're learning.",
   teen: "🎮 Teens coming too. We'll include things they'll actually think are cool.",
-  mixed: "Mixed ages? We'll find experiences that work for everyone—and build in some divide-and-conquer time.",
+  mixed: "Mixed ages? We'll find experiences that work for everyone, and build in some divide-and-conquer time.",
 };
 
 export const budgetResponses: Record<string, string> = {

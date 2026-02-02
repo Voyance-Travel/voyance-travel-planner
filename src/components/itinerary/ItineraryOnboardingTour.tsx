@@ -35,7 +35,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'optimize',
     title: 'Optimize Your Route',
-    description: 'Click Optimize to intelligently reorder activities and minimize travel time between stops—typically saving ~30 minutes per day.',
+    description: 'Click Optimize to intelligently reorder activities and minimize travel time between stops, typically saving ~30 minutes per day.',
     icon: <Route className="h-5 w-5" />,
     selector: '[data-tour="optimize-button"]',
     position: 'bottom',

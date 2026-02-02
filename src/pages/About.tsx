@@ -288,7 +288,7 @@ export default function About() {
     <MainLayout>
       <Head
         title="About | Travel Designed, Not Consumed"
-        description="Voyance started because travel planning online isn't planning—it's being marketed to. We built the opposite."
+        description="Voyance started because travel planning online isn't planning. It's being marketed to. We built the opposite."
       />
       
       {/* Hero Section - Your Vision */}
@@ -396,7 +396,7 @@ export default function About() {
                   the trip would feel like.
                 </p>
                 <p className="text-foreground font-medium">
-                  I wanted a better way to plan—one that protects your vacation time, respects your budget, 
+                  I wanted a better way to plan, one that protects your vacation time, respects your budget, 
                   and actually reflects you.
                 </p>
               </div>
@@ -439,7 +439,7 @@ export default function About() {
                   </li>
                   <li className="flex items-start gap-3">
                     <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-                    <span><strong className="text-foreground">Clear reasoning</strong> behind recommendations, so you can trust the plan—not just follow it</span>
+                    <span><strong className="text-foreground">Clear reasoning</strong> behind recommendations, so you can trust the plan, not just follow it</span>
                   </li>
                 </ul>
               </div>
@@ -462,7 +462,7 @@ export default function About() {
               <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Who's Behind It</span>
               <div className="mt-8 space-y-6 text-lg leading-relaxed">
                 <p className="text-muted-foreground">
-                  Voyance is being built by a small team across engineering, AI, and design—focused on accuracy, 
+                  Voyance is being built by a small team across engineering, AI, and design, focused on accuracy, 
                   performance, and a premium experience that feels calm and intentional.
                 </p>
                 <p className="text-muted-foreground">
@@ -632,7 +632,7 @@ export default function About() {
                 </div>
                 <h3 className="font-serif text-2xl md:text-3xl font-bold mb-4">We design your time</h3>
                 <p className="text-muted-foreground leading-relaxed text-lg">
-                  Not just destinations. Not just bookings. We craft how you spend your hours abroad—
+                  Not just destinations. Not just bookings. We craft how you spend your hours abroad:
                   the flow between moments, the rhythm of your days.
                   <span className="block mt-4 text-foreground font-medium">That's the difference.</span>
                 </p>
@@ -654,7 +654,7 @@ export default function About() {
                 <h3 className="font-serif text-xl font-bold mb-2">No fake trust</h3>
                 <p className="text-muted-foreground text-sm">
                   If we don't earn trust at the beginning, we'll never deserve it later. 
-                  Honesty isn't a marketing angle—it's how we operate.
+                  Honesty isn't a marketing angle. It's how we operate.
                 </p>
               </div>
             </motion.div>

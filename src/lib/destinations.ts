@@ -250,7 +250,7 @@ export const destinations: Destination[] = [
       'Book top restaurants like Noma months in advance',
       'Tivoli is magical at night. Visit after dark',
       'Harbor swimming at Islands Brygge is free and popular',
-      'Embrace "hygge"—linger in cafés with pastries and coffee',
+      'Embrace "hygge": linger in cafés with pastries and coffee',
     ],
   },
   {
