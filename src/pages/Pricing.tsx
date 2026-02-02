@@ -3,11 +3,11 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { Check, ArrowRight, Loader2, Sparkles, Briefcase, Clock, Zap, FileText, Wallet, Route, Layers, Download, Lock, Dna, Brain, Users, Heart } from 'lucide-react';
+import { Check, ArrowRight, Loader2, Sparkles, Clock, Zap, Lock, Dna, Brain, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { PLAN_FEATURES, STRIPE_PRODUCTS, COMPARISON_TABLE } from '@/config/pricing';
+import { PLAN_FEATURES, STRIPE_PRODUCTS, PACKAGES, TIER_FEATURES, COMPARISON_TABLE, getPerDayPrice, FREE_TIER_LIMITS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -26,7 +26,7 @@ function TableCellContent({ value, highlight }: { value: string; highlight?: boo
     return <Check className={`w-4 h-4 mx-auto ${highlight ? 'text-primary' : 'text-green-600'}`} />;
   }
   if (value === '-') {
-    return <span className="text-muted-foreground/50">-</span>;
+    return <span className="text-muted-foreground/50">—</span>;
   }
   return <span className={highlight ? 'text-foreground font-medium' : 'text-muted-foreground'}>{value}</span>;
 }
@@ -40,7 +40,7 @@ export default function Pricing() {
 
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      toast({ title: "Purchase complete!", description: "Your plan is now active." });
+      toast({ title: "Purchase complete!", description: "Your days have been added to your account." });
       searchParams.delete('success');
       setSearchParams(searchParams);
     }
@@ -70,10 +70,10 @@ export default function Pricing() {
 
   return (
     <MainLayout>
-      <Head title="Pricing | Voyance" description="Travel DNA personalization. Pay only for the trips you take." />
+      <Head title="Pricing | Voyance" description="Simple, flexible pricing. Pay for what you need. Days never expire." />
       
       {/* Hero */}
-      <section className="relative min-h-[50vh] flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-[45vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <img 
             src={pricingHero} 
@@ -98,7 +98,7 @@ export default function Pricing() {
             transition={{ delay: 0.1 }}
             className="text-3xl md:text-5xl font-serif font-bold text-foreground mb-4"
           >
-            Itineraries Built Around <span className="text-primary italic">You</span>
+            Simple, flexible pricing.
           </motion.h1>
           <motion.p
             initial={{ opacity: 0 }}
@@ -106,13 +106,262 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="text-muted-foreground text-lg max-w-xl mx-auto"
           >
-            Your Travel DNA shapes every recommendation. Preview Day 1 free, then unlock your complete personalized trip.
+            Pay for what you need. Days never expire.
           </motion.p>
         </div>
       </section>
 
-      {/* Why Personalization Matters */}
-      <section className="py-12 -mt-8 mb-8">
+      {/* Add Days Section */}
+      <section className="py-12 -mt-8">
+        <div className="max-w-4xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-8"
+          >
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-2">Add Days</h2>
+            <p className="text-muted-foreground">Perfect for quick trips</p>
+          </motion.div>
+
+          <div className="flex justify-center gap-6 flex-wrap">
+            {/* 1 Day */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-card rounded-2xl border border-border p-6 w-48 text-center"
+            >
+              <h3 className="text-xl font-bold text-foreground mb-2">1 Day</h3>
+              <div className="text-3xl font-bold text-foreground mb-4">${STRIPE_PRODUCTS.DAY_1.price}</div>
+              <Button 
+                variant="outline"
+                className="w-full"
+                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_1.priceId, 'payment', 'day_1', '1 Day')}
+                disabled={loadingPlan === 'day_1'}
+              >
+                {loadingPlan === 'day_1' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add Day'}
+              </Button>
+            </motion.div>
+
+            {/* 2 Days */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.05 }}
+              className="bg-card rounded-2xl border border-border p-6 w-48 text-center relative"
+            >
+              <Badge variant="secondary" className="absolute -top-2 left-1/2 -translate-x-1/2 text-xs">
+                Save $2
+              </Badge>
+              <h3 className="text-xl font-bold text-foreground mb-2 mt-1">2 Days</h3>
+              <div className="text-3xl font-bold text-foreground mb-4">${STRIPE_PRODUCTS.DAY_2.price}</div>
+              <Button 
+                variant="outline"
+                className="w-full"
+                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_2.priceId, 'payment', 'day_2', '2 Days')}
+                disabled={loadingPlan === 'day_2'}
+              >
+                {loadingPlan === 'day_2' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add 2'}
+              </Button>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Packages Section */}
+      <section className="py-16 bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-2">Packages</h2>
+            <p className="text-muted-foreground">Best value for full trips</p>
+          </motion.div>
+
+          {/* Package Grid */}
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-3 gap-4 min-w-[700px]">
+              {/* Header Row */}
+              <div className="text-center py-4">
+                <h3 className="font-bold text-foreground text-lg">Escape</h3>
+                <p className="text-muted-foreground text-sm">3 days</p>
+              </div>
+              <div className="text-center py-4">
+                <h3 className="font-bold text-foreground text-lg">Week</h3>
+                <p className="text-muted-foreground text-sm">7 days</p>
+              </div>
+              <div className="text-center py-4">
+                <h3 className="font-bold text-foreground text-lg">Extended</h3>
+                <p className="text-muted-foreground text-sm">12 days</p>
+              </div>
+
+              {/* Essential Row */}
+              {[
+                { pkg: PACKAGES.ESCAPE, product: STRIPE_PRODUCTS.ESCAPE_ESSENTIAL, key: 'escape_essential' },
+                { pkg: PACKAGES.WEEK, product: STRIPE_PRODUCTS.WEEK_ESSENTIAL, key: 'week_essential' },
+                { pkg: PACKAGES.EXTENDED, product: STRIPE_PRODUCTS.EXTENDED_ESSENTIAL, key: 'extended_essential' },
+              ].map(({ pkg, product, key }) => (
+                <motion.div
+                  key={key}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className="bg-card rounded-xl border border-border p-5"
+                >
+                  <div className="text-center mb-4">
+                    <span className="text-sm font-medium text-muted-foreground">Essential</span>
+                    <div className="text-2xl font-bold text-foreground">${product.price}</div>
+                    <div className="text-xs text-muted-foreground">${getPerDayPrice(product.price, product.days)}/day</div>
+                  </div>
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => openCheckout(product.priceId, 'payment', key, product.name)}
+                    disabled={loadingPlan === key}
+                  >
+                    {loadingPlan === key ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Get'}
+                  </Button>
+                </motion.div>
+              ))}
+
+              {/* Complete Row */}
+              {[
+                { pkg: PACKAGES.ESCAPE, product: STRIPE_PRODUCTS.ESCAPE_COMPLETE, key: 'escape_complete' },
+                { pkg: PACKAGES.WEEK, product: STRIPE_PRODUCTS.WEEK_COMPLETE, key: 'week_complete', featured: true },
+                { pkg: PACKAGES.EXTENDED, product: STRIPE_PRODUCTS.EXTENDED_COMPLETE, key: 'extended_complete' },
+              ].map(({ pkg, product, key, featured }) => (
+                <motion.div
+                  key={key}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className={`rounded-xl p-5 relative ${featured ? 'bg-primary/5 border-2 border-primary' : 'bg-card border border-border'}`}
+                >
+                  {featured && (
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Recommended
+                    </Badge>
+                  )}
+                  <div className="text-center mb-4">
+                    <span className={`text-sm font-medium ${featured ? 'text-primary' : 'text-muted-foreground'}`}>Complete ✨</span>
+                    <div className="text-2xl font-bold text-foreground">${product.price}</div>
+                    <div className="text-xs text-muted-foreground">${getPerDayPrice(product.price, product.days)}/day</div>
+                  </div>
+                  <Button 
+                    className="w-full"
+                    variant={featured ? 'default' : 'outline'}
+                    onClick={() => openCheckout(product.priceId, 'payment', key, product.name)}
+                    disabled={loadingPlan === key}
+                  >
+                    {loadingPlan === key ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Get'}
+                  </Button>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* What's Included */}
+      <section className="py-16">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">What's Included</h2>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="overflow-x-auto rounded-xl border border-border bg-card"
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="text-left py-4 px-5 font-medium text-muted-foreground">Feature</th>
+                  <th className="text-center py-4 px-4 font-semibold text-foreground">Essential</th>
+                  <th className="text-center py-4 px-4 font-semibold text-primary-foreground bg-primary">Complete</th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON_TABLE.rows.filter(row => row.feature !== 'Travel DNA Quiz').map((row, i) => (
+                  <tr key={row.feature} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}`}>
+                    <td className="py-3.5 px-5 text-foreground font-medium">{row.feature}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <TableCellContent value={row.essential} />
+                    </td>
+                    <td className="py-3.5 px-4 text-center bg-primary/5">
+                      <TableCellContent value={row.complete} highlight />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Free Tier */}
+      <section className="py-16 bg-muted/30">
+        <div className="max-w-3xl mx-auto px-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h2 className="text-2xl font-serif font-bold text-foreground mb-4">Free</h2>
+            <p className="text-muted-foreground mb-8">Always free to start</p>
+
+            <div className="bg-card rounded-2xl border border-border p-8 text-left max-w-lg mx-auto">
+              <ul className="space-y-3 mb-6">
+                <li className="flex items-center gap-3">
+                  <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span>1 free day every month (accumulates up to {FREE_TIER_LIMITS.maxBankedDays})</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span>{FREE_TIER_LIMITS.maxActivitySwaps} activity swaps per month</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span>{FREE_TIER_LIMITS.maxRegenerates} day regenerate per month</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span>Full Travel DNA quiz</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span>Trip previews</span>
+                </li>
+              </ul>
+              <div className="text-sm text-muted-foreground border-t border-border pt-4 space-y-1">
+                <p>• Free days expire after {FREE_TIER_LIMITS.freeExpirationMonths} months</p>
+                <p>• Purchased days never expire</p>
+              </div>
+              <Button asChild variant="outline" className="w-full mt-6">
+                <Link to={ROUTES.QUIZ}>
+                  Start Free <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Why DNA Matters */}
+      <section className="py-12">
         <div className="max-w-4xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -145,7 +394,7 @@ export default function Pricing() {
                 </div>
                 <h3 className="font-medium text-foreground mb-1 group-hover:text-primary transition-colors">27 Archetypes</h3>
                 <p className="text-sm text-muted-foreground">
-                  From "Slow Traveler" to "Adrenaline Chaser" - we find your match
+                  From "Slow Traveler" to "Adrenaline Chaser"
                 </p>
                 <span className="text-xs text-primary mt-2 inline-block opacity-0 group-hover:opacity-100 transition-opacity">
                   See all archetypes →
@@ -157,449 +406,13 @@ export default function Pricing() {
                 </div>
                 <h3 className="font-medium text-foreground mb-1">Every Activity Fits</h3>
                 <p className="text-sm text-muted-foreground">
-                  Dining, activities, and timing tailored to your preferences
-                </p>
-              </div>
-            </div>
-
-            {/* Feature Gating Callout */}
-            <div className="mt-8 pt-6 border-t border-primary/10">
-              <div className="flex items-center justify-center gap-3 text-center">
-                <Lock className="w-5 h-5 text-muted-foreground" />
-                <p className="text-foreground">
-                  <span className="font-medium">Free users see Day 1 only.</span>{' '}
-                  <span className="text-muted-foreground">Upgrade to see your full itinerary - every day matched to </span>
-                  <span className="text-primary font-medium italic">your</span>
-                  <span className="text-muted-foreground"> Travel DNA.</span>
+                  Dining, activities, and timing tailored to you
                 </p>
               </div>
             </div>
           </motion.div>
         </div>
       </section>
-
-      {/* Main Pricing Cards */}
-      <section className="py-16 -mt-8">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            
-            {/* Free */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} 
-              whileInView={{ opacity: 1, y: 0 }} 
-              viewport={{ once: true }}
-              className="bg-card rounded-2xl border border-border p-6 flex flex-col"
-            >
-              <div className="mb-4">
-                <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.FREE.name}</h3>
-                <p className="text-sm text-primary font-medium mt-1">{PLAN_FEATURES.FREE.headline}</p>
-              </div>
-              <div className="mb-4">
-                <span className="text-3xl font-bold text-foreground">$0</span>
-                <span className="text-muted-foreground text-sm ml-1">forever</span>
-              </div>
-              
-              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
-                {PLAN_FEATURES.FREE.subheadline}
-              </p>
-              
-              <ul className="space-y-2 mb-4 flex-1">
-                {PLAN_FEATURES.FREE.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                    <span className="text-foreground">{f}</span>
-                  </li>
-                ))}
-              </ul>
-
-              {PLAN_FEATURES.FREE.notIncluded && (
-                <ul className="space-y-2 mb-6">
-                  {PLAN_FEATURES.FREE.notIncluded.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <Lock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              
-              <Button asChild variant="outline" className="w-full mt-auto">
-                <Link to={ROUTES.QUIZ}>
-                  Start Free <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </motion.div>
-
-            {/* Trip Pass - Featured */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} 
-              whileInView={{ opacity: 1, y: 0 }} 
-              viewport={{ once: true }}
-              transition={{ delay: 0.05 }}
-              className="bg-card rounded-2xl border-2 border-primary p-6 flex flex-col relative"
-            >
-              <div className="absolute -top-3 left-6">
-                <Badge className="bg-primary text-primary-foreground">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  Best for One Trip
-                </Badge>
-              </div>
-              
-              <div className="mb-4 mt-2">
-                <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.TRIP_PASS.name}</h3>
-                <p className="text-sm text-primary font-medium mt-1">{PLAN_FEATURES.TRIP_PASS.headline}</p>
-              </div>
-              <div className="mb-4">
-                <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.TRIP_PASS.price}</span>
-                <span className="text-muted-foreground text-sm ml-1">one-time</span>
-              </div>
-              
-              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
-                {PLAN_FEATURES.TRIP_PASS.subheadline}
-              </p>
-              
-              <ul className="space-y-2 mb-6 flex-1">
-                {PLAN_FEATURES.TRIP_PASS.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                    <span className="text-foreground">{f}</span>
-                  </li>
-                ))}
-              </ul>
-              
-              <Button 
-                className="w-full mt-auto" 
-                onClick={() => openCheckout(STRIPE_PRODUCTS.TRIP_PASS.priceId, 'payment', 'trip_pass', 'Trip Pass')} 
-                disabled={loadingPlan === 'trip_pass'}
-              >
-                {loadingPlan === 'trip_pass' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Unlock Trip - ${STRIPE_PRODUCTS.TRIP_PASS.price}</>}
-              </Button>
-            </motion.div>
-
-            {/* 5 Credits */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} 
-              whileInView={{ opacity: 1, y: 0 }} 
-              viewport={{ once: true }}
-              transition={{ delay: 0.1 }}
-              className="bg-card rounded-2xl border border-border p-6 flex flex-col"
-            >
-              <div className="mb-4">
-                <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.CREDITS_5.name}</h3>
-                <p className="text-sm text-primary font-medium mt-1">{PLAN_FEATURES.CREDITS_5.headline}</p>
-              </div>
-              <div className="mb-4">
-                <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.CREDITS_5.price}</span>
-                <span className="text-muted-foreground text-sm ml-1">one-time</span>
-              </div>
-              
-              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
-                {PLAN_FEATURES.CREDITS_5.subheadline}
-              </p>
-              
-              <ul className="space-y-2 mb-6 flex-1">
-                {PLAN_FEATURES.CREDITS_5.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                    <span className="text-foreground">{f}</span>
-                  </li>
-                ))}
-              </ul>
-              
-              <Button 
-                variant="outline"
-                className="w-full mt-auto" 
-                onClick={() => openCheckout(STRIPE_PRODUCTS.CREDITS_5.priceId, 'payment', 'credits_5', '5 Credits')} 
-                disabled={loadingPlan === 'credits_5'}
-              >
-                {loadingPlan === 'credits_5' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Buy 5 Credits</>}
-              </Button>
-            </motion.div>
-
-            {/* 10 Credits */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} 
-              whileInView={{ opacity: 1, y: 0 }} 
-              viewport={{ once: true }}
-              transition={{ delay: 0.15 }}
-              className="bg-card rounded-2xl border border-border p-6 flex flex-col relative"
-            >
-              <div className="absolute -top-3 left-6">
-                <Badge variant="secondary">Save ~15%</Badge>
-              </div>
-              
-              <div className="mb-4 mt-2">
-                <h3 className="text-xl font-serif font-bold text-foreground">{PLAN_FEATURES.CREDITS_10.name}</h3>
-                <p className="text-sm text-primary font-medium mt-1">{PLAN_FEATURES.CREDITS_10.headline}</p>
-              </div>
-              <div className="mb-4">
-                <span className="text-3xl font-bold text-foreground">${STRIPE_PRODUCTS.CREDITS_10.price}</span>
-                <span className="text-muted-foreground text-sm ml-1">one-time</span>
-              </div>
-              
-              <p className="text-muted-foreground text-sm mb-4 pb-4 border-b border-border">
-                {PLAN_FEATURES.CREDITS_10.subheadline}
-              </p>
-              
-              <ul className="space-y-2 mb-6 flex-1">
-                {PLAN_FEATURES.CREDITS_10.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
-                    <span className="text-foreground">{f}</span>
-                  </li>
-                ))}
-              </ul>
-              
-              <Button 
-                variant="outline"
-                className="w-full mt-auto" 
-                onClick={() => openCheckout(STRIPE_PRODUCTS.CREDITS_10.priceId, 'payment', 'credits_10', '10 Credits')} 
-                disabled={loadingPlan === 'credits_10'}
-              >
-                {loadingPlan === 'credits_10' ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Buy 10 Credits</>}
-              </Button>
-            </motion.div>
-          </div>
-
-          {/* Credits never expire callout */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="text-center mt-8"
-          >
-            <div className="inline-flex items-center gap-3 px-6 py-4 bg-primary/10 border border-primary/20 rounded-xl">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <span className="text-lg font-medium text-foreground">Credits never expire.</span>
-              <span className="text-muted-foreground">Use them whenever you're ready.</span>
-            </div>
-          </motion.div>
-
-          {/* Credit explanation */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="text-center mt-6 p-6 bg-muted/30 rounded-xl"
-          >
-            <h3 className="font-medium text-foreground mb-2">How Credits Work</h3>
-            <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-              1 credit = Build a full DNA-personalized trip, regenerate a day with fresh recommendations, or swap an activity. 
-              Use them across any trip, anytime. Your Travel DNA ensures every action is tailored to you.
-            </p>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* What's Included Breakdown */}
-      <section className="py-16 bg-muted/30">
-        <div className="max-w-5xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-10"
-          >
-            <h2 className="text-2xl font-serif font-bold text-foreground mb-3">
-              What You Get
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              Every plan includes Travel DNA personalization. Here's what each tier unlocks.
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-4 gap-6">
-            {/* Free breakdown */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-card rounded-xl border border-border p-5"
-            >
-              <h3 className="font-bold text-foreground mb-1">Free</h3>
-              <p className="text-2xl font-bold text-foreground mb-4">$0</p>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Travel DNA quiz & archetype</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Build personalized itineraries</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>View Day 1 only</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>3 activity swaps</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Lock className="w-4 h-4 flex-shrink-0" />
-                  <span>No export or sharing</span>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Trip Pass breakdown */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.05 }}
-              className="bg-card rounded-xl border-2 border-primary p-5"
-            >
-              <h3 className="font-bold text-foreground mb-1">Trip Pass</h3>
-              <p className="text-2xl font-bold text-foreground mb-4">$24.99 <span className="text-sm font-normal text-muted-foreground">one-time</span></p>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>All days visible</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Unlimited swaps</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Regenerate any day</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Export to PDF</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Share with companions</span>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* 5 Credits breakdown */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.1 }}
-              className="bg-card rounded-xl border border-border p-5"
-            >
-              <h3 className="font-bold text-foreground mb-1">5 Credits</h3>
-              <p className="text-2xl font-bold text-foreground mb-4">$79 <span className="text-sm font-normal text-muted-foreground">one-time</span></p>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>5 flexible credits</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Use across any trip</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Build, swap, or regenerate</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Export & share included</span>
-                </div>
-                <div className="flex items-center gap-2 font-medium text-primary">
-                  <Sparkles className="w-4 h-4 flex-shrink-0" />
-                  <span>Never expire</span>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* 10 Credits breakdown */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.15 }}
-              className="bg-card rounded-xl border border-border p-5"
-            >
-              <h3 className="font-bold text-foreground mb-1">10 Credits</h3>
-              <p className="text-2xl font-bold text-foreground mb-4">$149 <span className="text-sm font-normal text-muted-foreground">one-time</span></p>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>10 flexible credits</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>~15% savings</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Build, swap, or regenerate</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Export & share included</span>
-                </div>
-                <div className="flex items-center gap-2 font-medium text-primary">
-                  <Sparkles className="w-4 h-4 flex-shrink-0" />
-                  <span>Never expire</span>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-
-      {/* Comparison Table */}
-      <section className="py-16">
-        <div className="max-w-4xl mx-auto px-4">
-          <motion.h2
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="text-2xl font-serif font-bold text-foreground text-center mb-8"
-          >
-            Compare Plans
-          </motion.h2>
-
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="overflow-x-auto rounded-xl border border-border bg-card"
-          >
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="text-left py-4 px-5 font-medium text-muted-foreground">Feature</th>
-                  <th className="text-center py-4 px-3 font-semibold text-foreground">Free</th>
-                  <th className="text-center py-4 px-3 font-semibold text-primary-foreground bg-primary">Trip Pass</th>
-                  <th className="text-center py-4 px-3 font-semibold text-foreground">5 Credits</th>
-                  <th className="text-center py-4 px-3 font-semibold text-foreground">10 Credits</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON_TABLE.rows.map((row, i) => (
-                  <tr key={row.feature} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}`}>
-                    <td className="py-3.5 px-5 text-foreground font-medium">{row.feature}</td>
-                    <td className="py-3.5 px-3 text-center">
-                      <TableCellContent value={row.free} />
-                    </td>
-                    <td className="py-3.5 px-3 text-center bg-primary/5">
-                      <TableCellContent value={row.tripPass} highlight />
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <TableCellContent value={row.credits5} />
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <TableCellContent value={row.credits10} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </motion.div>
-        </div>
-      </section>
-
 
       {/* FAQ */}
       <section className="py-16 border-t border-border">
@@ -621,15 +434,19 @@ export default function Pricing() {
               },
               { 
                 q: 'What can I do for free?', 
-                a: 'Take the Travel DNA quiz, discover your archetype, and build a fully personalized itinerary. You can see Day 1 completely free and swap up to 3 activities to try our AI-powered refinements.' 
+                a: 'Take the Travel DNA quiz, discover your archetype, and build a fully personalized itinerary. You get 1 free day per month (accumulates up to 5) plus 3 activity swaps and 1 day regenerate each month.' 
               },
               { 
-                q: 'What does a Trip Pass unlock?', 
-                a: 'Full access to your complete personalized trip: all days visible, unlimited AI-powered activity swaps, day regeneration, PDF export, and sharing with travel companions. It\'s everything you need for one trip.' 
+                q: "What's the difference between Essential and Complete?", 
+                a: 'Essential gives you full access to your itinerary with 5 swaps and 2 regenerates. Complete adds unlimited modifications plus premium features: route optimization, AI trip companion, restaurant recommendations, and real-time trip mode.' 
               },
               { 
-                q: 'How do credits work?', 
-                a: 'Credits are flexible tokens that work across any trip. 1 credit = build a full personalized trip, regenerate a day with new recommendations, or swap an activity. Credits never expire, so you can use them whenever you\'re ready.' 
+                q: 'Do days expire?', 
+                a: 'Purchased days never expire. Free days (earned monthly) expire after 6 months if unused.' 
+              },
+              { 
+                q: 'What if my trip is longer than my package?', 
+                a: 'You can add individual days at $9/day or $16 for 2 days. Or upgrade to a larger package — we\'ll credit what you\'ve already spent.' 
               },
               { 
                 q: 'Does my Travel DNA improve over time?', 
