@@ -191,7 +191,7 @@ export default function Archetypes() {
             
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Everyone travels differently. Discover which of our 27 traveler personalities 
-              captures how <em>you</em> explore—and unlock trips designed around it.
+              captures how <em>you</em> explore - and unlock trips designed around it.
             </p>
           </motion.div>
 

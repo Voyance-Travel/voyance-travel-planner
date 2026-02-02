@@ -318,7 +318,7 @@ export default function About() {
               not consumed.
             </h1>
             <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
-              Voyance started because travel planning online isn't planning—it's being marketed to. 
+              Voyance started because travel planning online isn't planning. It's being marketed to. 
               Endless lists. Sponsored content. 40 tabs of noise.
             </p>
             <p className="text-xl text-foreground font-medium mt-6 max-w-2xl">
@@ -467,17 +467,17 @@ export default function About() {
                 </p>
                 <p className="text-muted-foreground">
                   We're also early. We won't pretend we're bigger than we are. We're building this carefully, 
-                  and we want early users who care about doing travel smarter—not louder.
+                  and we want early users who care about doing travel smarter, not louder.
                 </p>
                 <p className="text-foreground font-medium">
-                  If you're joining now, you're joining at the ground floor—and your feedback will shape 
+                  If you're joining now, you're joining at the ground floor. Your feedback will shape 
                   what Voyance becomes.
                 </p>
               </div>
               
               {/* Signature */}
               <div className="mt-12 pt-8 border-t border-border/50">
-                <p className="text-foreground font-serif text-xl">— The Voyance Team</p>
+                <p className="text-foreground font-serif text-xl">The Voyance Team</p>
               </div>
             </motion.div>
           </div>

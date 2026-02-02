@@ -35,7 +35,7 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
 
   adrenaline_architect: {
     descriptionPrefix: {
-      cultural: "Quick stop—it's iconic, worth seeing, won't take long.",
+      cultural: "Quick stop. It's iconic, worth seeing, won't take long.",
       dining: "Fuel up. You'll need the energy.",
       sightseeing: "The real adventure starts after.",
       adventure: "This is what you came for. Full send.",
@@ -58,7 +58,7 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
       sightseeing: "The neighborhood has excellent food options too.",
       shopping: "Check out the food stalls and local markets here.",
       nature: "Pack a picnic. The setting makes everything taste better.",
-      entertainment: "Save room—there's good eating nearby.",
+      entertainment: "Save room. There's good eating nearby.",
     },
     paceNotes: {
       morning: "Markets are best early. Get there before the crowds.",
@@ -74,7 +74,7 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
       cultural: "This is where you'll understand what makes this place tick.",
       dining: "Eat what the locals eat. Food tells the story.",
       sightseeing: "Look past the surface. The real story is in the details.",
-      shopping: "Local artisans, traditional crafts—this is the authentic stuff.",
+      shopping: "Local artisans, traditional crafts. This is the authentic stuff.",
       nature: "This landscape shaped the culture. See how.",
       entertainment: "Local performance, local story. This is the real thing.",
     },
@@ -97,7 +97,7 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
       entertainment: "Premium seats, VIP treatment. As it should be.",
     },
     paceNotes: {
-      morning: "Late start—you've earned it. Breakfast in bed.",
+      morning: "Late start. You've earned it. Breakfast in bed.",
       afternoon: "Time for a spa treatment or pool time.",
       evening: "The evening is curated. Every detail considered.",
     },
@@ -161,7 +161,7 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
 
   family_architect: {
     descriptionPrefix: {
-      cultural: "Interactive and engaging—kids will love this too.",
+      cultural: "Interactive and engaging. Kids will love this too.",
       dining: "Family-friendly with something for everyone.",
       sightseeing: "Perfect for all ages. Bring the camera.",
       adventure: "Safe but exciting. Great for the whole crew.",

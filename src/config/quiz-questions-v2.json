@@ -25,7 +25,7 @@
         },
         {
           "id": "a2",
-          "label": "Are already dressed—you were up before your alarm",
+          "label": "Are already dressed. You were up before your alarm",
           "mappings": [
             { "trait": "adventureChaser", "weight": 0.9 },
             { "trait": "energySeeker", "weight": 0.7 },
@@ -208,7 +208,7 @@
         },
         {
           "id": "d2",
-          "label": "Push through—I'll sleep when I'm dead.",
+          "label": "Push through. I'll sleep when I'm dead.",
           "mappings": [
             { "trait": "energySeeker", "weight": 0.9 },
             { "trait": "adventureChaser", "weight": 0.75 },
@@ -312,7 +312,7 @@
       "answers": [
         {
           "id": "f1",
-          "label": "I'm in. Group trips are the best—shared chaos, inside jokes, someone else handles logistics.",
+          "label": "I'm in. Group trips are the best. Shared chaos, inside jokes, someone else handles logistics.",
           "mappings": [
             { "trait": "socialConnector", "weight": 0.95 },
             { "trait": "groupTraveler", "weight": 0.9 },
@@ -438,7 +438,7 @@
     },
     {
       "id": "q8",
-      "prompt": "You're booking a place to stay. Be honest—what actually matters most to you?",
+      "prompt": "You're booking a place to stay. Be honest. What actually matters most to you?",
       "type": "single",
       "feedback": {
         "h1": "Time is the real currency.",
@@ -623,7 +623,7 @@
         },
         {
           "id": "j3",
-          "label": "I want to see things before they're gone—or before I am. Time is short.",
+          "label": "I want to see things before they're gone, or before I am. Time is short.",
           "mappings": [
             { "trait": "bucketListDriven", "weight": 0.95 },
             { "trait": "urgencyTraveler", "weight": 0.9 },
@@ -956,7 +956,7 @@
       "answers": [
         {
           "id": "o1",
-          "label": "I recharge in solitude—other travelers drain me",
+          "label": "I recharge in solitude. Other travelers drain me",
           "mappings": [
             { "trait": "solitudeEmbracer", "weight": 0.95 },
             { "trait": "independentTraveler", "weight": 0.9 },
@@ -967,7 +967,7 @@
         },
         {
           "id": "o2",
-          "label": "Small, meaningful connections are enough—I prefer depth over breadth",
+          "label": "Small, meaningful connections are enough. I prefer depth over breadth",
           "mappings": [
             { "trait": "depthOverBreadth", "weight": 0.85 },
             { "trait": "connectionSeeker", "weight": 0.7 },
@@ -978,7 +978,7 @@
         },
         {
           "id": "o3",
-          "label": "I enjoy casual connections—hostel chats, tour group banter",
+          "label": "I enjoy casual connections. Hostel chats, tour group banter",
           "mappings": [
             { "trait": "socialConnector", "weight": 0.75 },
             { "trait": "flexibilityEmbracer", "weight": 0.6 },
@@ -989,7 +989,7 @@
         },
         {
           "id": "o4",
-          "label": "The more the merrier—I love meeting everyone",
+          "label": "The more the merrier. I love meeting everyone",
           "mappings": [
             { "trait": "socialConnector", "weight": 0.95 },
             { "trait": "energySeeker", "weight": 0.7 },
@@ -1071,7 +1071,7 @@
     },
     {
       "id": "q17",
-      "prompt": "Have you ever traveled somewhere specifically for how it might change you internally—not what you'd see, but who you'd become?",
+      "prompt": "Have you ever traveled somewhere specifically for how it might change you internally? Not what you'd see, but who you'd become?",
       "type": "single",
       "feedback": {
         "q1": "Travel as transformation.",
@@ -1104,7 +1104,7 @@
         },
         {
           "id": "q3",
-          "label": "I travel to experience, not to transform. I'm not looking for meaning—I'm looking for good times.",
+          "label": "I travel to experience, not to transform. I'm not looking for meaning. I'm looking for good times.",
           "mappings": [
             { "trait": "funSeeker", "weight": 0.85 },
             { "trait": "experienceMaximizer", "weight": 0.75 },
@@ -1216,7 +1216,7 @@
     "luxurySeeker": { "description": "Values premium experiences and accommodations", "dimension": "comfort" },
     "comfortPrioritizer": { "description": "Comfort and ease are non-negotiable", "dimension": "comfort" },
     "budgetConscious": { "description": "Values maximizing value for money", "dimension": "budget" },
-    "balancedSpender": { "description": "Strategic spending—splurge on priorities", "dimension": "budget" },
+    "balancedSpender": { "description": "Strategic spending. Splurge on priorities", "dimension": "budget" },
     "qualityFocused": { "description": "Willing to pay for quality experiences", "dimension": "budget" },
     "statusSeeker": { "description": "Values exclusive and prestigious experiences", "dimension": "comfort" },
     "experienceMaximizer": { "description": "Wants to fit in as many experiences as possible", "dimension": "pace" },

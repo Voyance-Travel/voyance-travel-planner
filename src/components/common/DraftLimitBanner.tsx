@@ -156,7 +156,7 @@ export function DraftLimitBlocker({ onClose }: DraftLimitBlockerProps) {
         <div className="space-y-3">
           <Button onClick={handleUpgrade} className="w-full gap-2">
             <Sparkles className="w-4 h-4" />
-            Unlock Full Trip — $24.99
+            Unlock Full Trip - $24.99
           </Button>
           {onClose && (
             <Button variant="ghost" onClick={onClose} className="w-full">
