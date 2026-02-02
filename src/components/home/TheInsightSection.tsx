@@ -47,7 +47,7 @@ export default function TheInsightSection() {
 
             {/* Body */}
             <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-8">
-              You're not a generic traveler. The problem isn't your research skills—it's that no one asked what kind of traveler you are.
+              You're not a generic traveler. The problem isn't your research skills. It's that no one asked what kind of traveler you are.
             </p>
 
             {/* The key insight */}

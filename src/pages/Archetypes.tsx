@@ -235,7 +235,7 @@ export default function Archetypes() {
               How We Match You
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Your archetype isn't random—it's the result of a careful analysis of how you actually travel.
+              Your archetype isn't random. It's the result of a careful analysis of how you actually travel.
             </p>
           </motion.div>
 
@@ -259,7 +259,7 @@ export default function Archetypes() {
               {
                 icon: MapPin,
                 title: 'Personalized Trips',
-                description: 'Your archetype shapes every recommendation—destinations, pace, activities, dining.',
+                description: 'Your archetype shapes every recommendation: destinations, pace, activities, dining.',
               },
             ].map((item, index) => (
               <motion.div
@@ -308,7 +308,7 @@ export default function Archetypes() {
                   <h4 className="font-semibold text-foreground">Continuous Learning</h4>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Rate activities, save favorites, adjust preferences—the more you use Voyance, 
+                  Rate activities, save favorites, adjust preferences. The more you use Voyance, 
                   the better we know you.
                 </p>
               </div>
@@ -359,7 +359,7 @@ export default function Archetypes() {
             Don't see yourself?
           </h3>
           <p className="text-muted-foreground mb-6 leading-relaxed">
-            Your Travel DNA is unique. Take the quiz—you might be a blend of multiple archetypes, 
+            Your Travel DNA is unique. Take the quiz. You might be a blend of multiple archetypes, 
             with hints of personalities that make you one of a kind.
           </p>
           <Button asChild variant="outline" className="rounded-full px-6">
