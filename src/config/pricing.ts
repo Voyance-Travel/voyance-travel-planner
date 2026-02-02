@@ -1,33 +1,115 @@
 // Pricing configuration - Single source of truth for all pricing data
-// Updated: Trip Pass $24.99, 5 Credits $79, 10 Credits $149
+// Updated: Day-based model with Essential/Complete packages
 
 export const STRIPE_PRODUCTS = {
-  // One-time purchases
+  // À la carte days
+  DAY_1: {
+    productId: 'prod_TuJ6uEsn9JZwFR',
+    priceId: 'price_1SwUUAFYxIg9jcJUIOZ30X3V',
+    name: '1 Day',
+    price: 9,
+    days: 1,
+    mode: 'payment' as const,
+  },
+  DAY_2: {
+    productId: 'prod_TuJ67oBTCaXbwK',
+    priceId: 'price_1SwUUBFYxIg9jcJU6OjLZWlW',
+    name: '2 Days',
+    price: 16,
+    days: 2,
+    savings: 2,
+    mode: 'payment' as const,
+  },
+  
+  // Escape packages (3 days)
+  ESCAPE_ESSENTIAL: {
+    productId: 'prod_TuJ6sVstk0s35i',
+    priceId: 'price_1SwUUDFYxIg9jcJUZtZqNFrv',
+    name: 'Escape Essential',
+    price: 29,
+    days: 3,
+    tier: 'essential' as const,
+    mode: 'payment' as const,
+  },
+  ESCAPE_COMPLETE: {
+    productId: 'prod_TuJ6PqaalAiPnm',
+    priceId: 'price_1SwUUEFYxIg9jcJUJZMHE06i',
+    name: 'Escape Complete',
+    price: 49,
+    days: 3,
+    tier: 'complete' as const,
+    mode: 'payment' as const,
+  },
+  
+  // Week packages (7 days)
+  WEEK_ESSENTIAL: {
+    productId: 'prod_TuJ6nEdTRdKMH3',
+    priceId: 'price_1SwUUFFYxIg9jcJUDD0YDlvQ',
+    name: 'Week Essential',
+    price: 49,
+    days: 7,
+    tier: 'essential' as const,
+    mode: 'payment' as const,
+  },
+  WEEK_COMPLETE: {
+    productId: 'prod_TuJ6UVJV9jAdgn',
+    priceId: 'price_1SwUUGFYxIg9jcJUM0RrP76m',
+    name: 'Week Complete',
+    price: 79,
+    days: 7,
+    tier: 'complete' as const,
+    featured: true,
+    mode: 'payment' as const,
+  },
+  
+  // Extended packages (12 days)
+  EXTENDED_ESSENTIAL: {
+    productId: 'prod_TuJ6x93fokmK50',
+    priceId: 'price_1SwUUHFYxIg9jcJUZmRQzSoQ',
+    name: 'Extended Essential',
+    price: 69,
+    days: 12,
+    tier: 'essential' as const,
+    mode: 'payment' as const,
+  },
+  EXTENDED_COMPLETE: {
+    productId: 'prod_TuJ6UizkY38Qsq',
+    priceId: 'price_1SwUUIFYxIg9jcJUB9oWn90L',
+    name: 'Extended Complete',
+    price: 109,
+    days: 12,
+    tier: 'complete' as const,
+    mode: 'payment' as const,
+  },
+
+  // Legacy products (for existing customers - not shown in UI)
   TRIP_PASS: {
     productId: 'prod_TrNlzMhbWMadTG',
     priceId: 'price_1StezbFYxIg9jcJUpN3X01Ox',
     name: 'Trip Pass',
     price: 24.99,
+    days: 7, // Convert to 7 days for migration
     mode: 'payment' as const,
+    deprecated: true,
   },
   CREDITS_5: {
     productId: 'prod_TrNllJjO44rfTT',
     priceId: 'price_1StezcFYxIg9jcJUJMy5waSO',
     name: '5 Credits',
     price: 79,
-    credits: 5,
+    days: 35, // 5 credits × 7 days each
     mode: 'payment' as const,
+    deprecated: true,
   },
   CREDITS_10: {
     productId: 'prod_TrNlRyHAG5CPaL',
     priceId: 'price_1StezdFYxIg9jcJUeoYoMEEI',
     name: '10 Credits',
     price: 149,
-    credits: 10,
+    days: 70, // 10 credits × 7 days each
     mode: 'payment' as const,
+    deprecated: true,
   },
-  
-  // Legacy - keeping for existing customers but not shown in UI
   MONTHLY: {
     productId: 'prod_Toyw6Gw8394rU4',
     priceId: 'price_1SrKz2FYxIg9jcJUVbrbOfFl',
@@ -44,7 +126,6 @@ export const STRIPE_PRODUCTS = {
     mode: 'subscription' as const,
     deprecated: true,
   },
-  // Travel Agent subscription
   TRAVEL_AGENT: {
     productId: 'prod_TravelAgent',
     priceId: 'price_TravelAgent',
@@ -54,119 +135,158 @@ export const STRIPE_PRODUCTS = {
   },
 } as const;
 
-// Credit costs - what each action costs in credits
-export const CREDIT_COSTS = {
-  BUILD_FULL_TRIP: 1,      // 1 credit to build a full trip
-  REGENERATE_DAY: 1,       // 1 credit to regenerate a day
-  SWAP_ACTIVITY: 1,        // 1 credit to swap an activity
-} as const;
-
-// Free tier limits - 5 itineraries/month, Day 1 only, 3 swaps, 1 regenerate
+// Free tier limits - 1 day/month (banks up to 5), expires after 6 months
 export const FREE_TIER_LIMITS = {
-  maxVisibleDays: 1,           // Can only see Day 1 of itinerary
-  maxItinerariesPerMonth: 5,   // 5 itineraries per month
-  maxActivitySwaps: 3,         // Can swap 3 activities per month
-  maxRegenerates: 1,           // 1 regenerate per month
-  canRegenerateDay: true,      // Can regenerate (up to limit)
-  canBuildFullTrip: true,      // Can build trips (to see Day 1)
+  daysPerMonth: 1,                 // 1 free day per month
+  maxBankedDays: 5,               // Can accumulate up to 5 free days
+  freeExpirationMonths: 6,        // Free days expire after 6 months
+  maxActivitySwaps: 3,            // 3 swaps per month
+  maxRegenerates: 1,              // 1 regenerate per month
   canExport: false,
   canShare: false,
+  // Legacy compatibility
+  maxVisibleDays: 1,
+  maxItinerariesPerMonth: 5,
+  canRegenerateDay: true,
+  canBuildFullTrip: true,
 } as const;
 
-// Plan feature definitions
+// Essential tier limits
+export const ESSENTIAL_LIMITS = {
+  activitySwaps: 5,
+  regenerates: 2,
+  canExport: true,
+  canShare: true,
+  routeOptimization: false,
+  aiCompanion: false,
+  restaurantAI: false,
+  realTimeMode: false,
+  companionSync: false,
+  priorityGeneration: false,
+} as const;
+
+// Complete tier limits
+export const COMPLETE_LIMITS = {
+  activitySwaps: -1, // Unlimited
+  regenerates: -1,   // Unlimited
+  canExport: true,
+  canShare: true,
+  routeOptimization: true,
+  aiCompanion: true,
+  restaurantAI: true,
+  realTimeMode: true,
+  companionSync: true,
+  priorityGeneration: true,
+} as const;
+
+// Package definitions for display
+export const PACKAGES = {
+  ESCAPE: {
+    id: 'escape',
+    name: 'Escape',
+    days: 3,
+    essential: STRIPE_PRODUCTS.ESCAPE_ESSENTIAL,
+    complete: STRIPE_PRODUCTS.ESCAPE_COMPLETE,
+  },
+  WEEK: {
+    id: 'week',
+    name: 'Week',
+    days: 7,
+    essential: STRIPE_PRODUCTS.WEEK_ESSENTIAL,
+    complete: STRIPE_PRODUCTS.WEEK_COMPLETE,
+    featured: true,
+  },
+  EXTENDED: {
+    id: 'extended',
+    name: 'Extended',
+    days: 12,
+    essential: STRIPE_PRODUCTS.EXTENDED_ESSENTIAL,
+    complete: STRIPE_PRODUCTS.EXTENDED_COMPLETE,
+  },
+} as const;
+
+// Features included in each tier
+export const TIER_FEATURES = {
+  essential: [
+    'Full personalized itinerary',
+    'All days unlocked',
+    '5 activity swaps',
+    '2 day regenerates',
+    'PDF export',
+    'Share with companions',
+  ],
+  complete: [
+    'Everything in Essential',
+    'Unlimited swaps & regenerates',
+    'Route optimization',
+    'AI trip companion',
+    'Restaurant AI',
+    'Real-time trip mode',
+    'Companion sync',
+    'Priority generation',
+  ],
+} as const;
+
+// Comparison table for pricing page
+export const COMPARISON_TABLE = {
+  headers: ['Feature', 'Free', 'Essential', 'Complete'],
+  rows: [
+    { feature: 'Travel DNA Quiz', free: '✓', essential: '✓', complete: '✓' },
+    { feature: 'Days Visible', free: 'Day 1 only', essential: 'All days', complete: 'All days' },
+    { feature: 'Activity Swaps', free: '3/month', essential: '5 per package', complete: 'Unlimited' },
+    { feature: 'Regenerate Days', free: '1/month', essential: '2 per package', complete: 'Unlimited' },
+    { feature: 'Export (PDF)', free: '-', essential: '✓', complete: '✓' },
+    { feature: 'Share with Companions', free: '-', essential: '✓', complete: '✓' },
+    { feature: 'Route Optimization', free: '-', essential: '-', complete: '✓' },
+    { feature: 'AI Trip Companion', free: '-', essential: '-', complete: '✓' },
+    { feature: 'Restaurant AI', free: '-', essential: '-', complete: '✓' },
+    { feature: 'Real-time Trip Mode', free: '-', essential: '-', complete: '✓' },
+  ],
+} as const;
+
+// Plan feature definitions (for legacy compatibility and detailed displays)
 export const PLAN_FEATURES = {
   FREE: {
     id: 'free',
     name: 'Free',
     headline: 'Discover your Travel DNA.',
-    subheadline: 'Build up to 5 arrival-day previews per month. See Day 1 of your trip—unlock the rest when ready.',
+    subheadline: 'Get 1 free day per month (banks up to 5). See Day 1 of your trip—unlock more when ready.',
     bestFor: 'Exploring what personalized travel planning feels like.',
     price: 0,
     priceDetail: 'forever',
     features: [
       'Travel DNA quiz & archetype',
-      '5 itineraries per month (Day 1 only)',
+      '1 free day per month (accumulates)',
       'Preview your arrival day',
       '3 activity swaps per month',
       '1 day regenerate per month',
     ],
     notIncluded: [
       'Days 2+ (blurred until upgrade)',
-      'Unlimited swaps & regenerates',
+      'More swaps & regenerates',
       'Export / print',
       'Collaboration',
     ],
     limits: FREE_TIER_LIMITS,
     cta: 'Start Free',
   },
-  TRIP_PASS: {
-    id: 'trip_pass',
-    name: 'Trip Pass',
-    headline: 'Unlock your DNA-powered trip.',
-    subheadline: 'Full access to your complete personalized itinerary. Every day, every recommendation, tailored to you.',
-    bestFor: 'Your next upcoming trip.',
-    price: 24.99,
-    priceDetail: 'one-time',
-    features: [
-      'Your full personalized itinerary',
-      'All days unlocked',
-      'Unlimited AI-powered swaps',
-      'Regenerate any day',
-      'Export to PDF',
-      'Share with travel companions',
-      'Route optimization',
-    ],
-    limits: {
-      maxVisibleDays: -1, // Unlimited
-      maxActivitySwaps: -1,
-      canRegenerateDay: true,
-      canExport: true,
-      canShare: true,
-    },
-    cta: 'Unlock Trip - $24.99',
+  ESSENTIAL: {
+    id: 'essential',
+    name: 'Essential',
+    headline: 'Your full personalized trip.',
+    subheadline: 'All days unlocked with swaps, regenerates, and export.',
+    bestFor: 'Standard trips with full itinerary access.',
+    features: TIER_FEATURES.essential,
+    limits: ESSENTIAL_LIMITS,
   },
-  CREDITS_5: {
-    id: 'credits_5',
-    name: '5 Credits',
-    headline: 'For the multi-trip traveler.',
-    subheadline: 'Build multiple personalized trips, regenerate days, or swap activities across any itinerary.',
-    bestFor: 'Travelers planning 2-5 trips.',
-    price: 79,
-    priceDetail: 'one-time',
-    credits: 5,
-    features: [
-      '5 credits to use anytime',
-      '1 credit = build, regenerate, or swap',
-      'Full Travel DNA personalization',
-      'Credits never expire',
-      'Use across multiple trips',
-    ],
-    limits: {
-      credits: 5,
-    },
-    cta: 'Buy 5 Credits - $79',
-  },
-  CREDITS_10: {
-    id: 'credits_10',
-    name: '10 Credits',
-    headline: 'Best value for frequent travelers.',
-    subheadline: 'Maximum flexibility for travelers who plan often. Your Travel DNA improves with every trip.',
-    bestFor: 'Frequent travelers who want the best value.',
-    price: 149,
-    priceDetail: 'one-time',
-    credits: 10,
-    features: [
-      '10 credits to use anytime',
-      '1 credit = build, regenerate, or swap',
-      'Full Travel DNA personalization',
-      'Credits never expire',
-      'Save ~15% vs 5 credits',
-      'Your preferences get smarter over time',
-    ],
-    limits: {
-      credits: 10,
-    },
-    cta: 'Buy 10 Credits - $149',
+  COMPLETE: {
+    id: 'complete',
+    name: 'Complete',
+    headline: 'The ultimate travel experience.',
+    subheadline: 'Unlimited modifications plus AI companion features.',
+    bestFor: 'Travelers who want maximum flexibility and AI assistance.',
+    features: TIER_FEATURES.complete,
+    limits: COMPLETE_LIMITS,
   },
   // ============================================
   // TRAVEL AGENT TIERS - Professional Plans
@@ -276,7 +396,6 @@ export const PLAN_FEATURES = {
     },
     cta: 'Contact Sales',
   },
-  // Legacy single agent tier (for backwards compatibility)
   TRAVEL_AGENT: {
     id: 'travel_agent',
     name: 'Travel Agent',
@@ -335,21 +454,22 @@ export const PLAN_FEATURES = {
   },
 } as const;
 
-// Comparison table data for visual display
-export const COMPARISON_TABLE = {
-  headers: ['Feature', 'Free', 'Trip Pass', '5 Credits', '10 Credits'],
-  rows: [
-    { feature: 'Travel DNA Quiz', free: '✓', tripPass: '✓', credits5: '✓', credits10: '✓' },
-    { feature: 'Itineraries/Month', free: '5 (Day 1 only)', tripPass: '1 full trip', credits5: '5 full trips', credits10: '10 full trips' },
-    { feature: 'Days Visible', free: 'Day 1 only', tripPass: 'All days', credits5: 'All days', credits10: 'All days' },
-    { feature: 'Activity Swaps', free: '3/month', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
-    { feature: 'Regenerate Days', free: '1/month', tripPass: 'Unlimited', credits5: 'Unlimited', credits10: 'Unlimited' },
-    { feature: 'Export (PDF)', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
-    { feature: 'Route Optimization', free: '-', tripPass: '✓', credits5: '✓', credits10: '✓' },
-  ],
-} as const;
+// Helper to calculate per-day price
+export function getPerDayPrice(price: number, days: number): string {
+  return (price / days).toFixed(2);
+}
 
-// Helper to check if a feature is available for a plan
+// Helper to check if a feature is available for a tier
+export function isTierFeatureEnabled(
+  tier: 'free' | 'essential' | 'complete', 
+  feature: keyof typeof COMPLETE_LIMITS
+): boolean {
+  if (tier === 'free') return false;
+  if (tier === 'essential') return ESSENTIAL_LIMITS[feature] === true || (typeof ESSENTIAL_LIMITS[feature] === 'number' && ESSENTIAL_LIMITS[feature] > 0);
+  return COMPLETE_LIMITS[feature] === true || COMPLETE_LIMITS[feature] === -1;
+}
+
+// Legacy helper for backwards compatibility
 export function isPlanFeatureEnabled(
   planId: string, 
   feature: 'flightHotelOptimization' | 'groupBudgeting' | 'coEditCollaboration' | 'preferenceLearning' | 'budgetTracking'
@@ -358,3 +478,10 @@ export function isPlanFeatureEnabled(
   if (!plan || !plan.limits) return false;
   return (plan.limits as Record<string, unknown>)[feature] === true;
 }
+
+// Migration helpers for legacy purchases
+export const LEGACY_CONVERSION = {
+  TRIP_PASS: { days: 7, tier: 'essential' as const },
+  CREDITS_5: { days: 35, tier: 'essential' as const }, // 5 × 7
+  CREDITS_10: { days: 70, tier: 'essential' as const }, // 10 × 7
+} as const;

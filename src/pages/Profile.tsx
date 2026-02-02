@@ -53,33 +53,33 @@ import { getArchetypeNarrative } from '@/data/archetypeNarratives';
 type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
 
 // Use the centralized pricing config from src/config/pricing.ts
-// New pricing model: Trip Pass $24.99, 5 Credits $79, 10 Credits $149
+// New pricing model: Day-based packages (Essential/Complete)
 
-// Product options for display in subscription tab
+// Product options for display in subscription tab - updated to new day-based model
 const PURCHASE_OPTIONS = {
-  tripPass: {
-    name: PLAN_FEATURES.TRIP_PASS.name,
-    description: PLAN_FEATURES.TRIP_PASS.subheadline,
-    price: STRIPE_PRODUCTS.TRIP_PASS.price,
-    priceId: STRIPE_PRODUCTS.TRIP_PASS.priceId,
-    productId: STRIPE_PRODUCTS.TRIP_PASS.productId,
-    features: PLAN_FEATURES.TRIP_PASS.features.slice(0, 4),
+  weekEssential: {
+    name: STRIPE_PRODUCTS.WEEK_ESSENTIAL.name,
+    description: 'Full itinerary access with 5 swaps and 2 regenerates',
+    price: STRIPE_PRODUCTS.WEEK_ESSENTIAL.price,
+    priceId: STRIPE_PRODUCTS.WEEK_ESSENTIAL.priceId,
+    productId: STRIPE_PRODUCTS.WEEK_ESSENTIAL.productId,
+    features: ['7 days unlocked', '5 activity swaps', '2 day regenerates', 'PDF export'],
   },
-  credits5: {
-    name: PLAN_FEATURES.CREDITS_5.name,
-    description: PLAN_FEATURES.CREDITS_5.subheadline,
-    price: STRIPE_PRODUCTS.CREDITS_5.price,
-    priceId: STRIPE_PRODUCTS.CREDITS_5.priceId,
-    productId: STRIPE_PRODUCTS.CREDITS_5.productId,
-    features: PLAN_FEATURES.CREDITS_5.features.slice(0, 4),
+  weekComplete: {
+    name: STRIPE_PRODUCTS.WEEK_COMPLETE.name,
+    description: 'Unlimited modifications plus AI companion features',
+    price: STRIPE_PRODUCTS.WEEK_COMPLETE.price,
+    priceId: STRIPE_PRODUCTS.WEEK_COMPLETE.priceId,
+    productId: STRIPE_PRODUCTS.WEEK_COMPLETE.productId,
+    features: ['7 days unlocked', 'Unlimited swaps', 'AI companion', 'Route optimization'],
   },
-  credits10: {
-    name: PLAN_FEATURES.CREDITS_10.name,
-    description: PLAN_FEATURES.CREDITS_10.subheadline,
-    price: STRIPE_PRODUCTS.CREDITS_10.price,
-    priceId: STRIPE_PRODUCTS.CREDITS_10.priceId,
-    productId: STRIPE_PRODUCTS.CREDITS_10.productId,
-    features: PLAN_FEATURES.CREDITS_10.features.slice(0, 4),
+  day1: {
+    name: STRIPE_PRODUCTS.DAY_1.name,
+    description: 'Add a single day to any trip',
+    price: STRIPE_PRODUCTS.DAY_1.price,
+    priceId: STRIPE_PRODUCTS.DAY_1.priceId,
+    productId: STRIPE_PRODUCTS.DAY_1.productId,
+    features: ['1 day unlocked', 'Never expires'],
   },
 };
 
@@ -1039,16 +1039,16 @@ export default function Profile() {
                           </div>
                           <div>
                             <h4 className="text-xl font-serif font-medium text-foreground">
-                              {PURCHASE_OPTIONS.tripPass.name}
+                              {PURCHASE_OPTIONS.weekComplete.name}
                             </h4>
                             <p className="text-sm text-muted-foreground">
-                              {PURCHASE_OPTIONS.tripPass.description}
+                              {PURCHASE_OPTIONS.weekComplete.description}
                             </p>
                           </div>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-2 mt-4">
-                          {PURCHASE_OPTIONS.tripPass.features.map((feature) => (
+                          {PURCHASE_OPTIONS.weekComplete.features.map((feature) => (
                             <span key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                               {feature}
@@ -1060,21 +1060,21 @@ export default function Profile() {
                       <div className="flex flex-col items-center md:items-end gap-3 shrink-0">
                         <div className="text-center md:text-right">
                           <span className="text-3xl font-serif font-medium text-foreground">
-                            ${PURCHASE_OPTIONS.tripPass.price}
+                            ${PURCHASE_OPTIONS.weekComplete.price}
                           </span>
                           <p className="text-xs text-muted-foreground mt-0.5">one-time</p>
                         </div>
                         <Button 
-                          onClick={() => handleCheckout(PURCHASE_OPTIONS.tripPass.priceId, 'payment')}
-                          disabled={isCheckingOut === PURCHASE_OPTIONS.tripPass.priceId}
+                          onClick={() => handleCheckout(PURCHASE_OPTIONS.weekComplete.priceId, 'payment')}
+                          disabled={isCheckingOut === PURCHASE_OPTIONS.weekComplete.priceId}
                           className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
                         >
-                          {isCheckingOut === PURCHASE_OPTIONS.tripPass.priceId ? (
+                          {isCheckingOut === PURCHASE_OPTIONS.weekComplete.priceId ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4 mr-2" />
-                              Unlock Trip
+                              Get Week Complete
                             </>
                           )}
                         </Button>
@@ -1085,33 +1085,33 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Credit Packages */}
+            {/* Day Packages */}
             <div>
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium block mb-1">
-                    Credit Packages
+                    Add More Days
                   </span>
-                  <h3 className="text-xl font-serif text-foreground">Need More Credits?</h3>
+                  <h3 className="text-xl font-serif text-foreground">Need More Days?</h3>
                 </div>
               </div>
               
               <div className="grid md:grid-cols-2 gap-6">
-                {[PURCHASE_OPTIONS.credits5, PURCHASE_OPTIONS.credits10].map((pack, idx) => {
-                  const isBestValue = idx === 1;
+                {[PURCHASE_OPTIONS.weekEssential, PURCHASE_OPTIONS.day1].map((pack, idx) => {
+                  const isPackage = idx === 0;
                   
                   return (
                     <motion.div
                       key={pack.name}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: isBestValue ? 0.1 : 0 }}
+                      transition={{ delay: isPackage ? 0 : 0.1 }}
                       className={cn(
                         "group relative bg-card rounded-lg overflow-hidden transition-all duration-300",
                         "border border-border hover:shadow-medium hover:border-muted-foreground/30"
                       )}
                     >
-                      {isBestValue && (
+                      {isPackage && (
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-accent to-primary/60" />
                       )}
                       
@@ -1119,7 +1119,7 @@ export default function Profile() {
                         <div className="flex items-start justify-between mb-6">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              {isBestValue && (
+                              {isPackage && (
                                 <span className="text-[9px] uppercase tracking-wider text-primary font-semibold px-2 py-0.5 bg-primary/10 rounded">
                                   Best Value
                                 </span>
@@ -1141,9 +1141,9 @@ export default function Profile() {
                               one-time
                             </span>
                           </div>
-                          {isBestValue && (
+                          {isPackage && (
                             <p className="text-xs text-primary mt-2 font-medium">
-                              Save ~15% vs 5 credits
+                              $7/day — saves vs buying days separately
                             </p>
                           )}
                         </div>
@@ -1162,7 +1162,7 @@ export default function Profile() {
                         <Button 
                           className={cn(
                             "w-full h-11 text-sm font-medium transition-all",
-                            isBestValue 
+                            isPackage 
                               ? "bg-gradient-to-r from-slate to-slate/90 hover:from-slate/90 hover:to-slate text-slate-foreground" 
                               : ""
                           )}
