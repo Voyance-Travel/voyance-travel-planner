@@ -326,6 +326,113 @@ serve(async (req) => {
           }
         }
 
+        // ========================================
+        // Day Purchase Fulfillment
+        // ========================================
+        if (metadata.type === "day_purchase") {
+          const userId = metadata.user_id;
+          const priceId = metadata.price_id;
+          const productId = metadata.product_id;
+          const daysToAdd = parseInt(metadata.days || "0", 10);
+          const packageTier = metadata.package_tier as 'essential' | 'complete' | null;
+          const amountCents = session.amount_total || 0;
+
+          if (userId && daysToAdd > 0) {
+            log("Processing day purchase", { userId, daysToAdd, packageTier, priceId });
+
+            // IDEMPOTENCY CHECK: Skip if this session already processed
+            const { data: existingLedger } = await supabaseAdmin
+              .from("day_ledger")
+              .select("id")
+              .eq("stripe_session_id", session.id)
+              .eq("transaction_type", "purchase")
+              .maybeSingle();
+
+            if (existingLedger) {
+              log("Duplicate day purchase event, skipping", { sessionId: session.id });
+              break;
+            }
+
+            // Get or create day balance record
+            const { data: existingBalance } = await supabaseAdmin
+              .from("day_balances")
+              .select("*")
+              .eq("user_id", userId)
+              .maybeSingle();
+
+            // Calculate new values
+            const currentPurchasedDays = existingBalance?.purchased_days || 0;
+            const newPurchasedDays = currentPurchasedDays + daysToAdd;
+
+            // Determine tier and package limits
+            let swapsRemaining = existingBalance?.swaps_remaining;
+            let regeneratesRemaining = existingBalance?.regenerates_remaining;
+            let activeTier = existingBalance?.active_tier;
+
+            // If buying a package, set tier and limits
+            if (packageTier) {
+              activeTier = packageTier;
+              if (packageTier === 'essential') {
+                // Essential: 5 swaps, 2 regenerates per package
+                swapsRemaining = (swapsRemaining || 0) + 5;
+                regeneratesRemaining = (regeneratesRemaining || 0) + 2;
+              } else if (packageTier === 'complete') {
+                // Complete: unlimited (-1)
+                swapsRemaining = -1;
+                regeneratesRemaining = -1;
+              }
+            }
+
+            // Upsert day balance
+            const { error: balanceError } = await supabaseAdmin
+              .from("day_balances")
+              .upsert({
+                user_id: userId,
+                purchased_days: newPurchasedDays,
+                free_days: existingBalance?.free_days || 0,
+                free_days_expires_at: existingBalance?.free_days_expires_at || null,
+                active_tier: activeTier,
+                swaps_remaining: swapsRemaining,
+                regenerates_remaining: regeneratesRemaining,
+                monthly_swaps_used: existingBalance?.monthly_swaps_used || 0,
+                monthly_regenerates_used: existingBalance?.monthly_regenerates_used || 0,
+                monthly_reset_at: existingBalance?.monthly_reset_at || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
+                updated_at: new Date().toISOString(),
+              }, { onConflict: "user_id" });
+
+            if (balanceError) {
+              log("Error upserting day balance", balanceError);
+            } else {
+              log("Day balance updated", { userId, newPurchasedDays, activeTier });
+            }
+
+            // Create ledger entry
+            const { error: ledgerError } = await supabaseAdmin
+              .from("day_ledger")
+              .insert({
+                user_id: userId,
+                transaction_type: 'purchase',
+                days_delta: daysToAdd,
+                is_free_day: false,
+                stripe_session_id: session.id,
+                stripe_product_id: productId,
+                price_id: priceId,
+                amount_cents: amountCents,
+                package_tier: packageTier,
+                package_days: daysToAdd,
+                notes: packageTier 
+                  ? `${packageTier.charAt(0).toUpperCase() + packageTier.slice(1)} package - ${daysToAdd} days`
+                  : `${daysToAdd} day${daysToAdd > 1 ? 's' : ''} à la carte`,
+              });
+
+            if (ledgerError) {
+              log("Error creating day ledger entry", ledgerError);
+            } else {
+              log("Day ledger entry created", { userId, daysToAdd, packageTier });
+            }
+          }
+        }
+
         break;
       }
 

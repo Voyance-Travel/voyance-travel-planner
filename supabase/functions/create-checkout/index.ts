@@ -20,8 +20,17 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const { priceId, mode = "subscription" } = await req.json();
-    logStep("Request body parsed", { priceId, mode });
+    const { 
+      priceId, 
+      mode = "subscription",
+      // Day purchase specific fields
+      productId,
+      days,
+      packageTier,
+      productName,
+      returnPath,
+    } = await req.json();
+    logStep("Request body parsed", { priceId, mode, days, packageTier });
 
     if (!priceId) {
       throw new Error("priceId is required");
@@ -101,6 +110,23 @@ serve(async (req) => {
     }
 
     const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+    const successPath = returnPath || "/profile?success=true";
+    const cancelPath = returnPath ? `${returnPath}?canceled=true` : "/profile?canceled=true";
+
+    // Build metadata based on purchase type
+    const sessionMetadata: Record<string, string> = {
+      user_id: userId,
+    };
+
+    // Add day purchase metadata if applicable
+    if (days && Number(days) > 0) {
+      sessionMetadata.type = "day_purchase";
+      sessionMetadata.days = String(days);
+      sessionMetadata.price_id = priceId;
+      if (productId) sessionMetadata.product_id = productId;
+      if (packageTier) sessionMetadata.package_tier = packageTier;
+      if (productName) sessionMetadata.product_name = productName;
+    }
 
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
@@ -113,11 +139,9 @@ serve(async (req) => {
         },
       ],
       mode: mode as "subscription" | "payment",
-      success_url: `${origin}/profile?success=true`,
-      cancel_url: `${origin}/profile?canceled=true`,
-      metadata: {
-        user_id: userId,
-      },
+      success_url: `${origin}${successPath}`,
+      cancel_url: `${origin}${cancelPath}`,
+      metadata: sessionMetadata,
     });
 
     logStep("Checkout session created", { sessionId: session.id });
