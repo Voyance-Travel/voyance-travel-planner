@@ -13,7 +13,7 @@ export interface CreditBalance {
   purchased_credits: number;
   free_credits: number;
   free_credits_expires_at: string | null;
-  last_free_credit_earned_at: string | null;
+  last_free_credit_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -39,10 +39,9 @@ async function fetchCredits(userId: string | undefined): Promise<CreditData> {
     };
   }
 
-  // For now, use the existing user_credits table
-  // TODO: Create dedicated credit_balances table with the new schema
+  // Fetch from the new credit_balances table
   const { data, error } = await supabase
-    .from('user_credits')
+    .from('credit_balances')
     .select('*')
     .eq('user_id', userId)
     .maybeSingle();
@@ -53,6 +52,7 @@ async function fetchCredits(userId: string | undefined): Promise<CreditData> {
   }
 
   if (!data) {
+    // No balance record yet - user has 0 credits
     return {
       balance: null,
       totalCredits: 0,
@@ -63,27 +63,38 @@ async function fetchCredits(userId: string | undefined): Promise<CreditData> {
     };
   }
 
-  // Map from user_credits to credit format
-  // balance_cents is now credits (1 cent = 1 credit for migration purposes)
-  const purchasedCredits = data.balance_cents || 0;
-  const freeCredits = 0; // Will be tracked separately later
+  const purchasedCredits = data.purchased_credits || 0;
+  let freeCredits = data.free_credits || 0;
+  let freeCreditsExpired = false;
+  
+  // Check if free credits are expired
+  if (data.free_credits_expires_at) {
+    const expiresAt = new Date(data.free_credits_expires_at);
+    if (expiresAt < new Date()) {
+      freeCreditsExpired = true;
+      freeCredits = 0; // Don't count expired free credits
+    }
+  }
+
+  const effectiveFreeCredits = freeCreditsExpired ? 0 : freeCredits;
+  const totalCredits = purchasedCredits + effectiveFreeCredits;
   
   return {
     balance: {
-      id: data.user_id, // user_credits uses user_id as key
-      user_id: userId,
+      id: data.id,
+      user_id: data.user_id,
       purchased_credits: purchasedCredits,
-      free_credits: freeCredits,
-      free_credits_expires_at: null,
-      last_free_credit_earned_at: null,
-      created_at: data.created_at || new Date().toISOString(),
-      updated_at: data.updated_at || new Date().toISOString(),
+      free_credits: data.free_credits || 0,
+      free_credits_expires_at: data.free_credits_expires_at,
+      last_free_credit_at: data.last_free_credit_at,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
     },
-    totalCredits: purchasedCredits + freeCredits,
+    totalCredits,
     purchasedCredits,
-    freeCredits,
-    effectiveFreeCredits: freeCredits,
-    freeCreditsExpired: false,
+    freeCredits: data.free_credits || 0,
+    effectiveFreeCredits,
+    freeCreditsExpired,
   };
 }
 
@@ -94,7 +105,7 @@ export function useCredits() {
     queryKey: ['credits', user?.id],
     queryFn: () => fetchCredits(user?.id),
     enabled: !!user?.id,
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 30 * 1000, // 30 seconds
     refetchOnWindowFocus: true,
   });
 }

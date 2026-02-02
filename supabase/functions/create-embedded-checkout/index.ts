@@ -24,12 +24,14 @@ serve(async (req) => {
       priceId, 
       mode = "subscription", 
       returnPath = "/profile",
-      // Day purchase fields
+      // Credit purchase fields
       productId,
+      credits,
+      // Legacy day purchase fields (deprecated)
       days,
       packageTier,
     } = await req.json();
-    logStep("Request body parsed", { priceId, mode, returnPath, days, packageTier });
+    logStep("Request body parsed", { priceId, mode, returnPath, credits, days, packageTier });
 
     if (!priceId) {
       throw new Error("priceId is required");
@@ -100,8 +102,15 @@ serve(async (req) => {
       user_id: userId,
     };
 
-    // Add day purchase metadata if applicable
-    if (days && Number(days) > 0) {
+    // Credit purchase metadata (new system)
+    if (credits && Number(credits) > 0) {
+      sessionMetadata.type = "credit_purchase";
+      sessionMetadata.credits = String(credits);
+      sessionMetadata.price_id = priceId;
+      if (productId) sessionMetadata.product_id = productId;
+    }
+    // Legacy day purchase metadata (deprecated, kept for existing purchases)
+    else if (days && Number(days) > 0) {
       sessionMetadata.type = "day_purchase";
       sessionMetadata.days = String(days);
       sessionMetadata.price_id = priceId;
