@@ -375,6 +375,270 @@
 
 ---
 
+## 8. Complete Feature Inventory
+
+### Consumer Features (B2C)
+
+#### Homepage & Entry Points
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Plan a Trip | Destination entry → 3-day quick preview | $0.003-0.01 |
+| Find My Style | Travel DNA quiz (21 questions) | $0.01-0.03 |
+| Fix My Itinerary | Paste & roast existing itinerary | $0.003-0.01 |
+
+#### Travel DNA System
+| Feature | Description | Cost |
+|---------|-------------|------|
+| 21-Question Quiz | Behavioral scenarios mapping personality | $0 (frontend) |
+| DNA Calculation | AI scores 8 traits, matches 27 archetypes | $0.01-0.03 |
+| Archetype Reveal | Animated reveal with tagline & summary | $0 |
+| Retake Quiz | Full recalculation | $0.01-0.03 |
+| 27 Archetypes | EXPLORER, CONNECTOR, ACHIEVER, RESTORER, CURATOR, TRANSFORMER categories | $0 |
+| Archetype Page | Browse all 27 archetypes with descriptions | $0 |
+| Trait Badges | "High Adventure", "Value-Focused" etc. | $0 |
+
+#### Trip Planning Flow
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Start Page | Unified entry with destination + dates + hotel mode | $0 |
+| Destination Autocomplete | City search with popular suggestions | $0 |
+| Hotel Mode Selection | "Search Hotels" / "I Have a Hotel" / "Add Later" | $0 |
+| Companion Selection | Solo, Partner, Family, Friends, Group | $0 |
+| Budget Selection | Value, Moderate, Premium, Luxury | $0 |
+| Pace Selection | Slow, Balanced, Active, Packed | $0 |
+
+#### Itinerary Generation
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Full Itinerary Build | AI generates multi-day trip (gpt-5) | $0.15-0.60 |
+| Day 1 Only (Free) | Limited preview for free users | $0.05-0.15 |
+| Regenerate Day | Rebuild single day with different activities | $0.03-0.10 |
+| Swap Activity | Replace one activity with alternative | $0.01-0.05 |
+| Add Restaurant | AI recommends dining for meal slot | $0.02-0.06 |
+| Itinerary Chat | Conversational modifications | $0.005-0.02 |
+
+#### Visible Intelligence (7 Layers)
+| Feature | Description | Cost |
+|---------|-------------|------|
+| What to Do | Standard landmarks & attractions | Included |
+| What to Skip | Trust-building skip recommendations | Included |
+| When to Go | Timing hacks & crowd avoidance | Included |
+| How to Do It | Insider tips (table requests, quiet entrances) | Included |
+| What You'd Miss | Hidden "Voyance Finds" | Included |
+| Why It's for You | Personalization proof with trade-off explanations | Included |
+| What Connects | Sequencing logic between activities | Included |
+| Intelligence Badges | Visual tags: Voyance Find, Timing Hack, Insider Tip, etc. | Included |
+
+#### Route Optimization
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Optimize Day Route | Reorder activities for efficient travel | $0.005-0.015 |
+| Walking Directions | Step-by-step between activities | Included |
+| Transit Suggestions | Public transport options | Included |
+
+#### Search & Discovery
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Flight Search | Amadeus-powered with filters | $0-0.05 |
+| Hotel Search | Amadeus-powered with amenity filters | $0-0.05 |
+| Activity Search | Viator products with booking | $0 |
+| Restaurant Discovery | AI-powered recommendations | $0.02-0.06 |
+| Weather Forecast | Multi-day forecast for destination | $0 |
+| Local Events | Real-time event lookup (Perplexity) | $0.005 |
+| Travel Advisories | Safety & visa info | $0.005 |
+| Nearby Suggestions | "What's near me" discovery | $0.017 |
+
+#### Destination Exploration
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Destinations Page | Browse all supported destinations | $0 |
+| Destination Detail | Deep-dive with neighborhoods, tips, best times | $0 |
+| Destination Images | Tiered fallback (Cache → Google → Pexels) | $0-0.017 |
+| Explore Page | Curated destination discovery | $0 |
+
+#### Booking & Commerce
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Viator Direct Booking | Tours & activities with instant confirm | $0 (affiliate) |
+| Flight Redirect | Kayak affiliate link | $0 |
+| Hotel Redirect | Booking.com affiliate link | $0 |
+| Restaurant Link | OpenTable / official website lookup | $0.005 |
+| Trip Pass Purchase | Stripe embedded checkout | 2.9% + $0.30 |
+| Credit Purchase | 5 or 10 credit packs | 2.9% + $0.30 |
+
+#### Collaboration & Sharing
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Share Trip Link | Unique secure token, 7-day expiry | $0 |
+| Invite Collaborators | Add trip companions | $0 |
+| Accept Invite | Join shared trip | $0 |
+| Friendship System | Auto-connect on collaboration | $0 |
+| Export PDF | Download formatted itinerary | $0 |
+
+#### User Account
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Email Sign Up | Email/password registration | $0 |
+| Google Sign In | OAuth authentication | $0 |
+| Profile Page | View DNA, trips, achievements | $0 |
+| Profile Edit | Update preferences, photo | $0 |
+| Settings Page | Account, notifications, privacy | $0 |
+| Trip Dashboard | All trips: drafts, upcoming, past | $0 |
+| Trip Detail | Full itinerary view with all features | $0 |
+| Active Trip View | Currently traveling mode | $0 |
+| Trip Recap | Post-trip summary & learnings | $0 |
+| Password Reset | Email-based reset flow | $0 |
+| Delete Account | GDPR-compliant deletion | $0 |
+
+#### Companion System
+| Feature | Description | Cost |
+|---------|-------------|------|
+| 8 User States | stranger → loyal progression | $0 |
+| Contextual Messaging | State-appropriate copy throughout | $0 |
+| Micro-feedback | Archetype-specific encouragement | $0 |
+
+#### Gamification
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Achievements | Unlockable badges for milestones | $0 |
+| Progress Tracking | Trips completed, countries visited | $0 |
+
+#### Static Pages
+| Page | Description | Cost |
+|------|-------------|------|
+| Homepage | Value-first hero with 3 CTAs | $0 |
+| How It Works | Magazine-style editorial guide | $0 |
+| Pricing | Plan comparison with checkout | $0 |
+| Archetypes | 27 archetype showcase | $0 |
+| About | Company story & mission | $0 |
+| Contact | Contact form (SendGrid) | $0 |
+| FAQ | Searchable knowledge base | $0 |
+| Help Center | Support & documentation | $0 |
+| Guides | Travel content library | $0 |
+| Travel Tips | Blog-style tips | $0 |
+| Careers | Job listings | $0 |
+| Press | Press kit & media assets | $0 |
+| Privacy Policy | Legal | $0 |
+| Terms of Service | Legal | $0 |
+
+---
+
+### Travel Agent Features (B2B)
+
+#### Dashboard & Overview
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Agent Dashboard | Pipeline view, revenue stats, tasks | $0 |
+| Quick Stats | Total clients, revenue, pending tasks | $0 |
+| Recent Activity | Live feed of trip/client updates | $0 |
+
+#### Client Management
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Accounts List | All client accounts with search/filter | $0 |
+| Account Detail | Full client profile with trips, travelers | $0 |
+| Account Form | Create/edit client accounts | $0 |
+| Client Tags | Custom categorization | $0 |
+| Lifetime Value Tracking | Total revenue per client | $0 |
+| Intake Form | Public client onboarding form | $0 |
+| Intake Link | Shareable intake URL per client | $0 |
+
+#### Traveler Profiles
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Traveler List | All travelers under account | $0 |
+| Traveler Detail | Passport, preferences, loyalty programs | $0 |
+| Passport Management | Number, expiry, country | $0 |
+| Loyalty Programs | Airline & hotel memberships | $0 |
+| Dietary & Medical | Allergies, restrictions, needs | $0 |
+| Emergency Contacts | Per-traveler contact info | $0 |
+| Seating Preferences | Aisle/window, meal preference | $0 |
+| TSA/Global Entry | KTN, Redress numbers | $0 |
+
+#### Trip Management
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Trip List | All trips with pipeline stage filter | $0 |
+| Trip Workspace | Full trip editing environment | $0 |
+| Trip Form | Create/edit trip details | $0 |
+| Pipeline Stages | Inquiry → Proposal → Booked → Traveling → Complete | $0 |
+| Trip Tags | Custom categorization | $0 |
+| Internal Notes | Agent-only notes | $0 |
+| Client-Facing Notes | Visible to client | $0 |
+| Link to Consumer Trip | Connect to generated itinerary | $0 |
+| Trip Share Page | Client-facing trip view | $0 |
+
+#### Booking Segments
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Flight Segments | Carrier, flight#, times, terminals | $0 |
+| Hotel Segments | Property, room type, confirmation | $0 |
+| Tour Segments | Activities with supplier info | $0 |
+| Transfer Segments | Ground transport bookings | $0 |
+| Cruise Segments | Ship, cabin, port schedule | $0 |
+| Insurance Segments | Policy details | $0 |
+| Segment Travelers | Assign travelers to segments | $0 |
+| Confirmation Numbers | Per-segment tracking | $0 |
+| Supplier Management | Vendor contacts & codes | $0 |
+| Commission Tracking | Per-segment commission rates | $0 |
+
+#### Quotes & Invoicing
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Quote Builder | Line items, agency fee, discounts | $0 |
+| Quote Versioning | v1, v2, v3 with history | $0 |
+| Quote PDF Export | Client-ready document | $0 |
+| Client Approval | Approval workflow with signature | $0 |
+| Invoice Generation | Auto-generate from approved quote | $0 |
+| Invoice List | All invoices with status | $0 |
+| Payment Tracking | Partial payments, balance due | $0 |
+| Payment Schedule | Deposit, final payment deadlines | $0 |
+| Payment Reminders | Automated email reminders | $0 |
+
+#### Financial Tracking
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Revenue Dashboard | Total revenue, margins | $0 |
+| Commission Report | Expected vs received commissions | $0 |
+| Supplier Payments | Track what's owed to suppliers | $0 |
+| Profit per Trip | Net margin calculation | $0 |
+| Payouts (Stripe Connect) | Agent payout management | $0 |
+
+#### Task Management
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Task List | All tasks with filters | $0 |
+| Task Creation | Manual task creation | $0 |
+| System-Generated Tasks | Auto-created for deadlines | $0 |
+| Task Reminders | Email notifications | $0 |
+| Task Priority | High/Medium/Low | $0 |
+| Task Due Dates | Deadline tracking | $0 |
+
+#### Documents
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Document Storage | Upload confirmations, contracts | $0 (storage) |
+| Document Types | Passport, visa, confirmation, contract | $0 |
+| Client-Visible Flag | Control what client sees | $0 |
+| Document Expiry | Passport/visa expiry alerts | $0 |
+
+#### Communications
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Email Log | All sent emails | $0 |
+| Email Templates | Pre-built templates | $0 |
+| Send Email | Compose & send to client | $0.001 |
+
+#### Agent Settings
+| Feature | Description | Cost |
+|---------|-------------|------|
+| Agency Branding | Logo, colors for exports | $0 |
+| Email Signature | Custom signature | $0 |
+| Commission Defaults | Default rates by supplier type | $0 |
+| Payment Instructions | Terms on invoices | $0 |
+
+---
+
 ## Edge Functions Inventory (73 Total)
 
 ### High-Cost Functions (AI-Intensive)
@@ -411,3 +675,6 @@
 | **Break-Even (Trip Passes)** | 2-11/month |
 | **Total Edge Functions** | 73 |
 | **Total Secrets/API Keys** | 21 |
+| **Total Consumer Features** | 100+ |
+| **Total Agent Features** | 60+ |
+| **Static Pages** | 15 |
