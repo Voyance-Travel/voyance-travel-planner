@@ -20,8 +20,16 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const { priceId, mode = "subscription", returnPath = "/profile" } = await req.json();
-    logStep("Request body parsed", { priceId, mode, returnPath });
+    const { 
+      priceId, 
+      mode = "subscription", 
+      returnPath = "/profile",
+      // Day purchase fields
+      productId,
+      days,
+      packageTier,
+    } = await req.json();
+    logStep("Request body parsed", { priceId, mode, returnPath, days, packageTier });
 
     if (!priceId) {
       throw new Error("priceId is required");
@@ -87,6 +95,20 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
 
+    // Build metadata based on purchase type
+    const sessionMetadata: Record<string, string> = {
+      user_id: userId,
+    };
+
+    // Add day purchase metadata if applicable
+    if (days && Number(days) > 0) {
+      sessionMetadata.type = "day_purchase";
+      sessionMetadata.days = String(days);
+      sessionMetadata.price_id = priceId;
+      if (productId) sessionMetadata.product_id = productId;
+      if (packageTier) sessionMetadata.package_tier = packageTier;
+    }
+
     // Create embedded checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -100,9 +122,7 @@ serve(async (req) => {
       mode: mode as "subscription" | "payment",
       ui_mode: "embedded",
       return_url: `${origin}${returnPath}?session_id={CHECKOUT_SESSION_ID}&payment=success`,
-      metadata: {
-        user_id: userId,
-      },
+      metadata: sessionMetadata,
     });
 
     logStep("Embedded checkout session created", { sessionId: session.id });

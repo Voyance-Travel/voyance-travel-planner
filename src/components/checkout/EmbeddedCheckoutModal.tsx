@@ -18,6 +18,10 @@ interface EmbeddedCheckoutModalProps {
   mode: 'subscription' | 'payment';
   productName: string;
   returnPath?: string;
+  // Day purchase fields
+  productId?: string;
+  days?: number;
+  packageTier?: 'essential' | 'complete';
 }
 
 export function EmbeddedCheckoutModal({
@@ -27,6 +31,9 @@ export function EmbeddedCheckoutModal({
   mode,
   productName,
   returnPath = '/profile',
+  productId,
+  days,
+  packageTier,
 }: EmbeddedCheckoutModalProps) {
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +42,15 @@ export function EmbeddedCheckoutModal({
       setError(null);
       
       const { data, error: fnError } = await supabase.functions.invoke('create-embedded-checkout', {
-        body: { priceId, mode, returnPath },
+        body: { 
+          priceId, 
+          mode, 
+          returnPath,
+          // Day purchase fields
+          productId,
+          days,
+          packageTier,
+        },
       });
 
       if (fnError) {
@@ -52,7 +67,7 @@ export function EmbeddedCheckoutModal({
       setError(message);
       throw err;
     }
-  }, [priceId, mode, returnPath]);
+  }, [priceId, mode, returnPath, productId, days, packageTier]);
 
   const options = { fetchClientSecret };
 

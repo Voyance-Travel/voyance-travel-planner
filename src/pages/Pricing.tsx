@@ -18,6 +18,10 @@ interface CheckoutConfig {
   mode: 'subscription' | 'payment';
   productName: string;
   returnPath: string;
+  // Day purchase fields
+  productId?: string;
+  days?: number;
+  packageTier?: 'essential' | 'complete';
 }
 
 // Helper component for table cell rendering
@@ -51,7 +55,13 @@ export default function Pricing() {
     }
   }, [searchParams, setSearchParams, toast]);
 
-  const openCheckout = async (priceId: string, mode: 'subscription' | 'payment', planName: string, productDisplayName: string) => {
+  const openCheckout = async (
+    priceId: string, 
+    mode: 'subscription' | 'payment', 
+    planName: string, 
+    productDisplayName: string,
+    options?: { productId?: string; days?: number; packageTier?: 'essential' | 'complete' }
+  ) => {
     setLoadingPlan(planName);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -60,7 +70,15 @@ export default function Pricing() {
         navigate('/signin?redirect=/pricing');
         return;
       }
-      setCheckoutConfig({ priceId, mode, productName: productDisplayName, returnPath: '/payment-success' });
+      setCheckoutConfig({ 
+        priceId, 
+        mode, 
+        productName: productDisplayName, 
+        returnPath: '/pricing?success=true',
+        productId: options?.productId,
+        days: options?.days,
+        packageTier: options?.packageTier,
+      });
     } catch (error) {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
@@ -162,7 +180,11 @@ export default function Pricing() {
                   <Button 
                     variant="outline"
                     className="w-full"
-                    onClick={() => openCheckout(product.priceId, 'payment', key, product.name)}
+                    onClick={() => openCheckout(product.priceId, 'payment', key, product.name, {
+                      productId: product.productId,
+                      days: product.days,
+                      packageTier: 'essential',
+                    })}
                     disabled={loadingPlan === key}
                   >
                     {loadingPlan === key ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Get'}
@@ -197,7 +219,11 @@ export default function Pricing() {
                   <Button 
                     className="w-full"
                     variant={featured ? 'default' : 'outline'}
-                    onClick={() => openCheckout(product.priceId, 'payment', key, product.name)}
+                    onClick={() => openCheckout(product.priceId, 'payment', key, product.name, {
+                      productId: product.productId,
+                      days: product.days,
+                      packageTier: 'complete',
+                    })}
                     disabled={loadingPlan === key}
                   >
                     {loadingPlan === key ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Get'}
@@ -236,7 +262,10 @@ export default function Pricing() {
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_1.priceId, 'payment', 'day_1', '1 Day')}
+                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_1.priceId, 'payment', 'day_1', '1 Day', {
+                  productId: STRIPE_PRODUCTS.DAY_1.productId,
+                  days: STRIPE_PRODUCTS.DAY_1.days,
+                })}
                 disabled={loadingPlan === 'day_1'}
               >
                 {loadingPlan === 'day_1' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
@@ -260,7 +289,10 @@ export default function Pricing() {
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_2.priceId, 'payment', 'day_2', '2 Days')}
+                onClick={() => openCheckout(STRIPE_PRODUCTS.DAY_2.priceId, 'payment', 'day_2', '2 Days', {
+                  productId: STRIPE_PRODUCTS.DAY_2.productId,
+                  days: STRIPE_PRODUCTS.DAY_2.days,
+                })}
                 disabled={loadingPlan === 'day_2'}
               >
                 {loadingPlan === 'day_2' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
@@ -480,6 +512,9 @@ export default function Pricing() {
           mode={checkoutConfig.mode}
           productName={checkoutConfig.productName}
           returnPath={checkoutConfig.returnPath}
+          productId={checkoutConfig.productId}
+          days={checkoutConfig.days}
+          packageTier={checkoutConfig.packageTier}
         />
       )}
     </MainLayout>
