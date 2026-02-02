@@ -337,10 +337,10 @@ export default function Profile() {
     }
   };
 
-  // Get current tier (check products)
+  // Get current tier (check credit packs)
   const getCurrentTier = () => {
     if (!subscription?.product_id) return null;
-    const products = [STRIPE_PRODUCTS.MONTHLY, STRIPE_PRODUCTS.YEARLY, STRIPE_PRODUCTS.TRIP_PASS, STRIPE_PRODUCTS.CREDITS_5, STRIPE_PRODUCTS.CREDITS_10];
+    const products = [STRIPE_PRODUCTS.CREDITS_200, STRIPE_PRODUCTS.CREDITS_500, STRIPE_PRODUCTS.CREDITS_1200, STRIPE_PRODUCTS.CREDITS_2500];
     return products.find(p => p.productId === subscription.product_id);
   };
 
@@ -949,7 +949,7 @@ export default function Profile() {
             {/* Day Balance Card */}
             <DayBalanceCard onBuyDays={() => navigate(ROUTES.PRICING)} />
 
-            {/* Quick Add Days */}
+            {/* Quick Add Credits */}
             <div className="relative">
               <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-primary/50 via-accent/30 to-transparent" />
               <div className="pl-8">
@@ -976,16 +976,16 @@ export default function Profile() {
                           </div>
                           <div>
                             <h4 className="text-xl font-serif font-medium text-foreground">
-                              {STRIPE_PRODUCTS.WEEK_COMPLETE.name}
+                              Explorer Pack
                             </h4>
                             <p className="text-sm text-muted-foreground">
-                              7 days with unlimited swaps, AI companion & more
+                              1,200 credits — covers a 7-day trip
                             </p>
                           </div>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-2 mt-4">
-                          {['7 days unlocked', 'Unlimited swaps', 'AI companion', 'Route optimization'].map((feature) => (
+                          {['7 days worth', 'Activity swaps', 'AI companion', 'Route optimization'].map((feature) => (
                             <span key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                               {feature}
@@ -997,21 +997,21 @@ export default function Profile() {
                       <div className="flex flex-col items-center md:items-end gap-3 shrink-0">
                         <div className="text-center md:text-right">
                           <span className="text-3xl font-serif font-medium text-foreground">
-                            ${STRIPE_PRODUCTS.WEEK_COMPLETE.price}
+                            ${STRIPE_PRODUCTS.CREDITS_1200.price}
                           </span>
                           <p className="text-xs text-muted-foreground mt-0.5">one-time</p>
                         </div>
                         <Button 
-                          onClick={() => handleCheckout(STRIPE_PRODUCTS.WEEK_COMPLETE.priceId, 'payment')}
-                          disabled={isCheckingOut === STRIPE_PRODUCTS.WEEK_COMPLETE.priceId}
+                          onClick={() => handleCheckout(STRIPE_PRODUCTS.CREDITS_1200.priceId, 'payment')}
+                          disabled={isCheckingOut === STRIPE_PRODUCTS.CREDITS_1200.priceId}
                           className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
                         >
-                          {isCheckingOut === STRIPE_PRODUCTS.WEEK_COMPLETE.priceId ? (
+                          {isCheckingOut === STRIPE_PRODUCTS.CREDITS_1200.priceId ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4 mr-2" />
-                              Get Week Complete
+                              Get 1,200 Credits
                             </>
                           )}
                         </Button>

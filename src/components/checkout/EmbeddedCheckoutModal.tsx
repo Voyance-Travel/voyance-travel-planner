@@ -18,8 +18,10 @@ interface EmbeddedCheckoutModalProps {
   mode: 'subscription' | 'payment';
   productName: string;
   returnPath?: string;
-  // Day purchase fields
+  // Credit purchase fields
   productId?: string;
+  credits?: number;
+  // Legacy day fields (deprecated)
   days?: number;
   packageTier?: 'essential' | 'complete';
 }
@@ -32,6 +34,7 @@ export function EmbeddedCheckoutModal({
   productName,
   returnPath = '/profile',
   productId,
+  credits,
   days,
   packageTier,
 }: EmbeddedCheckoutModalProps) {

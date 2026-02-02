@@ -1,131 +1,63 @@
-// Pricing configuration - Single source of truth for all pricing data
-// Updated: Day-based model with Essential/Complete packages
+// ============================================================
+// Pricing Configuration - Credit-Based Model
+// Single currency, single balance, single system
+// ============================================================
 
+// Credit Costs for Actions
+export const CREDIT_COSTS = {
+  UNLOCK_DAY: 150,          // Unlock 1 day of itinerary
+  SWAP_ACTIVITY: 5,         // Swap an activity
+  REGENERATE_DAY: 15,       // Regenerate a day
+  RESTAURANT_REC: 10,       // AI restaurant recommendation
+  AI_MESSAGE: 2,            // AI companion message
+  ROUTE_OPTIMIZATION: 0,    // Free
+  PDF_EXPORT: 0,            // Free
+  SHARING: 0,               // Free
+  REAL_TIME_MODE: 0,        // Free
+} as const;
+
+// Credit Packs - Stripe Products
 export const STRIPE_PRODUCTS = {
-  // À la carte days
-  DAY_1: {
-    productId: 'prod_TuJ6uEsn9JZwFR',
-    priceId: 'price_1SwUUAFYxIg9jcJUIOZ30X3V',
-    name: '1 Day',
-    price: 9,
-    days: 1,
+  // Credit Packs
+  CREDITS_200: {
+    productId: 'prod_TuL4pcyakcLNzu',
+    priceId: 'price_1SwWOnFYxIg9jcJU81hyigDW',
+    name: 'Single',
+    credits: 200,
+    price: 12,
+    description: '1 day + plenty of extras',
     mode: 'payment' as const,
   },
-  DAY_2: {
-    productId: 'prod_TuJ67oBTCaXbwK',
-    priceId: 'price_1SwUUBFYxIg9jcJU6OjLZWlW',
-    name: '2 Days',
-    price: 16,
-    days: 2,
-    savings: 2,
-    mode: 'payment' as const,
-  },
-  
-  // Escape packages (3 days)
-  ESCAPE_ESSENTIAL: {
-    productId: 'prod_TuJ6sVstk0s35i',
-    priceId: 'price_1SwUUDFYxIg9jcJUZtZqNFrv',
-    name: 'Escape Essential',
+  CREDITS_500: {
+    productId: 'prod_TuL48Mks27hy4a',
+    priceId: 'price_1SwWOoFYxIg9jcJUauGZTqar',
+    name: 'Starter',
+    credits: 500,
     price: 29,
-    days: 3,
-    tier: 'essential' as const,
+    description: '3-day trip',
     mode: 'payment' as const,
   },
-  ESCAPE_COMPLETE: {
-    productId: 'prod_TuJ6PqaalAiPnm',
-    priceId: 'price_1SwUUEFYxIg9jcJUJZMHE06i',
-    name: 'Escape Complete',
-    price: 49,
-    days: 3,
-    tier: 'complete' as const,
-    mode: 'payment' as const,
-  },
-  
-  // Week packages (7 days)
-  WEEK_ESSENTIAL: {
-    productId: 'prod_TuJ6nEdTRdKMH3',
-    priceId: 'price_1SwUUFFYxIg9jcJUDD0YDlvQ',
-    name: 'Week Essential',
-    price: 49,
-    days: 7,
-    tier: 'essential' as const,
-    mode: 'payment' as const,
-  },
-  WEEK_COMPLETE: {
-    productId: 'prod_TuJ6UVJV9jAdgn',
-    priceId: 'price_1SwUUGFYxIg9jcJUM0RrP76m',
-    name: 'Week Complete',
-    price: 79,
-    days: 7,
-    tier: 'complete' as const,
+  CREDITS_1200: {
+    productId: 'prod_TuL4qskvbZ5ueo',
+    priceId: 'price_1SwWOpFYxIg9jcJUP0YaWuz1',
+    name: 'Explorer',
+    credits: 1200,
+    price: 55,
+    description: '7-day trip',
     featured: true,
     mode: 'payment' as const,
   },
-  
-  // Extended packages (12 days)
-  EXTENDED_ESSENTIAL: {
-    productId: 'prod_TuJ6x93fokmK50',
-    priceId: 'price_1SwUUHFYxIg9jcJUZmRQzSoQ',
-    name: 'Extended Essential',
-    price: 69,
-    days: 12,
-    tier: 'essential' as const,
-    mode: 'payment' as const,
-  },
-  EXTENDED_COMPLETE: {
-    productId: 'prod_TuJ6UizkY38Qsq',
-    priceId: 'price_1SwUUIFYxIg9jcJUB9oWn90L',
-    name: 'Extended Complete',
-    price: 109,
-    days: 12,
-    tier: 'complete' as const,
+  CREDITS_2500: {
+    productId: 'prod_TuL5EXmVj7x98W',
+    priceId: 'price_1SwWOqFYxIg9jcJU0STDFvxw',
+    name: 'Adventurer',
+    credits: 2500,
+    price: 89,
+    description: '14-day trip',
     mode: 'payment' as const,
   },
 
-  // Legacy products (for existing customers - not shown in UI)
-  TRIP_PASS: {
-    productId: 'prod_TrNlzMhbWMadTG',
-    priceId: 'price_1StezbFYxIg9jcJUpN3X01Ox',
-    name: 'Trip Pass',
-    price: 24.99,
-    days: 7, // Convert to 7 days for migration
-    mode: 'payment' as const,
-    deprecated: true,
-  },
-  CREDITS_5: {
-    productId: 'prod_TrNllJjO44rfTT',
-    priceId: 'price_1StezcFYxIg9jcJUJMy5waSO',
-    name: '5 Credits',
-    price: 79,
-    days: 35, // 5 credits × 7 days each
-    mode: 'payment' as const,
-    deprecated: true,
-  },
-  CREDITS_10: {
-    productId: 'prod_TrNlRyHAG5CPaL',
-    priceId: 'price_1StezdFYxIg9jcJUeoYoMEEI',
-    name: '10 Credits',
-    price: 149,
-    days: 70, // 10 credits × 7 days each
-    mode: 'payment' as const,
-    deprecated: true,
-  },
-  MONTHLY: {
-    productId: 'prod_Toyw6Gw8394rU4',
-    priceId: 'price_1SrKz2FYxIg9jcJUVbrbOfFl',
-    name: 'Monthly',
-    price: 15.99,
-    mode: 'subscription' as const,
-    deprecated: true,
-  },
-  YEARLY: {
-    productId: 'prod_ToywY2JIGIaU7e',
-    priceId: 'price_1SrKz4FYxIg9jcJU8kMbZDSk',
-    name: 'Yearly',
-    price: 129,
-    mode: 'subscription' as const,
-    deprecated: true,
-  },
+  // Legacy - Travel Agent (unchanged)
   TRAVEL_AGENT: {
     productId: 'prod_TravelAgent',
     priceId: 'price_TravelAgent',
@@ -135,162 +67,93 @@ export const STRIPE_PRODUCTS = {
   },
 } as const;
 
-// Free tier limits - 1 day/month (banks up to 5), expires after 6 months
-export const FREE_TIER_LIMITS = {
-  daysPerMonth: 1,                 // 1 free day per month
-  maxBankedDays: 5,               // Can accumulate up to 5 free days
-  freeExpirationMonths: 6,        // Free days expire after 6 months
-  maxActivitySwaps: 3,            // 3 swaps per month
-  maxRegenerates: 1,              // 1 regenerate per month
-  canExport: false,
-  canShare: false,
-  // Legacy compatibility
-  maxVisibleDays: 1,
-  maxItinerariesPerMonth: 5,
-  canRegenerateDay: true,
-  canBuildFullTrip: true,
+// Free Tier
+export const FREE_TIER = {
+  signupBonus: 150,              // 150 credits = 1 free day
+  monthlyFree: 150,              // 150 credits/month
+  maxBankedFree: 750,            // Can accumulate up to 5 months worth
+  freeExpirationMonths: 6,       // Free credits expire after 6 months
+  referralBonus: 200,            // 200 credits per referral
 } as const;
 
-// Essential tier limits
-export const ESSENTIAL_LIMITS = {
-  activitySwaps: 5,
-  regenerates: 2,
-  canExport: true,
-  canShare: true,
-  routeOptimization: false,
-  aiCompanion: false,
-  restaurantAI: false,
-  realTimeMode: false,
-  companionSync: false,
-  priorityGeneration: false,
-} as const;
-
-// Complete tier limits
-export const COMPLETE_LIMITS = {
-  activitySwaps: -1, // Unlimited
-  regenerates: -1,   // Unlimited
-  canExport: true,
-  canShare: true,
-  routeOptimization: true,
-  aiCompanion: true,
-  restaurantAI: true,
-  realTimeMode: true,
-  companionSync: true,
-  priorityGeneration: true,
-} as const;
-
-// Package definitions for display
-export const PACKAGES = {
-  ESCAPE: {
-    id: 'escape',
-    name: 'Escape',
-    days: 3,
-    essential: STRIPE_PRODUCTS.ESCAPE_ESSENTIAL,
-    complete: STRIPE_PRODUCTS.ESCAPE_COMPLETE,
+// Credit Pack Definitions for Display
+export const CREDIT_PACKS = [
+  {
+    id: 'single' as const,
+    ...STRIPE_PRODUCTS.CREDITS_200,
+    perCredit: (12 / 200).toFixed(3), // ~$0.06
+    featured: false,
   },
-  WEEK: {
-    id: 'week',
-    name: 'Week',
-    days: 7,
-    essential: STRIPE_PRODUCTS.WEEK_ESSENTIAL,
-    complete: STRIPE_PRODUCTS.WEEK_COMPLETE,
+  {
+    id: 'starter' as const,
+    ...STRIPE_PRODUCTS.CREDITS_500,
+    perCredit: (29 / 500).toFixed(3), // ~$0.058
+    featured: false,
+  },
+  {
+    id: 'explorer' as const,
+    ...STRIPE_PRODUCTS.CREDITS_1200,
+    perCredit: (55 / 1200).toFixed(3), // ~$0.046
     featured: true,
   },
-  EXTENDED: {
-    id: 'extended',
-    name: 'Extended',
-    days: 12,
-    essential: STRIPE_PRODUCTS.EXTENDED_ESSENTIAL,
-    complete: STRIPE_PRODUCTS.EXTENDED_COMPLETE,
+  {
+    id: 'adventurer' as const,
+    ...STRIPE_PRODUCTS.CREDITS_2500,
+    perCredit: (89 / 2500).toFixed(3), // ~$0.036
+    featured: false,
+  },
+] as const;
+
+// Trip cost examples (for pricing page)
+export const TRIP_COST_EXAMPLES = {
+  threeDay: {
+    days: 3,
+    swaps: 4,
+    regenerates: 1,
+    restaurants: 1,
+    aiMessages: 5,
+    total: 3 * 150 + 4 * 5 + 1 * 15 + 1 * 10 + 5 * 2, // ~505
+  },
+  fiveDay: {
+    days: 5,
+    swaps: 6,
+    regenerates: 2,
+    restaurants: 2,
+    aiMessages: 10,
+    total: 5 * 150 + 6 * 5 + 2 * 15 + 2 * 10 + 10 * 2, // ~850
+  },
+  sevenDay: {
+    days: 7,
+    swaps: 8,
+    regenerates: 3,
+    restaurants: 3,
+    aiMessages: 15,
+    total: 7 * 150 + 8 * 5 + 3 * 15 + 3 * 10 + 15 * 2, // ~1195
   },
 } as const;
 
-// Features included in each tier
-export const TIER_FEATURES = {
-  essential: [
-    'Full personalized itinerary',
-    'All days unlocked',
-    '5 activity swaps',
-    '2 day regenerates',
-    'PDF export',
-    'Share with companions',
-  ],
-  complete: [
-    'Everything in Essential',
-    'Unlimited swaps & regenerates',
-    'Route optimization',
-    'AI trip companion',
-    'Restaurant AI',
-    'Real-time trip mode',
-    'Companion sync',
-    'Priority generation',
-  ],
-} as const;
+// Helper functions
+export function formatCredits(credits: number): string {
+  return credits.toLocaleString();
+}
 
-// Comparison table for pricing page
-export const COMPARISON_TABLE = {
-  headers: ['Feature', 'Free', 'Essential', 'Complete'],
-  rows: [
-    { feature: 'Travel DNA Quiz', free: '✓', essential: '✓', complete: '✓' },
-    { feature: 'Days Visible', free: 'Day 1 only', essential: 'All days', complete: 'All days' },
-    { feature: 'Activity Swaps', free: '3/month', essential: '5 per package', complete: 'Unlimited' },
-    { feature: 'Regenerate Days', free: '1/month', essential: '2 per package', complete: 'Unlimited' },
-    { feature: 'Export (PDF)', free: '-', essential: '✓', complete: '✓' },
-    { feature: 'Share with Companions', free: '-', essential: '✓', complete: '✓' },
-    { feature: 'Route Optimization', free: '-', essential: '-', complete: '✓' },
-    { feature: 'AI Trip Companion', free: '-', essential: '-', complete: '✓' },
-    { feature: 'Restaurant AI', free: '-', essential: '-', complete: '✓' },
-    { feature: 'Real-time Trip Mode', free: '-', essential: '-', complete: '✓' },
-  ],
-} as const;
+export function canAfford(balance: number, cost: number): boolean {
+  return balance >= cost;
+}
 
-// Plan feature definitions (for legacy compatibility and detailed displays)
+export function getRecommendedPack(creditsNeeded: number): typeof CREDIT_PACKS[number] | null {
+  for (const pack of CREDIT_PACKS) {
+    if (pack.credits >= creditsNeeded) {
+      return pack;
+    }
+  }
+  return CREDIT_PACKS[CREDIT_PACKS.length - 1]; // Return largest if none fit
+}
+
+// ============================================
+// TRAVEL AGENT TIERS - Professional Plans
+// ============================================
 export const PLAN_FEATURES = {
-  FREE: {
-    id: 'free',
-    name: 'Free',
-    headline: 'Discover your Travel DNA.',
-    subheadline: 'Get 1 free day per month (banks up to 5). See Day 1 of your trip—unlock more when ready.',
-    bestFor: 'Exploring what personalized travel planning feels like.',
-    price: 0,
-    priceDetail: 'forever',
-    features: [
-      'Travel DNA quiz & archetype',
-      '1 free day per month (accumulates)',
-      'Preview your arrival day',
-      '3 activity swaps per month',
-      '1 day regenerate per month',
-    ],
-    notIncluded: [
-      'Days 2+ (blurred until upgrade)',
-      'More swaps & regenerates',
-      'Export / print',
-      'Collaboration',
-    ],
-    limits: FREE_TIER_LIMITS,
-    cta: 'Start Free',
-  },
-  ESSENTIAL: {
-    id: 'essential',
-    name: 'Essential',
-    headline: 'Your full personalized trip.',
-    subheadline: 'All days unlocked with swaps, regenerates, and export.',
-    bestFor: 'Standard trips with full itinerary access.',
-    features: TIER_FEATURES.essential,
-    limits: ESSENTIAL_LIMITS,
-  },
-  COMPLETE: {
-    id: 'complete',
-    name: 'Complete',
-    headline: 'The ultimate travel experience.',
-    subheadline: 'Unlimited modifications plus AI companion features.',
-    bestFor: 'Travelers who want maximum flexibility and AI assistance.',
-    features: TIER_FEATURES.complete,
-    limits: COMPLETE_LIMITS,
-  },
-  // ============================================
-  // TRAVEL AGENT TIERS - Professional Plans
-  // ============================================
   AGENT_STARTER: {
     id: 'agent_starter',
     name: 'Starter',
@@ -454,21 +317,6 @@ export const PLAN_FEATURES = {
   },
 } as const;
 
-// Helper to calculate per-day price
-export function getPerDayPrice(price: number, days: number): string {
-  return (price / days).toFixed(2);
-}
-
-// Helper to check if a feature is available for a tier
-export function isTierFeatureEnabled(
-  tier: 'free' | 'essential' | 'complete', 
-  feature: keyof typeof COMPLETE_LIMITS
-): boolean {
-  if (tier === 'free') return false;
-  if (tier === 'essential') return ESSENTIAL_LIMITS[feature] === true || (typeof ESSENTIAL_LIMITS[feature] === 'number' && ESSENTIAL_LIMITS[feature] > 0);
-  return COMPLETE_LIMITS[feature] === true || COMPLETE_LIMITS[feature] === -1;
-}
-
 // Legacy helper for backwards compatibility
 export function isPlanFeatureEnabled(
   planId: string, 
@@ -478,10 +326,3 @@ export function isPlanFeatureEnabled(
   if (!plan || !plan.limits) return false;
   return (plan.limits as Record<string, unknown>)[feature] === true;
 }
-
-// Migration helpers for legacy purchases
-export const LEGACY_CONVERSION = {
-  TRIP_PASS: { days: 7, tier: 'essential' as const },
-  CREDITS_5: { days: 35, tier: 'essential' as const }, // 5 × 7
-  CREDITS_10: { days: 70, tier: 'essential' as const }, // 10 × 7
-} as const;
