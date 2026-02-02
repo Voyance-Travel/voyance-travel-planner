@@ -256,14 +256,17 @@
 
 ### Free User (Day 1 Only)
 
+> **IMPORTANT:** Free users now get Day 1 GENERATED only (not full itinerary blurred).
+> This reduces cost by ~80% compared to generating all days and hiding them.
+
 | Step | Cost |
 |------|------|
 | Visit Homepage | $0 |
 | Take DNA Quiz | $0.01-0.03 |
-| Plan Trip (Day 1 visible) | $0.20-0.50 |
+| Plan Trip (Day 1 generated) | $0.03-0.08 |
 | View Weather | $0 |
 | Search Flights | $0-0.05 |
-| **Total per Free User** | **$0.21-0.58** |
+| **Total per Free User** | **$0.04-0.16** |
 
 ### Trip Pass User ($24.99 one-time)
 
@@ -411,7 +414,7 @@
 | Feature | Description | Cost |
 |---------|-------------|------|
 | Full Itinerary Build | AI generates multi-day trip (gpt-5) | $0.15-0.60 |
-| Day 1 Only (Free) | Limited preview for free users | $0.05-0.15 |
+| Day 1 Only (Free) | **Single day generated** for free users (not blurred full trip) | $0.03-0.08 |
 | Regenerate Day | Rebuild single day with different activities | $0.03-0.10 |
 | Swap Activity | Replace one activity with alternative | $0.01-0.05 |
 | Add Restaurant | AI recommends dining for meal slot | $0.02-0.06 |
