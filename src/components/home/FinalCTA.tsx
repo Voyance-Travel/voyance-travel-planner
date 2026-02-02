@@ -12,12 +12,12 @@ const destinations = [
 
 export default function FinalCTA() {
   return (
-    <section className="relative py-20 md:py-24 bg-background overflow-hidden">
+    <section className="relative py-14 sm:py-20 md:py-24 bg-background overflow-hidden">
       {/* Top gradient fade from quote */}
       <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-black/5 to-transparent pointer-events-none" />
       
-      <div className="max-w-7xl mx-auto px-8 md:px-16">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 md:px-16">
+        <div className="grid lg:grid-cols-2 gap-10 sm:gap-16 items-center">
           {/* Left: CTA Content */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -26,21 +26,21 @@ export default function FinalCTA() {
             transition={{ duration: 0.6 }}
           >
             {/* Eyebrow */}
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-8 h-px bg-primary" />
-              <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
+            <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+              <div className="w-6 sm:w-8 h-px bg-primary" />
+              <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
                 Ready in Minutes
               </span>
             </div>
 
             {/* Headline */}
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground mb-6 leading-tight">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground mb-4 sm:mb-6 leading-tight">
               Stop planning,{' '}
               <em className="font-normal">start traveling</em>
             </h2>
 
             {/* Subhead */}
-            <p className="text-lg text-muted-foreground font-sans font-light mb-10 max-w-md leading-relaxed">
+            <p className="text-base sm:text-lg text-muted-foreground font-sans font-light mb-8 sm:mb-10 max-w-md leading-relaxed">
               We've done the research. We know what works. All we need to know is who you are.
             </p>
 

@@ -28,7 +28,7 @@ const SAMPLE_ARCHETYPE = {
 
 export default function SampleArchetype() {
   return (
-    <section id="sample-archetype" className="py-20 md:py-24 bg-background relative overflow-hidden">
+    <section id="sample-archetype" className="py-14 sm:py-20 md:py-24 bg-background relative overflow-hidden">
       {/* Top fade transition from hero */}
       <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/5 to-transparent pointer-events-none" />
       
@@ -40,25 +40,25 @@ export default function SampleArchetype() {
       {/* Decorative side accent */}
       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-48 bg-gradient-to-b from-transparent via-primary/20 to-transparent hidden lg:block" />
 
-      <div className="max-w-6xl mx-auto px-8 md:px-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 md:px-16">
         {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-16"
+          className="text-center mb-10 sm:mb-16"
         >
-          <div className="flex items-center justify-center gap-4 mb-4">
-            <div className="w-8 h-px bg-primary" />
-            <span className="text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
+          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4">
+            <div className="w-6 sm:w-8 h-px bg-primary" />
+            <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
               Sample Result
             </span>
-            <div className="w-8 h-px bg-primary" />
+            <div className="w-6 sm:w-8 h-px bg-primary" />
           </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground mb-4">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground mb-3 sm:mb-4">
             See yourself in your <em className="font-normal">Travel DNA</em>
           </h2>
-          <p className="text-muted-foreground max-w-lg mx-auto font-sans">
+          <p className="text-sm sm:text-base text-muted-foreground max-w-lg mx-auto font-sans">
             Here's what one of our 27 archetypes looks like. Yours will be uniquely you.
           </p>
         </motion.div>
@@ -71,31 +71,31 @@ export default function SampleArchetype() {
           transition={{ delay: 0.2 }}
           className="relative"
         >
-          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xl">
+          <div className="bg-card border border-border rounded-xl sm:rounded-2xl overflow-hidden shadow-xl">
             {/* Header with gradient */}
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-accent/10 p-8 md:p-12 border-b border-border">
-              <div className="flex items-start gap-6">
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-accent/10 p-5 sm:p-8 md:p-12 border-b border-border">
+              <div className="flex items-start gap-4 sm:gap-6">
                 {/* Icon */}
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
-                  <Snail className="w-8 h-8 text-white" />
+                <div className="w-12 sm:w-16 h-12 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
+                  <Snail className="w-6 sm:w-8 h-6 sm:h-8 text-white" />
                 </div>
                 
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   {/* Category badge */}
                   <div className="flex items-center gap-2 mb-2">
-                    <Leaf className="w-4 h-4 text-primary" />
-                    <span className="text-xs tracking-wider uppercase text-primary font-medium">
+                    <Leaf className="w-3 sm:w-4 h-3 sm:h-4 text-primary" />
+                    <span className="text-[10px] sm:text-xs tracking-wider uppercase text-primary font-medium">
                       {SAMPLE_ARCHETYPE.category}
                     </span>
                   </div>
                   
                   {/* Name */}
-                  <h3 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-serif font-semibold text-foreground mb-1 sm:mb-2">
                     {SAMPLE_ARCHETYPE.name}
                   </h3>
                   
                   {/* Hook line */}
-                  <p className="text-lg text-muted-foreground italic font-serif">
+                  <p className="text-sm sm:text-lg text-muted-foreground italic font-serif">
                     "{SAMPLE_ARCHETYPE.hookLine}"
                   </p>
                 </div>
@@ -103,11 +103,11 @@ export default function SampleArchetype() {
             </div>
 
             {/* Body */}
-            <div className="p-8 md:p-12">
-              <div className="grid md:grid-cols-2 gap-10">
+            <div className="p-5 sm:p-8 md:p-12">
+              <div className="grid md:grid-cols-2 gap-6 sm:gap-10">
                 {/* Left: Description */}
                 <div>
-                  <p className="text-foreground text-lg leading-relaxed mb-8 font-sans">
+                  <p className="text-foreground text-base sm:text-lg leading-relaxed mb-6 sm:mb-8 font-sans">
                     {SAMPLE_ARCHETYPE.coreDescription}
                   </p>
 
