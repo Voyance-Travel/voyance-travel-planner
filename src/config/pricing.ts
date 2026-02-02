@@ -121,10 +121,10 @@ export const CREDIT_PACKS = [
   },
 ] as const;
 
-// All packs including top-up (for full display)
+// All packs with top-up at the end (for display)
 export const ALL_CREDIT_PACKS = [
-  TOPUP_PACK,
   ...CREDIT_PACKS,
+  TOPUP_PACK,
 ] as const;
 
 // Trip cost examples (for pricing page)
