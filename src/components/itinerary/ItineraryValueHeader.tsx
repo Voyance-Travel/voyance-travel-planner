@@ -79,7 +79,7 @@ export function ItineraryValueHeader({
       </div>
 
       {/* Value Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="flex flex-wrap justify-center gap-3">
         {stats.voyanceFinds > 0 && (
           <ValueStat
             icon={<Sparkles className="h-4 w-4" />}
