@@ -235,7 +235,7 @@ function TripDetailsStep({
   celebrationDay: number | undefined;
   setCelebrationDay: (d: number | undefined) => void;
   onContinue: () => void;
-  onBack: () => void;
+  onBack?: () => void;
 }) {
   const today = startOfToday();
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => 
@@ -476,9 +476,13 @@ function TripDetailsStep({
 
       {/* Navigation */}
       <div className="flex justify-between pt-6 max-w-md mx-auto">
-        <Button variant="ghost" onClick={onBack}>
-          Back
-        </Button>
+        {onBack ? (
+          <Button variant="ghost" onClick={onBack}>
+            Back
+          </Button>
+        ) : (
+          <div /> /* Spacer when no back button */
+        )}
         <Button onClick={onContinue} disabled={!isValid} className="gap-2">
           Continue
           <ArrowRight className="w-4 h-4" />
@@ -634,6 +638,7 @@ export default function Start() {
   // Current step: 1 = Quiz, 2 = Trip Details, 3 = Budget
   const [currentStep, setCurrentStep] = useState(1);
   const [quizCompleted, setQuizCompleted] = useState(false);
+  const [hasExistingDNA, setHasExistingDNA] = useState(false);
 
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
@@ -675,6 +680,7 @@ export default function Start() {
         
         if (data?.traveler_type) {
           // User already has Travel DNA, skip quiz
+          setHasExistingDNA(true);
           setQuizCompleted(true);
           setCurrentStep(2);
         }
@@ -748,13 +754,15 @@ export default function Start() {
           {/* Progress Indicator */}
           <StepIndicator currentStep={currentStep} totalSteps={3} />
 
-          {/* Time estimate */}
-          <div className="text-center mb-8">
-            <span className="text-sm text-muted-foreground">
-              <Clock className="w-4 h-4 inline mr-1" />
-              Takes ~2 minutes
-            </span>
-          </div>
+          {/* Time estimate - only show if user needs to take quiz */}
+          {!hasExistingDNA && currentStep === 1 && (
+            <div className="text-center mb-8">
+              <span className="text-sm text-muted-foreground">
+                <Clock className="w-4 h-4 inline mr-1" />
+                Takes ~5 minutes
+              </span>
+            </div>
+          )}
 
           {/* Main content with sidebar */}
           <div className="flex gap-12">
@@ -791,7 +799,7 @@ export default function Start() {
                     celebrationDay={celebrationDay}
                     setCelebrationDay={setCelebrationDay}
                     onContinue={() => setCurrentStep(3)}
-                    onBack={() => setCurrentStep(1)}
+                    onBack={hasExistingDNA ? undefined : () => setCurrentStep(1)}
                   />
                 )}
 
