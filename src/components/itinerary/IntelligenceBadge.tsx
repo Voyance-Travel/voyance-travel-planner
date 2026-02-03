@@ -3,8 +3,11 @@
  * 
  * Visual badges that surface the hidden value in itinerary recommendations.
  * These make the "invisible" intelligence visible to users.
+ * 
+ * Tooltips only show automatically on first visit - after that users hover to see them.
  */
 
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Sparkles,
@@ -21,6 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { hasSeenIntelligenceBadges, markIntelligenceBadgesSeen } from '@/hooks/useFirstTimeTooltip';
 
 export type IntelligenceType =
   | 'voyance-find'      // Hidden gem you wouldn't find on Google
@@ -102,6 +106,33 @@ export function IntelligenceBadge({
   className,
 }: IntelligenceBadgeProps) {
   const config = badgeConfig[type];
+  const [isOpen, setIsOpen] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
+  
+  // Check if user has seen badges before on mount
+  useEffect(() => {
+    const hasSeen = hasSeenIntelligenceBadges();
+    if (!hasSeen) {
+      // Auto-open tooltip briefly on first visit
+      const timer = setTimeout(() => {
+        setIsOpen(true);
+        // Auto-close after 2 seconds
+        setTimeout(() => {
+          setIsOpen(false);
+          markIntelligenceBadgesSeen();
+        }, 2000);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+  
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (open && !hasInteracted) {
+      setHasInteracted(true);
+      markIntelligenceBadgesSeen();
+    }
+  };
   
   const badge = (
     <span
@@ -118,7 +149,7 @@ export function IntelligenceBadge({
   );
 
   return (
-    <Tooltip>
+    <Tooltip open={isOpen} onOpenChange={handleOpenChange}>
       <TooltipTrigger asChild>
         {badge}
       </TooltipTrigger>
