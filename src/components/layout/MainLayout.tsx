@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
+import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -19,6 +20,11 @@ export default function MainLayout({
 }: MainLayoutProps) {
   return (
     <div className={`min-h-screen flex flex-col ${className}`}>
+      {/* Global SEO Structured Data */}
+      <OrganizationSchema />
+      <WebSiteSchema />
+      <TravelAgencySchema />
+      
       <TopNav />
       <main className="flex-1">
         {children}

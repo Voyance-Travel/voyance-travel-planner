@@ -1,10 +1,11 @@
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
+import { FAQSchema } from '@/components/seo/StructuredData';
 import { motion } from 'framer-motion';
 import { ChevronDown, Search, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Link } from 'react-router-dom';
 import { CONTACT_CONFIG } from '@/config/contact';
@@ -113,12 +114,21 @@ export default function FAQ() {
     ),
   })).filter(category => category.questions.length > 0);
 
+  // Flatten all FAQs for structured data
+  const allFAQs = useMemo(() => 
+    faqCategories.flatMap(cat => 
+      cat.questions.map(q => ({ question: q.q, answer: q.a }))
+    ), 
+  []);
+
   return (
     <MainLayout>
       <Head
         title="FAQ | Voyance"
         description="Find answers to frequently asked questions about Voyance travel planning."
+        canonical="https://travelwithvoyance.com/faq"
       />
+      <FAQSchema questions={allFAQs} />
       
       {/* Hero */}
       <section className="pt-32 pb-12 bg-gradient-to-br from-primary/10 via-background to-secondary/10">

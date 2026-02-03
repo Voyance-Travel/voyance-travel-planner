@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Dna, Sparkles, Sliders, RefreshCw, MapPin } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
+import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
@@ -160,6 +161,11 @@ export default function Archetypes() {
 
   return (
     <MainLayout>
+      <Head
+        title="Travel Archetypes | Voyance - Discover Your Travel DNA"
+        description="Explore 27 unique traveler personalities and discover which one matches your travel style. From Slow Travelers to Adrenaline Architects, find your travel DNA."
+        canonical="https://travelwithvoyance.com/archetypes"
+      />
       {/* Hero with spotlight cards */}
       <section className="pt-24 pb-16 md:pt-32 md:pb-20 relative overflow-hidden">
         {/* Warm gradient background */}
