@@ -1,8 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+// Rate limit thresholds
+const RATE_LIMITS = {
+  perMinute: 10,
+  perHour: 30,
+  perDay: 100,
 };
 
 interface QuickPreviewRequest {
@@ -21,12 +29,47 @@ interface QuickPreviewResponse {
   totalDays: number;
   archetypeUsed: string;
   archetypeTagline: string;
+  isFallback?: boolean;
+}
+
+// Normalize destination to key format: "Tokyo, Japan" -> "tokyo-japan"
+function normalizeDestinationKey(destination: string): string {
+  return destination
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+// Get client IP from request headers
+function getClientIP(req: Request): string {
+  // Cloudflare
+  const cfConnectingIP = req.headers.get('cf-connecting-ip');
+  if (cfConnectingIP) return cfConnectingIP;
+  
+  // Standard proxy headers
+  const xForwardedFor = req.headers.get('x-forwarded-for');
+  if (xForwardedFor) {
+    return xForwardedFor.split(',')[0].trim();
+  }
+  
+  const xRealIP = req.headers.get('x-real-ip');
+  if (xRealIP) return xRealIP;
+  
+  // Fallback
+  return 'unknown';
 }
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
 
   try {
     const { destination }: QuickPreviewRequest = await req.json();
@@ -38,12 +81,98 @@ serve(async (req: Request) => {
       );
     }
 
+    const clientIP = getClientIP(req);
+    const endpoint = 'quick-preview';
+    const now = new Date();
+    
+    // Check rate limits
+    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000).toISOString();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Count requests in each window
+    const [minuteCount, hourCount, dayCount] = await Promise.all([
+      supabaseAdmin
+        .from('rate_limits')
+        .select('id', { count: 'exact', head: true })
+        .eq('ip_address', clientIP)
+        .eq('endpoint', endpoint)
+        .gte('created_at', oneMinuteAgo),
+      supabaseAdmin
+        .from('rate_limits')
+        .select('id', { count: 'exact', head: true })
+        .eq('ip_address', clientIP)
+        .eq('endpoint', endpoint)
+        .gte('created_at', oneHourAgo),
+      supabaseAdmin
+        .from('rate_limits')
+        .select('id', { count: 'exact', head: true })
+        .eq('ip_address', clientIP)
+        .eq('endpoint', endpoint)
+        .gte('created_at', oneDayAgo),
+    ]);
+
+    const isRateLimited = 
+      (minuteCount.count ?? 0) >= RATE_LIMITS.perMinute ||
+      (hourCount.count ?? 0) >= RATE_LIMITS.perHour ||
+      (dayCount.count ?? 0) >= RATE_LIMITS.perDay;
+
+    if (isRateLimited) {
+      console.log(`[rate-limited] IP: ${clientIP}, minute: ${minuteCount.count}, hour: ${hourCount.count}, day: ${dayCount.count}`);
+      
+      // Try to serve a static fallback
+      const destinationKey = normalizeDestinationKey(destination);
+      const { data: fallback } = await supabaseAdmin
+        .from('destination_fallbacks')
+        .select('*')
+        .eq('destination_key', destinationKey)
+        .single();
+
+      if (fallback) {
+        // Serve cached fallback - costs $0
+        const result: QuickPreviewResponse = {
+          destination: fallback.display_name,
+          days: fallback.preview_days as QuickPreviewDay[],
+          totalDays: 7,
+          archetypeUsed: "Slow Traveler",
+          archetypeTagline: fallback.tagline,
+          isFallback: true,
+        };
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // No fallback available - serve generic response
+      const genericResult: QuickPreviewResponse = {
+        destination: destination,
+        days: [
+          { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites in the heart of the city." },
+          { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and the stories that shape this place." },
+          { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
+        ],
+        totalDays: 7,
+        archetypeUsed: "Slow Traveler",
+        archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
+        isFallback: true,
+      };
+      return new Response(JSON.stringify(genericResult), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Log this request for rate limiting
+    await supabaseAdmin.from('rate_limits').insert({
+      ip_address: clientIP,
+      endpoint,
+    });
+
+    // Proceed with AI generation
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Use the fastest model for quick preview
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -114,7 +243,6 @@ OUTPUT FORMAT (JSON only, no markdown):
     // Parse the JSON from the response
     let parsed;
     try {
-      // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
