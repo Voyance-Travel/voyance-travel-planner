@@ -2049,13 +2049,6 @@ export function EditorialItinerary({
               imageUrl={midImage}
               isLoading={imagesLoading}
             />
-            {/* Destination Mid-page Image */}
-            <DestinationMidImage 
-              destination={destination} 
-              destinationCountry={destinationCountry} 
-              imageUrl={midImage}
-              isLoading={imagesLoading}
-            />
 
             {/* FLIGHT SECTION - Editorial Style */}
             <section className="space-y-5">
