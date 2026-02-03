@@ -104,18 +104,20 @@ export default function DestinationEntry() {
       <motion.h1 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal mb-4 text-white drop-shadow-lg"
+        className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal mb-4 text-white"
+        style={{ textShadow: '0 2px 20px rgba(0,0,0,0.8), 0 4px 40px rgba(0,0,0,0.6)' }}
       >
         40 hours of research.
         <br />
-        <span className="text-primary">2 minutes to access.</span>
+        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}>2 minutes to access.</span>
       </motion.h1>
       
       <motion.p
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="text-lg md:text-xl text-white/80 mb-10"
+        className="text-lg md:text-xl text-white/90 mb-10"
+        style={{ textShadow: '0 1px 10px rgba(0,0,0,0.7), 0 2px 20px rgba(0,0,0,0.5)' }}
       >
         We show the reasoning. We know what to skip. Pick a destination.
       </motion.p>

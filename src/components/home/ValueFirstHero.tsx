@@ -19,9 +19,11 @@ export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) 
           fetchPriority="high"
           decoding="async"
         />
-        {/* Multi-layer gradient overlay for readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-black/70" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
+        {/* Multi-layer gradient overlay for strong text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/60 to-black/80" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/20 to-black/40" />
+        {/* Center vignette for text focus */}
+        <div className="absolute inset-0 bg-radial-gradient" style={{ background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.3) 100%)' }} />
       </div>
 
       {/* Editorial Grid Lines - Magazine Detail */}
