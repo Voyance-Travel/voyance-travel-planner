@@ -100,16 +100,16 @@ export default function DestinationEntry() {
 
   return (
     <div className="w-full text-center">
-      {/* Intelligence-focused headline */}
+      {/* Value proposition headline */}
       <motion.h1 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal mb-4 text-white"
         style={{ textShadow: '0 2px 20px rgba(0,0,0,0.8), 0 4px 40px rgba(0,0,0,0.6)' }}
       >
-        40 hours of research.
+        You don't need more travel ideas.
         <br />
-        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}>Personalized for you.</span>
+        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}>You need a trip.</span>
       </motion.h1>
       
       <motion.p
@@ -119,7 +119,7 @@ export default function DestinationEntry() {
         className="text-lg md:text-xl text-white/90 mb-10"
         style={{ textShadow: '0 1px 10px rgba(0,0,0,0.7), 0 2px 20px rgba(0,0,0,0.5)' }}
       >
-        We show the reasoning. We know what to skip. Pick a destination.
+        Tell us how you travel. We'll build every day — timed, budgeted, and editable.
       </motion.p>
 
       <motion.div
@@ -133,7 +133,7 @@ export default function DestinationEntry() {
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Tokyo, Paris, Bali..."
+          placeholder="Where do you want to go..."
           className="w-full text-xl text-center py-4 border-0 border-b-2 border-white/40 bg-transparent text-white placeholder:text-white/50 focus:outline-none focus:border-white transition-colors"
           autoFocus
           disabled={isGenerating}
