@@ -4288,6 +4288,53 @@ Generate activities for this day following ALL constraints above.`;
         return normalizedAct;
       });
 
+      // ==========================================================================
+      // DEPARTURE DAY SEQUENCE FIX: Ensure checkout comes BEFORE airport transfer
+      // ==========================================================================
+      if (isLastDay && generatedDay.activities.length > 1) {
+        const checkoutIndex = generatedDay.activities.findIndex(a => 
+          (a.title || '').toLowerCase().includes('checkout') || 
+          (a.title || '').toLowerCase().includes('check-out') ||
+          (a.title || '').toLowerCase().includes('check out')
+        );
+        const airportIndex = generatedDay.activities.findIndex(a => 
+          ((a.title || '').toLowerCase().includes('airport') || 
+           (a.title || '').toLowerCase().includes('departure transfer')) &&
+          (a.category === 'transport' || (a.title || '').toLowerCase().includes('transfer'))
+        );
+        
+        // If checkout exists and comes AFTER airport transfer, swap them
+        if (checkoutIndex !== -1 && airportIndex !== -1 && checkoutIndex > airportIndex) {
+          console.log(`[Stage 2] Fixing departure day sequence: moving checkout (index ${checkoutIndex}) before airport transfer (index ${airportIndex})`);
+          
+          const checkoutActivity = generatedDay.activities[checkoutIndex];
+          const airportActivity = generatedDay.activities[airportIndex];
+          
+          // Swap the times - checkout should have the earlier time
+          const checkoutStart = checkoutActivity.startTime;
+          const checkoutEnd = checkoutActivity.endTime;
+          const airportStart = airportActivity.startTime;
+          const airportEnd = airportActivity.endTime;
+          
+          // Give checkout the airport's original time slot, and airport gets checkout's
+          checkoutActivity.startTime = airportStart;
+          checkoutActivity.endTime = airportStart.replace(/:\d{2}$/, ':15'); // 15 min for checkout
+          airportActivity.startTime = checkoutActivity.endTime;
+          airportActivity.endTime = airportEnd;
+          
+          // Swap positions in array
+          generatedDay.activities[airportIndex] = checkoutActivity;
+          generatedDay.activities[checkoutIndex] = airportActivity;
+          
+          // Re-sort by start time to ensure proper order
+          generatedDay.activities.sort((a, b) => {
+            const timeA = a.startTime.split(':').map(Number);
+            const timeB = b.startTime.split(':').map(Number);
+            return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+          });
+        }
+      }
+
       // Validate the generated day - pass previousDays for trip-wide uniqueness checks
       const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays);
       lastValidation = validation;
