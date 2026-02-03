@@ -3997,8 +3997,8 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
             <Plane className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h3 className="font-serif text-lg font-medium">Your Airport Game Plan</h3>
-            <p className="text-sm text-muted-foreground">Everything you need to know for departure day</p>
+            <h3 className="font-serif text-lg font-medium">Your Arrival Game Plan</h3>
+            <p className="text-sm text-muted-foreground">Everything you need for Day 1</p>
           </div>
         </div>
       </div>
