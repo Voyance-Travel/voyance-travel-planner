@@ -79,16 +79,22 @@ function getDestinationImage(destination: string): string {
 function transformTrip(trip: any): DisplayTrip {
   const startDate = trip.start_date ? new Date(trip.start_date) : null;
   const endDate = trip.end_date ? new Date(trip.end_date) : null;
+  const now = new Date();
   
   let dates = 'Planning...';
   if (startDate && endDate) {
     dates = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
   }
   
+  // Determine status based on dates AND explicit status
   let status: 'upcoming' | 'completed' | 'draft' = 'draft';
   if (trip.status === 'completed') {
     status = 'completed';
-  } else if (trip.status === 'booked' || (startDate && startDate > new Date())) {
+  } else if (endDate && endDate < now) {
+    // Trip has ended - mark as completed regardless of DB status
+    status = 'completed';
+  } else if (trip.status === 'booked' || (endDate && endDate >= now)) {
+    // Trip hasn't ended yet
     status = 'upcoming';
   }
   

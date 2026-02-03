@@ -197,14 +197,17 @@ export async function getTripStats(): Promise<TripStats> {
     // Status-based: explicitly completed
     if (t.status === 'completed') return true;
     // Date-based: trip has ended (end_date is in the past)
-    if (t.end_date && new Date(t.end_date) < now && t.status !== 'draft') return true;
+    // Include drafts that have past end dates - these are real trips that happened
+    if (t.end_date && new Date(t.end_date) < now) return true;
     return false;
   });
   
   const upcomingTrips = allTrips.filter(t => {
     // Explicitly completed trips are not upcoming
     if (t.status === 'completed') return false;
-    // Trip hasn't ended yet (future or currently ongoing) - includes drafts with future dates
+    // Trip has already ended - not upcoming
+    if (t.end_date && new Date(t.end_date) < now) return false;
+    // Trip hasn't ended yet (future or currently ongoing)
     if (t.end_date && new Date(t.end_date) >= now) return true;
     // No end date but has future start date
     if (t.start_date && new Date(t.start_date) >= now) return true;
