@@ -13,15 +13,10 @@ import {
   Clock,
   Loader2,
   CreditCard,
-  Check,
-  Crown,
-  RefreshCw,
   Sparkles,
-  Zap,
   Plane,
   CheckCircle,
-  Search,
-  Building2
+  Building2,
 } from 'lucide-react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
@@ -31,7 +26,7 @@ import heroHotelImage from '@/assets/hero-hotel.jpg';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
-import { STRIPE_PRODUCTS, PLAN_FEATURES } from '@/config/pricing';
+import { STRIPE_PRODUCTS } from '@/config/pricing';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -378,7 +373,7 @@ export default function Profile() {
     { id: 'trips' as const, label: 'My Trips' },
     // { id: 'agent' as const, label: 'My Agent' }, // Agent feature disabled
     { id: 'friends' as const, label: 'Friends' },
-    { id: 'subscription' as const, label: 'Subscription' },
+    { id: 'subscription' as const, label: 'Credits' },
     { id: 'preferences' as const, label: 'Preferences' },
   ];
 
@@ -872,165 +867,27 @@ export default function Profile() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-12"
+            className="space-y-8"
           >
-            {/* Hero Header - Editorial Magazine Style */}
-            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-slate to-slate/90 p-8 md:p-12">
-              <div className="absolute inset-0 opacity-10">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-white/20 to-transparent rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2" />
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-primary/30 to-transparent rounded-full blur-2xl transform -translate-x-1/3 translate-y-1/3" />
-              </div>
-              <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-4">
-                  <Crown className="h-4 w-4 text-gold" />
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-slate-foreground/70 font-medium">
-                    Premium Membership
-                  </span>
-                </div>
-                <h2 className="text-3xl md:text-4xl font-serif font-medium text-slate-foreground tracking-tight leading-tight mb-3">
-                  Travel Without<br />Limits
-                </h2>
-                <p className="text-slate-foreground/70 max-w-md text-sm leading-relaxed">
-                  {subscription?.subscribed 
-                    ? `Your membership is active until ${subscription.subscription_end ? format(new Date(subscription.subscription_end), 'MMMM d, yyyy') : 'renewal'}`
-                    : 'Unlock AI-powered itineraries, unlimited trips, and exclusive travel intelligence.'}
-                </p>
-                <div className="mt-6 flex items-center gap-4">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={checkSubscription}
-                    disabled={isLoadingSubscription}
-                    className="text-xs text-slate-foreground/60 hover:text-slate-foreground hover:bg-white/10"
-                  >
-                    {isLoadingSubscription ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                        Refresh Status
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Current Status - Editorial Card */}
-            {!subscription?.subscribed && (
-              <div className="relative">
-                <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-border via-muted-foreground/30 to-border" />
-                <div className="pl-8">
-                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                    Current Plan
-                  </span>
-                  <h3 className="text-xl font-serif text-foreground mt-2 mb-3">Explorer (Free)</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-lg mb-4">
-                    You're exploring Voyance with our complimentary tier. Upgrade to unlock the full suite of travel intelligence.
-                  </p>
-                  <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-2">
-                      <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                      3 trips/month
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                      Basic itineraries
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                      Travel DNA quiz
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Credit Balance Card */}
+            {/* Credit Balance Card - Primary Focus */}
             <CreditBalanceCard onBuyCredits={() => navigate(ROUTES.PRICING)} />
 
-            {/* Quick Add Credits */}
-            <div className="relative">
-              <div className="absolute -left-4 top-0 bottom-0 w-px bg-gradient-to-b from-primary/50 via-accent/30 to-transparent" />
-              <div className="pl-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Zap className="h-4 w-4 text-primary" />
-                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                    Quick Purchase
-                  </span>
-                </div>
-                
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="relative bg-gradient-to-br from-primary/5 via-card to-accent/5 rounded-xl border border-primary/20 overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-primary/10 to-transparent rounded-full blur-2xl transform translate-x-1/3 -translate-y-1/3" />
-                  
-                  <div className="relative p-6 md:p-8">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <Sparkles className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <h4 className="text-xl font-serif font-medium text-foreground">
-                              Explorer Pack
-                            </h4>
-                            <p className="text-sm text-muted-foreground">
-                              1,200 credits — covers a 7-day trip
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-2 mt-4">
-                          {['7 days worth', 'Activity swaps', 'AI companion', 'Route optimization'].map((feature) => (
-                            <span key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                              {feature}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-col items-center md:items-end gap-3 shrink-0">
-                        <div className="text-center md:text-right">
-                          <span className="text-3xl font-serif font-medium text-foreground">
-                            ${STRIPE_PRODUCTS.CREDITS_1200.price}
-                          </span>
-                          <p className="text-xs text-muted-foreground mt-0.5">one-time</p>
-                        </div>
-                        <Button 
-                          onClick={() => handleCheckout(STRIPE_PRODUCTS.CREDITS_1200.priceId, 'payment')}
-                          disabled={isCheckingOut === STRIPE_PRODUCTS.CREDITS_1200.priceId}
-                          className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
-                        >
-                          {isCheckingOut === STRIPE_PRODUCTS.CREDITS_1200.priceId ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>
-                              <Sparkles className="h-4 w-4 mr-2" />
-                              Get 1,200 Credits
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
+            {/* Browse Packages CTA */}
+            <div className="flex flex-col items-center gap-4 py-8 px-6 bg-muted/30 rounded-xl">
+              <div className="text-center">
+                <h3 className="text-lg font-serif font-medium text-foreground mb-2">
+                  Need more credits?
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Unlock days, swap activities, and get AI recommendations.
+                </p>
               </div>
-            </div>
-
-            {/* Browse All Packages */}
-            <div className="text-center py-6">
               <Button 
-                variant="outline" 
                 onClick={() => navigate(ROUTES.PRICING)}
-                className="group"
+                className="gap-2"
               >
-                <Plane className="h-4 w-4 mr-2 group-hover:translate-x-1 transition-transform" />
-                Browse All Packages
+                <Sparkles className="h-4 w-4" />
+                View Credit Packs
               </Button>
             </div>
 
@@ -1041,7 +898,7 @@ export default function Profile() {
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-1">Billing & Invoices</h4>
                     <p className="text-sm text-muted-foreground">
-                      Update payment methods, download invoices, or manage your subscription
+                      Update payment methods or download invoices
                     </p>
                   </div>
                   <Button 
@@ -1057,12 +914,12 @@ export default function Profile() {
               </div>
             )}
 
-            {/* FAQ Footer - Editorial */}
-            <div className="text-center pt-6">
+            {/* Support Link */}
+            <div className="text-center pt-4">
               <p className="text-xs text-muted-foreground">
-                Questions about membership?{' '}
+                Questions?{' '}
                 <a href="mailto:support@voyance.travel" className="underline underline-offset-2 hover:text-foreground transition-colors">
-                  Contact our team
+                  Contact support
                 </a>
               </p>
             </div>
