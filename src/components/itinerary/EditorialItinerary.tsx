@@ -21,8 +21,11 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins
 } from 'lucide-react';
+import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
+import { useCredits } from '@/hooks/useCredits';
+import { CREDIT_COSTS } from '@/config/pricing';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
 import { Badge } from '@/components/ui/badge';
@@ -817,6 +820,11 @@ export function EditorialItinerary({
   // Get entitlements for credit checking
   const { data: entitlements, isPaid } = useEntitlements();
   
+  // Credit system hooks
+  const { data: creditData } = useCredits();
+  const spendCredits = useSpendCredits();
+  const totalCredits = creditData?.totalCredits ?? 0;
+  
   // Get trip permission for current user
   const { data: tripPermission } = useTripPermission(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
@@ -953,10 +961,23 @@ export function EditorialItinerary({
     return 'any';
   }, []);
 
+  // Check if user can swap (has enough credits)
+  const canSwap = useCallback(() => {
+    if (isPaid) return true;
+    return totalCredits >= CREDIT_COSTS.SWAP_ACTIVITY;
+  }, [isPaid, totalCredits]);
+
   // Open the AI swap drawer for an activity
   const openSwapDrawer = useCallback((dayIndex: number, activity: EditorialActivity) => {
     if (activity.isLocked) {
       toast.error('Unlock this activity first to find alternatives');
+      return;
+    }
+
+    // Check if user can afford swap
+    if (!canSwap()) {
+      toast.error(`Need ${CREDIT_COSTS.SWAP_ACTIVITY} credits to swap activities`);
+      setShowCreditPrompt(true);
       return;
     }
 
@@ -990,15 +1011,33 @@ export function EditorialItinerary({
     } else {
       setSwapDrawerOpen(true);
     }
-  }, [travelers, budgetTier, isDiningActivity, getMealTypeFromActivity]);
+  }, [travelers, budgetTier, isDiningActivity, getMealTypeFromActivity, canSwap]);
 
   // Handle selecting an alternative from the drawer
-  const handleSelectSwapAlternative = useCallback((newActivity: ItineraryActivity) => {
+  const handleSelectSwapAlternative = useCallback(async (newActivity: ItineraryActivity) => {
     // Capture swapTarget at invocation time to avoid stale closure issues
     const target = swapTarget;
     if (!target) {
       console.warn('[Swap] No swap target available');
       return;
+    }
+
+    // Spend credits for the swap (skip for paid users)
+    if (!isPaid) {
+      try {
+        await spendCredits.mutateAsync({
+          action: 'SWAP_ACTIVITY',
+          tripId,
+          activityId: target.activityId,
+          dayIndex: target.dayIndex,
+        });
+      } catch (err) {
+        console.error('[Swap] Credit spend failed:', err);
+        setSwapDrawerOpen(false);
+        setSwapTarget(null);
+        setSwapDrawerActivity(null);
+        return;
+      }
     }
 
     console.log('[Swap] Replacing activity', target.activityId, 'with', newActivity.title);
@@ -1049,7 +1088,8 @@ export function EditorialItinerary({
     setSwapDrawerOpen(false);
     setSwapTarget(null);
     setSwapDrawerActivity(null);
-  }, [swapTarget, tripCurrency]);
+    toast.success(`Swapped activity (${CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
+  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId]);
 
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
@@ -1409,17 +1449,16 @@ export function EditorialItinerary({
     toast.success('Activity removed');
   }, []);
 
-  // Check if user can regenerate (is paid subscriber)
+  // Check if user can regenerate (has enough credits)
   const canRegenerate = useCallback(() => {
-    // Paid users always can
+    // Paid users always can (legacy entitlement check for backwards compat)
     if (isPaid) return true;
-    // Free users: check if they have remaining builds
-    const freeBuildsRemaining = entitlements?.limits?.freeBuildsRemaining ?? 0;
-    return freeBuildsRemaining > 0;
-  }, [isPaid, entitlements?.limits?.freeBuildsRemaining]);
+    // Credit-based check: need REGENERATE_DAY credits
+    return totalCredits >= CREDIT_COSTS.REGENERATE_DAY;
+  }, [isPaid, totalCredits]);
 
-  // Request regeneration - checks entitlements and regeneration count
-  const requestDayRegenerate = useCallback((dayIndex: number) => {
+  // Request regeneration - checks credits and regeneration count
+  const requestDayRegenerate = useCallback(async (dayIndex: number) => {
     if (!canRegenerate()) {
       // Show upgrade prompt
       setPendingRegenerateDay(dayIndex);
@@ -1436,15 +1475,46 @@ export function EditorialItinerary({
       setGuidedAssistDayIndex(dayIndex);
       setShowGuidedAssist(true);
     } else {
+      // Spend credits before regenerating (skip for paid users who have unlimited)
+      if (!isPaid) {
+        try {
+          await spendCredits.mutateAsync({
+            action: 'REGENERATE_DAY',
+            tripId,
+            dayIndex,
+          });
+        } catch (err) {
+          // Credit deduction failed - don't proceed
+          console.error('[Regenerate] Credit spend failed:', err);
+          return;
+        }
+      }
+      
       // Increment count and proceed with regeneration
       setDayRegenCounts(prev => ({ ...prev, [dayIndex]: currentCount + 1 }));
       handleDayRegenerateInternal(dayIndex);
     }
-  }, [canRegenerate, dayRegenCounts]);
+  }, [canRegenerate, dayRegenCounts, isPaid, spendCredits, tripId]);
 
   // Handle guided assist submission
-  const handleGuidedAssistSubmit = useCallback((preferences: string) => {
+  const handleGuidedAssistSubmit = useCallback(async (preferences: string) => {
     if (guidedAssistDayIndex === null) return;
+    
+    // Spend credits before regenerating (skip for paid users who have unlimited)
+    if (!isPaid) {
+      try {
+        await spendCredits.mutateAsync({
+          action: 'REGENERATE_DAY',
+          tripId,
+          dayIndex: guidedAssistDayIndex,
+        });
+      } catch (err) {
+        console.error('[GuidedAssist] Credit spend failed:', err);
+        setShowGuidedAssist(false);
+        setGuidedAssistDayIndex(null);
+        return;
+      }
+    }
     
     // Reset count for this day after guided assist
     setDayRegenCounts(prev => ({ ...prev, [guidedAssistDayIndex]: 0 }));
@@ -1456,7 +1526,7 @@ export function EditorialItinerary({
     handleDayRegenerateInternal(guidedAssistDayIndex, preferences || undefined);
     setShowGuidedAssist(false);
     setGuidedAssistDayIndex(null);
-  }, [guidedAssistDayIndex]);
+  }, [guidedAssistDayIndex, isPaid, spendCredits, tripId]);
 
   // Internal regenerate handler (after credit check passed)
   const handleDayRegenerateInternal = useCallback(async (dayIndex: number, guidedPreferences?: string) => {
