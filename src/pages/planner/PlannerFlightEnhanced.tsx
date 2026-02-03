@@ -268,7 +268,7 @@ export default function PlannerFlightEnhanced() {
             flightTimePreference: data.flight_time_preference as UserFlightPrefs['flightTimePreference'],
             seatPreference: data.seat_preference,
           });
-          console.log('[PlannerFlight] Loaded user preferences:', data);
+          // Loaded user flight preferences
         }
       } catch (err) {
         console.error('[PlannerFlight] Error loading preferences:', err);
@@ -456,7 +456,7 @@ export default function PlannerFlightEnhanced() {
     try {
       savedTripId = await saveTrip();
       if (savedTripId) {
-        console.log('[PlannerFlight] Trip saved with flight selection:', savedTripId);
+        // Trip saved with flight selection
       }
     } catch (error) {
       console.error('[PlannerFlight] Failed to save trip:', error);

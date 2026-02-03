@@ -109,12 +109,12 @@ export default function TripDetail() {
     const hasPhotos = Array.isArray(primaryHotel.images) && primaryHotel.images.length > 0;
     
     if (hasAddress && hasWebsite && hasPhotos) {
-      console.log('[TripDetail] Hotel already enriched, skipping');
+      // Hotel already enriched, skipping
       return;
     }
     
     hotelEnrichmentAttempted.current = true;
-    console.log('[TripDetail] Enriching hotel:', primaryHotel.name);
+    // Enriching hotel data
     
     // Normalize destination (strip IATA codes)
     const cleanDestination = (trip.destination || '')
@@ -124,7 +124,7 @@ export default function TripDetail() {
     const enrichment = await enrichHotel(primaryHotel.name as string, cleanDestination);
     
     if (!enrichment) {
-      console.log('[TripDetail] Hotel enrichment returned no data');
+      // Hotel enrichment returned no data
       return;
     }
     
@@ -140,7 +140,7 @@ export default function TripDetail() {
       placeId: enrichment.placeId || primaryHotel.placeId,
     };
     
-    console.log('[TripDetail] Enriched hotel data:', enrichedHotel);
+    // Enriched hotel data ready
     
     // Rebuild array (preserve other hotels) and update local state
     const updatedHotels = hotels.map((h, idx) => (idx === 0 ? enrichedHotel : h));
@@ -157,7 +157,7 @@ export default function TripDetail() {
         if (error) {
           console.error('[TripDetail] Failed to persist enriched hotel:', error);
         } else {
-          console.log('[TripDetail] Enriched hotel persisted successfully');
+          // Enriched hotel persisted successfully
         }
       } catch (err) {
         console.error('[TripDetail] Error persisting enriched hotel:', err);

@@ -342,12 +342,7 @@ export function InlineBookingActions({
   if (linkType === 'find_restaurant') {
     // Prefer venue name from location over generic activity title
     const restaurantName = activity.location?.name || activity.title;
-    console.log('[InlineBookingActions] Restaurant lookup:', { 
-      locationName: activity.location?.name, 
-      location: activity.location,
-      title: activity.title, 
-      using: restaurantName 
-    });
+    // Restaurant lookup using venue name from location or activity title
     return (
       <RestaurantLink 
         restaurantName={restaurantName} 

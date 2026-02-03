@@ -234,7 +234,7 @@ export default function Profile() {
       // Ensure we have a valid session before making the call
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session?.access_token) {
-        console.log('[Subscription] No valid session token, skipping check');
+        // No valid session - skip subscription check silently
         setSubscription({ subscribed: false, product_id: null, price_id: null, subscription_end: null });
         return;
       }
@@ -285,13 +285,13 @@ export default function Profile() {
         return;
       }
       
-      console.log('[Checkout] Starting checkout for price:', priceId, 'mode:', mode);
+      
       
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { priceId, mode },
       });
       
-      console.log('[Checkout] Response:', { data, error });
+      
       
       if (error) {
         console.error('[Checkout] Function error:', error);
@@ -302,7 +302,7 @@ export default function Profile() {
         throw new Error(data.error);
       }
       if (data?.url) {
-        console.log('[Checkout] Opening Stripe checkout:', data.url);
+        // Opening Stripe checkout in new tab
         // Use location.href for more reliable redirect, fallback to window.open
         window.open(data.url, '_blank');
       } else {

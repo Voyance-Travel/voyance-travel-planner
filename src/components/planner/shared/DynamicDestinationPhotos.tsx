@@ -63,7 +63,7 @@ export default function DynamicDestinationPhotos({
       setError(false);
 
       try {
-        console.log('[DynamicPhotos] Fetching landmark-driven image for:', cleanDestination);
+        // Fetching landmark-driven image
 
         // Trigger prefetch for future use
         prefetchDestinationImages(cleanDestination);
@@ -77,11 +77,11 @@ export default function DynamicDestinationPhotos({
         });
 
         if (fetchedImages.length > 0) {
-          console.log('[DynamicPhotos] Got landmark image:', fetchedImages[0].url.substring(0, 60));
+          // Got landmark image
           setHeroImage(fetchedImages[0]);
           fetchedRef.current = cleanDestination;
         } else {
-          console.log('[DynamicPhotos] No images returned');
+          // No images returned
           setError(true);
         }
       } catch (err) {

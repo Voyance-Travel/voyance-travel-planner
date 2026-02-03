@@ -66,7 +66,7 @@ async function fetchImageFromBackend(
     });
 
     if (error) {
-      console.log('[useActivityImage] Backend error:', error.message);
+      // Backend error - fall through to fallback handling
       return null;
     }
 
@@ -77,7 +77,7 @@ async function fetchImageFromBackend(
 
     return null;
   } catch (err) {
-    console.log('[useActivityImage] Fetch error:', err);
+    // Fetch error - fall through to fallback handling
     return null;
   }
 }

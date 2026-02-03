@@ -267,7 +267,7 @@ export function useLovableItinerary(tripId: string | null) {
       }));
 
       // Step 1: Fetch trip details (5%)
-      console.log('[useLovableItinerary] Fetching trip details...');
+      // Fetching trip details
       const { data: tripResponse, error: tripError } = await supabase.functions.invoke('generate-itinerary', {
         body: { action: 'get-trip', tripId }
       });
@@ -303,7 +303,7 @@ export function useLovableItinerary(tripId: string | null) {
           message: `Crafting Day ${dayNum} of ${totalDays}...`,
         }));
 
-        console.log(`[useLovableItinerary] Generating day ${dayNum}/${totalDays}`);
+        // Generating day
 
         let dayResponse: any = null;
         let lastError: unknown = null;
@@ -487,7 +487,7 @@ export function useLovableItinerary(tripId: string | null) {
         }));
       }
 
-      console.log(`[useLovableItinerary] Generation complete in ${(duration / 1000).toFixed(1)}s`);
+      // Generation complete
 
     } catch (error) {
       console.error('[useLovableItinerary] Generation failed:', error);

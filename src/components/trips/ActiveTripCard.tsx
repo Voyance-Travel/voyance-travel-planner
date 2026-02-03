@@ -228,7 +228,7 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
                 className="p-1.5 rounded-full hover:bg-muted transition-colors group"
                 onClick={() => {
                   // TODO: Implement quick rating
-                  console.log('Rate day:', rating);
+                  // TODO: Implement quick rating
                 }}
               >
                 <Star className={cn(
