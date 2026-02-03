@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { ArrowRight, Eye, Sparkles, Clock, DollarSign, AlertTriangle, Gem, MapPin, Calendar } from 'lucide-react';
+import { ArrowRight, Eye, Sparkles, Clock, DollarSign, AlertTriangle, Gem, MapPin, Calendar, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -222,7 +222,11 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
   );
 }
 
-export default function ItineraryShowcase() {
+interface ItineraryShowcaseProps {
+  onStartTour?: () => void;
+}
+
+export default function ItineraryShowcase({ onStartTour }: ItineraryShowcaseProps) {
   const [activeDestination, setActiveDestination] = useState('Tokyo');
 
   return (
@@ -247,9 +251,21 @@ export default function ItineraryShowcase() {
             See what we <em className="font-normal">build</em>
           </h2>
           
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
             Real sample itineraries with intelligence metrics. Preview a full trip or build something like it.
           </p>
+
+          {/* Tour CTA */}
+          {onStartTour && (
+            <Button 
+              variant="outline" 
+              onClick={onStartTour}
+              className="gap-2"
+            >
+              <Play className="w-4 h-4" />
+              Take a guided tour of how it works
+            </Button>
+          )}
         </motion.div>
 
         {/* Embedded Demo Preview */}
