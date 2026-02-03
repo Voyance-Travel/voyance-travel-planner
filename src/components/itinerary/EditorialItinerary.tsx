@@ -611,6 +611,32 @@ interface CostInfo {
  * Get activity cost with defensible estimation using destination_cost_index
  * Uses synchronous version for immediate rendering - cache preloaded on component mount
  */
+// Categories that should NEVER show as "Free" - always estimate if cost is 0
+const NEVER_FREE_CATEGORIES = [
+  'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee',
+  'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
+  'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club'
+];
+
+function isNeverFreeCategory(category: string, title: string): boolean {
+  const cat = category.toLowerCase();
+  const titleLower = title.toLowerCase();
+  
+  // Check category
+  if (NEVER_FREE_CATEGORIES.some(nfc => cat.includes(nfc))) return true;
+  
+  // Check title for dining/meal keywords
+  if (titleLower.includes('breakfast') || titleLower.includes('brunch') || 
+      titleLower.includes('lunch') || titleLower.includes('dinner') ||
+      titleLower.includes('cruise') || titleLower.includes('tour') ||
+      titleLower.includes('restaurant') || titleLower.includes('café') ||
+      titleLower.includes('cafe')) {
+    return true;
+  }
+  
+  return false;
+}
+
 function getActivityCostInfo(
   activity: EditorialActivity,
   travelers: number = 1,
@@ -618,13 +644,26 @@ function getActivityCostInfo(
   destinationCity?: string,
   destinationCountry?: string
 ): CostInfo {
+  const category = activity.category || activity.type || 'activity';
+  const title = activity.title || '';
+  const shouldNeverBeFree = isNeverFreeCategory(category, title);
+  
   // Check cost.amount first - this is explicit pricing from venue data
-  if (activity.cost?.amount !== undefined && activity.cost.amount >= 0) {
+  // BUT if it's 0 and the category should never be free, fall through to estimation
+  if (activity.cost?.amount !== undefined && activity.cost.amount > 0) {
     return { amount: activity.cost.amount, isEstimated: false, confidence: 'high' };
   }
   
+  // If cost is explicitly 0 but category should never be free, skip to estimation
+  if (activity.cost?.amount === 0 && shouldNeverBeFree) {
+    // Fall through to estimation engine below
+  } else if (activity.cost?.amount === 0) {
+    // Truly free activity (parks, viewpoints, walking tours, etc.)
+    return { amount: 0, isEstimated: false, confidence: 'high' };
+  }
+  
   // Check estimatedCost - AI-provided estimate during generation
-  if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount >= 0) {
+  if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount > 0) {
     return { 
       amount: activity.estimatedCost.amount, 
       isEstimated: true,
@@ -633,8 +672,14 @@ function getActivityCostInfo(
     };
   }
   
+  // If estimatedCost is 0 but should never be free, fall through
+  if (activity.estimatedCost?.amount === 0 && shouldNeverBeFree) {
+    // Fall through to estimation engine below
+  } else if (activity.estimatedCost?.amount === 0) {
+    return { amount: 0, isEstimated: true, estimateReason: 'No cost expected', confidence: 'medium' };
+  }
+  
   // Use defensible cost estimation engine
-  const category = activity.category || activity.type || 'activity';
   const priceLevel = (activity as any).priceLevel || (activity as any).price_level;
   
   const result = estimateCostSync({

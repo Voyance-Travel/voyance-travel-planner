@@ -1905,7 +1905,7 @@ const STRICT_ITINERARY_TOOL = {
                     cost: {
                       type: "object",
                       properties: {
-                        amount: { type: "number", minimum: 0, description: "REQUIRED: Realistic cost per person in local currency. Use 0 for free attractions." },
+                        amount: { type: "number", minimum: 0, description: "REQUIRED: Realistic cost per person in local currency. Use 0 ONLY for truly free attractions (parks, churches, viewpoints). NEVER use 0 for: dining, restaurants, breakfast, lunch, dinner, cruises, tours, shows, or any paid activity." },
                         currency: { type: "string", description: "ISO currency code (USD, EUR, GBP, etc.)" }
                       },
                       required: ["amount", "currency"]
