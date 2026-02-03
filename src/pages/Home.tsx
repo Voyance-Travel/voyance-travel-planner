@@ -7,6 +7,7 @@ import ValueFirstHero from '@/components/home/ValueFirstHero';
 import TheProblemSection from '@/components/home/TheProblemSection';
 import TheInsightSection from '@/components/home/TheInsightSection';
 import SampleArchetype from '@/components/home/SampleArchetype';
+import CustomizationShowcase from '@/components/home/CustomizationShowcase';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
 import FinalCTA from '@/components/home/FinalCTA';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
@@ -98,6 +99,9 @@ export default function Home() {
         
         {/* Sample Archetype - Travel DNA proof */}
         <SampleArchetype />
+        
+        {/* Customization Showcase - Post-generation power */}
+        <CustomizationShowcase />
         
         {/* Curated Journeys - Real output examples */}
         <ScrollTarget id="preview-section" className="scroll-mt-16">

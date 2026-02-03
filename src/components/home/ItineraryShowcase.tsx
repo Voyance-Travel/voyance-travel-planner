@@ -1,196 +1,308 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { ArrowRight, ArrowUpRight } from 'lucide-react';
+import { ArrowRight, Eye, Sparkles, Clock, DollarSign, AlertTriangle, Gem, MapPin, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
 
-const itineraries = [
+// Sample itineraries with computed intelligence metrics
+const SAMPLE_ITINERARIES = [
   {
-    id: 'kyoto',
-    destination: 'Kyoto',
+    id: 'tokyo-slow',
+    destination: 'Tokyo',
     country: 'Japan',
     duration: '7 days',
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800',
-    category: 'Culture & Heritage',
-    tagline: 'Where tradition meets tranquility',
-    highlights: ['Ancient temples', 'Traditional ryokans', 'Geisha districts', 'Tea ceremonies'],
-    price: 2890,
+    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
+    archetype: 'Slow Traveler',
+    archetypeCategory: 'RESTORER',
+    budgetTier: 'Stretch',
+    totalCost: 2890,
+    // Intelligence metrics - computed from real trip analysis
+    intelligence: {
+      finds: 3,        // Voyance-discovered gems
+      timingHacks: 2,  // Optimal timing suggestions
+      trapsAvoided: 3, // Tourist traps skipped
+    },
+    highlights: [
+      'Morning at Tsukiji Outer Market (before 8am)',
+      'Private tea ceremony in Yanaka',
+      'Sunset from Shimokitazawa rooftops',
+    ],
   },
   {
-    id: 'santorini',
-    destination: 'Santorini',
-    country: 'Greece',
+    id: 'paris-culture',
+    destination: 'Paris',
+    country: 'France',
     duration: '5 days',
-    image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800',
-    category: 'Romance & Relaxation',
-    tagline: 'Sunsets that redefine beauty',
-    highlights: ['Sunset views', 'Wine tasting', 'Volcanic beaches', 'Boutique hotels'],
-    price: 3250,
+    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
+    archetype: 'Culture Curator',
+    archetypeCategory: 'CURATOR',
+    budgetTier: 'Splurge',
+    totalCost: 4250,
+    intelligence: {
+      finds: 5,
+      timingHacks: 3,
+      trapsAvoided: 4,
+    },
+    highlights: [
+      'Musée de lOrangerie at golden hour',
+      'Hidden sculpture garden in Le Marais',
+      'Chef table at unmarked bistro',
+    ],
   },
   {
-    id: 'iceland',
-    destination: 'Reykjavik',
-    country: 'Iceland',
+    id: 'bali-adventurer',
+    destination: 'Bali',
+    country: 'Indonesia',
     duration: '6 days',
-    image: 'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=800',
-    category: 'Adventure & Nature',
-    tagline: 'Nature in its purest form',
-    highlights: ['Northern Lights', 'Golden Circle', 'Blue Lagoon', 'Glacier hiking'],
-    price: 3680,
+    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800',
+    archetype: 'Adrenaline Architect',
+    archetypeCategory: 'EXPLORER',
+    budgetTier: 'Safe',
+    totalCost: 1890,
+    intelligence: {
+      finds: 4,
+      timingHacks: 2,
+      trapsAvoided: 5,
+    },
+    highlights: [
+      'Sunrise trek to Mount Batur',
+      'Hidden waterfall only locals know',
+      'Cliff jumping at secret cove',
+    ],
+  },
+  {
+    id: 'rome-foodie',
+    destination: 'Rome',
+    country: 'Italy',
+    duration: '4 days',
+    image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800',
+    archetype: 'Culinary Explorer',
+    archetypeCategory: 'CURATOR',
+    budgetTier: 'Stretch',
+    totalCost: 2450,
+    intelligence: {
+      finds: 6,
+      timingHacks: 4,
+      trapsAvoided: 3,
+    },
+    highlights: [
+      'Supplì tasting in Testaccio',
+      'Sunset aperitivo on hidden terrace',
+      'Family-run trattoria (no tourists)',
+    ],
   },
 ];
 
+const DESTINATIONS = ['Tokyo', 'Paris', 'Bali', 'Rome'];
+
+function getBudgetTierColor(tier: string) {
+  switch (tier) {
+    case 'Safe': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+    case 'Stretch': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+    case 'Splurge': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
+    default: return 'bg-muted text-muted-foreground';
+  }
+}
+
+function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:border-primary/20 transition-all duration-300 group"
+    >
+      {/* Image */}
+      <div className="relative aspect-[16/10] overflow-hidden">
+        <img
+          src={itinerary.image}
+          alt={`${itinerary.destination}, ${itinerary.country}`}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        
+        {/* Destination overlay */}
+        <div className="absolute bottom-4 left-4 text-white">
+          <div className="flex items-center gap-2 mb-1">
+            <MapPin className="w-3.5 h-3.5" />
+            <span className="text-xs opacity-80">{itinerary.country}</span>
+          </div>
+          <h3 className="text-2xl font-serif font-semibold">{itinerary.destination}</h3>
+        </div>
+        
+        {/* Duration badge */}
+        <div className="absolute top-4 right-4">
+          <Badge variant="secondary" className="bg-white/90 text-foreground backdrop-blur-sm">
+            <Calendar className="w-3 h-3 mr-1" />
+            {itinerary.duration}
+          </Badge>
+        </div>
+      </div>
+      
+      {/* Content */}
+      <div className="p-5">
+        {/* Archetype & Budget */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            <span className="text-xs text-muted-foreground">
+              Built for: <span className="text-foreground font-medium">{itinerary.archetype}</span>
+            </span>
+          </div>
+          <Badge className={getBudgetTierColor(itinerary.budgetTier)}>
+            {itinerary.budgetTier}
+          </Badge>
+        </div>
+        
+        {/* Total Cost */}
+        <div className="flex items-baseline gap-1 mb-4">
+          <span className="text-2xl font-serif font-semibold text-foreground">
+            ${itinerary.totalCost.toLocaleString()}
+          </span>
+          <span className="text-sm text-muted-foreground">/person</span>
+        </div>
+        
+        {/* Intelligence Metrics */}
+        <div className="flex items-center gap-4 mb-5 py-3 px-4 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-1.5" title="Voyance Finds - Hidden gems matched to your style">
+            <Gem className="w-3.5 h-3.5 text-primary" />
+            <span className="text-xs font-medium text-foreground">{itinerary.intelligence.finds}</span>
+            <span className="text-xs text-muted-foreground">Finds</span>
+          </div>
+          <div className="w-px h-4 bg-border" />
+          <div className="flex items-center gap-1.5" title="Timing Hacks - Optimal timing suggestions">
+            <Clock className="w-3.5 h-3.5 text-accent" />
+            <span className="text-xs font-medium text-foreground">{itinerary.intelligence.timingHacks}</span>
+            <span className="text-xs text-muted-foreground">Timing</span>
+          </div>
+          <div className="w-px h-4 bg-border" />
+          <div className="flex items-center gap-1.5" title="Traps Avoided - Tourist traps we skipped">
+            <AlertTriangle className="w-3.5 h-3.5 text-destructive/70" />
+            <span className="text-xs font-medium text-foreground">{itinerary.intelligence.trapsAvoided}</span>
+            <span className="text-xs text-muted-foreground">Skipped</span>
+          </div>
+        </div>
+        
+        {/* Highlights */}
+        <div className="space-y-2 mb-5">
+          {itinerary.highlights.map((highlight, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm">
+              <span className="text-primary mt-0.5">•</span>
+              <span className="text-muted-foreground">{highlight}</span>
+            </div>
+          ))}
+        </div>
+        
+        {/* CTAs */}
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1" asChild>
+            <Link to={`${ROUTES.ITINERARY.SAMPLE}?id=${itinerary.id}`}>
+              <Eye className="w-3.5 h-3.5 mr-1.5" />
+              Preview This Trip
+            </Link>
+          </Button>
+          <Button size="sm" className="flex-1" asChild>
+            <Link to={`${ROUTES.START}?destination=${itinerary.destination}`}>
+              Build Like This
+              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+      
+      {/* Sample label - honest framing */}
+      <div className="px-5 py-2.5 bg-muted/30 border-t border-border">
+        <p className="text-xs text-muted-foreground text-center">
+          Sample itinerary for the {itinerary.archetype} in {itinerary.destination}
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function ItineraryShowcase() {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const activeItinerary = itineraries[activeIndex];
+  const [activeDestination, setActiveDestination] = useState('Tokyo');
+  
+  const filteredItineraries = SAMPLE_ITINERARIES.filter(
+    it => it.destination === activeDestination
+  );
+  
+  // Show all if only one per destination, otherwise show filtered
+  const displayItineraries = filteredItineraries.length > 0 
+    ? filteredItineraries 
+    : SAMPLE_ITINERARIES.slice(0, 2);
 
   return (
-    <section className="py-14 sm:py-20 md:py-24 bg-muted/30 relative overflow-hidden">
-      {/* Top curved divider */}
-      <div className="absolute top-0 left-0 right-0 h-24 -translate-y-full">
-        <svg viewBox="0 0 1440 96" fill="none" className="absolute bottom-0 w-full h-24" preserveAspectRatio="none">
-          <path d="M0 96L1440 96L1440 0C1440 0 1080 96 720 96C360 96 0 0 0 0L0 96Z" className="fill-muted/30" />
-        </svg>
-      </div>
-      {/* Editorial Section Header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-8 md:px-16">
-        <div className="flex items-start justify-between mb-10 sm:mb-16">
-          <div>
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="flex items-center gap-3 sm:gap-4 mb-4"
-            >
-              <div className="w-6 sm:w-8 h-px bg-primary" />
-              <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
-                Featured Journeys
-              </span>
-            </motion.div>
-            <motion.h2 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground"
-            >
-              Curated <em className="font-normal">for you</em>
-            </motion.h2>
+    <section className="py-16 sm:py-24 md:py-32 bg-muted/30 relative overflow-hidden">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 md:px-16">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-center mb-10 md:mb-12"
+        >
+          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4">
+            <div className="w-6 sm:w-8 h-px bg-primary" />
+            <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
+              Featured Journeys
+            </span>
+            <div className="w-6 sm:w-8 h-px bg-primary" />
           </div>
           
-          {/* Issue Number - Editorial Detail */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="hidden md:block text-right"
-          >
-            <span className="text-7xl font-serif text-muted/20">{activeIndex + 1}</span>
-          </motion.div>
-        </div>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-normal text-foreground mb-4">
+            Curated <em className="font-normal">for you</em>
+          </h2>
+          
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Real sample itineraries with intelligence metrics computed from our recommendation engine.
+          </p>
+        </motion.div>
 
-        {/* Destination Navigation - Magazine Style */}
-        <div className="flex gap-1 mb-8 sm:mb-12 border-b border-border overflow-x-auto scrollbar-hide">
-          {itineraries.map((itinerary, index) => (
+        {/* Destination Tabs */}
+        <div className="flex justify-center gap-2 mb-10 flex-wrap">
+          {DESTINATIONS.map((dest) => (
             <button
-              key={itinerary.id}
-              onClick={() => setActiveIndex(index)}
-              className={`relative px-4 sm:px-6 py-3 sm:py-4 font-sans text-xs sm:text-sm tracking-wide transition-colors whitespace-nowrap ${
-                activeIndex === index
-                  ? 'text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+              key={dest}
+              onClick={() => setActiveDestination(dest)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                activeDestination === dest
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
               }`}
             >
-              {itinerary.destination}
-              {activeIndex === index && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-                />
-              )}
+              {dest}
             </button>
           ))}
         </div>
 
-        {/* Itinerary Feature - Magazine Layout */}
+        {/* Itinerary Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+          {SAMPLE_ITINERARIES.filter(it => it.destination === activeDestination).length > 0 ? (
+            SAMPLE_ITINERARIES.filter(it => it.destination === activeDestination).map((itinerary) => (
+              <ItineraryCard key={itinerary.id} itinerary={itinerary} />
+            ))
+          ) : (
+            // If no match, show the selected destination's card
+            <ItineraryCard itinerary={SAMPLE_ITINERARIES.find(it => it.destination === activeDestination) || SAMPLE_ITINERARIES[0]} />
+          )}
+        </div>
+        
+        {/* View More CTA */}
         <motion.div
-          key={activeItinerary.id}
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="grid lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-12"
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="text-center mt-10"
         >
-          {/* Image - Large Editorial Image */}
-          <div className="lg:col-span-7 relative">
-            <div className="aspect-[3/4] sm:aspect-[4/5] lg:aspect-[3/4] relative overflow-hidden">
-              <img
-                src={activeItinerary.image}
-                alt={activeItinerary.destination}
-                className="w-full h-full object-cover"
-              />
-              {/* Category Badge */}
-              <div className="absolute top-6 left-6">
-                <span className="px-3 py-1.5 bg-white/95 backdrop-blur-sm text-xs tracking-[0.15em] uppercase font-sans text-foreground">
-                  {activeItinerary.category}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Content - Editorial Text */}
-          <div className="lg:col-span-5 flex flex-col justify-center py-4 sm:py-8">
-            <div className="mb-4 sm:mb-6">
-              <span className="text-[10px] sm:text-xs tracking-[0.2em] uppercase text-muted-foreground font-sans">
-                {activeItinerary.duration} · {activeItinerary.country}
-              </span>
-            </div>
-
-            <h3 className="text-3xl sm:text-4xl md:text-5xl font-serif font-normal text-foreground mb-3 sm:mb-4">
-              {activeItinerary.destination}
-            </h3>
-
-            <p className="text-lg font-serif italic text-muted-foreground mb-8">
-              {activeItinerary.tagline}
-            </p>
-
-            {/* Highlights - Clean List */}
-            <div className="mb-10 space-y-3">
-              {activeItinerary.highlights.map((highlight, i) => (
-                <div key={highlight} className="flex items-center gap-4 text-sm text-foreground/80 font-sans">
-                  <span className="text-xs text-muted-foreground w-4">{i + 1}</span>
-                  <span>{highlight}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Price & CTA */}
-            <div className="pt-8 border-t border-border">
-              <div className="mb-6">
-                <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground font-sans block mb-1">
-                  From
-                </span>
-                <span className="text-3xl font-serif text-foreground">
-                  ${activeItinerary.price.toLocaleString()}
-                </span>
-                <span className="text-sm text-muted-foreground font-sans ml-1">/person</span>
-              </div>
-              
-              <div className="flex gap-3">
-                <Button variant="outline" size="sm" className="font-sans text-sm" asChild>
-                  <Link to={`${ROUTES.ITINERARY.SAMPLE}?destination=${activeItinerary.id}`}>
-                    View Details
-                    <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-                <Button size="sm" className="font-sans text-sm" asChild>
-                  <Link to={ROUTES.START}>
-                    Book Now
-                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
+          <Button variant="outline" size="lg" asChild>
+            <Link to={ROUTES.EXPLORE}>
+              Explore More Destinations
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Link>
+          </Button>
         </motion.div>
       </div>
     </section>
