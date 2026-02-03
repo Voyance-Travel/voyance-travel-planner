@@ -169,6 +169,7 @@ export function calculateItineraryValueStats(
   let voyanceFinds = 0;
   let timingOptimizations = 0;
   let insiderTips = 0;
+  let lowCrowdActivities = 0;
 
   days.forEach(day => {
     day.activities.forEach(activity => {
@@ -177,6 +178,7 @@ export function calculateItineraryValueStats(
       if (intelligence.isHiddenGem) voyanceFinds++;
       if (intelligence.hasTimingHack) timingOptimizations++;
       if (intelligence.hasInsiderTip) insiderTips++;
+      if (intelligence.crowdLevel === 'low') lowCrowdActivities++;
     });
   });
 
@@ -185,29 +187,70 @@ export function calculateItineraryValueStats(
     timingOptimizations,
     touristTrapsAvoided: skippedItems?.length || 0,
     insiderTips,
-    estimatedSavings: calculateEstimatedSavings(timingOptimizations, skippedItems?.length || 0),
+    estimatedSavings: calculateEstimatedSavings(
+      days.length,
+      timingOptimizations,
+      skippedItems?.length || 0,
+      voyanceFinds,
+      lowCrowdActivities,
+      insiderTips
+    ),
   };
 }
 
 /**
  * Estimate time and money savings based on optimizations
+ * 
+ * Value calculation methodology:
+ * - Route optimization: ~15-25 min/day saved from logical geographic sequencing
+ * - Timing hacks: ~20-30 min saved per optimization (avoiding peak crowds/lines)
+ * - Low crowd activities: ~15 min saved per activity (no waiting)
+ * - Traps avoided: $30-50 saved per trap (overpriced restaurants, scams, etc.)
+ * - Hidden gems: $15-25 saved per find (better value than tourist-priced alternatives)
+ * - Research time: ~30 min saved per day (you didn't have to find all this yourself)
  */
 function calculateEstimatedSavings(
+  totalDays: number,
   timingOptimizations: number,
-  trapsAvoided: number
+  trapsAvoided: number,
+  hiddenGems: number,
+  lowCrowdActivities: number,
+  insiderTips: number
 ): { time: string; money?: string } | undefined {
-  if (timingOptimizations === 0 && trapsAvoided === 0) return undefined;
+  // Base value from having an optimized itinerary at all
+  const baseResearchMinutes = totalDays * 30; // 30 min research saved per day
+  const routeOptimizationMinutes = totalDays * 18; // avg 18 min/day from smart routing
   
-  // Rough estimates: 15-30 min saved per timing optimization, $20-50 per trap avoided
-  const minutesSaved = timingOptimizations * 20;
-  const moneySaved = trapsAvoided * 30;
+  // Activity-specific savings
+  const timingMinutes = timingOptimizations * 25; // avoiding peak times/lines
+  const lowCrowdMinutes = lowCrowdActivities * 12; // less waiting at uncrowded spots
+  const tipValueMinutes = Math.min(insiderTips, 10) * 8; // tips save time (cap at 10)
   
-  const hours = Math.floor(minutesSaved / 60);
-  const timeStr = hours > 0 ? `${hours}+ hours` : `${minutesSaved}+ minutes`;
+  // Money savings
+  const trapMoney = trapsAvoided * 35; // tourist trap avoidance
+  const hiddenGemMoney = hiddenGems * 18; // better value alternatives
+  
+  const totalMinutes = baseResearchMinutes + routeOptimizationMinutes + 
+                       timingMinutes + lowCrowdMinutes + tipValueMinutes;
+  const totalMoney = trapMoney + hiddenGemMoney;
+  
+  if (totalMinutes === 0 && totalMoney === 0) return undefined;
+  
+  const hours = Math.floor(totalMinutes / 60);
+  const remainingMins = totalMinutes % 60;
+  
+  let timeStr: string;
+  if (hours >= 2) {
+    timeStr = `${hours}+ hours`;
+  } else if (hours === 1) {
+    timeStr = remainingMins > 20 ? `${hours}h ${Math.round(remainingMins / 10) * 10}m` : `${hours}+ hour`;
+  } else {
+    timeStr = `${Math.round(totalMinutes / 5) * 5}+ min`;
+  }
   
   return {
     time: timeStr,
-    money: moneySaved > 0 ? `$${moneySaved}` : undefined,
+    money: totalMoney > 0 ? `$${totalMoney}` : undefined,
   };
 }
 
