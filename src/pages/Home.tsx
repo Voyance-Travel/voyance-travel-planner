@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
@@ -13,31 +12,16 @@ import FinalCTA from '@/components/home/FinalCTA';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 import { scrollToTop } from '@/utils/scrollUtils';
-import { ROUTES } from '@/config/routes';
-
-const FIRST_VISIT_KEY = 'voyance_has_visited';
 
 export default function Home() {
-  const navigate = useNavigate();
-
   useEffect(() => {
-    // Check if this is first visit
-    const hasVisited = localStorage.getItem(FIRST_VISIT_KEY);
-    
-    if (!hasVisited) {
-      // Mark as visited and redirect to demo
-      localStorage.setItem(FIRST_VISIT_KEY, 'true');
-      navigate(ROUTES.DEMO, { replace: true });
-      return;
-    }
-
     scrollToTop();
     document.documentElement.style.scrollPaddingTop = '80px';
 
     return () => {
       document.documentElement.style.scrollPaddingTop = '';
     };
-  }, [navigate]);
+  }, []);
 
   return (
     <main className="antialiased">
