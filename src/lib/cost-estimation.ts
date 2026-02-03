@@ -44,6 +44,7 @@ export interface CostEstimateResult {
 
 export interface EstimateParams {
   category: string;
+  title?: string; // Activity title - used to infer meal type when category is generic
   city?: string;
   country?: string;
   travelers?: number;
@@ -77,7 +78,7 @@ const CATEGORY_TO_BASE_FIELD: Record<string, keyof CostIndex> = {
   brunch: 'breakfast_base_usd',
   lunch: 'lunch_base_usd',
   dinner: 'dinner_base_usd',
-  dining: 'dinner_base_usd',
+  dining: 'dinner_base_usd', // Generic dining - will be refined by title analysis
   restaurant: 'dinner_base_usd',
   coffee: 'coffee_base_usd',
   cafe: 'coffee_base_usd',
@@ -90,7 +91,30 @@ const CATEGORY_TO_BASE_FIELD: Record<string, keyof CostIndex> = {
   experience: 'tour_base_usd',
   transport: 'transport_base_usd',
   transfer: 'transport_base_usd',
+  airport: 'transport_base_usd',
+  taxi: 'transport_base_usd',
 };
+
+/**
+ * Infer meal type from activity title when category is generic "dining"
+ */
+function inferMealTypeFromTitle(title: string): keyof CostIndex | null {
+  const titleLower = title.toLowerCase();
+  if (titleLower.includes('breakfast') || titleLower.includes('morning meal')) {
+    return 'breakfast_base_usd';
+  }
+  if (titleLower.includes('brunch')) {
+    return 'breakfast_base_usd';
+  }
+  if (titleLower.includes('lunch') || titleLower.includes('midday')) {
+    return 'lunch_base_usd';
+  }
+  if (titleLower.includes('coffee') || titleLower.includes('café') || titleLower.includes('cafe')) {
+    return 'coffee_base_usd';
+  }
+  // Default to dinner for evening/dinner/restaurant
+  return null;
+}
 
 // Default base prices (USD) when no destination index exists
 const DEFAULT_BASE_PRICES: CostIndex = {
@@ -241,9 +265,16 @@ export async function estimateCost(params: EstimateParams): Promise<CostEstimate
     };
   }
   
-  // Priority 3: Category-based estimation
+  // Priority 3: Category-based estimation with title inference
   const normalizedCategory = category.toLowerCase().trim();
-  const baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  
+  // Try to infer meal type from title if category is generic "dining"
+  let baseField: keyof CostIndex;
+  if (normalizedCategory === 'dining' && params.title) {
+    baseField = inferMealTypeFromTitle(params.title) || CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  } else {
+    baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  }
   const basePrice = costIndex[baseField] as number;
   
   const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
@@ -354,9 +385,16 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
     };
   }
   
-  // Priority 3: Category-based estimation
+  // Priority 3: Category-based estimation with title inference
   const normalizedCategory = category.toLowerCase().trim();
-  const baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  
+  // Try to infer meal type from title if category is generic "dining"
+  let baseField: keyof CostIndex;
+  if (normalizedCategory === 'dining' && params.title) {
+    baseField = inferMealTypeFromTitle(params.title) || CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  } else {
+    baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
+  }
   const basePrice = costIndex[baseField] as number;
   
   const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
