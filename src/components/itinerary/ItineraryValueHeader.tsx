@@ -53,20 +53,14 @@ export function ItineraryValueHeader({
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Your {destination}
-          </h3>
-          {archetype && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {archetype} style
-            </p>
-          )}
-        </div>
+      <div className="text-center mb-4">
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          Your {destination}
+          {archetype && <span className="ml-1">· {archetype} style</span>}
+        </h3>
         {stats.estimatedSavings && (
-          <div className="text-right">
-            <div className="flex items-center gap-1 text-primary text-sm font-medium">
+          <div className="mt-2">
+            <div className="flex items-center justify-center gap-1 text-primary text-sm font-medium">
               <TrendingUp className="h-3.5 w-3.5" />
               <span>vs. typical itinerary</span>
             </div>
