@@ -252,7 +252,7 @@ export default function SampleArchetype() {
           
           <Button asChild size="lg" className="font-sans text-base px-8">
             <Link to={ROUTES.QUIZ}>
-              Take the 2-Minute Quiz
+              Take the 5-Minute Quiz
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>

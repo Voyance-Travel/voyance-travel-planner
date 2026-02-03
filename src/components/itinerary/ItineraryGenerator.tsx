@@ -243,7 +243,7 @@ export function ItineraryGenerator({
             
             <p className="text-muted-foreground mb-6">
               Without completing your Travel DNA quiz, we can only generate a <strong className="text-foreground">generic itinerary</strong>. 
-              Take 2 minutes to tell us about your travel style and get recommendations that actually match <em>you</em>.
+              Take 5 minutes to tell us about your travel style and get recommendations that actually match <em>you</em>.
             </p>
 
             {/* What you're missing */}
@@ -272,7 +272,7 @@ export function ItineraryGenerator({
                 className="gap-2"
               >
                 <Sparkles className="h-5 w-5" />
-                Take the Quiz (2 min)
+                Take the Quiz (5 min)
               </Button>
               
               <Button 
