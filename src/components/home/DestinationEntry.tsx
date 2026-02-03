@@ -109,7 +109,7 @@ export default function DestinationEntry() {
       >
         40 hours of research.
         <br />
-        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}>2 minutes to access.</span>
+        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}>Personalized for you.</span>
       </motion.h1>
       
       <motion.p
