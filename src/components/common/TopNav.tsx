@@ -8,10 +8,11 @@ import {
   Settings, 
   LogOut,
   ChevronDown,
-  Building2,
-  Calendar,
   Sparkles,
-  Briefcase
+  Briefcase,
+  Compass,
+  Map,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,9 +21,14 @@ import { Button } from '@/components/ui/button';
 import { NotificationBell } from '@/components/common/NotificationBell';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 
+// Explore dropdown items
+const exploreItems = [
+  { href: ROUTES.EXPLORE, label: 'Browse Destinations', icon: Compass, description: 'Find your next adventure' },
+  { href: ROUTES.DESTINATIONS, label: 'Featured Trips', icon: Map, description: 'Curated journeys by destination' },
+  { href: ROUTES.ARCHETYPES, label: 'Travel Archetypes', icon: Users, description: 'See all 27 traveler types' },
+];
+
 const navLinks = [
-  { href: ROUTES.EXPLORE, label: 'Explore' },
-  { href: ROUTES.DESTINATIONS, label: 'Destinations' },
   { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
   { href: ROUTES.PRICING, label: 'Pricing' },
 ];
@@ -38,8 +44,10 @@ const agentMenuItem = { href: ROUTES.AGENT.DASHBOARD, label: 'Agent Dashboard', 
 export default function TopNav() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [hasScrolled, setHasScrolled] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const exploreMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
@@ -58,13 +66,17 @@ export default function TopNav() {
   useEffect(() => {
     setIsMenuOpen(false);
     setIsUserMenuOpen(false);
+    setIsExploreOpen(false);
   }, [location.pathname]);
 
-  // Close user menu on click outside
+  // Close menus on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
+      }
+      if (exploreMenuRef.current && !exploreMenuRef.current.contains(event.target as Node)) {
+        setIsExploreOpen(false);
       }
     };
 
@@ -113,16 +125,58 @@ export default function TopNav() {
 
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-6">
+            {/* Explore Dropdown */}
+            <div className="relative" ref={exploreMenuRef}>
+              <button
+                onClick={() => setIsExploreOpen(!isExploreOpen)}
+                className={`flex items-center gap-1.5 text-sm font-medium transition-colors hover:opacity-80 ${
+                  isTransparent ? 'text-white/80' : 'text-muted-foreground'
+                }`}
+              >
+                Explore
+                <ChevronDown className={`h-4 w-4 transition-transform ${isExploreOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              <AnimatePresence>
+                {isExploreOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-0 mt-3 w-72 bg-popover border border-border rounded-xl shadow-lg overflow-hidden z-50"
+                  >
+                    <div className="py-2">
+                      {exploreItems.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <Link
+                            key={item.href}
+                            to={item.href}
+                            className="flex items-start gap-3 px-4 py-3 hover:bg-muted transition-colors"
+                            onClick={() => setIsExploreOpen(false)}
+                          >
+                            <Icon className="h-5 w-5 text-primary mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{item.label}</p>
+                              <p className="text-xs text-muted-foreground">{item.description}</p>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Other nav links */}
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
                 className={`text-sm font-medium transition-colors hover:opacity-80 ${
-                  'highlight' in link && link.highlight
-                    ? isTransparent
-                      ? 'text-white bg-white/15 px-3 py-1.5 rounded-full'
-                      : 'text-primary bg-primary/10 px-3 py-1.5 rounded-full'
-                    : location.pathname === link.href
+                  location.pathname === link.href
                     ? isTransparent
                       ? 'text-white'
                       : 'text-primary'
@@ -145,14 +199,13 @@ export default function TopNav() {
                   <NotificationBell />
                 </div>
 
-                {/* Plan Your Trip - Unified CTA */}
+                {/* Build My Itinerary - Primary CTA */}
                 <Button
                   size="sm"
                   onClick={() => navigate(ROUTES.START)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
-                  <Sparkles className="h-4 w-4" />
-                  Plan Your Trip
+                  Build My Itinerary
                 </Button>
 
                 {/* User Dropdown */}
@@ -260,14 +313,13 @@ export default function TopNav() {
               </>
             ) : (
               <>
-                {/* Plan Your Trip Button */}
+                {/* Build My Itinerary Button */}
                 <Button
                   size="sm"
                   onClick={() => navigate(ROUTES.START)}
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
-                  <Sparkles className="h-4 w-4" />
-                  Plan Your Trip
+                  Build My Itinerary
                 </Button>
 
                 <Link
@@ -330,15 +382,37 @@ export default function TopNav() {
                 </div>
               )}
 
+              {/* Explore Section */}
+              <div className="pb-3 mb-3 border-b border-border">
+                <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Explore
+                </p>
+                {exploreItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      to={item.href}
+                      className={`flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        location.pathname === item.href
+                          ? 'bg-accent/10 text-primary'
+                          : 'text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+
               {/* Nav Links */}
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   to={link.href}
                   className={`block py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    'highlight' in link && link.highlight
-                      ? 'bg-primary/10 text-primary border border-primary/20'
-                      : location.pathname === link.href
+                    location.pathname === link.href
                       ? 'bg-accent/10 text-primary'
                       : 'text-muted-foreground hover:bg-muted'
                   }`}
@@ -378,11 +452,10 @@ export default function TopNav() {
                     })}
                     <div className="pt-2">
                       <Button
-                        className="w-full gap-2"
+                        className="w-full"
                         onClick={() => navigate(ROUTES.START)}
                       >
-                        <Sparkles className="h-4 w-4" />
-                        Plan Your Trip
+                        Build My Itinerary
                       </Button>
                     </div>
                     <button
@@ -397,11 +470,10 @@ export default function TopNav() {
                   <>
                     <div className="mb-4">
                       <Button
-                        className="w-full gap-2"
+                        className="w-full"
                         onClick={() => navigate(ROUTES.START)}
                       >
-                        <Sparkles className="h-4 w-4" />
-                        Plan Your Trip
+                        Build My Itinerary
                       </Button>
                     </div>
                     <Link
