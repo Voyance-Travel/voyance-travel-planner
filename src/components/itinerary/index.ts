@@ -9,4 +9,6 @@ export { EditorialItinerary } from './EditorialItinerary';
 export { VoyanceInsight } from './VoyanceInsight';
 export { TransitBadge } from './TransitBadge';
 export { ItineraryUtilityBar } from './ItineraryUtilityBar';
+export { PostGenerationCTA } from './PostGenerationCTA';
+export { LockedDayCard } from './LockedDayCard';
 export type { EditorialDay, EditorialActivity, EditorialItineraryProps } from './EditorialItinerary';

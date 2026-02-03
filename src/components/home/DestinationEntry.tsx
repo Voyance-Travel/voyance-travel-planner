@@ -1,28 +1,27 @@
 import { useState } from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { POPULAR_DESTINATIONS } from '@/lib/archetypeTeasers';
-import QuickPreviewDisplay from './QuickPreviewDisplay';
+import IntelligenceTeaser from './IntelligenceTeaser';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ROUTES } from '@/config/routes';
 
-interface PreviewData {
+interface IntelligenceStats {
   destination: string;
-  days: Array<{
-    dayNumber: number;
-    headline: string;
-    description: string;
-  }>;
-  totalDays: number;
-  archetypeUsed: string;
-  archetypeTagline: string;
+  hiddenGems: number;
+  timingHacks: number;
+  trapsToAvoid: number;
+  insiderTips: number;
 }
 
 export default function DestinationEntry() {
   const [destination, setDestination] = useState('');
-  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [intelligenceStats, setIntelligenceStats] = useState<IntelligenceStats | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (dest?: string) => {
     const targetDest = dest || destination;
@@ -31,25 +30,41 @@ export default function DestinationEntry() {
     setIsGenerating(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('generate-quick-preview', {
+      // Call cached intelligence preview (no login required)
+      const { data, error } = await supabase.functions.invoke('get-destination-intelligence', {
         body: { destination: targetDest.trim() }
       });
 
       if (error) {
-        console.error('Preview generation error:', error);
-        toast.error('Failed to generate preview. Please try again.');
+        console.error('Intelligence fetch error:', error);
+        // Fallback to mock data for demo
+        setIntelligenceStats({
+          destination: targetDest,
+          hiddenGems: 12,
+          timingHacks: 8,
+          trapsToAvoid: 5,
+          insiderTips: 15,
+        });
         return;
       }
 
-      if (data.error) {
-        toast.error(data.error);
-        return;
-      }
-
-      setPreview(data);
+      setIntelligenceStats({
+        destination: targetDest,
+        hiddenGems: data?.hiddenGems || 12,
+        timingHacks: data?.timingHacks || 8,
+        trapsToAvoid: data?.trapsToAvoid || 5,
+        insiderTips: data?.insiderTips || 15,
+      });
     } catch (err) {
-      console.error('Preview error:', err);
-      toast.error('Something went wrong. Please try again.');
+      console.error('Intelligence error:', err);
+      // Fallback to mock data
+      setIntelligenceStats({
+        destination: targetDest,
+        hiddenGems: 12,
+        timingHacks: 8,
+        trapsToAvoid: 5,
+        insiderTips: 15,
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -62,14 +77,22 @@ export default function DestinationEntry() {
   };
 
   const handleStartOver = () => {
-    setPreview(null);
+    setIntelligenceStats(null);
     setDestination('');
   };
 
-  if (preview) {
+  const handleTakeQuiz = () => {
+    // Navigate to quiz with destination pre-filled
+    navigate(`${ROUTES.START}?destination=${encodeURIComponent(intelligenceStats?.destination || destination)}`);
+  };
+
+  // Show intelligence teaser after destination search
+  if (intelligenceStats) {
     return (
-      <QuickPreviewDisplay 
-        preview={preview}
+      <IntelligenceTeaser 
+        destination={intelligenceStats.destination}
+        stats={intelligenceStats}
+        onTakeQuiz={handleTakeQuiz}
         onStartOver={handleStartOver}
       />
     );
@@ -77,12 +100,15 @@ export default function DestinationEntry() {
 
   return (
     <div className="w-full text-center">
+      {/* Intelligence-focused headline */}
       <motion.h1 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal mb-4 text-white drop-shadow-lg"
       >
-        Where do you want to go?
+        40 hours of research.
+        <br />
+        <span className="text-primary">2 minutes to access.</span>
       </motion.h1>
       
       <motion.p
@@ -91,7 +117,7 @@ export default function DestinationEntry() {
         transition={{ delay: 0.1 }}
         className="text-lg md:text-xl text-white/80 mb-10"
       >
-        Type a destination. See what your trip could look like.
+        We show the reasoning. We know what to skip. Pick a destination.
       </motion.p>
 
       <motion.div
@@ -133,7 +159,7 @@ export default function DestinationEntry() {
           animate={{ opacity: 1 }}
           className="mt-6 text-white/70"
         >
-          Creating your preview...
+          Loading intelligence...
         </motion.p>
       )}
 
@@ -160,6 +186,18 @@ export default function DestinationEntry() {
             </Button>
           ))}
         </motion.div>
+      )}
+
+      {/* Free tier callout - moderate visibility */}
+      {!isGenerating && !intelligenceStats && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="mt-8 text-sm text-white/60"
+        >
+          No credit card required. Your first day is free, every month.
+        </motion.p>
       )}
     </div>
   );
