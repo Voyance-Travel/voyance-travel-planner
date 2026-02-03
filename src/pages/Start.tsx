@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils
+  Eye, Gem, Utensils, Building2
 } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
@@ -81,6 +81,7 @@ function StepIndicator({ currentStep, totalSteps }: { currentStep: number; total
   const steps = [
     { label: 'Trip Details', step: 1 },
     { label: 'Budget', step: 2 },
+    { label: 'Hotel', step: 3 },
   ];
 
   return (
@@ -487,19 +488,17 @@ function TripDetailsStep({
   );
 }
 
-// Step 3: Budget Step
+// Step 2: Budget Step
 function BudgetStep({
   budgetAmount,
   setBudgetAmount,
-  onSubmit,
+  onContinue,
   onBack,
-  isSubmitting,
 }: {
   budgetAmount: number | undefined;
   setBudgetAmount: (n: number | undefined) => void;
-  onSubmit: () => void;
+  onContinue: () => void;
   onBack: () => void;
-  isSubmitting: boolean;
 }) {
   const [showBudget, setShowBudget] = useState(!!budgetAmount);
 
@@ -595,13 +594,109 @@ function BudgetStep({
         </button>
       </div>
 
-      {/* Submit */}
+      {/* Navigation */}
+      <div className="flex justify-between pt-6 max-w-md mx-auto">
+        <Button variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+        <Button onClick={onContinue} className="gap-2">
+          Continue
+          <ArrowRight className="w-4 h-4" />
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+// Step 3: Hotel Step - redirects to hotel selection page
+function HotelStep({
+  onSkip,
+  onBack,
+  isSubmitting,
+  destination,
+  startDate,
+  endDate,
+  travelers,
+}: {
+  onSkip: () => void;
+  onBack: () => void;
+  isSubmitting: boolean;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  travelers: number;
+}) {
+  const navigate = useNavigate();
+
+  const handleSelectHotel = () => {
+    // Navigate to the hotel selection page with trip details
+    const params = new URLSearchParams({
+      destination,
+      checkIn: startDate,
+      checkOut: endDate,
+      guests: travelers.toString(),
+    });
+    navigate(`/planner/hotel?${params.toString()}`);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-6"
+    >
+      <div className="text-center mb-8">
+        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
+          Where will you stay?
+        </h2>
+        <p className="text-muted-foreground">
+          Add your hotel for a complete itinerary, or skip to continue
+        </p>
+      </div>
+
+      <div className="space-y-4 max-w-md mx-auto">
+        {/* Select Hotel Option */}
+        <button
+          type="button"
+          onClick={handleSelectHotel}
+          className="w-full p-6 rounded-xl border-2 border-primary bg-primary/5 hover:bg-primary/10 transition-all text-left group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Building2 className="w-6 h-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <div className="font-medium text-foreground text-lg">Find a Hotel</div>
+              <div className="text-sm text-muted-foreground">
+                Browse and select from recommended hotels
+              </div>
+            </div>
+            <ArrowRight className="w-5 h-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </button>
+
+        {/* Skip Option */}
+        <button
+          type="button"
+          onClick={onSkip}
+          disabled={isSubmitting}
+          className="w-full p-4 rounded-xl border-2 border-border hover:border-primary/40 transition-all text-center"
+        >
+          <div className="font-medium text-foreground">Skip for now</div>
+          <div className="text-xs text-muted-foreground">
+            You can add hotel details later
+          </div>
+        </button>
+      </div>
+
+      {/* Navigation */}
       <div className="flex justify-between pt-6 max-w-md mx-auto">
         <Button variant="ghost" onClick={onBack}>
           Back
         </Button>
         <Button
-          onClick={onSubmit}
+          onClick={onSkip}
           disabled={isSubmitting}
           className="h-14 px-8 text-base font-medium rounded-xl shadow-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
         >
@@ -630,7 +725,7 @@ export default function Start() {
   const { canCreateDraft, needsCredits } = useDraftLimitCheck();
   const [showLimitBlocker, setShowLimitBlocker] = useState(false);
 
-  // Current step: 1 = Trip Details, 2 = Budget
+  // Current step: 1 = Trip Details, 2 = Budget, 3 = Hotel
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -739,9 +834,21 @@ export default function Start() {
                     key="budget"
                     budgetAmount={budgetAmount}
                     setBudgetAmount={setBudgetAmount}
-                    onSubmit={handleSubmit}
+                    onContinue={() => setCurrentStep(3)}
                     onBack={() => setCurrentStep(1)}
+                  />
+                )}
+
+                {currentStep === 3 && (
+                  <HotelStep
+                    key="hotel"
+                    onSkip={handleSubmit}
+                    onBack={() => setCurrentStep(2)}
                     isSubmitting={isSubmitting}
+                    destination={destinationSelection.cityName}
+                    startDate={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
+                    endDate={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
+                    travelers={travelers}
                   />
                 )}
               </AnimatePresence>
