@@ -194,6 +194,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
+    let isMounted = true;
+    let loadingTimeout: ReturnType<typeof setTimeout>;
+    
+    // Safety timeout: never show loading spinner for more than 5 seconds
+    loadingTimeout = setTimeout(() => {
+      if (isMounted && isLoading) {
+        console.warn('[Auth] Loading timeout - forcing isLoading to false');
+        setIsLoading(false);
+      }
+    }, 5000);
+    
     // CRITICAL: Set up listener BEFORE getSession() per Supabase docs
     // This prevents race conditions on page refresh where session exists
     // but listener hasn't been registered yet
@@ -208,12 +219,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // INITIAL_SESSION fires on page load when session exists in storage
       // SIGNED_IN fires on explicit login
       if (newSession?.user) {
-        // CRITICAL: Set loading true IMMEDIATELY to prevent false redirects
-        // This ensures ProtectedRoute shows spinner until user data is ready
-        setIsLoading(true);
-        
         // Defer async operations with setTimeout to avoid deadlock with Supabase internals
         setTimeout(async () => {
+          if (!isMounted) return;
+          
           try {
             // On explicit sign in, sync profile and claim any locally-saved trips
             if (event === 'SIGNED_IN') {
@@ -228,11 +237,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             const { profile, preferences } = await loadUserData(newSession.user);
-            setUser(transformProfile(newSession.user, profile, preferences));
+            if (isMounted) {
+              setUser(transformProfile(newSession.user, profile, preferences));
+            }
           } catch (error) {
             console.error('[Auth] Error loading user data:', error);
           } finally {
-            setIsLoading(false);
+            if (isMounted) {
+              setIsLoading(false);
+            }
           }
         }, 0);
       } else {
@@ -246,12 +259,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       // If no session and no pending auth state change, we can stop loading
       // The onAuthStateChange callback handles the case where session exists
-      if (!initialSession) {
+      if (!initialSession && isMounted) {
+        setIsLoading(false);
+      }
+    }).catch((error) => {
+      console.error('[Auth] Error getting session:', error);
+      if (isMounted) {
         setIsLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      clearTimeout(loadingTimeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
