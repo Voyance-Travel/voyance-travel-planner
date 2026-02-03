@@ -617,7 +617,9 @@ interface CostInfo {
 const NEVER_FREE_CATEGORIES = [
   'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee',
   'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
-  'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club'
+  'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club',
+  // Transport categories - airport transfers, taxis, etc. are never free
+  'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare'
 ];
 
 function isNeverFreeCategory(category: string, title: string): boolean {
@@ -628,11 +630,12 @@ function isNeverFreeCategory(category: string, title: string): boolean {
   if (NEVER_FREE_CATEGORIES.some(nfc => cat.includes(nfc))) return true;
   
   // Check title for dining/meal keywords
-  if (titleLower.includes('breakfast') || titleLower.includes('brunch') || 
-      titleLower.includes('lunch') || titleLower.includes('dinner') ||
-      titleLower.includes('cruise') || titleLower.includes('tour') ||
-      titleLower.includes('restaurant') || titleLower.includes('café') ||
-      titleLower.includes('cafe')) {
+  const neverFreeKeywords = [
+    'breakfast', 'brunch', 'lunch', 'dinner', 'cruise', 'tour',
+    'restaurant', 'café', 'cafe', 'transfer', 'airport', 'taxi',
+    'uber', 'private car', 'shuttle', 'train to', 'bus to'
+  ];
+  if (neverFreeKeywords.some(kw => titleLower.includes(kw))) {
     return true;
   }
   
@@ -686,6 +689,7 @@ function getActivityCostInfo(
   
   const result = estimateCostSync({
     category,
+    title, // Pass title for meal type inference (breakfast vs dinner)
     city: destinationCity,
     country: destinationCountry,
     travelers,
