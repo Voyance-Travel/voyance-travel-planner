@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
@@ -15,16 +15,9 @@ import FreeTierSection from '@/components/home/FreeTierSection';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 import { scrollToTop } from '@/utils/scrollUtils';
-import { DemoHero } from '@/components/demo/DemoHero';
-import { DemoFeatureShowcase } from '@/components/demo/DemoFeatureShowcase';
-import { DemoArchetypeComparison } from '@/components/demo/DemoArchetypeComparison';
-import { DemoGroupBlend } from '@/components/demo/DemoGroupBlend';
-import { DemoPlayground } from '@/components/demo/DemoPlayground';
 
 export default function Home() {
-  const [showTour, setShowTour] = useState(false);
-  const playgroundRef = useRef<HTMLDivElement>(null);
-  const comparisonRef = useRef<HTMLDivElement>(null);
+  const demoRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollToTop();
@@ -35,17 +28,8 @@ export default function Home() {
     };
   }, []);
 
-  const handleStartTour = () => {
-    setShowTour(true);
-  };
-
-  const handleTourComplete = () => {
-    setShowTour(false);
-    comparisonRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleSkipToPlayground = () => {
-    playgroundRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const handleScrollToDemo = () => {
+    demoRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
@@ -62,36 +46,8 @@ export default function Home() {
       <TopNav />
       
       <div className="bg-background overflow-hidden">
-        {/* Hero - Destination Search Only */}
-        <ValueFirstHero />
-        
-        {/* Demo Hero Section */}
-        <div id="demo-hero">
-          {!showTour && (
-            <DemoHero 
-              onStartTour={handleStartTour} 
-              onSkipToPlayground={handleSkipToPlayground}
-            />
-          )}
-          {showTour && (
-            <DemoFeatureShowcase onComplete={handleTourComplete} />
-          )}
-        </div>
-
-        {/* Archetype Comparison - Prove personalization works */}
-        <div id="archetype-comparison" ref={comparisonRef}>
-          <DemoArchetypeComparison />
-        </div>
-
-        {/* Group Travel Blending Demo */}
-        <div id="group-blend">
-          <DemoGroupBlend />
-        </div>
-
-        {/* Interactive playground */}
-        <div id="playground" ref={playgroundRef}>
-          <DemoPlayground />
-        </div>
+        {/* Hero - Destination Search + Demo CTA */}
+        <ValueFirstHero onScrollToDemo={handleScrollToDemo} />
         
         {/* The Problem - Emotional resonance */}
         <TheProblemSection />
@@ -105,9 +61,11 @@ export default function Home() {
         {/* Customization Showcase - Post-generation power */}
         <CustomizationShowcase />
         
-        {/* Curated Journeys - Real output examples */}
-        <ScrollTarget id="preview-section" className="scroll-mt-16">
-          <ItineraryShowcase />
+        {/* Featured Journeys with Embedded Demo */}
+        <ScrollTarget id="demo-section" className="scroll-mt-16">
+          <div ref={demoRef}>
+            <ItineraryShowcase />
+          </div>
         </ScrollTarget>
         
         {/* Social Proof - Honest trust signals */}

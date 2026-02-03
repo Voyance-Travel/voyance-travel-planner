@@ -1,7 +1,13 @@
 import { motion } from 'framer-motion';
+import { Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import DestinationEntry from './DestinationEntry';
 
-export default function ValueFirstHero() {
+interface ValueFirstHeroProps {
+  onScrollToDemo?: () => void;
+}
+
+export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) {
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
       {/* Full-screen Background Image - LCP optimized */}
@@ -34,6 +40,26 @@ export default function ValueFirstHero() {
           <DestinationEntry />
         </motion.div>
       </div>
+
+      {/* Demo CTA - positioned above scroll indicator */}
+      {onScrollToDemo && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8, duration: 0.5 }}
+          className="absolute bottom-24 sm:bottom-28 left-1/2 -translate-x-1/2 z-10"
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onScrollToDemo}
+            className="text-white/80 hover:text-white hover:bg-white/10 gap-2 text-sm font-medium"
+          >
+            <Play className="w-4 h-4" />
+            Want to see a demo?
+          </Button>
+        </motion.div>
+      )}
 
       {/* Editorial Detail - Issue marker */}
       <motion.div
