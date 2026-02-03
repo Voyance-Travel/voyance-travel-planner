@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -16,16 +16,12 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Slider } from '@/components/ui/slider';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-// Import the embedded quiz component
-import EmbeddedQuiz from '@/components/planner/steps/EmbeddedQuiz';
 // Import destination autocomplete
 import { DestinationAutocomplete } from '@/components/planner/shared/DestinationAutocomplete';
 
@@ -83,9 +79,8 @@ const sampleItineraries = [
 // Progress Step Indicator
 function StepIndicator({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
   const steps = [
-    { label: 'Your Style', step: 1 },
-    { label: 'Trip Details', step: 2 },
-    { label: 'Budget', step: 3 },
+    { label: 'Trip Details', step: 1 },
+    { label: 'Budget', step: 2 },
   ];
 
   return (
@@ -635,10 +630,9 @@ export default function Start() {
   const { canCreateDraft, needsCredits } = useDraftLimitCheck();
   const [showLimitBlocker, setShowLimitBlocker] = useState(false);
 
-  // Current step: 1 = Quiz, 2 = Trip Details, 3 = Budget
+  // Current step: 1 = Trip Details, 2 = Budget
   const [currentStep, setCurrentStep] = useState(1);
-  const [quizCompleted, setQuizCompleted] = useState(false);
-  const [hasExistingDNA, setHasExistingDNA] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
@@ -657,7 +651,6 @@ export default function Start() {
   const [tripType, setTripType] = useState<string>('leisure');
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Check draft limit
   useEffect(() => {
@@ -665,43 +658,6 @@ export default function Start() {
       setShowLimitBlocker(true);
     }
   }, [canCreateDraft, user]);
-
-  // Check if user already has Travel DNA
-  useEffect(() => {
-    const checkExistingDNA = async () => {
-      if (!user) return;
-      
-      try {
-        const { data } = await supabase
-          .from('user_preferences')
-          .select('traveler_type')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (data?.traveler_type) {
-          // User already has Travel DNA, skip quiz
-          setHasExistingDNA(true);
-          setQuizCompleted(true);
-          setCurrentStep(2);
-        }
-      } catch (err) {
-        // No existing DNA, start with quiz
-      }
-    };
-
-    checkExistingDNA();
-  }, [user]);
-
-  // Handle quiz completion
-  const handleQuizComplete = () => {
-    setQuizCompleted(true);
-    setCurrentStep(2);
-  };
-
-  // Handle quiz skip
-  const handleQuizSkip = () => {
-    setCurrentStep(2);
-  };
 
   // Handle final submission
   const handleSubmit = async () => {
@@ -752,17 +708,7 @@ export default function Start() {
       <section className="min-h-screen py-8 px-4">
         <div className="max-w-5xl mx-auto">
           {/* Progress Indicator */}
-          <StepIndicator currentStep={currentStep} totalSteps={3} />
-
-          {/* Time estimate - only show if user needs to take quiz */}
-          {!hasExistingDNA && currentStep === 1 && (
-            <div className="text-center mb-8">
-              <span className="text-sm text-muted-foreground">
-                <Clock className="w-4 h-4 inline mr-1" />
-                Takes ~5 minutes
-              </span>
-            </div>
-          )}
+          <StepIndicator currentStep={currentStep} totalSteps={2} />
 
           {/* Main content with sidebar */}
           <div className="flex gap-12">
@@ -770,20 +716,6 @@ export default function Start() {
             <div className="flex-1 min-w-0">
               <AnimatePresence mode="wait">
                 {currentStep === 1 && (
-                  <motion.div
-                    key="quiz"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <EmbeddedQuiz
-                      onComplete={handleQuizComplete}
-                      onSkip={handleQuizSkip}
-                    />
-                  </motion.div>
-                )}
-
-                {currentStep === 2 && (
                   <TripDetailsStep
                     key="details"
                     destinationSelection={destinationSelection}
@@ -798,18 +730,17 @@ export default function Start() {
                     setTripType={setTripType}
                     celebrationDay={celebrationDay}
                     setCelebrationDay={setCelebrationDay}
-                    onContinue={() => setCurrentStep(3)}
-                    onBack={hasExistingDNA ? undefined : () => setCurrentStep(1)}
+                    onContinue={() => setCurrentStep(2)}
                   />
                 )}
 
-                {currentStep === 3 && (
+                {currentStep === 2 && (
                   <BudgetStep
                     key="budget"
                     budgetAmount={budgetAmount}
                     setBudgetAmount={setBudgetAmount}
                     onSubmit={handleSubmit}
-                    onBack={() => setCurrentStep(2)}
+                    onBack={() => setCurrentStep(1)}
                     isSubmitting={isSubmitting}
                   />
                 )}
