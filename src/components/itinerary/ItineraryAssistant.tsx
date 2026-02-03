@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2 } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -33,6 +33,10 @@ import {
   updateLocalTripItinerary,
   type ItineraryDay,
 } from '@/services/itineraryActionExecutor';
+import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { useCredits } from '@/hooks/useCredits';
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { CREDIT_COSTS } from '@/config/pricing';
 
 interface ItineraryAssistantProps {
   tripId: string;
@@ -64,6 +68,12 @@ export function ItineraryAssistant({
   const [conversationId] = useState(generateConversationId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Credit system hooks
+  const { data: creditData } = useCredits();
+  const { isPaid } = useEntitlements();
+  const spendCredits = useSpendCredits();
+  const totalCredits = creditData?.totalCredits ?? 0;
 
   // Keep local days in sync with props
   useEffect(() => {
@@ -129,6 +139,27 @@ export function ItineraryAssistant({
         description: `Please keep your message under ${MAX_MESSAGE_LENGTH} characters.`,
       });
       return;
+    }
+
+    // Check if user can afford AI message (skip for paid users)
+    if (!isPaid && totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+      toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits for AI messages`, {
+        description: 'Get more credits to continue chatting.',
+      });
+      return;
+    }
+
+    // Spend credits for AI message (skip for paid users)
+    if (!isPaid) {
+      try {
+        await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          tripId,
+        });
+      } catch (err) {
+        console.error('[ItineraryAssistant] Credit spend failed:', err);
+        return;
+      }
     }
 
     // Client-side safety: basic input sanitization
@@ -210,7 +241,7 @@ export function ItineraryAssistant({
     } finally {
       setIsLoading(false);
     }
-  }, [inputValue, isLoading, messages, itineraryContext, conversationId, approvalMode]);
+  }, [inputValue, isLoading, messages, itineraryContext, conversationId, approvalMode, isPaid, totalCredits, spendCredits, tripId]);
 
   const handleActionApply = async (messageId: string, actionIndex: number, action: ItineraryAction) => {
     const actionId = `${messageId}-${actionIndex}`;
