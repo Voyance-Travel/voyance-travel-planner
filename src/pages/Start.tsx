@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown, PartyPopper } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -511,6 +511,9 @@ const tripOccasions = [
   { id: 'wellness', label: 'Wellness' },
 ];
 
+// Trip types that are celebrations and need a "celebration day" selector
+const CELEBRATION_TRIP_TYPES = ['birthday', 'anniversary', 'honeymoon'] as const;
+
 // Featured destinations
 const featuredDestinations = [
   { name: 'Kyoto', country: 'Japan', image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600' },
@@ -576,6 +579,7 @@ export default function Start() {
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [childrenCount, setChildrenCount] = useState(plannerState.basics.childrenCount || 0);
   const [tripType, setTripType] = useState<string>('leisure');
+  const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [hotelSelection, setHotelSelection] = useState<HotelSelectionData | null>(null);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
@@ -1021,13 +1025,14 @@ export default function Start() {
           };
         }
         
-        // Save metadata with airport codes
+        // Save metadata with airport codes and celebration day
         updatePayload.metadata = {
           destinationAirportCodes: destinationSelection.airportCodes,
           originAirportCodes: originSelection.airportCodes,
           isDestinationMetro: destinationSelection.isMetroArea,
           isOriginMetro: originSelection.isMetroArea,
           budgetAmount: budgetAmount,
+          celebrationDay: CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) ? celebrationDay : undefined,
         };
         
         const { error: updateError } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
@@ -1529,6 +1534,10 @@ export default function Start() {
                           setTravelers(1);
                           setChildrenCount(0);
                         }
+                        // Reset celebration day if switching to non-celebration type
+                        if (!CELEBRATION_TRIP_TYPES.includes(occasion.id as typeof CELEBRATION_TRIP_TYPES[number])) {
+                          setCelebrationDay(undefined);
+                        }
                       }}
                       className={cn(
                         "px-3 py-1.5 rounded-full border transition-all text-sm",
@@ -1566,6 +1575,10 @@ export default function Start() {
                               setTravelers(1);
                               setChildrenCount(0);
                             }
+                            // Reset celebration day if switching to non-celebration type
+                            if (!CELEBRATION_TRIP_TYPES.includes(occasion.id as typeof CELEBRATION_TRIP_TYPES[number])) {
+                              setCelebrationDay(undefined);
+                            }
                           }}
                           className={cn(
                             "px-3 py-1.5 rounded-full border transition-all text-sm",
@@ -1582,7 +1595,43 @@ export default function Start() {
                 </Collapsible>
               </div>
 
-              {/* Optional Budget Section */}
+              {/* Celebration Day Selector - appears for birthday, anniversary, honeymoon */}
+              {CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) && startDate && endDate && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-3"
+                >
+                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-2">
+                    <PartyPopper className="h-4 w-4 text-amber-500" />
+                    Which day is the {tripType === 'birthday' ? 'birthday' : tripType === 'anniversary' ? 'anniversary' : 'special occasion'}?
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1 }, (_, i) => i + 1).map((day) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setCelebrationDay(day)}
+                        className={cn(
+                          "w-10 h-10 rounded-full border transition-all text-sm font-medium",
+                          celebrationDay === day
+                            ? "bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-400"
+                            : "border-border text-muted-foreground hover:border-amber-500/40 hover:text-foreground"
+                        )}
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                  {celebrationDay && (
+                    <p className="text-xs text-muted-foreground">
+                      We'll plan something special for Day {celebrationDay} ✨
+                    </p>
+                  )}
+                </motion.div>
+              )}
+
               <Collapsible open={showBudget} onOpenChange={setShowBudget}>
                 <CollapsibleTrigger asChild>
                   <button
