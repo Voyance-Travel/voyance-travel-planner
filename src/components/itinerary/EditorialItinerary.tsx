@@ -1876,13 +1876,6 @@ export function EditorialItinerary({
               />
             )}
 
-            {/* Airport Game Plan - Show before Day 1 (or prompt to add details) */}
-            <AirportGamePlan 
-              flightSelection={flightSelection} 
-              hotelSelection={hotelSelection}
-              destination={destination}
-              onNavigateToBookings={() => setActiveTab('details')}
-            />
 
             {/* Inline Modifier - Natural language itinerary changes */}
             {effectiveIsEditable && (
@@ -1971,38 +1964,50 @@ export function EditorialItinerary({
             
             {/* Show only selected day */}
             {days[selectedDayIndex] && (
-              <DayCard
-                key={days[selectedDayIndex].dayNumber}
-                day={days[selectedDayIndex]}
-                dayIndex={selectedDayIndex}
-                totalDays={days.length}
-                travelers={travelers}
-                budgetTier={budgetTier}
-                tripCurrency={tripCurrency}
-                displayCost={displayCost}
-                destination={destination}
-                destinationCountry={destinationCountry}
-                isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
-                isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
-                isEditable={effectiveIsEditable}
-                tripId={tripId}
-                getPaymentForItem={getPaymentForItem}
-                refreshPayments={refreshPayments}
-                onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
-                onActivitySwap={openSwapDrawer}
-                onActivityLock={handleActivityLock}
-                onActivityMove={handleActivityMove}
-                onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
-                onMoveToDay={handleMoveToDay}
-                onActivityRemove={handleActivityRemove}
-                onDayLock={handleDayLock}
-                onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
-                onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
-                onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
-                onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
-                onPaymentRequest={onPaymentRequest}
-                onViewReviews={openReviewsDrawer}
-              />
+              <div className="space-y-6">
+                {/* Airport Game Plan - Show only on Day 1 */}
+                {selectedDayIndex === 0 && (
+                  <AirportGamePlan 
+                    flightSelection={flightSelection} 
+                    hotelSelection={hotelSelection}
+                    destination={destination}
+                    onNavigateToBookings={() => setActiveTab('details')}
+                  />
+                )}
+                
+                <DayCard
+                  key={days[selectedDayIndex].dayNumber}
+                  day={days[selectedDayIndex]}
+                  dayIndex={selectedDayIndex}
+                  totalDays={days.length}
+                  travelers={travelers}
+                  budgetTier={budgetTier}
+                  tripCurrency={tripCurrency}
+                  displayCost={displayCost}
+                  destination={destination}
+                  destinationCountry={destinationCountry}
+                  isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
+                  isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
+                  isEditable={effectiveIsEditable}
+                  tripId={tripId}
+                  getPaymentForItem={getPaymentForItem}
+                  refreshPayments={refreshPayments}
+                  onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
+                  onActivitySwap={openSwapDrawer}
+                  onActivityLock={handleActivityLock}
+                  onActivityMove={handleActivityMove}
+                  onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
+                  onMoveToDay={handleMoveToDay}
+                  onActivityRemove={handleActivityRemove}
+                  onDayLock={handleDayLock}
+                  onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
+                  onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                  onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                  onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                  onPaymentRequest={onPaymentRequest}
+                  onViewReviews={openReviewsDrawer}
+                />
+              </div>
             )}
           </motion.div>
         )}
