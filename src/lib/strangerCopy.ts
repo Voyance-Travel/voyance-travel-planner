@@ -15,7 +15,7 @@ export const strangerCopy = {
       headline: "Travel planning that gets you.",
       subhead: "Most tools treat everyone the same. We learn how you actually travel. Then we build trips that fit.",
       cta: "Discover Your Travel Style",
-      ctaSubtext: "4 minutes. Free forever.",
+      ctaSubtext: "5 minutes. Free forever.",
       secondaryCta: "See How It Works",
     },
     
@@ -91,7 +91,7 @@ Most of that time is wasted on the wrong things.
 
 We've done the research. We know what works.
 All we need to know is who you are.`,
-      cta: "Take the Quiz - 4 minutes",
+      cta: "Take the Quiz - 5 minutes",
     },
     
     footerCta: {
@@ -99,7 +99,7 @@ All we need to know is who you are.`,
       body: `You're either very thorough (we respect that) or not quite sure yet (also fair).
 
 Here's what we can promise:
-• The quiz takes 4 minutes
+• The quiz takes 5 minutes
 • It's actually interesting
 • You'll learn something about yourself
 • And we'll never spam you`,
@@ -142,7 +142,7 @@ Here's what we can promise:
         "Spam you",
         "Share your data",
         "Make you feel judged",
-        "Take more than 4 minutes",
+        "Take more than 5 minutes",
       ],
     },
     
@@ -216,7 +216,7 @@ Here's what we can promise:
     noDataSelling: "We don't sell your data. Subscriptions, not surveillance.",
     builtBy: "Built by travelers who were tired of the same generic advice.",
     typesCount: "27 traveler types. Yours is one of them.",
-    timeCommitment: "4 minutes to find out. Free forever.",
+    timeCommitment: "5 minutes to find out. Free forever.",
   },
   
   // ═══════════════════════════════════════════════
@@ -225,7 +225,7 @@ Here's what we can promise:
   
   browseNudges: {
     initial: "Looking around? Smart. The quiz is here when you're ready.",
-    afterPages: "Curious what your travel style is? 4 minutes, no commitment.",
+    afterPages: "Curious what your travel style is? 5 minutes, no commitment.",
     afterExample: "Like what you see? Find out your type.",
     persistent: "Still exploring? We like the thoroughness.",
     cta: "Take the Quiz",

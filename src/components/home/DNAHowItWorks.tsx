@@ -9,8 +9,8 @@ const STEPS = [
     number: '1',
     icon: Dna,
     title: 'Discover your Travel DNA',
-    description: 'Take our 2-minute quiz. We analyze your preferences across 8 traits to identify your unique travel personality from 27 archetypes.',
-    highlight: '2-min quiz',
+    description: 'Take our 5-minute quiz. We analyze your preferences across 10 traits to identify your unique travel personality from 27 archetypes.',
+    highlight: '5-min quiz',
   },
   {
     number: '2',

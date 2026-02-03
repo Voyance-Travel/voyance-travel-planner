@@ -80,7 +80,7 @@ export default function HowItWorks() {
             transition={{ delay: 0.2 }}
             className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed"
           >
-            A 2-minute quiz. Your travel personality. 
+            A 5-minute quiz. Your travel personality. 
             A day-by-day itinerary built just for you.
           </motion.p>
           <motion.div

@@ -37,7 +37,7 @@ export const strangerMessages = {
   },
   
   nudges: {
-    idle: "Curious what kind of traveler you are? 4 minutes, no spam.",
+    idle: "Curious what kind of traveler you are? 5 minutes, no spam.",
     secondVisit: "Back again? The quiz is still waiting.",
     afterBrowsing: "Ready to see how you actually travel?",
   },
@@ -389,7 +389,7 @@ export const emptyStateMessages = {
     headline: "We don't know you yet",
     subhead: "Take the quiz so we can plan trips that actually fit you.",
     cta: "Take the quiz",
-    note: "4 minutes. Changes everything.",
+    note: "5 minutes. Changes everything.",
   },
 };
 
