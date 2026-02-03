@@ -72,6 +72,7 @@ import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationS
 import { InlineModifier } from './InlineModifier';
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { ItineraryValueHeader } from './ItineraryValueHeader';
+import { ItineraryUtilityBar } from './ItineraryUtilityBar';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { calculateItineraryValueStats, getDestinationSkippedItems } from '@/utils/intelligenceAnalytics';
 import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
@@ -2072,6 +2073,15 @@ export function EditorialItinerary({
               stats={valueStats}
               destination={destination}
               archetype={style}
+            />
+
+            {/* Utility Bar - Share/Save/Export/Print */}
+            <ItineraryUtilityBar
+              tripId={tripId}
+              tripName={`Trip to ${destination}`}
+              destination={destination}
+              onSave={effectiveIsEditable ? handleSave : undefined}
+              isSaving={isSaving}
             />
 
             {/* What We Skipped - Tourist traps avoided */}

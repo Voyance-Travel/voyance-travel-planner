@@ -147,6 +147,7 @@ export function analyzeActivityIntelligence(activity: {
 
 /**
  * Calculate aggregate value stats for an entire itinerary
+ * Now includes expandable detail arrays for each category
  */
 export function calculateItineraryValueStats(
   days: Array<{
@@ -171,16 +172,54 @@ export function calculateItineraryValueStats(
   let insiderTips = 0;
   let lowCrowdActivities = 0;
 
+  // Collect details for expandable sections
+  const voyanceFindsDetails: Array<{ title: string; reason?: string }> = [];
+  const timingDetails: Array<{ title: string; reason?: string; savingsTime?: string }> = [];
+  const insiderTipsDetails: Array<{ title: string; reason?: string }> = [];
+
   days.forEach(day => {
     day.activities.forEach(activity => {
       const intelligence = analyzeActivityIntelligence(activity);
+      const activityName = activity.name || activity.title || 'Activity';
       
-      if (intelligence.isHiddenGem) voyanceFinds++;
-      if (intelligence.hasTimingHack) timingOptimizations++;
-      if (intelligence.hasInsiderTip) insiderTips++;
+      if (intelligence.isHiddenGem) {
+        voyanceFinds++;
+        voyanceFindsDetails.push({
+          title: activityName,
+          reason: activity.personalization?.whyThisFits || 
+                  (activity.crowdLevel === 'low' ? 'Local favorite with minimal crowds' : 
+                   'Off the beaten path discovery'),
+        });
+      }
+      
+      if (intelligence.hasTimingHack) {
+        timingOptimizations++;
+        timingDetails.push({
+          title: activityName,
+          reason: intelligence.timingReason || 'Scheduled to avoid peak crowds',
+          savingsTime: '20-30 min',
+        });
+      }
+      
+      if (intelligence.hasInsiderTip) {
+        insiderTips++;
+        insiderTipsDetails.push({
+          title: activityName,
+          reason: intelligence.insiderTip,
+        });
+      }
+      
       if (intelligence.crowdLevel === 'low') lowCrowdActivities++;
     });
   });
+
+  // Convert skipped items to detail format
+  const trapsAvoidedDetails = skippedItems?.map(item => ({
+    title: item.name,
+    reason: item.reason,
+    savingsTime: item.savingsEstimate?.time,
+    savingsMoney: item.savingsEstimate?.money,
+  })) || [];
 
   return {
     voyanceFinds,
@@ -195,6 +234,11 @@ export function calculateItineraryValueStats(
       lowCrowdActivities,
       insiderTips
     ),
+    // Expandable details
+    voyanceFindsDetails: voyanceFindsDetails.slice(0, 5), // Cap at 5 for UI
+    timingDetails: timingDetails.slice(0, 5),
+    trapsAvoidedDetails: trapsAvoidedDetails.slice(0, 5),
+    insiderTipsDetails: insiderTipsDetails.slice(0, 5),
   };
 }
 
