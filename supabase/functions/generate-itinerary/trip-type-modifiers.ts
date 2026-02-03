@@ -2548,16 +2548,23 @@ COMPLIANCE CHECK
 /**
  * Build comprehensive birthday prompt with personalization
  */
-export function buildBirthdayPrompt(archetype: string): string {
+export function buildBirthdayPrompt(archetype: string, celebrationDay?: number, totalDays?: number): string {
+  const celebrationDayText = celebrationDay 
+    ? `\n⭐ THE ACTUAL BIRTHDAY IS DAY ${celebrationDay}. ⭐\nONLY Day ${celebrationDay} should have birthday activities, dinner, and celebration moments.\nDays 1-${celebrationDay - 1} and ${celebrationDay + 1}-${totalDays || celebrationDay} should be NORMAL days with no birthday theming.\n`
+    : '';
+  
   return `
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                        TRIP TYPE: BIRTHDAY                           ║
 ╚═══════════════════════════════════════════════════════════════════════╝
-
+${celebrationDayText}
 Someone is CELEBRATING A BIRTHDAY. The trip should honor THEM.
 
 KEY INSIGHT: Birthday trip ≠ "birthday activities everywhere."
 It means: the trip is designed around what THEY want.
+
+⚠️ CRITICAL: ONLY ONE DAY gets birthday activities.${celebrationDay ? ` That day is Day ${celebrationDay}.` : ''}
+All other days should be NORMAL itinerary days with NO birthday theming.
 
 A birthday for a Slow Traveler ≠ party party party.
 A birthday for an Introvert ≠ group celebration.
@@ -4554,7 +4561,8 @@ export function getTripTypeModifier(tripType: string | undefined | null): TripTy
 export function buildTripTypePromptSection(
   tripType: string | undefined | null,
   archetype: string,
-  totalDays: number
+  totalDays: number,
+  celebrationDay?: number
 ): string {
   const modifier = getTripTypeModifier(tripType);
   const interaction = getTripTypeInteraction(tripType || 'none', archetype);
@@ -4581,7 +4589,7 @@ export function buildTripTypePromptSection(
       promptContent = buildBabymoonPrompt();
       break;
     case 'birthday':
-      promptContent = buildBirthdayPrompt(archetype);
+      promptContent = buildBirthdayPrompt(archetype, celebrationDay, totalDays);
       break;
     case 'anniversary':
       promptContent = buildAnniversaryPrompt();
