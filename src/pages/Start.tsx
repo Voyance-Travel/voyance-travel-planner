@@ -1,499 +1,43 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { MapPin, Calendar as CalendarIcon, Users, Plane, Loader2, UserPlus, DollarSign, Info, Sparkles, Globe, Building2, Star, ChevronDown, PartyPopper } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
+  Sparkles, ChevronDown, PartyPopper, ArrowRight, Check, Clock,
+  Eye, Gem, Utensils
+} from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { DraftLimitBanner, DraftLimitBlocker } from '@/components/common/DraftLimitBanner';
 import { useDraftLimitCheck } from '@/hooks/useDraftLimitCheck';
-import heroItineraryImage from '@/assets/hero-itinerary.jpg';
-import heroHotelImage from '@/assets/hero-hotel.jpg';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Slider } from '@/components/ui/slider';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
-import { 
-  searchAirports, 
-  searchDestinations,
-  formatAirportDisplay,
-  type Airport,
-  type Destination,
-} from '@/services/locationSearchAPI';
-import { searchHotelsByName, type HotelSearchByNameResult } from '@/services/hotelAPI';
-import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
-import { FlightDetailsModal, type FlightDetails, type FlightSegment } from '@/components/itinerary/FlightDetailsModal';
-import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import TripSetupFeedback from '@/components/common/TripSetupFeedback';
 
-// Types for structured location data
+// Import the embedded quiz component
+import EmbeddedQuiz from '@/components/planner/steps/EmbeddedQuiz';
+// Import destination autocomplete
+import { DestinationAutocomplete } from '@/components/planner/shared/DestinationAutocomplete';
+
+// Types
 interface LocationSelection {
-  display: string;        // What user sees: "Paris" or "Atlanta (ATL)"
-  cityName: string;       // Clean city name: "Paris", "Atlanta"
-  airportCodes?: string[]; // All airport codes if metro area selected
+  display: string;
+  cityName: string;
+  airportCodes?: string[];
   isMetroArea?: boolean;
 }
 
-// Debounce hook for search
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
-}
-
-// Airport/Destination Autocomplete - Forces selection of real cities
-function AirportAutocomplete({
-  value,
-  onChange,
-  placeholder,
-  icon: Icon = Plane,
-  required = false,
-}: {
-  value: string;
-  onChange: (selection: LocationSelection) => void;
-  placeholder: string;
-  icon?: typeof Plane;
-  required?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(value);
-  const [airports, setAirports] = useState<Airport[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [metroInfo, setMetroInfo] = useState<{ name: string; codes: string[] } | null>(null);
-  const [hasValidSelection, setHasValidSelection] = useState(!!value);
-
-  const debouncedQuery = useDebounce(inputValue, 300);
-
-  // Sync with external value changes (e.g., from popular destinations)
-  useEffect(() => {
-    if (value && value !== inputValue) {
-      setInputValue(value);
-      setHasValidSelection(true);
-    } else if (!value && inputValue) {
-      // Value was cleared externally
-      setInputValue('');
-      setHasValidSelection(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  useEffect(() => {
-    if (debouncedQuery.length >= 2) {
-      setLoading(true);
-      import('@/services/locationSearchAPI').then(({ getMetroAreaInfo }) => {
-        const metro = getMetroAreaInfo(debouncedQuery);
-        setMetroInfo(metro);
-      });
-      searchAirports(debouncedQuery, 12)
-        .then(setAirports)
-        .finally(() => setLoading(false));
-    } else {
-      setAirports([]);
-      setMetroInfo(null);
-    }
-  }, [debouncedQuery]);
-
-  const handleSelectMetro = () => {
-    if (!metroInfo) return;
-    setInputValue(metroInfo.name);
-    setHasValidSelection(true);
-    onChange({
-      display: metroInfo.name,
-      cityName: metroInfo.name,
-      airportCodes: metroInfo.codes,
-      isMetroArea: true,
-    });
-    setIsOpen(false);
-  };
-
-  const handleSelect = (airport: Airport) => {
-    const display = `${airport.city} (${airport.code})`;
-    setInputValue(display);
-    setHasValidSelection(true);
-    onChange({
-      display,
-      cityName: airport.city,
-      airportCodes: [airport.code],
-      isMetroArea: false,
-    });
-    setIsOpen(false);
-  };
-
-  const handleInputChange = (val: string) => {
-    setInputValue(val);
-    // Only clear selection if user is actively typing something different
-    if (val.length === 0) {
-      setHasValidSelection(false);
-      onChange({
-        display: '',
-        cityName: '',
-        airportCodes: undefined,
-        isMetroArea: false,
-      });
-    } else if (hasValidSelection) {
-      // User is modifying a previously selected value - clear the valid selection
-      setHasValidSelection(false);
-    }
-    setIsOpen(true);
-  };
-
-  const showDropdown = isOpen && inputValue.length >= 2;
-  const showValidationHint = inputValue.length >= 2 && !hasValidSelection && !isOpen;
-
-  return (
-    <div className="relative">
-      <div className="absolute left-0 top-1/2 -translate-y-1/2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <Input
-        placeholder={placeholder}
-        value={inputValue}
-        onChange={(e) => handleInputChange(e.target.value)}
-        onFocus={() => {
-          if (inputValue.length >= 2) setIsOpen(true);
-        }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 300)}
-        className={cn(
-          "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
-          showValidationHint ? "border-amber-500" : "border-border focus:border-primary"
-        )}
-      />
-      {showValidationHint && (
-        <p className="text-xs text-amber-600 mt-1">Please select a city from the dropdown</p>
-      )}
-      {showDropdown && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 overflow-hidden max-h-80 overflow-y-auto rounded-xl"
-        >
-          {loading ? (
-            <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm font-sans">Searching...</span>
-            </div>
-          ) : airports.length > 0 ? (
-            <>
-              {/* Metro area "All airports" option */}
-              {metroInfo && airports.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    className="w-full px-4 py-3 text-left hover:bg-primary/10 flex items-center gap-3 transition-colors bg-primary/5 border-b border-primary/20"
-                    onPointerDown={(e) => { e.preventDefault(); handleSelectMetro(); }}
-                  >
-                    <span className="text-xs font-bold text-primary tracking-wide w-10">ALL</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-sans text-sm font-medium text-primary">{metroInfo.name} (All airports)</p>
-                      <p className="text-xs text-muted-foreground">Search {metroInfo.codes.join(', ')} for best prices</p>
-                    </div>
-                  </button>
-                  <div className="px-4 py-1.5 bg-muted/50 border-b border-border">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Or choose specific airport</span>
-                  </div>
-                </>
-              )}
-              {airports.map((airport, idx) => (
-                <button
-                  key={airport.id}
-                  type="button"
-                  className={cn(
-                    "w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3 transition-colors",
-                    idx < airports.length - 1 && "border-b border-border/50"
-                  )}
-                  onPointerDown={(e) => { e.preventDefault(); handleSelect(airport); }}
-                >
-                  <span className="text-xs font-semibold text-primary tracking-wide w-10">{airport.code}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-sans text-sm text-foreground truncate">{airport.name}</p>
-                    <p className="text-xs text-muted-foreground">{airport.city}, {airport.country}</p>
-                  </div>
-                </button>
-              ))}
-            </>
-          ) : inputValue.length >= 2 ? (
-            <div className="px-4 py-6 text-center text-muted-foreground text-sm font-sans">
-              No cities or airports found for "{inputValue}"
-            </div>
-          ) : null}
-        </motion.div>
-      )}
-    </div>
-  );
-}
-
-// City/Destination Autocomplete - For itinerary mode (no airport codes needed)
-function DestinationAutocomplete({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (selection: LocationSelection) => void;
-  placeholder: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(value);
-  const [destinations, setDestinations] = useState<Destination[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasValidSelection, setHasValidSelection] = useState(!!value);
-
-  const debouncedQuery = useDebounce(inputValue, 300);
-
-  // Sync with external value changes (e.g., from popular destinations)
-  useEffect(() => {
-    if (value && value !== inputValue) {
-      setInputValue(value);
-      setHasValidSelection(true);
-    } else if (!value && inputValue) {
-      // Value was cleared externally
-      setInputValue('');
-      setHasValidSelection(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  useEffect(() => {
-    if (debouncedQuery.length >= 2) {
-      setLoading(true);
-      searchDestinations(debouncedQuery, 10)
-        .then(setDestinations)
-        .finally(() => setLoading(false));
-    } else {
-      setDestinations([]);
-    }
-  }, [debouncedQuery]);
-
-  const handleSelect = (destination: Destination) => {
-    const display = `${destination.city}, ${destination.country}`;
-    setInputValue(display);
-    setHasValidSelection(true);
-    onChange({
-      display,
-      cityName: destination.city,
-      airportCodes: destination.airport_codes, // May be undefined, that's fine
-      isMetroArea: false,
-    });
-    setIsOpen(false);
-  };
-
-  const handleInputChange = (val: string) => {
-    setInputValue(val);
-    // Only clear selection if user is actively typing something different
-    if (val.length === 0) {
-      setHasValidSelection(false);
-      onChange({
-        display: '',
-        cityName: '',
-        airportCodes: undefined,
-        isMetroArea: false,
-      });
-    } else if (hasValidSelection) {
-      // User is modifying a previously selected value - clear the valid selection
-      setHasValidSelection(false);
-    }
-    setIsOpen(true);
-  };
-
-  const showDropdown = isOpen && inputValue.length >= 2;
-  const showValidationHint = inputValue.length >= 2 && !hasValidSelection && !isOpen;
-
-  return (
-    <div className="relative">
-      <div className="absolute left-0 top-1/2 -translate-y-1/2">
-        <MapPin className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <Input
-        placeholder={placeholder}
-        value={inputValue}
-        onChange={(e) => handleInputChange(e.target.value)}
-        onFocus={() => {
-          if (inputValue.length >= 2) setIsOpen(true);
-        }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 300)}
-        className={cn(
-          "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
-          showValidationHint ? "border-amber-500" : "border-border focus:border-primary"
-        )}
-      />
-      {showValidationHint && (
-        <p className="text-xs text-amber-600 mt-1">Please select a city from the dropdown</p>
-      )}
-      {showDropdown && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 overflow-hidden max-h-80 overflow-y-auto rounded-xl"
-        >
-          {loading ? (
-            <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm font-sans">Searching destinations...</span>
-            </div>
-          ) : destinations.length > 0 ? (
-            destinations.map((dest, idx) => (
-              <button
-                key={dest.id}
-                type="button"
-                className={cn(
-                  "w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3 transition-colors",
-                  idx < destinations.length - 1 && "border-b border-border/50"
-                )}
-                onPointerDown={(e) => { e.preventDefault(); handleSelect(dest); }}
-              >
-                <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-sans text-sm font-medium text-foreground">{dest.city}</p>
-                  <p className="text-xs text-muted-foreground">{dest.country}{dest.region ? ` • ${dest.region}` : ''}</p>
-                </div>
-              </button>
-            ))
-          ) : inputValue.length >= 2 ? (
-            <div className="px-4 py-6 text-center text-muted-foreground text-sm font-sans">
-              No destinations found for "{inputValue}"
-            </div>
-          ) : null}
-        </motion.div>
-      )}
-    </div>
-  );
-}
-
-// Hotel selection type for itinerary-only mode
-interface HotelSelectionData {
-  placeId: string;
-  name: string;
-  address: string;
-  rating?: number;
-  reviewCount?: number;
-  website?: string;
-  googleMapsUrl?: string;
-  coordinates?: { lat: number; lng: number };
-}
-
-// Hotel Autocomplete for itinerary-only mode
-function HotelAutocomplete({
-  value,
-  onChange,
-  destination,
-  placeholder = "Where are you staying? (optional)",
-}: {
-  value: HotelSelectionData | null;
-  onChange: (hotel: HotelSelectionData | null) => void;
-  destination: string;
-  placeholder?: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(value?.name || '');
-  const [hotels, setHotels] = useState<HotelSearchByNameResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const debouncedQuery = useDebounce(inputValue, 400);
-
-  useEffect(() => {
-    if (value?.name !== inputValue && value?.name) {
-      setInputValue(value.name);
-    }
-  }, [value?.name]);
-
-  useEffect(() => {
-    if (debouncedQuery.length >= 2 && destination) {
-      setLoading(true);
-      setIsOpen(true); // Keep dropdown open while loading
-      searchHotelsByName(debouncedQuery, destination)
-        .then((results) => {
-          setHotels(results);
-          if (results.length > 0) setIsOpen(true); // Ensure open when results arrive
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setHotels([]);
-    }
-  }, [debouncedQuery, destination]);
-
-  const handleSelect = (hotel: HotelSearchByNameResult) => {
-    setInputValue(hotel.name);
-    onChange({
-      placeId: hotel.placeId,
-      name: hotel.name,
-      address: hotel.address,
-      rating: hotel.rating,
-      reviewCount: hotel.reviewCount,
-      website: hotel.website,
-      googleMapsUrl: hotel.googleMapsUrl,
-      coordinates: hotel.coordinates,
-    });
-    setIsOpen(false);
-  };
-
-  return (
-    <div className="relative">
-      <div className="absolute left-0 top-1/2 -translate-y-1/2">
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <Input
-        placeholder={destination ? placeholder : "Select destination first"}
-        value={inputValue}
-        onChange={(e) => { setInputValue(e.target.value); if (!e.target.value) onChange(null); setIsOpen(true); }}
-        onFocus={() => { if (inputValue.length >= 2 && destination) setIsOpen(true); }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 300)}
-        disabled={!destination}
-        className={cn(
-          "h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans",
-          !destination ? "opacity-50 cursor-not-allowed" : "border-border focus:border-primary"
-        )}
-      />
-      {(isOpen || loading) && inputValue.length >= 2 && destination && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-elevated z-50 overflow-hidden max-h-80 overflow-y-auto rounded-xl"
-        >
-          {loading ? (
-            <div className="px-4 py-6 flex items-center justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm">Searching hotels...</span>
-            </div>
-          ) : hotels.length > 0 ? (
-            hotels.map((hotel, idx) => (
-              <button
-                key={hotel.placeId}
-                type="button"
-                className={cn("w-full px-4 py-3 text-left hover:bg-secondary/50 flex items-center gap-3", idx < hotels.length - 1 && "border-b border-border/50")}
-                onPointerDown={(e) => { e.preventDefault(); handleSelect(hotel); }}
-              >
-                <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">{hotel.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{hotel.address}</p>
-                  {hotel.rating && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
-                      <span className="text-xs text-muted-foreground">{hotel.rating.toFixed(1)}</span>
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))
-          ) : (
-            <div className="px-4 py-6 text-center text-muted-foreground text-sm">No hotels found</div>
-          )}
-        </motion.div>
-      )}
-    </div>
-  );
-}
-
-// Trip occasion options - what's the purpose of this trip?
+// Trip occasions
 const tripOccasions = [
   { id: 'leisure', label: 'Leisure' },
   { id: 'romantic', label: 'Romantic' },
@@ -503,1316 +47,772 @@ const tripOccasions = [
   { id: 'girls-trip', label: "Girls' Trip" },
   { id: 'guys-trip', label: "Guys' Trip" },
   { id: 'family', label: 'Family' },
-  { id: 'adult-family', label: 'Adult Family' },
   { id: 'solo', label: 'Solo' },
   { id: 'friends', label: 'Friends' },
-  { id: 'business', label: 'Business' },
   { id: 'adventure', label: 'Adventure' },
   { id: 'wellness', label: 'Wellness' },
 ];
 
-// Trip types that are celebrations and need a "celebration day" selector
 const CELEBRATION_TRIP_TYPES = ['birthday', 'anniversary', 'honeymoon'] as const;
 
-// Featured destinations
-const featuredDestinations = [
-  { name: 'Kyoto', country: 'Japan', image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600' },
-  { name: 'Santorini', country: 'Greece', image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600' },
-  { name: 'Marrakech', country: 'Morocco', image: 'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=600' },
-  { name: 'Bali', country: 'Indonesia', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600' },
-  { name: 'Amalfi', country: 'Italy', image: 'https://images.unsplash.com/photo-1534113414509-0eec2bfb493f?w=600' },
-  { name: 'Reykjavik', country: 'Iceland', image: 'https://images.unsplash.com/photo-1520769945061-0a448c463865?w=600' },
+// Sample itineraries for sidebar motivation
+const sampleItineraries = [
+  {
+    destination: 'Kyoto',
+    duration: '5 days',
+    highlight: 'Bamboo forest at dawn',
+    tags: ['Culture', 'Hidden Gems'],
+    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
+  },
+  {
+    destination: 'Amalfi Coast',
+    duration: '7 days',
+    highlight: 'Cliffside dinner in Ravello',
+    tags: ['Romance', 'Cuisine'],
+    image: 'https://images.unsplash.com/photo-1534113414509-0eec2bfb493f?w=400',
+  },
+  {
+    destination: 'Bali',
+    duration: '6 days',
+    highlight: 'Private temple ceremony',
+    tags: ['Wellness', 'Adventure'],
+    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400',
+  },
 ];
 
-// Hotel entry mode - unified approach
-type HotelMode = 'search' | 'manual' | 'skip';
+// Progress Step Indicator
+function StepIndicator({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
+  const steps = [
+    { label: 'Your Style', step: 1 },
+    { label: 'Trip Details', step: 2 },
+    { label: 'Budget', step: 3 },
+  ];
+
+  return (
+    <div className="flex items-center justify-center gap-2 mb-8">
+      {steps.map((s, idx) => (
+        <div key={s.step} className="flex items-center">
+          <div className="flex flex-col items-center">
+            <div
+              className={cn(
+                'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all',
+                currentStep === s.step
+                  ? 'bg-primary text-primary-foreground'
+                  : currentStep > s.step
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-muted text-muted-foreground'
+              )}
+            >
+              {currentStep > s.step ? <Check className="w-4 h-4" /> : s.step}
+            </div>
+            <span
+              className={cn(
+                'text-xs mt-1 font-medium',
+                currentStep === s.step ? 'text-primary' : 'text-muted-foreground'
+              )}
+            >
+              {s.label}
+            </span>
+          </div>
+          {idx < steps.length - 1 && (
+            <div
+              className={cn(
+                'w-12 h-0.5 mx-2 mt-[-16px]',
+                currentStep > s.step ? 'bg-primary' : 'bg-muted'
+              )}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Sidebar with sample itineraries
+function MotivationSidebar() {
+  return (
+    <div className="hidden lg:block w-80 shrink-0">
+      <div className="sticky top-24 space-y-6">
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-2">
+            <Eye className="w-4 h-4" />
+            What you'll get
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            AI-crafted itineraries tailored to your travel DNA
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {sampleItineraries.map((itinerary) => (
+            <motion.div
+              key={itinerary.destination}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="group relative overflow-hidden rounded-xl border border-border bg-card"
+            >
+              <div className="aspect-[16/10] overflow-hidden">
+                <img
+                  src={itinerary.image}
+                  alt={itinerary.destination}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 p-3">
+                <div className="flex items-center justify-between text-white mb-1">
+                  <span className="font-medium text-sm">{itinerary.destination}</span>
+                  <span className="text-xs opacity-80">{itinerary.duration}</span>
+                </div>
+                <p className="text-xs text-white/80 mb-2">{itinerary.highlight}</p>
+                <div className="flex gap-1">
+                  {itinerary.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full text-[10px] text-white"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Intelligence metrics preview */}
+        <div className="p-4 rounded-xl bg-muted/50 border border-border space-y-3">
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Intelligence Included
+          </h4>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Gem className="w-4 h-4 text-emerald-500" />
+              <span className="text-foreground">Hidden gems locals love</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="w-4 h-4 text-blue-500" />
+              <span className="text-foreground">Best timing for each spot</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Utensils className="w-4 h-4 text-amber-500" />
+              <span className="text-foreground">Curated dining picks</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Step 2: Trip Details Form
+function TripDetailsStep({
+  destinationSelection,
+  setDestinationSelection,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  travelers,
+  setTravelers,
+  tripType,
+  setTripType,
+  celebrationDay,
+  setCelebrationDay,
+  onContinue,
+  onBack,
+}: {
+  destinationSelection: LocationSelection;
+  setDestinationSelection: (s: LocationSelection) => void;
+  startDate: Date | undefined;
+  setStartDate: (d: Date | undefined) => void;
+  endDate: Date | undefined;
+  setEndDate: (d: Date | undefined) => void;
+  travelers: number;
+  setTravelers: (n: number) => void;
+  tripType: string;
+  setTripType: (t: string) => void;
+  celebrationDay: number | undefined;
+  setCelebrationDay: (d: number | undefined) => void;
+  onContinue: () => void;
+  onBack: () => void;
+}) {
+  const today = startOfToday();
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => 
+    startDate ? startOfMonth(startDate) : startOfMonth(new Date())
+  );
+
+  // Auto-set end date when start date changes
+  useEffect(() => {
+    if (startDate && !endDate) {
+      setEndDate(addDays(startDate, 5));
+    }
+  }, [startDate, endDate, setEndDate]);
+
+  const isValid = destinationSelection.cityName && startDate && endDate;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-6"
+    >
+      <div className="text-center mb-8">
+        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
+          Where are you going?
+        </h2>
+        <p className="text-muted-foreground">
+          Tell us about your trip and we'll tailor the experience
+        </p>
+      </div>
+
+      <div className="space-y-5 max-w-md mx-auto">
+        {/* Destination */}
+        <div className="space-y-2">
+          <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+            Destination
+          </label>
+          <DestinationAutocomplete
+            value={destinationSelection.display}
+            onChange={setDestinationSelection}
+            placeholder="Search cities..."
+          />
+        </div>
+
+        {/* Dates */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+              Arriving
+            </label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'w-full h-12 justify-between text-left font-normal',
+                    !startDate && 'text-muted-foreground'
+                  )}
+                >
+                  {startDate ? format(startDate, 'MMM d, yyyy') : 'Select date'}
+                  <CalendarIcon className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={startDate}
+                  month={calendarMonth}
+                  onMonthChange={setCalendarMonth}
+                  onSelect={setStartDate}
+                  disabled={(date) => isBefore(date, today)}
+                  initialFocus
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+              Leaving
+            </label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'w-full h-12 justify-between text-left font-normal',
+                    !endDate && 'text-muted-foreground'
+                  )}
+                >
+                  {endDate ? format(endDate, 'MMM d, yyyy') : 'Select date'}
+                  <CalendarIcon className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={endDate}
+                  month={calendarMonth}
+                  onMonthChange={setCalendarMonth}
+                  onSelect={setEndDate}
+                  disabled={(date) => (startDate ? isBefore(date, startDate) : isBefore(date, today))}
+                  initialFocus
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        {/* Travelers */}
+        <div className="space-y-2">
+          <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+            Travelers
+          </label>
+          <div className="flex items-center gap-2">
+            {[1, 2, 3, 4].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => {
+                  setTravelers(num);
+                  if (num === 1 && tripType !== 'solo') {
+                    setTripType('solo');
+                  } else if (num > 1 && tripType === 'solo') {
+                    setTripType('leisure');
+                  }
+                }}
+                className={cn(
+                  'w-12 h-12 rounded-lg border-2 transition-all text-sm font-medium',
+                  travelers === num
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                )}
+              >
+                {num}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setTravelers(Math.min(10, travelers + 1))}
+              className="w-12 h-12 rounded-lg border-2 border-border text-muted-foreground hover:border-primary/50 hover:text-foreground transition-all text-sm"
+            >
+              {travelers > 4 ? travelers : '5+'}
+            </button>
+          </div>
+        </div>
+
+        {/* Trip Type */}
+        <div className="space-y-3">
+          <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+            Trip Type
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {tripOccasions.slice(0, 6).map((occasion) => (
+              <button
+                key={occasion.id}
+                type="button"
+                onClick={() => setTripType(occasion.id)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full border transition-all text-sm',
+                  tripType === occasion.id
+                    ? 'bg-primary/10 border-primary text-primary font-medium'
+                    : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                )}
+              >
+                {occasion.label}
+              </button>
+            ))}
+          </div>
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                <ChevronDown className="h-3 w-3" />
+                More options
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <div className="flex flex-wrap gap-2">
+                {tripOccasions.slice(6).map((occasion) => (
+                  <button
+                    key={occasion.id}
+                    type="button"
+                    onClick={() => setTripType(occasion.id)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full border transition-all text-sm',
+                      tripType === occasion.id
+                        ? 'bg-primary/10 border-primary text-primary font-medium'
+                        : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    )}
+                  >
+                    {occasion.label}
+                  </button>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+
+        {/* Celebration Day */}
+        {CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) && startDate && endDate && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="space-y-3"
+          >
+            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-2">
+              <PartyPopper className="h-4 w-4 text-amber-500" />
+              Which day is the celebration?
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {Array.from(
+                { length: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1 },
+                (_, i) => i + 1
+              ).map((day) => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setCelebrationDay(day)}
+                  className={cn(
+                    'w-10 h-10 rounded-full border transition-all text-sm font-medium',
+                    celebrationDay === day
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-400'
+                      : 'border-border text-muted-foreground hover:border-amber-500/40 hover:text-foreground'
+                  )}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <div className="flex justify-between pt-6 max-w-md mx-auto">
+        <Button variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+        <Button onClick={onContinue} disabled={!isValid} className="gap-2">
+          Continue
+          <ArrowRight className="w-4 h-4" />
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+// Step 3: Budget Step
+function BudgetStep({
+  budgetAmount,
+  setBudgetAmount,
+  onSubmit,
+  onBack,
+  isSubmitting,
+}: {
+  budgetAmount: number | undefined;
+  setBudgetAmount: (n: number | undefined) => void;
+  onSubmit: () => void;
+  onBack: () => void;
+  isSubmitting: boolean;
+}) {
+  const [showBudget, setShowBudget] = useState(!!budgetAmount);
+
+  const budgetPresets = [
+    { label: 'Budget', value: 500, description: 'Under $500/person' },
+    { label: 'Moderate', value: 1000, description: '$500–$1,500' },
+    { label: 'Premium', value: 2500, description: '$1,500–$3,500' },
+    { label: 'Luxury', value: 5000, description: '$3,500+' },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-6"
+    >
+      <div className="text-center mb-8">
+        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
+          What's your budget?
+        </h2>
+        <p className="text-muted-foreground">
+          Optional — helps us match recommendations to your comfort level
+        </p>
+      </div>
+
+      <div className="space-y-6 max-w-md mx-auto">
+        {/* Budget presets */}
+        <div className="grid grid-cols-2 gap-3">
+          {budgetPresets.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => {
+                setBudgetAmount(preset.value);
+                setShowBudget(true);
+              }}
+              className={cn(
+                'p-4 rounded-xl border-2 text-left transition-all',
+                budgetAmount === preset.value
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/40'
+              )}
+            >
+              <div className="font-medium text-foreground">{preset.label}</div>
+              <div className="text-xs text-muted-foreground">{preset.description}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Custom amount */}
+        {showBudget && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="space-y-3"
+          >
+            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+              Or set exact amount per person
+            </label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="number"
+                placeholder="e.g. 2000"
+                value={budgetAmount || ''}
+                onChange={(e) => setBudgetAmount(e.target.value ? Number(e.target.value) : undefined)}
+                className="h-12 pl-9 text-base"
+                min={0}
+              />
+            </div>
+          </motion.div>
+        )}
+
+        {/* Skip option */}
+        <button
+          type="button"
+          onClick={() => {
+            setBudgetAmount(undefined);
+            setShowBudget(false);
+          }}
+          className={cn(
+            'w-full p-4 rounded-xl border-2 text-center transition-all',
+            !budgetAmount
+              ? 'border-primary bg-primary/5'
+              : 'border-border hover:border-primary/40'
+          )}
+        >
+          <div className="font-medium text-foreground">Skip for now</div>
+          <div className="text-xs text-muted-foreground">
+            We'll use your travel style to guide recommendations
+          </div>
+        </button>
+      </div>
+
+      {/* Submit */}
+      <div className="flex justify-between pt-6 max-w-md mx-auto">
+        <Button variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+        <Button
+          onClick={onSubmit}
+          disabled={isSubmitting}
+          className="h-14 px-8 text-base font-medium rounded-xl shadow-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5 mr-2" />
+              Build My Itinerary
+            </>
+          )}
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function Start() {
-  const { state: plannerState, setBasics, setHotel, saveTrip } = useTripPlanner();
+  const { state: plannerState, setBasics, saveTrip } = useTripPlanner();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { canCreateDraft, needsCredits } = useDraftLimitCheck();
   const [showLimitBlocker, setShowLimitBlocker] = useState(false);
-  
-  // Check for destination from query params
+
+  // Current step: 1 = Quiz, 2 = Trip Details, 3 = Budget
+  const [currentStep, setCurrentStep] = useState(1);
+  const [quizCompleted, setQuizCompleted] = useState(false);
+
+  // Trip state
   const destinationFromQuery = searchParams.get('destination');
-  
-  // Hotel mode state - unified approach with 3 options
-  const [hotelMode, setHotelMode] = useState<HotelMode>('search');
-  
-  // Show blocker if at limit
-  useEffect(() => {
-    if (!canCreateDraft && user) {
-      setShowLimitBlocker(true);
-    }
-  }, [canCreateDraft, user]);
-  
-  // Structured location state - stores both display and data
-  const [originSelection, setOriginSelection] = useState<LocationSelection>({
-    display: plannerState.basics.originCity || '',
-    cityName: plannerState.basics.originCity || '',
+  const [destinationSelection, setDestinationSelection] = useState<LocationSelection>(() => ({
+    display: destinationFromQuery || plannerState.basics.destination || '',
+    cityName: destinationFromQuery || plannerState.basics.destination || '',
     airportCodes: undefined,
-  });
-  const [destinationSelection, setDestinationSelection] = useState<LocationSelection>(() => {
-    // Priority: query param > context > empty
-    const initialDestination = destinationFromQuery || plannerState.basics.destination || '';
-    return {
-      display: initialDestination,
-      cityName: initialDestination,
-      airportCodes: undefined,
-    };
-  });
+  }));
   const [startDate, setStartDate] = useState<Date | undefined>(
     plannerState.basics.startDate ? parseISO(plannerState.basics.startDate) : undefined
   );
   const [endDate, setEndDate] = useState<Date | undefined>(
     plannerState.basics.endDate ? parseISO(plannerState.basics.endDate) : undefined
   );
-  // Shared calendar month state - syncs both date pickers
-  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
-    if (plannerState.basics.startDate) {
-      return startOfMonth(parseISO(plannerState.basics.startDate));
-    }
-    return startOfMonth(new Date());
-  });
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
-  const [childrenCount, setChildrenCount] = useState(plannerState.basics.childrenCount || 0);
   const [tripType, setTripType] = useState<string>('leisure');
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
-  const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
-  const [hotelSelection, setHotelSelection] = useState<HotelSelectionData | null>(null);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
-  const [showBudget, setShowBudget] = useState(!!plannerState.basics.budgetAmount);
-  // Flight details - always optional
-  const [flightDetails, setFlightDetails] = useState<FlightDetails | null>(null);
-  const [showFlightDetailsModal, setShowFlightDetailsModal] = useState(false);
-  const today = startOfToday();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Prefill origin city from user preferences (home_airport or flight_preferences)
+  // Check draft limit
   useEffect(() => {
-    const prefillHomeAirport = async () => {
-      // Don't prefill if already set
-      if (originSelection.cityName || !user) return;
+    if (!canCreateDraft && user) {
+      setShowLimitBlocker(true);
+    }
+  }, [canCreateDraft, user]);
+
+  // Check if user already has Travel DNA
+  useEffect(() => {
+    const checkExistingDNA = async () => {
+      if (!user) return;
       
       try {
-        // First check user_preferences for home_airport and flight_preferences
-        const { data: prefs } = await supabase
+        const { data } = await supabase
           .from('user_preferences')
-          .select('home_airport, flight_preferences')
+          .select('traveler_type')
           .eq('user_id', user.id)
           .single();
         
-        // Check flight_preferences.airport_code first (most specific)
-        const flightPrefs = prefs?.flight_preferences as { airport_code?: string; home_airport?: string } | null;
-        const airportCode = flightPrefs?.airport_code || flightPrefs?.home_airport;
-        
-        if (airportCode) {
-          // Look up airport details to get proper display name
-          const { data: airport } = await supabase
-            .from('airports')
-            .select('code, name, city')
-            .eq('code', airportCode.toUpperCase())
-            .single();
-          
-          if (airport) {
-            setOriginSelection({
-              display: `${airport.city} (${airport.code})`,
-              cityName: airport.city,
-              airportCodes: [airport.code],
-            });
-            return;
-          }
-        }
-        
-        // Fallback to home_airport text field
-        if (prefs?.home_airport) {
-          // Check if it's an airport code (3 letters)
-          if (prefs.home_airport.length === 3) {
-            const { data: airport } = await supabase
-              .from('airports')
-              .select('code, name, city')
-              .eq('code', prefs.home_airport.toUpperCase())
-              .single();
-            
-            if (airport) {
-              setOriginSelection({
-                display: `${airport.city} (${airport.code})`,
-                cityName: airport.city,
-                airportCodes: [airport.code],
-              });
-              return;
-            }
-          }
-          
-          setOriginSelection({
-            display: prefs.home_airport,
-            cityName: prefs.home_airport,
-            airportCodes: undefined,
-          });
-          return;
-        }
-        
-        // Fallback to profiles table
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('home_airport')
-          .eq('id', user.id)
-          .single();
-        
-        if (profile?.home_airport) {
-          // Check if it's an airport code (3 letters)
-          if (profile.home_airport.length === 3) {
-            const { data: airport } = await supabase
-              .from('airports')
-              .select('code, name, city')
-              .eq('code', profile.home_airport.toUpperCase())
-              .single();
-            
-            if (airport) {
-              setOriginSelection({
-                display: `${airport.city} (${airport.code})`,
-                cityName: airport.city,
-                airportCodes: [airport.code],
-              });
-              return;
-            }
-          }
-          
-          setOriginSelection({
-            display: profile.home_airport,
-            cityName: profile.home_airport,
-            airportCodes: undefined,
-          });
+        if (data?.traveler_type) {
+          // User already has Travel DNA, skip quiz
+          setQuizCompleted(true);
+          setCurrentStep(2);
         }
       } catch (err) {
-        // Could not prefill home airport
+        // No existing DNA, start with quiz
       }
     };
-    
-    prefillHomeAirport();
-  }, [user, originSelection.cityName]);
 
-  // Incremental save - debounced to avoid too many writes
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  const saveIncrementally = useCallback(() => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    saveTimeoutRef.current = setTimeout(async () => {
-      // Only save if we have a valid destination selection (with airport codes)
-      const hasValidSelection = destinationSelection.cityName && destinationSelection.airportCodes?.length;
-      if (hasValidSelection && user) {
-        // Determine budget tier from amount
-        const getBudgetTier = (amount?: number): string => {
-          if (!amount) return 'moderate';
-          if (amount < 500) return 'budget';
-          if (amount < 1500) return 'moderate';
-          if (amount < 3000) return 'premium';
-          return 'luxury';
-        };
-        
-        const basics = {
-          destination: destinationSelection.cityName, // Clean city name for UX
-          originCity: originSelection.cityName,
-          startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-          endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
-          travelers,
-          childrenCount,
-          tripType: tripType as 'solo' | 'couple' | 'family' | 'group',
-          budgetTier: getBudgetTier(budgetAmount),
-          budgetAmount,
-        };
-        setBasics(basics);
-        
-        // Save to database incrementally
-        try {
-          await saveTrip();
-          // Incremental save completed
-        } catch (err) {
-          console.error('[Start] Incremental save failed:', err);
-        }
-      }
-    }, 1500); // Debounce 1.5 seconds
-  }, [destinationSelection, originSelection, startDate, endDate, travelers, childrenCount, tripType, budgetAmount, user, setBasics, saveTrip]);
+    checkExistingDNA();
+  }, [user]);
 
-  // Trigger incremental save when data changes
-  useEffect(() => {
-    if (destinationSelection.cityName) {
-      saveIncrementally();
-    }
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [destinationSelection, originSelection, startDate, endDate, travelers, childrenCount, tripType, budgetAmount, saveIncrementally]);
+  // Handle quiz completion
+  const handleQuizComplete = () => {
+    setQuizCompleted(true);
+    setCurrentStep(2);
+  };
 
-  useEffect(() => {
-    if (plannerState.basics.destination && plannerState.basics.destination !== destinationSelection.cityName) {
-      setDestinationSelection({
-        display: plannerState.basics.destination,
-        cityName: plannerState.basics.destination,
-        airportCodes: undefined,
-      });
-    }
-    if (plannerState.basics.originCity && plannerState.basics.originCity !== originSelection.cityName) {
-      setOriginSelection({
-        display: plannerState.basics.originCity,
-        cityName: plannerState.basics.originCity,
-        airportCodes: undefined,
-      });
-    }
-    if (plannerState.basics.startDate) {
-      const contextDate = parseISO(plannerState.basics.startDate);
-      if (!startDate || contextDate.getTime() !== startDate.getTime()) {
-        setStartDate(contextDate);
-      }
-    }
-    if (plannerState.basics.endDate) {
-      const contextDate = parseISO(plannerState.basics.endDate);
-      if (!endDate || contextDate.getTime() !== endDate.getTime()) {
-        setEndDate(contextDate);
-      }
-    }
-    if (plannerState.basics.travelers && plannerState.basics.travelers !== travelers) {
-      setTravelers(plannerState.basics.travelers);
-    }
-    if (plannerState.basics.childrenCount !== undefined && plannerState.basics.childrenCount !== childrenCount) {
-      setChildrenCount(plannerState.basics.childrenCount);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plannerState.basics]);
+  // Handle quiz skip
+  const handleQuizSkip = () => {
+    setCurrentStep(2);
+  };
 
-  const handleStart = async () => {
-    // Only need a valid city name - hotel search works with city names via Google Places
-    const hasValidDestination = !!destinationSelection.cityName;
-    
-    if (!hasValidDestination || !startDate || !endDate) {
-      if (!hasValidDestination && destinationSelection.display) {
-        toast.error('Please select a destination from the dropdown');
-      }
+  // Handle final submission
+  const handleSubmit = async () => {
+    if (!destinationSelection.cityName || !startDate || !endDate) {
+      toast.error('Please fill in all required fields');
       return;
     }
 
-    const start = format(startDate, 'yyyy-MM-dd');
-    const end = format(endDate, 'yyyy-MM-dd');
+    setIsSubmitting(true);
 
-    // Determine budget tier from amount
-    const getBudgetTier = (amount?: number): string => {
-      if (!amount) return 'moderate';
-      if (amount < 500) return 'budget';
-      if (amount < 1500) return 'moderate';
-      if (amount < 3000) return 'premium';
-      return 'luxury';
-    };
-
-    // Store clean city name for UX, airport codes in metadata for API calls
-    setBasics({
-      destination: destinationSelection.cityName, // Clean name: "Paris" not "Paris (CDG)"
-      startDate: start,
-      endDate: end,
-      travelers,
-      childrenCount,
-      originCity: originSelection.cityName,
-      budgetTier: getBudgetTier(budgetAmount),
-      budgetAmount,
-    });
-
-    // Save trip to database before navigating
-    if (user) {
-      const tripId = await saveTrip();
-      if (tripId) {
-        // Trip saved before navigation
-        
-        // Store airport codes and budget in trip metadata for flight search
-        try {
-          await supabase.from('trips').update({
-            metadata: {
-              destinationAirportCodes: destinationSelection.airportCodes,
-              originAirportCodes: originSelection.airportCodes,
-              isDestinationMetro: destinationSelection.isMetroArea,
-              isOriginMetro: originSelection.isMetroArea,
-              budgetAmount: budgetAmount,
-              childrenCount: childrenCount,
-              adults: travelers - childrenCount,
-            },
-          }).eq('id', tripId);
-        } catch (err) {
-          console.error('[Start] Error saving trip metadata:', err);
-        }
-        
-        // Save linked guests as collaborators if we have a trip ID
-        if (linkedGuests.length > 0) {
-          for (const guest of linkedGuests) {
-            if (guest.isVoyanceUser) {
-              try {
-                await supabase.from('trip_collaborators').insert({
-                  trip_id: tripId,
-                  user_id: guest.id,
-                  permission: 'contributor',
-                  invited_by: user.id,
-                  accepted_at: new Date().toISOString(),
-                });
-              } catch (err) {
-                console.error('[Start] Error adding collaborator:', err);
-              }
-            }
-          }
-          toast.success(`Trip saved with ${linkedGuests.length} companion${linkedGuests.length > 1 ? 's' : ''}`);
-        }
-      }
-    }
-
-    const params = new URLSearchParams();
-    params.set('destination', destinationSelection.cityName);
-    if (originSelection.cityName) params.set('origin', originSelection.cityName);
-    // Also pass airport codes for flight search
-    if (destinationSelection.airportCodes) {
-      params.set('destAirports', destinationSelection.airportCodes.join(','));
-    }
-    if (originSelection.airportCodes) {
-      params.set('originAirports', originSelection.airportCodes.join(','));
-    }
-    params.set('startDate', start);
-    params.set('endDate', end);
-    params.set('travelers', String(travelers));
-    params.set('tripType', tripType);
-    if (budgetAmount) {
-      params.set('budget', String(budgetAmount));
-    }
-
-    // If manual entry or skip mode, go directly to itinerary generation
-    if (hotelMode === 'manual' || hotelMode === 'skip') {
-      // First update basics so saveTrip has correct context
+    try {
+      // Save basics to context
       setBasics({
         destination: destinationSelection.cityName,
-        startDate: start,
-        endDate: end,
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(endDate, 'yyyy-MM-dd'),
         travelers,
-        originCity: originSelection.cityName,
-        budgetTier: getBudgetTier(budgetAmount),
         budgetAmount,
       });
 
-      // IMPORTANT: Persist manual hotel into TripPlannerContext *before* saveTrip.
-      // This ensures:
-      // - anonymous users store hotel_selection in localStorage
-      // - authenticated users include hotel_selection on initial insert
-      // The DB update below will still run (and may normalize to array format).
-      if (hotelMode === 'manual' && hotelSelection) {
-        setHotel({
-          id: `manual-${Date.now()}`,
-          name: hotelSelection.name,
-          location: hotelSelection.address,
-          address: hotelSelection.address,
-          neighborhood: undefined,
-          rating: hotelSelection.rating || 0,
-          pricePerNight: 0,
-          roomType: 'Hotel',
-          amenities: [],
-          imageUrl: undefined,
-          images: undefined,
-          website: hotelSelection.website,
-          googleMapsUrl: hotelSelection.googleMapsUrl,
-          checkIn: start,
-          checkOut: end,
-          placeId: hotelSelection.placeId,
-        });
+      // Check if user needs to authenticate
+      if (!user) {
+        // Store trip data and redirect to sign up
+        navigate(ROUTES.SIGNUP + '?redirect=' + ROUTES.PLANNER.ITINERARY);
+        return;
       }
-      
-      const tripId = await saveTrip();
-      if (tripId) {
-        // Build comprehensive update payload with ALL trip data
-        // This ensures destination persists even if context hadn't fully updated
-        const updatePayload: Record<string, unknown> = {
-          // Core trip fields - ensure destination is saved
-          name: `Trip to ${destinationSelection.cityName}`,
-          destination: destinationSelection.cityName,
-          start_date: start,
-          end_date: end,
-          travelers,
-          origin_city: originSelection.cityName,
-          budget_tier: getBudgetTier(budgetAmount),
-          trip_type: tripType || 'vacation',
-        };
-        
-        // Save hotel selection if provided (manual mode only)
-        if (hotelMode === 'manual' && hotelSelection) {
-          updatePayload.hotel_selection = [{
-            id: `manual-${Date.now()}`,
-            name: hotelSelection.name,
-            address: hotelSelection.address,
-            location: hotelSelection.address,
-            rating: hotelSelection.rating || 0,
-            website: hotelSelection.website,
-            googleMapsUrl: hotelSelection.googleMapsUrl,
-            placeId: hotelSelection.placeId,
-            coordinates: hotelSelection.coordinates,
-            checkIn: start,
-            checkOut: end,
-            isManualEntry: true,
-          }];
-        }
-        
-        // Save flight times with origin/destination for itinerary generation
-        const originAirport = flightDetails?.outbound?.departureAirport || originSelection.airportCodes?.[0] || originSelection.cityName;
-        const destAirport = flightDetails?.outbound?.arrivalAirport || destinationSelection.airportCodes?.[0] || destinationSelection.cityName;
-        const hasOriginInfo = originAirport || flightDetails?.outbound?.departureAirport;
-        
-        if (flightDetails || hasOriginInfo) {
-          updatePayload.flight_selection = {
-            departure: {
-              departureAirport: originAirport,
-              departureCity: originSelection.cityName || flightDetails?.outbound?.departureAirport,
-              departureTime: flightDetails?.outbound?.departureTime,
-              departureDate: start,
-              arrivalAirport: destAirport,
-              arrivalCity: destinationSelection.cityName,
-              arrivalTime: flightDetails?.outbound?.arrivalTime || undefined,
-              arrivalDate: start,
-              arrival: {
-                airport: destAirport,
-                city: destinationSelection.cityName,
-                time: flightDetails?.outbound?.arrivalTime || undefined,
-                date: start,
-              },
-              connections: flightDetails?.outboundLayovers?.map(l => ({
-                departureAirport: l.departureAirport,
-                arrivalAirport: l.arrivalAirport,
-                departureTime: l.departureTime,
-                arrivalTime: l.arrivalTime,
-              })),
-            },
-            return: flightDetails?.return ? {
-              departureAirport: flightDetails.return.departureAirport || destAirport,
-              departureCity: destinationSelection.cityName,
-              departureTime: flightDetails.return.departureTime || undefined,
-              departureDate: end,
-              arrivalAirport: flightDetails.return.arrivalAirport || originAirport,
-              arrivalCity: originSelection.cityName || flightDetails.return.arrivalAirport,
-              arrivalTime: flightDetails.return.arrivalTime,
-              arrivalDate: end,
-              departure: {
-                airport: flightDetails.return.departureAirport || destAirport,
-                city: destinationSelection.cityName,
-                time: flightDetails.return.departureTime || undefined,
-                date: end,
-              },
-              connections: flightDetails?.returnLayovers?.map(l => ({
-                departureAirport: l.departureAirport,
-                arrivalAirport: l.arrivalAirport,
-                departureTime: l.departureTime,
-                arrivalTime: l.arrivalTime,
-              })),
-            } : undefined,
-            arrivalTime: flightDetails?.outbound?.arrivalTime,
-            returnDepartureTime: flightDetails?.return?.departureTime,
-            departureAirport: originAirport,
-            arrivalAirport: destAirport,
-            interCityTransfers: flightDetails?.interCityTransfers?.map(t => ({
-              mode: t.mode,
-              fromCity: t.fromCity,
-              toCity: t.toCity,
-              departureDate: t.departureDate,
-              departureTime: t.departureTime,
-              arrivalTime: t.arrivalTime,
-              carrier: t.carrier,
-            })),
-            isMultiCity: flightDetails?.isMultiCity,
-          };
-        }
-        
-        // Save metadata with airport codes and celebration day
-        updatePayload.metadata = {
-          destinationAirportCodes: destinationSelection.airportCodes,
-          originAirportCodes: originSelection.airportCodes,
-          isDestinationMetro: destinationSelection.isMetroArea,
-          isOriginMetro: originSelection.isMetroArea,
-          budgetAmount: budgetAmount,
-          celebrationDay: CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) ? celebrationDay : undefined,
-        };
-        
-        const { error: updateError } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
-        
-        if (updateError) {
-          console.error('[Start] Failed to update trip with full payload:', updateError);
-        } else {
-          // Trip updated successfully
-        }
-        
-        navigate(`/trip/${tripId}?generate=true`);
-      }
-      return;
+
+      // Navigate to itinerary generation
+      navigate(ROUTES.PLANNER.ITINERARY);
+    } catch (err) {
+      console.error('Error starting trip:', err);
+      toast.error('Something went wrong. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Hotel search mode - go to hotel search page
-    navigate(`${ROUTES.PLANNER.HOTEL}?${params.toString()}`);
   };
-
-  // Guest link modal state
-  const [guestModalOpen, setGuestModalOpen] = useState(false);
-
-  const handleAddGuest = () => {
-    setGuestModalOpen(true);
-  };
-
-  const handleGuestsConfirmed = (guests: LinkedGuest[]) => {
-    setLinkedGuests(guests);
-  };
-
-  const isFormValid = destinationSelection.cityName && startDate && endDate;
 
   return (
-    <MainLayout>
+    <MainLayout showFooter={false}>
       <Head
-        title="Start Planning | Voyance"
-        description="Start planning your dream trip with Voyance's AI-powered travel planner."
+        title="Plan Your Trip | Voyance"
+        description="Start planning your personalized travel itinerary with Voyance."
       />
-      
-      {/* Draft limit blocker modal */}
-      {showLimitBlocker && (
-        <DraftLimitBlocker onClose={() => setShowLimitBlocker(false)} />
-      )}
-      
-      {/* Scrapbook Photo Collage Hero */}
-      <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-gradient-to-br from-stone-100 via-amber-50/50 to-stone-100 dark:from-stone-900 dark:via-stone-800 dark:to-stone-900">
-        {/* Photo Collage Background */}
-        <div className="absolute inset-0 overflow-hidden">
-          {/* Scattered polaroid-style photos */}
-          <div className="absolute -top-8 -left-12 w-48 h-64 rotate-[-12deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          <div className="absolute top-16 left-[15%] w-40 h-52 rotate-[8deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          <div className="absolute -top-4 right-[20%] w-44 h-56 rotate-[-6deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          <div className="absolute top-8 -right-8 w-52 h-64 rotate-[15deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          <div className="absolute bottom-[20%] -left-6 w-44 h-56 rotate-[10deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          <div className="absolute bottom-12 left-[12%] w-36 h-48 rotate-[-8deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          <div className="absolute bottom-[15%] right-[10%] w-48 h-60 rotate-[6deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          <div className="absolute -bottom-4 right-[25%] w-40 h-52 rotate-[-14deg] shadow-xl rounded-sm overflow-hidden border-[6px] border-white dark:border-stone-700">
-            <img src="https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=400&q=80" alt="" className="w-full h-full object-cover" />
-          </div>
-          
-          {/* Strong center overlay for text readability - especially on mobile */}
-          <div className="absolute inset-0 bg-gradient-to-b from-stone-100/40 via-stone-100/95 to-stone-100 dark:from-stone-900/40 dark:via-stone-900/95 dark:to-stone-900" />
-          {/* Extra strong center spotlight for header text */}
-          <div 
-            className="absolute inset-0" 
-            style={{ 
-              background: 'radial-gradient(ellipse 80% 60% at 50% 35%, hsl(var(--background)) 0%, hsl(var(--background) / 0.95) 30%, hsl(var(--background) / 0.7) 50%, transparent 80%)' 
-            }} 
-          />
-        </div>
 
-        {/* Content */}
-        <div className="relative z-10 w-full max-w-2xl mx-auto px-6 py-16">
-          {/* Editorial Header */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-10"
-          >
-            <p className="text-[10px] tracking-[0.35em] uppercase font-semibold mb-4 drop-shadow-sm text-primary">
-              Plan Your Trip
-            </p>
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-foreground leading-tight drop-shadow-sm">
-              Start Your <em className="italic">Journey</em>
-            </h1>
-            <p className="mt-4 text-base sm:text-lg text-foreground/90 max-w-lg mx-auto px-4 sm:px-0 drop-shadow-sm">
-              Tell us where you're going, and we'll help with hotels and your perfect itinerary
-            </p>
-          </motion.div>
+      {/* Draft limit blocker */}
+      {showLimitBlocker && <DraftLimitBlocker />}
 
-          {/* Form Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.15 }}
-            className="bg-white/95 dark:bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 md:p-8"
-          >
-            <div className="space-y-5">
-              {/* Destination */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    Destination
-                  </label>
-                  <Link 
-                    to={ROUTES.PLANNER.MULTI_CITY}
-                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                    Multiple cities?
-                  </Link>
-                </div>
-                {/* Always use DestinationAutocomplete - hotel search works with city names */}
-                <DestinationAutocomplete
-                  value={destinationSelection.display}
-                  onChange={setDestinationSelection}
-                  placeholder="Where do you want to go?"
-                />
-                {/* Warm feedback for destination */}
-                {destinationSelection.cityName && (
-                  <TripSetupFeedback 
-                    field="destination" 
-                    value={destinationSelection.cityName} 
-                  />
-                )}
-              </div>
+      <section className="min-h-screen py-8 px-4">
+        <div className="max-w-5xl mx-auto">
+          {/* Progress Indicator */}
+          <StepIndicator currentStep={currentStep} totalSteps={3} />
 
-              {/* Flight Details - Always optional */}
-              <div className="space-y-3">
-                <span className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                  Flight Details <span className="normal-case text-muted-foreground/70">(optional)</span>
-                </span>
-                
-                {flightDetails ? (
-                  <div 
-                    className="p-4 rounded-lg border border-border bg-muted/30 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => setShowFlightDetailsModal(true)}
-                  >
-                    {/* Outbound summary */}
-                    <div className="flex items-center gap-2">
-                      <Plane className="h-4 w-4 text-primary rotate-[-45deg]" />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">
-                          {flightDetails.outbound.departureAirport || originSelection.cityName || 'Home'} → {flightDetails.outbound.arrivalAirport || destinationSelection.cityName}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {flightDetails.outbound.departureTime && `Departs ${flightDetails.outbound.departureTime}`}
-                          {flightDetails.outbound.departureTime && flightDetails.outbound.arrivalTime && ' · '}
-                          {flightDetails.outbound.arrivalTime && `Arrives ${flightDetails.outbound.arrivalTime}`}
-                          {startDate && ` on ${format(startDate, 'MMM d')}`}
-                        </div>
-                        {flightDetails.outboundLayovers && flightDetails.outboundLayovers.length > 0 && (
-                          <div className="text-[10px] text-muted-foreground mt-0.5">
-                            + {flightDetails.outboundLayovers.length} connection(s)
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Return summary */}
-                    {flightDetails.return && (
-                      <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-                        <Plane className="h-4 w-4 text-primary rotate-45" />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
-                            {flightDetails.return.departureAirport || destinationSelection.cityName} → {flightDetails.return.arrivalAirport || originSelection.cityName || 'Home'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {flightDetails.return.departureTime && `Departs ${flightDetails.return.departureTime}`}
-                            {flightDetails.return.departureTime && flightDetails.return.arrivalTime && ' · '}
-                            {flightDetails.return.arrivalTime && `Arrives ${flightDetails.return.arrivalTime}`}
-                            {endDate && ` on ${format(endDate, 'MMM d')}`}
-                          </div>
-                          {flightDetails.returnLayovers && flightDetails.returnLayovers.length > 0 && (
-                            <div className="text-[10px] text-muted-foreground mt-0.5">
-                              + {flightDetails.returnLayovers.length} connection(s)
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+          {/* Time estimate */}
+          <div className="text-center mb-8">
+            <span className="text-sm text-muted-foreground">
+              <Clock className="w-4 h-4 inline mr-1" />
+              Takes ~2 minutes
+            </span>
+          </div>
 
-                    {/* Inter-city transfers summary */}
-                    {flightDetails.interCityTransfers && flightDetails.interCityTransfers.length > 0 && (
-                      <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-                        <div className="h-4 w-4 flex items-center justify-center text-primary">
-                          🚄
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
-                            {flightDetails.interCityTransfers.length} inter-city transfer{flightDetails.interCityTransfers.length > 1 ? 's' : ''}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {flightDetails.interCityTransfers.map((t, i) => (
-                              <span key={i}>
-                                {i > 0 && ' · '}
-                                {t.fromCity} → {t.toCity}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <p className="text-[10px] text-primary text-center pt-1">
-                      Click to edit flight details
-                    </p>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full h-12 justify-start text-muted-foreground"
-                    onClick={() => setShowFlightDetailsModal(true)}
-                  >
-                    <Plane className="h-4 w-4 mr-2 rotate-[-45deg]" />
-                    Add flight details (helps plan your itinerary)
-                  </Button>
-                )}
-                
-                {startDate && !flightDetails && (
-                  <p className="text-[10px] text-muted-foreground">
-                    Arrival time plans Day 1, departure time plans your last day
-                  </p>
-                )}
-              </div>
-
-              {/* Hotel Options - Unified selector */}
-              <div className="space-y-3">
-                <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                  Accommodation
-                </label>
-                
-                {/* Hotel mode tabs */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setHotelMode('search')}
-                    className={cn(
-                      "p-3 rounded-lg border-2 transition-all text-center",
-                      hotelMode === 'search'
-                        ? "border-sky-500 bg-sky-50 dark:bg-sky-500/10"
-                        : "border-border hover:border-primary/30"
-                    )}
-                  >
-                    <Building2 className={cn("h-5 w-5 mx-auto mb-1", hotelMode === 'search' ? "text-sky-600" : "text-muted-foreground")} />
-                    <p className={cn("text-xs font-medium", hotelMode === 'search' ? "text-sky-700 dark:text-sky-400" : "text-muted-foreground")}>
-                      Search Hotels
-                    </p>
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setHotelMode('manual')}
-                    className={cn(
-                      "p-3 rounded-lg border-2 transition-all text-center",
-                      hotelMode === 'manual'
-                        ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10"
-                        : "border-border hover:border-primary/30"
-                    )}
-                  >
-                    <Star className={cn("h-5 w-5 mx-auto mb-1", hotelMode === 'manual' ? "text-amber-600" : "text-muted-foreground")} />
-                    <p className={cn("text-xs font-medium", hotelMode === 'manual' ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>
-                      I Have a Hotel
-                    </p>
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setHotelMode('skip')}
-                    className={cn(
-                      "p-3 rounded-lg border-2 transition-all text-center",
-                      hotelMode === 'skip'
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/30"
-                    )}
-                  >
-                    <Sparkles className={cn("h-5 w-5 mx-auto mb-1", hotelMode === 'skip' ? "text-primary" : "text-muted-foreground")} />
-                    <p className={cn("text-xs font-medium", hotelMode === 'skip' ? "text-primary" : "text-muted-foreground")}>
-                      Add Later
-                    </p>
-                  </button>
-                </div>
-                
-                {/* Hotel manual entry - only show when manual mode */}
-                {hotelMode === 'manual' && (
+          {/* Main content with sidebar */}
+          <div className="flex gap-12">
+            {/* Main form area */}
+            <div className="flex-1 min-w-0">
+              <AnimatePresence mode="wait">
+                {currentStep === 1 && (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    // Important: allow the autocomplete dropdown (absolute positioned) to render outside
-                    // this animated container.
-                    className="overflow-visible"
+                    key="quiz"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
                   >
-                    <HotelAutocomplete
-                      value={hotelSelection}
-                      onChange={setHotelSelection}
-                      destination={destinationSelection.cityName}
-                      placeholder="Search your hotel..."
+                    <EmbeddedQuiz
+                      onComplete={handleQuizComplete}
+                      onSkip={handleQuizSkip}
                     />
                   </motion.div>
                 )}
-                
-                {/* Mode description */}
-                <p className="text-[10px] text-muted-foreground">
-                  {hotelMode === 'search' && "We'll help you find and compare hotels at your destination"}
-                  {hotelMode === 'manual' && "Enter your booked hotel so we can plan activities near you"}
-                  {hotelMode === 'skip' && "Jump straight to building your itinerary, add hotel anytime"}
-                </p>
-              </div>
 
-              {/* Dates - Side by side */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    Arriving
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full h-12 justify-between text-left font-normal",
-                          !startDate && "text-muted-foreground"
-                        )}
-                      >
-                        {startDate ? format(startDate, "MMM d, yyyy") : "Select date"}
-                        <CalendarIcon className="h-4 w-4 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={startDate}
-                        month={calendarMonth}
-                        onMonthChange={setCalendarMonth}
-                        onSelect={(date) => {
-                          setStartDate(date);
-                          if (date && (!endDate || isBefore(endDate, date))) {
-                            setEndDate(addDays(date, 7));
-                          }
-                        }}
-                        disabled={(date) => isBefore(date, today)}
-                        initialFocus
-                        className="p-3 pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                    Leaving
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full h-12 justify-between text-left font-normal",
-                          !endDate && "text-muted-foreground"
-                        )}
-                      >
-                        {endDate ? format(endDate, "MMM d, yyyy") : "Select date"}
-                        <CalendarIcon className="h-4 w-4 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={endDate}
-                        month={calendarMonth}
-                        onMonthChange={setCalendarMonth}
-                        onSelect={(date) => setEndDate(date)}
-                        disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, today)}
-                        initialFocus
-                        className="p-3 pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              {/* Travelers */}
-              <div className="space-y-2">
-                <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                  Travelers
-                </label>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 flex-1">
-                    {[1, 2, 3, 4].map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => {
-                          setTravelers(num);
-                          // Reset children if reducing travelers
-                          if (childrenCount > num) {
-                            setChildrenCount(Math.max(0, num - 1));
-                          }
-                          // If increasing travelers from solo, switch trip type away from solo
-                          if (num > 1 && tripType === 'solo') {
-                            setTripType('leisure');
-                          }
-                        }}
-                        className={cn(
-                          "w-12 h-12 rounded-lg border-2 transition-all text-sm font-medium",
-                          travelers === num
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                        )}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                  {travelers > 1 && (
-                    <button 
-                      onClick={handleAddGuest}
-                      className="flex items-center gap-1.5 text-sm text-primary hover:underline"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      {linkedGuests.length > 0 
-                        ? `${linkedGuests.length} linked` 
-                        : 'Link guests'}
-                    </button>
-                  )}
-                </div>
-                
-                {/* Children Count */}
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-sm text-muted-foreground">Any children?</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setChildrenCount(Math.max(0, childrenCount - 1))}
-                      disabled={childrenCount === 0}
-                      className={cn(
-                        "w-8 h-8 rounded-full border flex items-center justify-center text-sm font-medium transition-all",
-                        childrenCount === 0 
-                          ? "border-border/50 text-muted-foreground/50 cursor-not-allowed"
-                          : "border-border text-foreground hover:bg-muted"
-                      )}
-                    >
-                      −
-                    </button>
-                    <span className="w-6 text-center text-sm font-medium">{childrenCount}</span>
-                    <button
-                      type="button"
-                      onClick={() => setChildrenCount(Math.min(travelers - 1, childrenCount + 1))}
-                      disabled={childrenCount >= travelers - 1}
-                      className={cn(
-                        "w-8 h-8 rounded-full border flex items-center justify-center text-sm font-medium transition-all",
-                        childrenCount >= travelers - 1
-                          ? "border-border/50 text-muted-foreground/50 cursor-not-allowed"
-                          : "border-border text-foreground hover:bg-muted"
-                      )}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-                {childrenCount > 0 && (
-                  <p className="text-[10px] text-muted-foreground">
-                    {travelers - childrenCount} adult{travelers - childrenCount !== 1 ? 's' : ''}, {childrenCount} child{childrenCount !== 1 ? 'ren' : ''}
-                  </p>
+                {currentStep === 2 && (
+                  <TripDetailsStep
+                    key="details"
+                    destinationSelection={destinationSelection}
+                    setDestinationSelection={setDestinationSelection}
+                    startDate={startDate}
+                    setStartDate={setStartDate}
+                    endDate={endDate}
+                    setEndDate={setEndDate}
+                    travelers={travelers}
+                    setTravelers={setTravelers}
+                    tripType={tripType}
+                    setTripType={setTripType}
+                    celebrationDay={celebrationDay}
+                    setCelebrationDay={setCelebrationDay}
+                    onContinue={() => setCurrentStep(3)}
+                    onBack={() => setCurrentStep(1)}
+                  />
                 )}
-              </div>
 
-              {/* Trip Occasion - Compact */}
-              <div className="space-y-3">
-                <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                  Trip Type
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {tripOccasions.slice(0, 6).map((occasion) => (
-                    <button
-                      key={occasion.id}
-                      type="button"
-                      onClick={() => {
-                        setTripType(occasion.id);
-                        // Solo trips are always 1 traveler
-                        if (occasion.id === 'solo') {
-                          setTravelers(1);
-                          setChildrenCount(0);
-                        }
-                        // Reset celebration day if switching to non-celebration type
-                        if (!CELEBRATION_TRIP_TYPES.includes(occasion.id as typeof CELEBRATION_TRIP_TYPES[number])) {
-                          setCelebrationDay(undefined);
-                        }
-                      }}
-                      className={cn(
-                        "px-3 py-1.5 rounded-full border transition-all text-sm",
-                        tripType === occasion.id
-                          ? "bg-primary/10 border-primary text-primary font-medium"
-                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                      )}
-                    >
-                      {occasion.label}
-                    </button>
-                  ))}
-                </div>
-                
-                {/* Show more occasions */}
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      <ChevronDown className="h-3 w-3" />
-                      More options
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2">
-                    <div className="flex flex-wrap gap-2">
-                    {tripOccasions.slice(6).map((occasion) => (
-                        <button
-                          key={occasion.id}
-                          type="button"
-                          onClick={() => {
-                            setTripType(occasion.id);
-                            // Solo trips are always 1 traveler
-                            if (occasion.id === 'solo') {
-                              setTravelers(1);
-                              setChildrenCount(0);
-                            }
-                            // Reset celebration day if switching to non-celebration type
-                            if (!CELEBRATION_TRIP_TYPES.includes(occasion.id as typeof CELEBRATION_TRIP_TYPES[number])) {
-                              setCelebrationDay(undefined);
-                            }
-                          }}
-                          className={cn(
-                            "px-3 py-1.5 rounded-full border transition-all text-sm",
-                            tripType === occasion.id
-                              ? "bg-primary/10 border-primary text-primary font-medium"
-                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                          )}
-                        >
-                          {occasion.label}
-                        </button>
-                      ))}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-
-              {/* Celebration Day Selector - appears for birthday, anniversary, honeymoon */}
-              {CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) && startDate && endDate && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-3"
-                >
-                  <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-2">
-                    <PartyPopper className="h-4 w-4 text-amber-500" />
-                    Which day is the {tripType === 'birthday' ? 'birthday' : tripType === 'anniversary' ? 'anniversary' : 'special occasion'}?
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {Array.from({ length: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1 }, (_, i) => i + 1).map((day) => (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => setCelebrationDay(day)}
-                        className={cn(
-                          "w-10 h-10 rounded-full border transition-all text-sm font-medium",
-                          celebrationDay === day
-                            ? "bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-400"
-                            : "border-border text-muted-foreground hover:border-amber-500/40 hover:text-foreground"
-                        )}
-                      >
-                        {day}
-                      </button>
-                    ))}
-                  </div>
-                  {celebrationDay && (
-                    <p className="text-xs text-muted-foreground">
-                      We'll plan something special for Day {celebrationDay} ✨
-                    </p>
-                  )}
-                </motion.div>
-              )}
-
-              <Collapsible open={showBudget} onOpenChange={setShowBudget}>
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <DollarSign className="h-4 w-4" />
-                    <span>{showBudget ? 'Hide budget options' : 'Set a budget (optional)'}</span>
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-4 space-y-3">
-                  <div>
-                    <label className="block text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
-                      Budget Per Person (USD)
-                    </label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="number"
-                        placeholder="e.g. 2000"
-                        value={budgetAmount || ''}
-                        onChange={(e) => setBudgetAmount(e.target.value ? Number(e.target.value) : undefined)}
-                        className="h-12 pl-9 text-base"
-                        min={0}
-                      />
-                    </div>
-                  </div>
-                  
-                  {budgetAmount && budgetAmount < 500 && (
-                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                      <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        For budget trips, we'll prioritize the cheapest options.
-                      </p>
-                    </div>
-                  )}
-                  
-                  {/* Quick budget presets */}
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: 'Budget', min: 0, max: 500, display: 'Under $500' },
-                      { label: 'Moderate', min: 500, max: 1500, display: '$500–$1,500' },
-                      { label: 'Premium', min: 1500, max: 3000, display: '$1,500–$3,000' },
-                      { label: 'Luxury', min: 3000, max: 10000, display: '$3,000+' },
-                    ].map((preset) => {
-                      const isInRange = budgetAmount !== undefined && 
-                        budgetAmount >= preset.min && 
-                        (preset.max === 10000 ? true : budgetAmount <= preset.max);
-                      
-                      const targetAmount = preset.label === 'Budget' 
-                        ? 500 
-                        : preset.label === 'Luxury' 
-                          ? 5000 
-                          : Math.round((preset.min + preset.max) / 2);
-                      
-                      return (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => setBudgetAmount(targetAmount)}
-                          className={cn(
-                            "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                            isInRange
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border text-muted-foreground hover:border-primary/50"
-                          )}
-                        >
-                          {preset.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
+                {currentStep === 3 && (
+                  <BudgetStep
+                    key="budget"
+                    budgetAmount={budgetAmount}
+                    setBudgetAmount={setBudgetAmount}
+                    onSubmit={handleSubmit}
+                    onBack={() => setCurrentStep(2)}
+                    isSubmitting={isSubmitting}
+                  />
+                )}
+              </AnimatePresence>
             </div>
 
-            {/* CTA Button - adapts based on hotel mode */}
-            <div className="pt-6 space-y-3">
-              <Button
-                onClick={handleStart}
-                disabled={!isFormValid}
-                className="w-full h-14 text-base font-medium rounded-xl shadow-lg transition-all bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-primary/25"
-                size="lg"
-              >
-                <Sparkles className="h-5 w-5 mr-2" />
-                {hotelMode === 'search' ? 'Find Hotels & Build Itinerary' : 'Build My Itinerary'}
-              </Button>
-              
-              {/* Helper text */}
-              <p className="text-center text-xs text-muted-foreground">
-                {hotelMode === 'search' 
-                  ? "We'll show you hotel options, then build your itinerary"
-                  : hotelMode === 'manual' && hotelSelection
-                    ? `We'll create activities around ${hotelSelection.name}`
-                    : "We'll create your personalized day-by-day itinerary"}
-              </p>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Popular Destinations Section */}
-      <section className="py-16 bg-secondary/30">
-        <div className="max-w-6xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-10"
-          >
-            <h2 className="font-serif text-2xl md:text-3xl text-foreground mb-2">
-              Popular Destinations
-            </h2>
-            <p className="text-muted-foreground">
-              Get inspired by trending travel destinations
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {featuredDestinations.map((dest, index) => (
-              <motion.button
-                key={dest.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                onClick={() => {
-                  // Set destination and switch to manual/skip mode since popular destinations don't have airport codes
-                  setDestinationSelection({
-                    display: `${dest.name}, ${dest.country}`,
-                    cityName: dest.name,
-                    airportCodes: undefined,
-                    isMetroArea: false,
-                  });
-                  // If in search mode, switch to skip mode since no airport codes
-                  if (hotelMode === 'search') {
-                    setHotelMode('skip');
-                  }
-                  // Scroll to top of page so user can see their selection
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="group relative aspect-[4/5] rounded-xl overflow-hidden"
-              >
-                <img
-                  src={dest.image}
-                  alt={dest.name}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate/80 via-slate/20 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-3 text-white text-left">
-                  <p className="font-medium text-sm">{dest.name}</p>
-                  <p className="text-xs text-white/70">{dest.country}</p>
-                </div>
-              </motion.button>
-            ))}
+            {/* Motivation Sidebar */}
+            <MotivationSidebar />
           </div>
         </div>
       </section>
-
-      {/* Guest Link Modal */}
-      <GuestLinkModal
-        open={guestModalOpen}
-        onOpenChange={setGuestModalOpen}
-        maxGuests={travelers}
-        currentTravelers={travelers}
-        onGuestsConfirmed={handleGuestsConfirmed}
-      />
-
-      {/* Flight Details Modal */}
-      <FlightDetailsModal
-        open={showFlightDetailsModal}
-        onOpenChange={setShowFlightDetailsModal}
-        onSave={(details) => {
-          setFlightDetails(details);
-          toast.success('Flight details saved!');
-        }}
-        initialDetails={flightDetails || undefined}
-        tripStartDate={startDate ? format(startDate, 'yyyy-MM-dd') : undefined}
-        tripEndDate={endDate ? format(endDate, 'yyyy-MM-dd') : undefined}
-        destination={destinationSelection.cityName}
-      />
     </MainLayout>
   );
 }
