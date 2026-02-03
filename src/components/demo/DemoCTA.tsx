@@ -61,7 +61,7 @@ export function DemoCTA() {
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-primary" />
-              <span>2 min quiz</span>
+              <span>5 min quiz</span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-primary" />
