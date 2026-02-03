@@ -9,7 +9,9 @@ import {
   Play,
   Heart,
   Rocket,
-  ChevronDown
+  ChevronDown,
+  Users,
+  Layers
 } from 'lucide-react';
 
 interface NavSection {
@@ -22,6 +24,8 @@ const SECTIONS: NavSection[] = [
   { id: 'hero', label: 'Welcome', icon: Sparkles },
   { id: 'journey', label: 'The Journey', icon: BookOpen },
   { id: 'travel-dna', label: 'Travel DNA', icon: Dna },
+  { id: 'archetype-comparison', label: 'Personalization', icon: Layers },
+  { id: 'group-blend', label: 'Group Travel', icon: Users },
   { id: 'playground', label: 'See It in Action', icon: Play },
   { id: 'promise', label: 'Our Promise', icon: Heart },
   { id: 'cta', label: 'Get Started', icon: Rocket },
