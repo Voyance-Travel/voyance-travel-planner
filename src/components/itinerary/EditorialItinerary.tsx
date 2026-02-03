@@ -74,6 +74,7 @@ import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { ItineraryValueHeader } from './ItineraryValueHeader';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { calculateItineraryValueStats, getDestinationSkippedItems } from '@/utils/intelligenceAnalytics';
+import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -205,6 +206,7 @@ export interface EditorialItineraryProps {
   travelers: number;
   budgetTier?: string;
   tripType?: string;
+  celebrationDay?: number; // User-specified celebration day for birthday/anniversary trips
   style?: string;
   pace?: string;
   days: EditorialDay[];
@@ -757,6 +759,7 @@ export function EditorialItinerary({
   travelers,
   budgetTier,
   tripType,
+  celebrationDay,
   style,
   pace,
   days: initialDays,
@@ -880,6 +883,26 @@ export function EditorialItinerary({
   // Calculate intelligence value stats for the itinerary
   const skippedItems = useMemo(() => getDestinationSkippedItems(destination), [destination]);
   const valueStats = useMemo(() => calculateItineraryValueStats(days, skippedItems), [days, skippedItems]);
+
+  // Dynamic itinerary validation - detect skip list violations and other issues
+  const validationIssues = useMemo<ValidationIssue[]>(() => {
+    const result = validateItinerary(days, {
+      destination,
+      tripType,
+      celebrationDay,
+      totalDays: days.length
+    });
+    return result.issues;
+  }, [days, destination, tripType, celebrationDay]);
+  
+  // Get skip list violation IDs for highlighting in the UI
+  const skipListViolationIds = useMemo(() => {
+    return new Set(
+      validationIssues
+        .filter(i => i.type === 'skip_list')
+        .map(i => i.activityId)
+    );
+  }, [validationIssues]);
 
   // Fetch 2 destination images for hero and mid-page sections
   const { heroImage, midImage, isLoading: imagesLoading } = useDestinationImages(
@@ -2052,6 +2075,31 @@ export function EditorialItinerary({
               skippedItems={skippedItems}
               destination={destination}
             />
+
+            {/* Skip List Violation Warning - Activities that match our skip list */}
+            {validationIssues.filter(i => i.type === 'skip_list').length > 0 && (
+              <div className="px-4 py-3 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-medium text-sm">
+                      Heads up: {validationIssues.filter(i => i.type === 'skip_list').length} activit{validationIssues.filter(i => i.type === 'skip_list').length === 1 ? 'y matches' : 'ies match'} our skip list
+                    </p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400/80">
+                      These activities appear in "Why We Skipped These" but are still in your itinerary. 
+                      Consider swapping them for better alternatives.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {validationIssues.filter(i => i.type === 'skip_list').map((issue, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs border-amber-500/50 text-amber-700 dark:text-amber-400">
+                          Day {issue.dayNumber}: {issue.activityTitle.length > 30 ? issue.activityTitle.slice(0, 30) + '…' : issue.activityTitle}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Flight Sync Warning - Show if flight times don't match Day 1 */}
             {flightSelection?.outbound?.arrival?.time && days[0]?.activities?.[0] && (
