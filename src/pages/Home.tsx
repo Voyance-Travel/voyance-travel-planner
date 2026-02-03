@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
+import Head from '@/components/common/Head';
 import ScrollTarget from '@/components/common/ScrollTarget';
 import ValueFirstHero from '@/components/home/ValueFirstHero';
 import TheProblemSection from '@/components/home/TheProblemSection';
@@ -10,6 +11,7 @@ import SampleArchetype from '@/components/home/SampleArchetype';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
 import FinalCTA from '@/components/home/FinalCTA';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
+import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 import { scrollToTop } from '@/utils/scrollUtils';
 import { ROUTES } from '@/config/routes';
 
@@ -39,6 +41,14 @@ export default function Home() {
 
   return (
     <main className="antialiased">
+      <Head 
+        title="Voyance | AI-Powered Travel Planning - Personalized Itineraries"
+        description="Plan your dream trip with Voyance. Our AI creates personalized travel itineraries based on your unique travel style. Discover hidden gems, avoid crowds, and travel smarter."
+        canonical="https://travelwithvoyance.com/"
+      />
+      <OrganizationSchema />
+      <WebSiteSchema />
+      <TravelAgencySchema />
       <OnboardingRedirect />
       <TopNav />
       

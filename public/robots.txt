@@ -13,5 +13,12 @@ Allow: /
 User-agent: *
 Allow: /
 
+# Disallow private/auth-required pages from indexing
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /settings
+Disallow: /trip/
+Disallow: /planner/
+
 # Sitemap location
-Sitemap: https://voyance-travel-planner.lovable.app/sitemap.xml
+Sitemap: https://travelwithvoyance.com/sitemap.xml

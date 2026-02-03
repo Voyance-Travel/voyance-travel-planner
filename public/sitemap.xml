@@ -2,97 +2,114 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <!-- Core Pages -->
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/</loc>
+    <loc>https://travelwithvoyance.com/</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/demo</loc>
+    <loc>https://travelwithvoyance.com/demo</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/explore</loc>
+    <loc>https://travelwithvoyance.com/explore</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/destinations</loc>
+    <loc>https://travelwithvoyance.com/destinations</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/archetypes</loc>
+    <loc>https://travelwithvoyance.com/archetypes</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/how-it-works</loc>
+    <loc>https://travelwithvoyance.com/how-it-works</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   
   <!-- Pricing & Conversion -->
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/pricing</loc>
+    <loc>https://travelwithvoyance.com/pricing</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/start</loc>
+    <loc>https://travelwithvoyance.com/start</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   
   <!-- Auth -->
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/signin</loc>
+    <loc>https://travelwithvoyance.com/signin</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/signup</loc>
+    <loc>https://travelwithvoyance.com/signup</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.5</priority>
   </url>
   
   <!-- Support -->
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/contact</loc>
+    <loc>https://travelwithvoyance.com/contact</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/faq</loc>
+    <loc>https://travelwithvoyance.com/faq</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/about</loc>
+    <loc>https://travelwithvoyance.com/about</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   
   <!-- Content -->
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/guides</loc>
+    <loc>https://travelwithvoyance.com/guides</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/travel-tips</loc>
+    <loc>https://travelwithvoyance.com/travel-tips</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   
   <!-- Legal -->
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/privacy</loc>
+    <loc>https://travelwithvoyance.com/privacy</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://voyance-travel-planner.lovable.app/terms</loc>
+    <loc>https://travelwithvoyance.com/terms</loc>
+    <lastmod>2026-02-03</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>

@@ -4,12 +4,14 @@ import DestinationEntry from './DestinationEntry';
 export default function ValueFirstHero() {
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
-      {/* Full-screen Background Image */}
+      {/* Full-screen Background Image - LCP optimized */}
       <div className="absolute inset-0">
         <img
           src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
+          fetchPriority="high"
+          decoding="async"
         />
         {/* Multi-layer gradient overlay for readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-black/70" />

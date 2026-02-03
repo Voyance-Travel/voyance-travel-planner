@@ -172,6 +172,7 @@ export default function Explore() {
       <Head
         title="Explore Destinations | Voyance"
         description="Explore amazing destinations curated to your travel preferences. Discover places by travel style, season, and more."
+        canonical="https://travelwithvoyance.com/explore"
       />
       <TopNav />
 

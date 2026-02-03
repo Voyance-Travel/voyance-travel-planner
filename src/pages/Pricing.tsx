@@ -71,7 +71,11 @@ export default function Pricing() {
 
   return (
     <MainLayout>
-      <Head title="Pricing | Voyance" description="Simple credit packs for personalized travel planning." />
+      <Head 
+        title="Pricing | Voyance" 
+        description="Simple credit packs for personalized travel planning. Buy only what you need." 
+        canonical="https://travelwithvoyance.com/pricing"
+      />
       
       {/* Hero */}
       <section className="relative min-h-[35vh] flex items-center justify-center overflow-hidden">

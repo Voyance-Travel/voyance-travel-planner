@@ -41,6 +41,7 @@ export default function HowItWorks() {
       <Head
         title="How It Works | Voyance"
         description="From quiz to itinerary in minutes. See how Voyance builds personalized day-by-day travel plans."
+        canonical="https://travelwithvoyance.com/how-it-works"
       />
 
       {/* Side Navigation */}
