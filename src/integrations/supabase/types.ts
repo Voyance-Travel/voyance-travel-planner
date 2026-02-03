@@ -2468,6 +2468,36 @@ export type Database = {
         }
         Relationships: []
       }
+      destination_fallbacks: {
+        Row: {
+          created_at: string
+          description: string
+          destination_key: string
+          display_name: string
+          id: string
+          preview_days: Json
+          tagline: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          destination_key: string
+          display_name: string
+          id?: string
+          preview_days?: Json
+          tagline: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          destination_key?: string
+          display_name?: string
+          id?: string
+          preview_days?: Json
+          tagline?: string
+        }
+        Relationships: []
+      }
       destinations: {
         Row: {
           airport_codes: Json | null
@@ -3946,6 +3976,30 @@ export type Database = {
           updated_at?: string | null
           user_agent?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          ip_address: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          ip_address: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          ip_address?: string
+          user_id?: string | null
         }
         Relationships: []
       }
