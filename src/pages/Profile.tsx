@@ -41,6 +41,7 @@ import MemoryLane from '@/components/profile/MemoryLane';
 import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
 import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
 import CreditBalanceCard from '@/components/profile/CreditBalanceCard';
+import CreditPacksGrid from '@/components/profile/CreditPacksGrid';
 import { useCredits, useRefreshCredits } from '@/hooks/useCredits';
 import { getTripStats, TripStats } from '@/services/userAPI';
 import { getArchetypeNarrative } from '@/data/archetypeNarratives';
@@ -870,25 +871,19 @@ export default function Profile() {
             className="space-y-8"
           >
             {/* Credit Balance Card - Primary Focus */}
-            <CreditBalanceCard onBuyCredits={() => navigate(ROUTES.PRICING)} />
+            <CreditBalanceCard />
 
-            {/* Browse Packages CTA */}
-            <div className="flex flex-col items-center gap-4 py-8 px-6 bg-muted/30 rounded-xl">
-              <div className="text-center">
-                <h3 className="text-lg font-serif font-medium text-foreground mb-2">
-                  Need more credits?
+            {/* Credit Packs Purchase Grid */}
+            <div className="bg-card rounded-xl border border-border p-6">
+              <div className="text-center mb-6">
+                <h3 className="text-lg font-serif font-medium text-foreground mb-1">
+                  Get Credits
                 </h3>
-                <p className="text-sm text-muted-foreground max-w-md">
-                  Unlock days, swap activities, and get AI recommendations.
+                <p className="text-sm text-muted-foreground">
+                  Unlock days, swap activities, and get AI recommendations
                 </p>
               </div>
-              <Button 
-                onClick={() => navigate(ROUTES.PRICING)}
-                className="gap-2"
-              >
-                <Sparkles className="h-4 w-4" />
-                View Credit Packs
-              </Button>
+              <CreditPacksGrid returnPath="/profile?payment=success" />
             </div>
 
             {/* Billing Portal (for legacy subscribers) */}
