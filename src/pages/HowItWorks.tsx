@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
@@ -14,12 +15,16 @@ import {
   Leaf,
   Zap,
   Palette,
+  Play,
   type LucideIcon
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { DemoPlayground } from '@/components/demo/DemoPlayground';
+import { DemoArchetypeComparison } from '@/components/demo/DemoArchetypeComparison';
+import { DemoGroupBlend } from '@/components/demo/DemoGroupBlend';
+import { DemoFeatureShowcase } from '@/components/demo/DemoFeatureShowcase';
 import { HowItWorksSideNav } from '@/components/home/HowItWorksSideNav';
 
 // Import generated images
@@ -36,6 +41,8 @@ const promises = [
 ];
 
 export default function HowItWorks() {
+  const [showFeatureTour, setShowFeatureTour] = useState(false);
+
   return (
     <MainLayout>
       <Head
@@ -333,6 +340,42 @@ export default function HowItWorks() {
           </motion.p>
         </div>
       </section>
+
+      {/* Feature Tour (Interactive) */}
+      {showFeatureTour && (
+        <div id="feature-tour">
+          <DemoFeatureShowcase onComplete={() => setShowFeatureTour(false)} />
+        </div>
+      )}
+
+      {/* Start Feature Tour Button */}
+      {!showFeatureTour && (
+        <section className="py-12 bg-muted/30 border-y border-border">
+          <div className="max-w-4xl mx-auto px-4 text-center">
+            <Button
+              onClick={() => setShowFeatureTour(true)}
+              size="lg"
+              className="gap-2"
+            >
+              <Play className="h-5 w-5" />
+              Take the Feature Tour
+            </Button>
+            <p className="text-sm text-muted-foreground mt-3">
+              7 interactive steps showing how we build your perfect trip
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* Archetype Comparison */}
+      <div id="archetype-comparison">
+        <DemoArchetypeComparison />
+      </div>
+
+      {/* Group Travel Blending */}
+      <div id="group-blend">
+        <DemoGroupBlend />
+      </div>
 
       {/* Interactive Playground */}
       <div id="playground">
