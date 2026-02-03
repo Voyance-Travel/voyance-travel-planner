@@ -3786,6 +3786,24 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       ((a.category === 'transport') && (a.title || '').toLowerCase().includes('airport'))
     );
 
+    // Enforce sequence: checkout must occur before airport transfer / departure transport
+    const checkoutAct = day.activities?.find(a => {
+      const t = (a.title || '').toLowerCase();
+      return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
+    });
+    const airportAct = day.activities?.find(a => {
+      const t = (a.title || '').toLowerCase();
+      const isAirportish = t.includes('airport') || t.includes('departure transfer');
+      const isTransportish = (a.category === 'transport') || t.includes('transfer') || t.includes('departure');
+      return isAirportish && isTransportish;
+    });
+
+    const checkoutMins = checkoutAct?.startTime ? parseTimeToMinutes(checkoutAct.startTime) : null;
+    const airportMins = airportAct?.startTime ? parseTimeToMinutes(airportAct.startTime) : null;
+    if (checkoutMins !== null && airportMins !== null && checkoutMins > airportMins) {
+      errors.push('Departure day sequence violation: Hotel checkout must occur before airport transfer.');
+    }
+
     if (!hasCheckout) {
       warnings.push('Last day should include hotel checkout');
     }
@@ -4310,17 +4328,42 @@ Generate activities for this day following ALL constraints above.`;
           const checkoutActivity = generatedDay.activities[checkoutIndex];
           const airportActivity = generatedDay.activities[airportIndex];
           
-          // Swap the times - checkout should have the earlier time
-          const checkoutStart = checkoutActivity.startTime;
-          const checkoutEnd = checkoutActivity.endTime;
-          const airportStart = airportActivity.startTime;
-          const airportEnd = airportActivity.endTime;
-          
-          // Give checkout the airport's original time slot, and airport gets checkout's
-          checkoutActivity.startTime = airportStart;
-          checkoutActivity.endTime = airportStart.replace(/:\d{2}$/, ':15'); // 15 min for checkout
+          // Preserve durations; re-anchor sequence so checkout happens right before transfer.
+          const checkoutDuration = Math.max(
+            5,
+            calculateDuration(checkoutActivity.startTime, checkoutActivity.endTime) || 15
+          );
+          const transferDuration = Math.max(
+            10,
+            calculateDuration(airportActivity.startTime, airportActivity.endTime) || 60
+          );
+
+          // Choose an anchor start that doesn't overlap the previous activity (typically breakfast).
+          let anchorStart = airportActivity.startTime;
+          try {
+            const sorted = [...generatedDay.activities].sort((a, b) => {
+              const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+              const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+              return ta - tb;
+            });
+            const airportPos = sorted.findIndex(a => a.id === airportActivity.id);
+            if (airportPos > 0) {
+              const prev = sorted[airportPos - 1];
+              const prevEndMins = parseTimeToMinutes(prev?.endTime || '') ?? null;
+              const airportStartMins = parseTimeToMinutes(airportActivity.startTime || '') ?? null;
+              if (prevEndMins !== null && airportStartMins !== null && prevEndMins > airportStartMins) {
+                anchorStart = minutesToHHMM(prevEndMins);
+              }
+            }
+          } catch {
+            // Non-fatal, keep original anchor
+          }
+
+          // Checkout happens first, then transfer begins immediately after.
+          checkoutActivity.startTime = anchorStart;
+          checkoutActivity.endTime = addMinutesToHHMM(anchorStart, checkoutDuration);
           airportActivity.startTime = checkoutActivity.endTime;
-          airportActivity.endTime = airportEnd;
+          airportActivity.endTime = addMinutesToHHMM(airportActivity.startTime, transferDuration);
           
           // Swap positions in array
           generatedDay.activities[airportIndex] = checkoutActivity;
@@ -4328,9 +4371,9 @@ Generate activities for this day following ALL constraints above.`;
           
           // Re-sort by start time to ensure proper order
           generatedDay.activities.sort((a, b) => {
-            const timeA = a.startTime.split(':').map(Number);
-            const timeB = b.startTime.split(':').map(Number);
-            return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+            const timeA = parseTimeToMinutes(a.startTime || '') ?? 99999;
+            const timeB = parseTimeToMinutes(b.startTime || '') ?? 99999;
+            return timeA - timeB;
           });
         }
       }
