@@ -386,7 +386,7 @@ export default function Archetypes() {
               Ready to find yours?
             </h2>
             <p className="text-lg text-white/60 mb-8 max-w-xl mx-auto">
-              Take our 2-minute quiz. We'll match you to your archetype and start 
+              Take our 5-minute quiz. We'll match you to your archetype and start 
               building trips that actually fit how you travel.
             </p>
             <Button asChild size="lg" className="rounded-full px-8 bg-white text-slate-900 hover:bg-white/90">

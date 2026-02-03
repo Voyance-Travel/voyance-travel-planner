@@ -54,7 +54,7 @@ export default function Welcome() {
               </Button>
               
               <p className="text-sm text-muted-foreground">
-                Takes about 2 minutes
+                Takes about 5 minutes
               </p>
             </div>
           </motion.div>

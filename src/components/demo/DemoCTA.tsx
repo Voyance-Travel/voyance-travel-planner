@@ -33,7 +33,7 @@ export function DemoCTA() {
           </h2>
           
           <p className="text-lg text-muted-foreground mb-10 max-w-xl mx-auto">
-            Take our 2-minute Travel DNA Quiz and get a personalized itinerary 
+            Take our 5-minute Travel DNA Quiz and get a personalized itinerary 
             built just for you. No more hours of research.
           </p>
 
@@ -81,17 +81,17 @@ export function DemoCTA() {
             <div className="inline-flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm">
               <div className="text-center">
                 <p className="font-medium text-foreground">Free</p>
-                <p className="text-xs text-muted-foreground">Day 1 preview</p>
+                <p className="text-xs text-muted-foreground">150 credits to start</p>
               </div>
               <div className="hidden sm:block w-px h-8 bg-border" />
               <div className="text-center">
-                <p className="font-medium text-foreground">Trip Pass</p>
-                <p className="text-xs text-muted-foreground">$24.99 per trip</p>
+                <p className="font-medium text-foreground">Starter</p>
+                <p className="text-xs text-muted-foreground">500 credits for $29</p>
               </div>
               <div className="hidden sm:block w-px h-8 bg-border" />
               <div className="text-center">
-                <p className="font-medium text-foreground">Credits</p>
-                <p className="text-xs text-muted-foreground">5 for $79 • 10 for $149</p>
+                <p className="font-medium text-foreground">Explorer</p>
+                <p className="text-xs text-muted-foreground">1,200 credits for $55</p>
               </div>
             </div>
           </div>

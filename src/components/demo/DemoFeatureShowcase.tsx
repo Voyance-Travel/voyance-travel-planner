@@ -17,7 +17,7 @@ const FEATURES = [
   {
     id: 'quiz',
     title: 'Your Travel Profile',
-    subtitle: '2 minutes to unlock personalized trips',
+    subtitle: '5 minutes to unlock personalized trips',
     description: 'Answer a few questions about how you like to travel. We learn your pace, interests, and style to build trips that actually fit you.',
     valuePoint: 'No more generic itineraries that don\'t match your style.',
   },

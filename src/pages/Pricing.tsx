@@ -323,7 +323,7 @@ export default function Pricing() {
             Ready to plan your perfect trip?
           </h2>
           <p className="text-muted-foreground mb-6">
-            Take the 2-minute quiz to discover your Travel DNA.
+            Take the 5-minute quiz to discover your Travel DNA.
           </p>
           <Button asChild size="lg">
             <Link to={ROUTES.QUIZ}>
