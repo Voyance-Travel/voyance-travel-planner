@@ -292,15 +292,25 @@ export function getDestinationSkippedItems(destination: string): SkippedItem[] {
         betterAlternative: 'Trattoria in Testaccio or Jewish Ghetto',
       },
       {
-        name: 'Street vendors selling "leather"',
-        reason: 'Fake leather products at inflated prices. Real Italian leather shops don\'t hawk on streets.',
-        category: 'tourist-trap',
+        name: 'Trevi Fountain selfie crowd (midday)',
+        reason: 'Packed 10am-6pm with selfie sticks and tour groups. Visit at 7am or after 10pm for the real experience.',
+        category: 'overcrowded',
+        savingsEstimate: { time: '45 min' },
+        betterAlternative: 'Early morning or late night visit',
       },
       {
         name: 'Cafes on Spanish Steps',
         reason: 'You\'re paying for the view, not the coffee. A €2 espresso becomes €8.',
         category: 'overpriced',
         savingsEstimate: { money: '$20' },
+        betterAlternative: 'Sant\'Eustachio Il Caffè (best espresso in Rome)',
+      },
+      {
+        name: 'Via Veneto restaurants',
+        reason: 'Dolce Vita glamour ended in the 1960s. Now overpriced tourist spots coasting on reputation.',
+        category: 'overhyped',
+        savingsEstimate: { money: '$35' },
+        betterAlternative: 'Pigneto or Trastevere',
       },
     ],
     paris: [
