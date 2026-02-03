@@ -668,6 +668,121 @@ async function getDestinationId(supabase: any, destination: string): Promise<str
   }
 }
 
+// =============================================================================
+// TOURIST TRAP SKIP LIST
+// Destination-specific activities we tell users to avoid - AI must not plan these
+// =============================================================================
+interface SkippedItem {
+  name: string;
+  reason: string;
+  keywords?: string[]; // Additional keywords to catch variations
+}
+
+const DESTINATION_SKIP_LISTS: Record<string, SkippedItem[]> = {
+  paris: [
+    {
+      name: 'Seine dinner cruises',
+      reason: 'Mediocre buffet food, crowded boats, expensive',
+      keywords: ['seine cruise', 'river cruise', 'bateaux', 'boat cruise', 'dinner cruise', 'sunset cruise on seine']
+    },
+    {
+      name: 'Champs-Élysées restaurants',
+      reason: 'Chain restaurants with frozen food at premium prices',
+      keywords: ['champs-elysees restaurant', 'champs elysees dining']
+    },
+    {
+      name: 'Montmartre portrait artists',
+      reason: 'Overpriced and often pushy',
+      keywords: ['montmartre portrait', 'place du tertre artists']
+    }
+  ],
+  tokyo: [
+    {
+      name: 'Robot Restaurant',
+      reason: 'Overpriced gimmick with terrible food',
+      keywords: ['robot restaurant', 'robot show']
+    },
+    {
+      name: 'Tokyo Skytree',
+      reason: 'Expensive, crowded, view not better than free alternatives',
+      keywords: ['skytree observation', 'tokyo skytree']
+    }
+  ],
+  rome: [
+    {
+      name: 'Piazza Navona restaurants',
+      reason: 'Triple the price for half the quality',
+      keywords: ['piazza navona dining', 'navona restaurants']
+    },
+    {
+      name: 'Via Veneto restaurants',
+      reason: 'Overpriced tourist spots coasting on old reputation',
+      keywords: ['via veneto restaurant']
+    }
+  ],
+  london: [
+    {
+      name: 'Leicester Square restaurants',
+      reason: 'Tourist trap central with overpriced chains',
+      keywords: ['leicester square dining', 'leicester square restaurant']
+    },
+    {
+      name: 'Hard Rock Cafe London',
+      reason: 'American chain, not a London experience',
+      keywords: ['hard rock cafe']
+    }
+  ],
+  barcelona: [
+    {
+      name: 'La Rambla restaurants',
+      reason: 'Terrible food, aggressive waiters, pickpocket central',
+      keywords: ['rambla restaurant', 'las ramblas dining']
+    },
+    {
+      name: 'Barceloneta beachfront restaurants',
+      reason: 'Frozen seafood at beach prices, tourist paella',
+      keywords: ['barceloneta restaurant', 'beach paella']
+    }
+  ]
+};
+
+function buildSkipListPrompt(destination: string): string {
+  const cityKey = destination.toLowerCase();
+  const matchedCity = Object.keys(DESTINATION_SKIP_LISTS).find(key => 
+    cityKey.includes(key) || key.includes(cityKey)
+  );
+  
+  if (!matchedCity) {
+    return '';
+  }
+  
+  const skipList = DESTINATION_SKIP_LISTS[matchedCity];
+  if (!skipList || skipList.length === 0) {
+    return '';
+  }
+  
+  const avoidItems = skipList.map(item => {
+    const keywords = item.keywords ? ` (also avoid: ${item.keywords.join(', ')})` : '';
+    return `  ❌ ${item.name}${keywords} — ${item.reason}`;
+  }).join('\n');
+  
+  return `
+╔═══════════════════════════════════════════════════════════════════════╗
+║                    TOURIST TRAP SKIP LIST                             ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+⚠️ CRITICAL: DO NOT RECOMMEND ANY OF THESE ACTIVITIES.
+We tell users to AVOID these in our "Why We Skipped These" section.
+It would be contradictory and trust-breaking to then recommend them.
+
+${avoidItems}
+
+ENFORCEMENT:
+- If a celebration/birthday suggests a "cruise" → suggest a WALKING tour along the Seine, rooftop bar, or picnic instead
+- If the user wants river views → recommend Pont Alexandre III at sunset, a riverside café, or Île Saint-Louis stroll
+- Never generate activities matching the skip list names or keywords above
+`;
+}
 
 // Derives a single canonical budget line from tier + traits
 // =============================================================================
@@ -6425,11 +6540,20 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         console.log(`[Stage 1.995] No special trip type - using standard generation`);
       }
       
+      // =======================================================================
+      // STAGE 1.997: Tourist Trap Skip List (Visible Intelligence)
+      // Prevent AI from recommending activities we explicitly tell users to avoid
+      // =======================================================================
+      const skipListPrompt = buildSkipListPrompt(context.destination);
+      if (skipListPrompt) {
+        console.log(`[Stage 1.997] ✓ Skip list built for ${context.destination}`);
+      }
+      
       // Combine all context for maximum personalization
-      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
+      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
