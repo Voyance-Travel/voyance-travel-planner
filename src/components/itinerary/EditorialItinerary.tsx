@@ -725,7 +725,7 @@ export function EditorialItinerary({
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'weather' | 'overview' | 'needtoknow'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow'>('itinerary');
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
     // Auto-select "Today" if trip is active
     const todayIndex = initialDays.findIndex(d => d.date && isToday(parseISO(d.date)));
@@ -1816,8 +1816,7 @@ export function EditorialItinerary({
             { id: 'itinerary', label: 'Itinerary', fullLabel: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
             { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
             { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-            { id: 'weather', label: 'Weather', fullLabel: 'Weather', icon: <CloudSun className="h-4 w-4" /> },
-            { id: 'overview', label: 'Flights', fullLabel: 'Flight & Hotel', icon: <Plane className="h-4 w-4" /> },
+            { id: 'details', label: 'Details', fullLabel: 'Trip Details', icon: <Plane className="h-4 w-4" /> },
             { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" /> },
           ].map((tab) => (
             <button
@@ -1882,7 +1881,7 @@ export function EditorialItinerary({
               flightSelection={flightSelection} 
               hotelSelection={hotelSelection}
               destination={destination}
-              onNavigateToBookings={() => setActiveTab('overview')}
+              onNavigateToBookings={() => setActiveTab('details')}
             />
 
             {/* Inline Modifier - Natural language itinerary changes */}
@@ -2027,31 +2026,29 @@ export function EditorialItinerary({
           />
         )}
 
-        {activeTab === 'weather' && (
+        {activeTab === 'details' && (
           <motion.div
-            key="weather"
+            key="details"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="space-y-6"
+            className="space-y-8"
           >
+            {/* Weather Forecast */}
             <WeatherForecast
               destination={destination}
               startDate={startDate}
               endDate={endDate}
               tripDays={days.length}
             />
-          </motion.div>
-        )}
 
-        {activeTab === 'overview' && (
-          <motion.div
-            key="overview"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="space-y-8"
-          >
+            {/* Destination Mid-page Image */}
+            <DestinationMidImage 
+              destination={destination} 
+              destinationCountry={destinationCountry} 
+              imageUrl={midImage}
+              isLoading={imagesLoading}
+            />
             {/* Destination Mid-page Image */}
             <DestinationMidImage 
               destination={destination} 
