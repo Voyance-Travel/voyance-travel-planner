@@ -119,7 +119,7 @@ export default function DestinationEntry() {
         className="text-lg md:text-xl text-white/90 mb-10"
         style={{ textShadow: '0 1px 10px rgba(0,0,0,0.7), 0 2px 20px rgba(0,0,0,0.5)' }}
       >
-        Tell us how you travel. We'll build every day — timed, budgeted, and editable.
+        Tell us how you travel. We'll build every day: timed, budgeted, and editable.
       </motion.p>
 
       <motion.div
