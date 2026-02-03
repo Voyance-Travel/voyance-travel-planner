@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2
+  Eye, Gem, Utensils, Building2, Plane, Star, Wifi, Coffee
 } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
@@ -33,6 +33,16 @@ interface LocationSelection {
   isMetroArea?: boolean;
 }
 
+interface HotelOption {
+  id: string;
+  name: string;
+  neighborhood: string;
+  stars: number;
+  pricePerNight: number;
+  amenities: string[];
+  imageUrl: string;
+}
+
 // Trip occasions
 const tripOccasions = [
   { id: 'leisure', label: 'Leisure' },
@@ -50,6 +60,37 @@ const tripOccasions = [
 ];
 
 const CELEBRATION_TRIP_TYPES = ['birthday', 'anniversary', 'honeymoon'] as const;
+
+// Mock hotel options for quick selection
+const mockHotels: HotelOption[] = [
+  {
+    id: 'hotel-1',
+    name: 'The Grand Heritage',
+    neighborhood: 'Historic Center',
+    stars: 5,
+    pricePerNight: 320,
+    amenities: ['Free WiFi', 'Breakfast included', 'Pool', 'Spa'],
+    imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&q=80',
+  },
+  {
+    id: 'hotel-2',
+    name: 'Boutique Maison',
+    neighborhood: 'Arts District',
+    stars: 4,
+    pricePerNight: 185,
+    amenities: ['Free WiFi', 'Breakfast included', 'Gym'],
+    imageUrl: 'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=400&q=80',
+  },
+  {
+    id: 'hotel-3',
+    name: 'Urban Loft Hotel',
+    neighborhood: 'Downtown',
+    stars: 3,
+    pricePerNight: 120,
+    amenities: ['Free WiFi', 'Restaurant'],
+    imageUrl: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=400&q=80',
+  },
+];
 
 // Sample itineraries for sidebar motivation
 const sampleItineraries = [
@@ -76,12 +117,19 @@ const sampleItineraries = [
   },
 ];
 
+// Budget presets
+const budgetPresets = [
+  { label: 'Budget', value: 500, description: 'Under $500' },
+  { label: 'Moderate', value: 1000, description: '$500–$1.5k' },
+  { label: 'Premium', value: 2500, description: '$1.5k–$3.5k' },
+  { label: 'Luxury', value: 5000, description: '$3.5k+' },
+];
+
 // Progress Step Indicator
-function StepIndicator({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
+function StepIndicator({ currentStep }: { currentStep: number }) {
   const steps = [
     { label: 'Trip Details', step: 1 },
-    { label: 'Budget', step: 2 },
-    { label: 'Hotel', step: 3 },
+    { label: 'Flight & Hotel', step: 2 },
   ];
 
   return (
@@ -201,7 +249,7 @@ function MotivationSidebar() {
   );
 }
 
-// Step 2: Trip Details Form
+// Step 1: Trip Details with inline budget section
 function TripDetailsStep({
   destinationSelection,
   setDestinationSelection,
@@ -215,8 +263,9 @@ function TripDetailsStep({
   setTripType,
   celebrationDay,
   setCelebrationDay,
+  budgetAmount,
+  setBudgetAmount,
   onContinue,
-  onBack,
 }: {
   destinationSelection: LocationSelection;
   setDestinationSelection: (s: LocationSelection) => void;
@@ -230,13 +279,15 @@ function TripDetailsStep({
   setTripType: (t: string) => void;
   celebrationDay: number | undefined;
   setCelebrationDay: (d: number | undefined) => void;
+  budgetAmount: number | undefined;
+  setBudgetAmount: (n: number | undefined) => void;
   onContinue: () => void;
-  onBack?: () => void;
 }) {
   const today = startOfToday();
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => 
     startDate ? startOfMonth(startDate) : startOfMonth(new Date())
   );
+  const [showBudget, setShowBudget] = useState(!!budgetAmount);
 
   // Auto-set end date when start date changes
   useEffect(() => {
@@ -468,17 +519,48 @@ function TripDetailsStep({
             </div>
           </motion.div>
         )}
+
+        {/* Budget Section - Collapsible */}
+        <Collapsible open={showBudget} onOpenChange={setShowBudget}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/40 transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">
+                  {budgetAmount ? `Budget: $${budgetAmount.toLocaleString()}` : 'Set budget (optional)'}
+                </span>
+              </div>
+              <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', showBudget && 'rotate-180')} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <div className="grid grid-cols-4 gap-2">
+              {budgetPresets.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setBudgetAmount(preset.value)}
+                  className={cn(
+                    'p-2 rounded-lg border text-center transition-all',
+                    budgetAmount === preset.value
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/40'
+                  )}
+                >
+                  <div className="text-xs font-medium text-foreground">{preset.label}</div>
+                  <div className="text-[10px] text-muted-foreground">{preset.description}</div>
+                </button>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between pt-6 max-w-md mx-auto">
-        {onBack ? (
-          <Button variant="ghost" onClick={onBack}>
-            Back
-          </Button>
-        ) : (
-          <div /> /* Spacer when no back button */
-        )}
+      <div className="flex justify-end pt-6 max-w-md mx-auto">
         <Button onClick={onContinue} disabled={!isValid} className="gap-2">
           Continue
           <ArrowRight className="w-4 h-4" />
@@ -488,148 +570,36 @@ function TripDetailsStep({
   );
 }
 
-// Step 2: Budget Step
-function BudgetStep({
-  budgetAmount,
-  setBudgetAmount,
-  onContinue,
-  onBack,
-}: {
-  budgetAmount: number | undefined;
-  setBudgetAmount: (n: number | undefined) => void;
-  onContinue: () => void;
-  onBack: () => void;
-}) {
-  const [showBudget, setShowBudget] = useState(!!budgetAmount);
-
-  const budgetPresets = [
-    { label: 'Budget', value: 500, description: 'Under $500/person' },
-    { label: 'Moderate', value: 1000, description: '$500–$1,500' },
-    { label: 'Premium', value: 2500, description: '$1,500–$3,500' },
-    { label: 'Luxury', value: 5000, description: '$3,500+' },
-  ];
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
-    >
-      <div className="text-center mb-8">
-        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
-          What's your budget?
-        </h2>
-        <p className="text-muted-foreground">
-          Optional — helps us match recommendations to your comfort level
-        </p>
-      </div>
-
-      <div className="space-y-6 max-w-md mx-auto">
-        {/* Budget presets */}
-        <div className="grid grid-cols-2 gap-3">
-          {budgetPresets.map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              onClick={() => {
-                setBudgetAmount(preset.value);
-                setShowBudget(true);
-              }}
-              className={cn(
-                'p-4 rounded-xl border-2 text-left transition-all',
-                budgetAmount === preset.value
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/40'
-              )}
-            >
-              <div className="font-medium text-foreground">{preset.label}</div>
-              <div className="text-xs text-muted-foreground">{preset.description}</div>
-            </button>
-          ))}
-        </div>
-
-        {/* Custom amount */}
-        {showBudget && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="space-y-3"
-          >
-            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-              Or set exact amount per person
-            </label>
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="number"
-                placeholder="e.g. 2000"
-                value={budgetAmount || ''}
-                onChange={(e) => setBudgetAmount(e.target.value ? Number(e.target.value) : undefined)}
-                className="h-12 pl-9 text-base"
-                min={0}
-              />
-            </div>
-          </motion.div>
-        )}
-
-        {/* Skip option */}
-        <button
-          type="button"
-          onClick={() => {
-            setBudgetAmount(undefined);
-            setShowBudget(false);
-          }}
-          className={cn(
-            'w-full p-4 rounded-xl border-2 text-center transition-all',
-            !budgetAmount
-              ? 'border-primary bg-primary/5'
-              : 'border-border hover:border-primary/40'
-          )}
-        >
-          <div className="font-medium text-foreground">Skip for now</div>
-          <div className="text-xs text-muted-foreground">
-            We'll use your travel style to guide recommendations
-          </div>
-        </button>
-      </div>
-
-      {/* Navigation */}
-      <div className="flex justify-between pt-6 max-w-md mx-auto">
-        <Button variant="ghost" onClick={onBack}>
-          Back
-        </Button>
-        <Button onClick={onContinue} className="gap-2">
-          Continue
-          <ArrowRight className="w-4 h-4" />
-        </Button>
-      </div>
-    </motion.div>
-  );
-}
-
-// Step 3: Hotel Step - redirects to hotel selection page
-function HotelStep({
-  onSkip,
-  onBack,
-  isSubmitting,
+// Step 2: Flight (optional) & Hotel Selection
+function FlightHotelStep({
   destination,
   startDate,
   endDate,
   travelers,
+  selectedHotel,
+  setSelectedHotel,
+  flightArrivalTime,
+  setFlightArrivalTime,
+  onSubmit,
+  onBack,
+  isSubmitting,
 }: {
-  onSkip: () => void;
-  onBack: () => void;
-  isSubmitting: boolean;
   destination: string;
   startDate: string;
   endDate: string;
   travelers: number;
+  selectedHotel: HotelOption | null;
+  setSelectedHotel: (h: HotelOption | null) => void;
+  flightArrivalTime: string;
+  setFlightArrivalTime: (t: string) => void;
+  onSubmit: () => void;
+  onBack: () => void;
+  isSubmitting: boolean;
 }) {
   const navigate = useNavigate();
+  const nights = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
 
-  const handleSelectHotel = () => {
-    // Navigate to the hotel selection page with trip details
+  const handleBrowseMoreHotels = () => {
     const params = new URLSearchParams({
       destination,
       checkIn: startDate,
@@ -644,61 +614,141 @@ function HotelStep({
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
+      className="space-y-8"
     >
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <h2 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
-          Where will you stay?
+          Flight & Hotel
         </h2>
         <p className="text-muted-foreground">
-          Add your hotel for a complete itinerary, or skip to continue
+          Add your travel details for a complete itinerary
         </p>
       </div>
 
-      <div className="space-y-4 max-w-md mx-auto">
-        {/* Select Hotel Option */}
-        <button
-          type="button"
-          onClick={handleSelectHotel}
-          className="w-full p-6 rounded-xl border-2 border-primary bg-primary/5 hover:bg-primary/10 transition-all text-left group"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-primary" />
-            </div>
-            <div className="flex-1">
-              <div className="font-medium text-foreground text-lg">Find a Hotel</div>
-              <div className="text-sm text-muted-foreground">
-                Browse and select from recommended hotels
-              </div>
-            </div>
-            <ArrowRight className="w-5 h-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="max-w-xl mx-auto space-y-8">
+        {/* Flight Section - Optional */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Plane className="h-4 w-4 text-muted-foreground" />
+            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+              Flight arrival time
+              <span className="text-muted-foreground/60 ml-1">(optional)</span>
+            </label>
           </div>
-        </button>
+          <p className="text-xs text-muted-foreground">
+            Helps us plan Day 1 activities around your arrival
+          </p>
+          <Input
+            type="time"
+            value={flightArrivalTime}
+            onChange={(e) => setFlightArrivalTime(e.target.value)}
+            placeholder="e.g. 14:00"
+            className="h-12 max-w-[200px]"
+          />
+        </div>
 
-        {/* Skip Option */}
-        <button
-          type="button"
-          onClick={onSkip}
-          disabled={isSubmitting}
-          className="w-full p-4 rounded-xl border-2 border-border hover:border-primary/40 transition-all text-center"
-        >
-          <div className="font-medium text-foreground">Skip for now</div>
-          <div className="text-xs text-muted-foreground">
-            You can add hotel details later
+        {/* Hotel Section - 3 Options */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                Where will you stay?
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={handleBrowseMoreHotels}
+              className="text-xs text-primary hover:underline"
+            >
+              Browse more hotels →
+            </button>
           </div>
-        </button>
+
+          <div className="grid gap-3">
+            {mockHotels.map((hotel) => (
+              <button
+                key={hotel.id}
+                type="button"
+                onClick={() => setSelectedHotel(selectedHotel?.id === hotel.id ? null : hotel)}
+                className={cn(
+                  'w-full flex gap-4 p-3 rounded-xl border-2 text-left transition-all',
+                  selectedHotel?.id === hotel.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/40'
+                )}
+              >
+                <img
+                  src={hotel.imageUrl}
+                  alt={hotel.name}
+                  className="w-20 h-20 rounded-lg object-cover shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-medium text-foreground text-sm">{hotel.name}</h4>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {Array.from({ length: hotel.stars }).map((_, i) => (
+                          <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
+                        ))}
+                        <span className="text-xs text-muted-foreground ml-1">{hotel.neighborhood}</span>
+                      </div>
+                    </div>
+                    <div className={cn(
+                      'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0',
+                      selectedHotel?.id === hotel.id
+                        ? 'border-primary bg-primary'
+                        : 'border-muted-foreground/30'
+                    )}>
+                      {selectedHotel?.id === hotel.id && <Check className="w-3 h-3 text-primary-foreground" />}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    {hotel.amenities.slice(0, 2).map((amenity) => (
+                      <span key={amenity} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        {amenity === 'Free WiFi' && <Wifi className="h-3 w-3" />}
+                        {amenity === 'Breakfast included' && <Coffee className="h-3 w-3" />}
+                        {amenity}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-2">
+                    <span className="text-sm font-semibold text-foreground">${hotel.pricePerNight}</span>
+                    <span className="text-xs text-muted-foreground">/night</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      · ${hotel.pricePerNight * nights} total
+                    </span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Skip hotel option */}
+          <button
+            type="button"
+            onClick={() => setSelectedHotel(null)}
+            className={cn(
+              'w-full p-3 rounded-xl border-2 text-center transition-all text-sm',
+              !selectedHotel
+                ? 'border-primary/50 bg-primary/5 text-foreground'
+                : 'border-border text-muted-foreground hover:border-primary/40'
+            )}
+          >
+            I'll add hotel details later
+          </button>
+        </div>
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between pt-6 max-w-md mx-auto">
+      <div className="flex justify-between pt-6 max-w-xl mx-auto">
         <Button variant="ghost" onClick={onBack}>
           Back
         </Button>
         <Button
-          onClick={onSkip}
+          onClick={onSubmit}
           disabled={isSubmitting}
-          className="h-14 px-8 text-base font-medium rounded-xl shadow-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+          className="h-12 px-6 text-base font-medium rounded-xl shadow-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
         >
           {isSubmitting ? (
             <>
@@ -718,14 +768,14 @@ function HotelStep({
 }
 
 export default function Start() {
-  const { state: plannerState, setBasics, saveTrip } = useTripPlanner();
+  const { state: plannerState, setBasics } = useTripPlanner();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { canCreateDraft, needsCredits } = useDraftLimitCheck();
+  const { canCreateDraft } = useDraftLimitCheck();
   const [showLimitBlocker, setShowLimitBlocker] = useState(false);
 
-  // Current step: 1 = Trip Details, 2 = Budget, 3 = Hotel
+  // Current step: 1 = Trip Details, 2 = Flight & Hotel
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -746,6 +796,10 @@ export default function Start() {
   const [tripType, setTripType] = useState<string>('leisure');
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
+  
+  // Step 2 state
+  const [selectedHotel, setSelectedHotel] = useState<HotelOption | null>(null);
+  const [flightArrivalTime, setFlightArrivalTime] = useState('');
 
   // Check draft limit
   useEffect(() => {
@@ -803,7 +857,7 @@ export default function Start() {
       <section className="min-h-screen py-8 px-4">
         <div className="max-w-5xl mx-auto">
           {/* Progress Indicator */}
-          <StepIndicator currentStep={currentStep} totalSteps={2} />
+          <StepIndicator currentStep={currentStep} />
 
           {/* Main content with sidebar */}
           <div className="flex gap-12">
@@ -825,30 +879,26 @@ export default function Start() {
                     setTripType={setTripType}
                     celebrationDay={celebrationDay}
                     setCelebrationDay={setCelebrationDay}
+                    budgetAmount={budgetAmount}
+                    setBudgetAmount={setBudgetAmount}
                     onContinue={() => setCurrentStep(2)}
                   />
                 )}
 
-                {currentStep === 2 && (
-                  <BudgetStep
-                    key="budget"
-                    budgetAmount={budgetAmount}
-                    setBudgetAmount={setBudgetAmount}
-                    onContinue={() => setCurrentStep(3)}
-                    onBack={() => setCurrentStep(1)}
-                  />
-                )}
-
-                {currentStep === 3 && (
-                  <HotelStep
-                    key="hotel"
-                    onSkip={handleSubmit}
-                    onBack={() => setCurrentStep(2)}
-                    isSubmitting={isSubmitting}
+                {currentStep === 2 && startDate && endDate && (
+                  <FlightHotelStep
+                    key="flight-hotel"
                     destination={destinationSelection.cityName}
-                    startDate={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
-                    endDate={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
+                    startDate={format(startDate, 'yyyy-MM-dd')}
+                    endDate={format(endDate, 'yyyy-MM-dd')}
                     travelers={travelers}
+                    selectedHotel={selectedHotel}
+                    setSelectedHotel={setSelectedHotel}
+                    flightArrivalTime={flightArrivalTime}
+                    setFlightArrivalTime={setFlightArrivalTime}
+                    onSubmit={handleSubmit}
+                    onBack={() => setCurrentStep(1)}
+                    isSubmitting={isSubmitting}
                   />
                 )}
               </AnimatePresence>
