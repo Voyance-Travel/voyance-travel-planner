@@ -42,7 +42,7 @@ async function preloadAllDestinationImages(): Promise<void> {
   if (preloadStarted) return;
   preloadStarted = true;
   
-  console.log('[ImagePreloader] Starting background preload of destination images...');
+  // Starting background preload of destination images
   
   // Collect all unique image URLs
   const allImages: string[] = [];
@@ -60,7 +60,7 @@ async function preloadAllDestinationImages(): Promise<void> {
   // Deduplicate
   const uniqueImages = [...new Set(allImages)];
   
-  console.log(`[ImagePreloader] Preloading ${uniqueImages.length} destination images...`);
+  // Preloading destination images
   
   // Load in batches to avoid overwhelming the browser
   const BATCH_SIZE = 6;
@@ -74,7 +74,7 @@ async function preloadAllDestinationImages(): Promise<void> {
     }
   }
   
-  console.log(`[ImagePreloader] ✓ Preloaded ${loadedImages.size} images`);
+  // Preloading complete
 }
 
 /**

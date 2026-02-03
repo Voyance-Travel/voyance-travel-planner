@@ -125,7 +125,7 @@ export function useItineraryGeneration() {
    * This is the preferred method - generates all days at once with enrichment
    */
   const generateFullItinerary = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
-    console.log('[useItineraryGeneration] Starting full generation for:', trip.destination);
+    // Starting full generation
 
     setState({
       isGenerating: true,
@@ -199,7 +199,7 @@ export function useItineraryGeneration() {
         status: 'complete',
       });
 
-      console.log('[useItineraryGeneration] Generation complete:', generatedDays.length, 'days');
+      // Generation complete
       toast.success(`Itinerary generated! ${generatedDays.length} days of adventure await.`);
 
       // Trigger achievement for first itinerary generation
@@ -239,7 +239,7 @@ export function useItineraryGeneration() {
     const endDate = new Date(trip.endDate);
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    console.log('[useItineraryGeneration] Starting progressive generation:', totalDays, 'days');
+    // Starting progressive generation
 
     setState({
       isGenerating: true,

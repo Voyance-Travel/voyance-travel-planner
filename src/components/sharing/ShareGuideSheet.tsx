@@ -215,7 +215,7 @@ export default function ShareGuideSheet({
                   });
                 } catch (err) {
                   // User cancelled or error
-                  console.log('Share cancelled or failed:', err);
+                  // Share cancelled or failed - ignore
                 }
               })}
               disabled={isGenerating}

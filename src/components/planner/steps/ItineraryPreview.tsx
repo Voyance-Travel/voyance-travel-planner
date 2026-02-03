@@ -245,7 +245,7 @@ export default function ItineraryPreview({
         setHasSetContext(true); // Already has itinerary, skip context form
       } else if (hasPreExistingContext) {
         // We have flight data from Start page - auto-start generation
-        console.log('[ItineraryPreview] Using pre-existing flight context from Start page');
+        // Using pre-existing flight context from Start page
         const preContext: ItineraryContextData = {
           hotelLocation: existingHotelLocation,
           arrivalTime: existingArrivalTime,

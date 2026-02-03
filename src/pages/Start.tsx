@@ -686,7 +686,7 @@ export default function Start() {
           });
         }
       } catch (err) {
-        console.log('Could not prefill home airport:', err);
+        // Could not prefill home airport
       }
     };
     
@@ -730,7 +730,7 @@ export default function Start() {
         // Save to database incrementally
         try {
           await saveTrip();
-          console.log('[Start] Incremental save completed');
+          // Incremental save completed
         } catch (err) {
           console.error('[Start] Incremental save failed:', err);
         }
@@ -825,7 +825,7 @@ export default function Start() {
     if (user) {
       const tripId = await saveTrip();
       if (tripId) {
-        console.log('[Start] Trip saved before navigation:', tripId);
+        // Trip saved before navigation
         
         // Store airport codes and budget in trip metadata for flight search
         try {
@@ -1040,7 +1040,7 @@ export default function Start() {
         if (updateError) {
           console.error('[Start] Failed to update trip with full payload:', updateError);
         } else {
-          console.log('[Start] Trip updated successfully with hotel_selection:', updatePayload.hotel_selection ? 'YES' : 'NO');
+          // Trip updated successfully
         }
         
         navigate(`/trip/${tripId}?generate=true`);

@@ -39,14 +39,14 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
     
     async function lookupUrl() {
       // Log what we're looking up for debugging
-      console.log('[RestaurantLink] Looking up:', restaurantName, 'in', destination);
+      // Looking up restaurant URL
       
       const cacheKey = getCacheKey(restaurantName, destination);
       
       // Check cache first
       const cached = urlCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        console.log('[RestaurantLink] Cache hit for:', restaurantName, '-> URL:', cached.url);
+        // Cache hit
         if (!cancelled) {
           setUrl(cached.url); // Will be null if no URL was found
           setIsLoading(false);
@@ -56,7 +56,7 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
       
       try {
         const cleanName = cleanRestaurantName(restaurantName);
-        console.log('[RestaurantLink] Calling API with cleaned name:', cleanName);
+        // Calling API with cleaned name
         
         const { data, error } = await supabase.functions.invoke('lookup-restaurant-url', {
           body: { restaurantName: cleanName, destination }
@@ -65,12 +65,12 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
         if (!cancelled) {
           if (error || !data?.success || !data?.url) {
             // Cache the miss - no URL found
-            console.log('[RestaurantLink] No URL found for:', cleanName);
+            // No URL found - cache the miss
             urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
             setUrl(null);
           } else {
             // Cache the hit
-            console.log('[RestaurantLink] Found URL for:', cleanName, '->', data.url);
+            // Found URL - cache the hit
             urlCache.set(cacheKey, { url: data.url, timestamp: Date.now() });
             setUrl(data.url);
           }

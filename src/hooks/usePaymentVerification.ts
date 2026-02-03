@@ -26,7 +26,7 @@ export function usePaymentVerification(options: UsePaymentVerificationOptions = 
       verificationAttempted.current = true;
       
       const verify = async () => {
-        console.log('[usePaymentVerification] Verifying session:', sessionId);
+        // Verifying payment session
         
         try {
           const result = await verifyPayment(sessionId);

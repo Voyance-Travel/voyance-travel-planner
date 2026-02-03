@@ -62,7 +62,7 @@ export function useProgressiveItinerary() {
 
   const generate = useCallback(async (params: GenerateItineraryParams) => {
     if (isGeneratingRef.current) {
-      console.log('[Progressive] Already generating, ignoring duplicate call');
+      // Already generating, ignoring duplicate call
       return;
     }
 

@@ -157,7 +157,7 @@ export default function Planner() {
           setFormData(prev => ({ ...prev, departureCity: profile.home_airport }));
         }
       } catch (err) {
-        console.log('Could not prefill home airport:', err);
+        // Could not prefill home airport
       }
     };
     
@@ -311,7 +311,7 @@ export default function Planner() {
         
         // Store in localStorage for anonymous users
         localStorage.setItem(`trip_${sessionId}`, JSON.stringify(tripData));
-        console.log('[Planner] Saved to localStorage:', sessionId);
+        // Saved to localStorage for anonymous user
         return sessionId;
       }
     } catch (err) {

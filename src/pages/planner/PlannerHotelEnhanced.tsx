@@ -184,7 +184,7 @@ export default function PlannerHotelEnhanced() {
         
         if (!error && data) {
           setUserPreferences(data);
-          console.log('[PlannerHotel] Loaded user hotel preferences:', data);
+          // Loaded user hotel preferences
         }
       } catch (err) {
         console.warn('[PlannerHotel] Failed to load preferences:', err);
@@ -436,7 +436,7 @@ export default function PlannerHotelEnhanced() {
           imageUrl: enrichment.photos?.[0] || hotelSelection.imageUrl,
           placeId: enrichment.placeId || hotelSelection.placeId,
         };
-        console.log('[PlannerHotel] Hotel enriched with Google Places data');
+        // Hotel enriched with Google Places data
       }
     } catch (err) {
       console.warn('[PlannerHotel] Hotel enrichment failed:', err);
@@ -449,7 +449,7 @@ export default function PlannerHotelEnhanced() {
     try {
       const tripId = await saveTrip();
       if (tripId) {
-        console.log('[PlannerHotel] Hotel selection saved to database:', tripId);
+        // Hotel selection saved to database
       }
     } catch (err) {
       console.warn('[PlannerHotel] Incremental save failed:', err);
@@ -493,7 +493,7 @@ export default function PlannerHotelEnhanced() {
     try {
       savedTripId = await saveTrip();
       if (savedTripId) {
-        console.log('[PlannerHotel] Trip saved with hotel selection:', savedTripId);
+        // Trip saved with hotel selection
       }
     } catch (error) {
       console.error('[PlannerHotel] Failed to save trip:', error);

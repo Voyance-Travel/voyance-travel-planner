@@ -257,7 +257,7 @@ export default function PlannerBooking() {
     // For anonymous users, ensure trip is saved to localStorage before navigating
     if (isAnonymous) {
       const savedTripId = await saveTrip();
-      console.log('[PlannerBooking] Saved trip before checkout:', savedTripId);
+      // Saved trip before checkout
 
       // Persist traveler info locally
       try {

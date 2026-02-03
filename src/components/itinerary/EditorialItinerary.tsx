@@ -1184,7 +1184,7 @@ export function EditorialItinerary({
       }
     }
 
-    console.log('[Swap] Replacing activity', target.activityId, 'with', newActivity.title);
+    // Replacing activity with new selection
 
     setDays(prev => {
       const updatedDays = prev.map((day, dIdx) => {
@@ -1224,7 +1224,7 @@ export function EditorialItinerary({
         return { ...day, activities: updatedActivities };
       });
       
-      console.log('[Swap] Updated days:', updatedDays[target.dayIndex]?.activities.map(a => a.title));
+      // Updated days with swapped activity
       return updatedDays;
     });
 
@@ -1268,7 +1268,7 @@ export function EditorialItinerary({
           if (!error) {
             setHasChanges(false);
             setLastSaved(new Date());
-            console.log('[EditorialItinerary] Auto-saved to database');
+            // Auto-saved to database
           } else {
             console.error('[EditorialItinerary] Database save failed:', error);
           }
@@ -1289,7 +1289,7 @@ export function EditorialItinerary({
           localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
           setHasChanges(false);
           setLastSaved(new Date());
-          console.log('[EditorialItinerary] Auto-saved to localStorage');
+          // Auto-saved to localStorage
         }
       } catch (err) {
         console.error('[EditorialItinerary] Auto-save failed:', err);
