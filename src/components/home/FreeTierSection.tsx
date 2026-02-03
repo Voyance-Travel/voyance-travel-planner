@@ -7,7 +7,7 @@ import { ROUTES } from '@/config/routes';
 const FREE_TIER_STEPS = [
   {
     icon: Zap,
-    title: 'Generate in 2 min',
+    title: 'Quick & personalized',
     description: 'Take the quiz, pick a destination, get a personalized day built for your travel style.',
   },
   {
