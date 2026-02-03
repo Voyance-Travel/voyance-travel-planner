@@ -1,56 +1,48 @@
 /**
  * Interactive Micro-Quiz: "Which day would you choose?"
  * 
- * Cinematic, magazine-style design with immersive cards.
+ * App-like itinerary preview cards that match Voyance's design system.
  * One click reveals archetype tendency and leads to full quiz.
  */
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Sunrise, Moon, Utensils, Camera, Coffee, Mountain, Clock, MapPin, Sparkles } from 'lucide-react';
+import { ArrowRight, Sunrise, Moon, Utensils, Camera, Coffee, Mountain, MapPin, Sparkles, Calendar, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 
-// Two contrasting day types with imagery
+// Two contrasting day types
 const DAY_OPTIONS = {
   packed: {
     title: "The Early Bird",
     subtitle: "Dawn to dusk adventure",
-    time: "6:00 AM – 10:00 PM",
     archetype: "Bucket List Sprinter",
     tendencyLabel: "You might be a Bucket List Sprinter",
-    image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80",
     activities: [
-      { time: "6:00 AM", name: "Sunrise at the temple", icon: Sunrise },
-      { time: "8:00 AM", name: "Street food breakfast tour", icon: Utensils },
-      { time: "10:00 AM", name: "Museum district deep dive", icon: Camera },
-      { time: "2:00 PM", name: "Neighborhood walking tour", icon: MapPin },
-      { time: "6:00 PM", name: "Sunset viewpoint", icon: Mountain },
-      { time: "8:00 PM", name: "Local dinner reservation", icon: Moon },
+      { time: "6:00 AM", name: "Sunrise at Senso-ji Temple", icon: Sunrise, badge: "Crowd Hack" },
+      { time: "8:30 AM", name: "Tsukiji Outer Market breakfast", icon: Utensils, badge: null },
+      { time: "10:30 AM", name: "teamLab Planets", icon: Camera, badge: "Pre-booked" },
+      { time: "1:00 PM", name: "Harajuku backstreet walk", icon: MapPin, badge: "Voyance Find" },
+      { time: "4:00 PM", name: "Shibuya Sky sunset", icon: Mountain, badge: null },
+      { time: "7:00 PM", name: "Izakaya in Yurakucho", icon: Moon, badge: "Local Pick" },
     ],
-    vibe: "See everything. Sleep later.",
-    color: "from-sky-500 to-indigo-600",
-    accent: "sky",
+    stats: { activities: 6, hours: "16", style: "Fast-paced" },
   },
   relaxed: {
     title: "The Slow Morning",
     subtitle: "Quality over quantity",
-    time: "10:00 AM – 8:00 PM",
     archetype: "Slow Traveler",
     tendencyLabel: "You might be a Slow Traveler",
-    image: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80",
     activities: [
-      { time: "10:00 AM", name: "Wake up, no alarm", icon: Coffee },
-      { time: "11:30 AM", name: "Long brunch at a local spot", icon: Utensils },
-      { time: "2:00 PM", name: "One museum, done right", icon: Camera },
-      { time: "5:00 PM", name: "Golden hour stroll", icon: Sunrise },
-      { time: "7:00 PM", name: "Dinner wherever feels right", icon: Moon },
+      { time: "10:00 AM", name: "Wake up, no alarm", icon: Coffee, badge: null },
+      { time: "11:30 AM", name: "Kissaten coffee in Yanaka", icon: Coffee, badge: "Voyance Find" },
+      { time: "1:30 PM", name: "Nezu Museum gardens", icon: Camera, badge: null },
+      { time: "4:00 PM", name: "Shimokitazawa wander", icon: MapPin, badge: "Local Pick" },
+      { time: "7:00 PM", name: "Omakase at chef's choice", icon: Utensils, badge: null },
     ],
-    vibe: "Less rushing. More experiencing.",
-    color: "from-amber-500 to-orange-600",
-    accent: "amber",
+    stats: { activities: 5, hours: "9", style: "Leisurely" },
   },
 };
 
@@ -68,7 +60,7 @@ export function MicroQuizComparison() {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto">
+    <div className="w-full max-w-5xl mx-auto">
       <AnimatePresence mode="wait">
         {!selectedOption ? (
           <motion.div
@@ -76,7 +68,7 @@ export function MicroQuizComparison() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="space-y-10"
+            className="space-y-8"
           >
             {/* Editorial Question */}
             <div className="text-center">
@@ -99,9 +91,9 @@ export function MicroQuizComparison() {
               </p>
             </div>
 
-            {/* Cinematic Cards */}
-            <div className="grid md:grid-cols-2 gap-6 lg:gap-8">
-              <CinematicDayCard
+            {/* App-like Itinerary Cards */}
+            <div className="grid md:grid-cols-2 gap-5">
+              <ItineraryPreviewCard
                 option={DAY_OPTIONS.packed}
                 onClick={() => handleSelect('packed')}
                 variant="packed"
@@ -110,7 +102,7 @@ export function MicroQuizComparison() {
                 onHover={() => setHoveredOption('packed')}
                 onLeave={() => setHoveredOption(null)}
               />
-              <CinematicDayCard
+              <ItineraryPreviewCard
                 option={DAY_OPTIONS.relaxed}
                 onClick={() => handleSelect('relaxed')}
                 variant="relaxed"
@@ -179,7 +171,7 @@ export function MicroQuizComparison() {
   );
 }
 
-interface CinematicDayCardProps {
+interface ItineraryPreviewCardProps {
   option: typeof DAY_OPTIONS.packed;
   onClick: () => void;
   variant: 'packed' | 'relaxed';
@@ -189,8 +181,8 @@ interface CinematicDayCardProps {
   onLeave: () => void;
 }
 
-function CinematicDayCard({ option, onClick, variant, isHovered, isOtherHovered, onHover, onLeave }: CinematicDayCardProps) {
-  const isRelaxed = variant === 'relaxed';
+function ItineraryPreviewCard({ option, onClick, variant, isHovered, isOtherHovered, onHover, onLeave }: ItineraryPreviewCardProps) {
+  const isPacked = variant === 'packed';
   
   return (
     <motion.button
@@ -200,123 +192,128 @@ function CinematicDayCard({ option, onClick, variant, isHovered, isOtherHovered,
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
       className={cn(
-        "group relative w-full text-left rounded-xl overflow-hidden transition-all duration-500",
-        "border border-border/50 hover:border-primary/30",
-        "shadow-md hover:shadow-xl",
+        "group relative w-full text-left rounded-xl overflow-hidden transition-all duration-300",
+        "bg-card border border-border",
+        "shadow-sm hover:shadow-lg hover:border-primary/40",
         isOtherHovered ? "opacity-50 scale-[0.98]" : "opacity-100"
       )}
-      style={{ minHeight: '480px' }}
     >
-      {/* Background Image */}
-      <div className="absolute inset-0">
-        <img
-          src={option.image}
-          alt={option.title}
-          className={cn(
-            "w-full h-full object-cover transition-transform duration-700",
-            isHovered ? "scale-105" : "scale-100"
-          )}
-        />
-        {/* Gradient Overlay - Stronger for readability */}
-        <div className={cn(
-          "absolute inset-0 transition-opacity duration-500",
-          isRelaxed 
-            ? "bg-gradient-to-t from-stone-950 via-stone-900/90 to-stone-800/60"
-            : "bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-800/60"
+      {/* Card Header - App-like */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "w-9 h-9 rounded-lg flex items-center justify-center",
+            isPacked ? "bg-sky-500/10" : "bg-amber-500/10"
+          )}>
+            <Calendar className={cn(
+              "w-4 h-4",
+              isPacked ? "text-sky-600" : "text-amber-600"
+            )} />
+          </div>
+          <div>
+            <h4 className="text-base font-semibold text-foreground">{option.title}</h4>
+            <p className="text-xs text-muted-foreground">{option.subtitle}</p>
+          </div>
+        </div>
+        <ChevronRight className={cn(
+          "w-5 h-5 text-muted-foreground transition-transform duration-200",
+          isHovered ? "translate-x-1 text-primary" : ""
         )} />
       </div>
 
-      {/* Content */}
-      <div className="relative z-10 h-full flex flex-col p-5 md:p-6">
-        {/* Header Badge */}
-        <div className="flex items-center mb-6">
-          <div className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium tracking-wide backdrop-blur-md",
-            isRelaxed 
-              ? "bg-amber-500/25 text-amber-100 border border-amber-400/40"
-              : "bg-sky-500/25 text-sky-100 border border-sky-400/40"
-          )}>
-            <Clock className="w-3 h-3" />
-            {option.time}
-          </div>
+      {/* Stats Bar */}
+      <div className="flex items-center gap-4 px-5 py-3 bg-muted/20 border-b border-border/50">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Activities:</span>
+          <span className="text-xs font-semibold text-foreground">{option.stats.activities}</span>
         </div>
+        <div className="w-px h-3 bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Duration:</span>
+          <span className="text-xs font-semibold text-foreground">{option.stats.hours}h</span>
+        </div>
+        <div className="w-px h-3 bg-border" />
+        <div className={cn(
+          "text-xs font-medium px-2 py-0.5 rounded-full",
+          isPacked 
+            ? "bg-sky-500/10 text-sky-700" 
+            : "bg-amber-500/10 text-amber-700"
+        )}>
+          {option.stats.style}
+        </div>
+      </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Main Content - Bottom */}
-        <div>
-          {/* Title */}
-          <h4 className="text-2xl md:text-3xl font-serif text-white mb-0.5 leading-tight">
-            {option.title}
-          </h4>
-          <p className="text-white/60 text-sm mb-5">{option.subtitle}</p>
-
-          {/* Activity List - Cleaner layout */}
-          <div className={cn(
-            "space-y-2 mb-5 transition-all duration-300",
-            isHovered ? "opacity-100" : "opacity-90"
-          )}>
-            {option.activities.map((activity, i) => (
-              <motion.div 
-                key={i} 
-                className="flex items-center gap-2.5"
-                initial={false}
-                animate={{ 
-                  x: isHovered ? 2 : 0,
-                  transition: { delay: i * 0.02, duration: 0.2 }
-                }}
-              >
-                <span className="text-white/40 w-12 shrink-0 font-mono text-[10px] uppercase tracking-wide">
-                  {activity.time}
-                </span>
-                <div className={cn(
-                  "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
-                  isRelaxed ? "bg-amber-400/20" : "bg-sky-400/20"
-                )}>
-                  <activity.icon className={cn(
-                    "h-2.5 w-2.5",
-                    isRelaxed ? "text-amber-300" : "text-sky-300"
-                  )} />
-                </div>
-                <span className="text-white/85 text-sm leading-snug">{activity.name}</span>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Vibe Quote - More editorial */}
-          <div className={cn(
-            "flex items-start gap-2 pt-4 border-t",
-            isRelaxed ? "border-amber-400/20" : "border-sky-400/20"
-          )}>
-            <div className={cn(
-              "w-0.5 h-6 rounded-full mt-0.5 shrink-0",
-              isRelaxed ? "bg-amber-400" : "bg-sky-400"
-            )} />
-            <p className="text-base font-serif italic text-white/80">
-              "{option.vibe}"
-            </p>
-          </div>
-
-          {/* Hover CTA */}
-          <motion.div
+      {/* Activity List */}
+      <div className="p-4 space-y-1">
+        {option.activities.map((activity, i) => (
+          <motion.div 
+            key={i}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
+              isHovered ? "bg-muted/50" : "bg-transparent"
+            )}
             initial={false}
             animate={{ 
-              opacity: isHovered ? 1 : 0,
-              y: isHovered ? 0 : 8
+              x: isHovered ? 2 : 0,
+              transition: { delay: i * 0.02, duration: 0.15 }
             }}
-            transition={{ duration: 0.2 }}
-            className={cn(
-              "mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium",
-              isRelaxed 
-                ? "bg-amber-500 text-white"
-                : "bg-sky-500 text-white"
-            )}
           >
-            Choose this day
-            <ArrowRight className="w-3.5 h-3.5" />
+            {/* Time */}
+            <span className="text-[11px] text-muted-foreground font-mono w-14 shrink-0">
+              {activity.time}
+            </span>
+            
+            {/* Timeline dot */}
+            <div className="relative flex flex-col items-center">
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                isPacked ? "bg-sky-500" : "bg-amber-500"
+              )} />
+              {i < option.activities.length - 1 && (
+                <div className={cn(
+                  "w-px h-6 absolute top-2",
+                  isPacked ? "bg-sky-200" : "bg-amber-200"
+                )} />
+              )}
+            </div>
+            
+            {/* Activity name */}
+            <div className="flex-1 flex items-center gap-2 min-w-0">
+              <activity.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm text-foreground truncate">{activity.name}</span>
+            </div>
+            
+            {/* Badge */}
+            {activity.badge && (
+              <span className={cn(
+                "text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0",
+                activity.badge === "Voyance Find" && "bg-primary/10 text-primary",
+                activity.badge === "Local Pick" && "bg-emerald-500/10 text-emerald-700",
+                activity.badge === "Crowd Hack" && "bg-violet-500/10 text-violet-700",
+                activity.badge === "Pre-booked" && "bg-blue-500/10 text-blue-700"
+              )}>
+                {activity.badge}
+              </span>
+            )}
           </motion.div>
-        </div>
+        ))}
+      </div>
+
+      {/* Hover CTA */}
+      <div className={cn(
+        "px-5 py-4 border-t border-border bg-muted/30 flex items-center justify-center gap-2 transition-all duration-200",
+        isHovered ? "bg-primary text-primary-foreground" : ""
+      )}>
+        <span className={cn(
+          "text-sm font-medium",
+          isHovered ? "text-primary-foreground" : "text-muted-foreground"
+        )}>
+          {isHovered ? "This is my vibe" : "Choose this day"}
+        </span>
+        <ArrowRight className={cn(
+          "w-4 h-4 transition-transform",
+          isHovered ? "translate-x-1 text-primary-foreground" : "text-muted-foreground"
+        )} />
       </div>
     </motion.button>
   );
