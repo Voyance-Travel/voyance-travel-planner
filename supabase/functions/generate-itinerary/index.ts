@@ -241,6 +241,8 @@ interface GenerationContext {
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
   groupArchetypes?: TravelerArchetype[];
+  // Celebration day: User-specified day for birthday/anniversary celebration (1-indexed)
+  celebrationDay?: number;
 }
 
 interface StrictActivity {
@@ -3472,6 +3474,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     originCity: trip.origin_city,
     destinationTimezone: resolveTimezone(trip.destination) || undefined,
     jetLagSensitivity: trip.metadata?.jetLagSensitivity || 'moderate',
+    // Celebration day from user selection
+    celebrationDay: trip.metadata?.celebrationDay,
   };
 
   // Set daily budget based on tier
@@ -6269,7 +6273,8 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         travelCompanions,
         hasChildren,
         primaryArchetype: primaryArchetypeId,
-        secondaryArchetype: secondaryArchetypeId
+        secondaryArchetype: secondaryArchetypeId,
+        celebrationDay: context.celebrationDay,
       };
       const forcedSlots = deriveForcedSlots(traitScores, userInterests, 1, context.totalDays, slotContext);
       const forcedSlotsPrompt = buildForcedSlotsPrompt(forcedSlots);
@@ -6411,7 +6416,8 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       const tripTypePrompt = buildTripTypePromptSection(
         context.tripType,
         unifiedProfile.archetype,
-        context.totalDays
+        context.totalDays,
+        context.celebrationDay
       );
       if (tripTypePrompt) {
         console.log(`[Stage 1.995] ✓ Trip type "${context.tripType}" prompt built (${tripTypePrompt.length} chars)`);
@@ -7583,11 +7589,23 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       
       console.log(`[generate-day] Full guidance built: ${generationHierarchy.length} chars (dynamic=${!!destinationId})`);
       
+      // Fetch celebration day from trip metadata if available
+      let celebrationDay: number | undefined;
+      if (tripId) {
+        const { data: tripMeta } = await supabase
+          .from('trips')
+          .select('metadata')
+          .eq('id', tripId)
+          .single();
+        celebrationDay = tripMeta?.metadata?.celebrationDay;
+      }
+      
       // Build trip type prompt section (first-class input for celebrations/groups/purpose)
       const tripTypePrompt = buildTripTypePromptSection(
         tripType,
         primaryArchetype,
-        totalDays
+        totalDays,
+        celebrationDay
       );
       if (tripTypePrompt) {
         console.log(`[generate-day] Trip type "${tripType}" prompt built (${tripTypePrompt.length} chars)`);

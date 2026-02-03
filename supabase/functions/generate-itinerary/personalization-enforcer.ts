@@ -106,6 +106,7 @@ export interface SlotDerivationContext {
   hasChildren?: boolean;
   primaryArchetype?: string;
   secondaryArchetype?: string;
+  celebrationDay?: number; // User-specified day for birthday/anniversary celebration (1-indexed)
 }
 
 export interface ScheduleConstraints {
@@ -350,15 +351,19 @@ export function deriveForcedSlots(
   }
   
   // 5. BIRTHDAY/CELEBRATION: Special celebration moments
+  // ONLY add celebration slots on the user-specified celebrationDay (if provided)
   const isCelebration = context?.tripType === 'birthday' || 
     context?.tripType?.toLowerCase()?.includes('birthday') ||
     context?.tripType === 'anniversary' ||
     context?.tripType?.toLowerCase()?.includes('celebration') ||
     context?.tripType?.toLowerCase()?.includes('milestone');
   if (isCelebration) {
-    // Add a special celebration dinner (once per trip, towards the end for maximum anticipation)
-    const celebrationDinnerDay = totalDays >= 3 ? totalDays - 1 : Math.ceil(totalDays * 0.7);
-    if (dayNumber === celebrationDinnerDay || (totalDays === 1 && dayNumber === 1)) {
+    // Use user-specified celebration day if provided, otherwise fall back to smart default
+    const userSpecifiedDay = context?.celebrationDay;
+    const celebrationTargetDay = userSpecifiedDay ?? (totalDays >= 3 ? Math.ceil(totalDays / 2) : 1);
+    
+    // ONLY add celebration slots on the designated celebration day
+    if (dayNumber === celebrationTargetDay) {
       slots.push({
         type: 'celebration_dinner',
         traitSource: 'context',
@@ -366,10 +371,6 @@ export function deriveForcedSlots(
         description: 'BIRTHDAY/CELEBRATION: Special celebration dinner at a highly-rated restaurant with great ambiance',
         validationTags: ['celebration', 'special-occasion', 'fine-dining', 'birthday', 'anniversary', 'upscale', 'memorable', 'reservation-worthy', 'champagne']
       });
-    }
-    // Add a celebration activity/experience (mid-trip highlight)
-    const celebrationExperienceDay = Math.ceil(totalDays / 2);
-    if (dayNumber === celebrationExperienceDay && totalDays >= 2) {
       slots.push({
         type: 'celebration_experience',
         traitSource: 'context',
@@ -378,6 +379,7 @@ export function deriveForcedSlots(
         validationTags: ['special-experience', 'celebration', 'champagne', 'memorable', 'unique', 'treat-yourself', 'milestone', 'bucket-list']
       });
     }
+    // Non-celebration days should be NORMAL - no celebration language or activities
   }
   
   // ==========================================================================
