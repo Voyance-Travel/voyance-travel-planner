@@ -10,6 +10,7 @@ import { useImagePreloader } from "@/hooks/useImagePreloader";
 import { CookieConsent } from "@/components/common/CookieConsent";
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useJourneyStore } from '@/stores/journey-store';
+import { MonthlyCreditsChecker } from '@/components/common/MonthlyCreditsChecker';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -258,6 +259,7 @@ const App = () => (
               <CookieConsent />
               <ScrollToTop />
               <JourneyTracker />
+              <MonthlyCreditsChecker />
               <AnimatedRoutes />
             </BrowserRouter>
           </TooltipProvider>
