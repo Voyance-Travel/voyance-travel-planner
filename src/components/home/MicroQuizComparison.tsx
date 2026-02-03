@@ -194,17 +194,18 @@ function CinematicDayCard({ option, onClick, variant, isHovered, isOtherHovered,
   
   return (
     <motion.button
-      whileHover={{ y: -8 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ y: -4 }}
+      whileTap={{ scale: 0.99 }}
       onClick={onClick}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
       className={cn(
-        "group relative w-full text-left rounded-2xl overflow-hidden transition-all duration-500",
-        "shadow-lg hover:shadow-2xl",
-        isOtherHovered ? "opacity-60 scale-[0.98]" : "opacity-100"
+        "group relative w-full text-left rounded-xl overflow-hidden transition-all duration-500",
+        "border border-border/50 hover:border-primary/30",
+        "shadow-md hover:shadow-xl",
+        isOtherHovered ? "opacity-50 scale-[0.98]" : "opacity-100"
       )}
-      style={{ minHeight: '420px' }}
+      style={{ minHeight: '480px' }}
     >
       {/* Background Image */}
       <div className="absolute inset-0">
@@ -213,88 +214,86 @@ function CinematicDayCard({ option, onClick, variant, isHovered, isOtherHovered,
           alt={option.title}
           className={cn(
             "w-full h-full object-cover transition-transform duration-700",
-            isHovered ? "scale-110" : "scale-100"
+            isHovered ? "scale-105" : "scale-100"
           )}
         />
-        {/* Gradient Overlay */}
+        {/* Gradient Overlay - Stronger for readability */}
         <div className={cn(
-          "absolute inset-0 bg-gradient-to-t transition-opacity duration-500",
+          "absolute inset-0 transition-opacity duration-500",
           isRelaxed 
-            ? "from-amber-950/95 via-amber-900/70 to-amber-800/30"
-            : "from-slate-950/95 via-slate-900/70 to-slate-800/30"
-        )} />
-        {/* Extra darkening on hover for contrast */}
-        <div className={cn(
-          "absolute inset-0 bg-black/20 transition-opacity duration-300",
-          isHovered ? "opacity-0" : "opacity-100"
+            ? "bg-gradient-to-t from-stone-950 via-stone-900/90 to-stone-800/60"
+            : "bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-800/60"
         )} />
       </div>
 
       {/* Content */}
-      <div className="relative z-10 h-full flex flex-col p-6 md:p-8">
+      <div className="relative z-10 h-full flex flex-col p-5 md:p-6">
         {/* Header Badge */}
-        <div className="flex items-center justify-between mb-auto">
+        <div className="flex items-center mb-6">
           <div className={cn(
-            "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide uppercase backdrop-blur-sm",
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium tracking-wide backdrop-blur-md",
             isRelaxed 
-              ? "bg-amber-500/20 text-amber-200 border border-amber-400/30"
-              : "bg-sky-500/20 text-sky-200 border border-sky-400/30"
+              ? "bg-amber-500/25 text-amber-100 border border-amber-400/40"
+              : "bg-sky-500/25 text-sky-100 border border-sky-400/40"
           )}>
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3 h-3" />
             {option.time}
           </div>
         </div>
 
+        {/* Spacer */}
+        <div className="flex-1" />
+
         {/* Main Content - Bottom */}
-        <div className="mt-auto">
+        <div>
           {/* Title */}
-          <h4 className="text-2xl md:text-3xl font-serif text-white mb-1">
+          <h4 className="text-2xl md:text-3xl font-serif text-white mb-0.5 leading-tight">
             {option.title}
           </h4>
-          <p className="text-white/70 text-sm mb-6">{option.subtitle}</p>
+          <p className="text-white/60 text-sm mb-5">{option.subtitle}</p>
 
-          {/* Activity List */}
+          {/* Activity List - Cleaner layout */}
           <div className={cn(
-            "space-y-2.5 mb-6 transition-all duration-500",
-            isHovered ? "opacity-100 translate-y-0" : "opacity-80 translate-y-1"
+            "space-y-2 mb-5 transition-all duration-300",
+            isHovered ? "opacity-100" : "opacity-90"
           )}>
             {option.activities.map((activity, i) => (
               <motion.div 
                 key={i} 
-                className="flex items-center gap-3"
+                className="flex items-center gap-2.5"
                 initial={false}
                 animate={{ 
-                  x: isHovered ? 4 : 0,
-                  transition: { delay: i * 0.03 }
+                  x: isHovered ? 2 : 0,
+                  transition: { delay: i * 0.02, duration: 0.2 }
                 }}
               >
-                <span className="text-white/50 w-14 shrink-0 font-mono text-xs">
+                <span className="text-white/40 w-12 shrink-0 font-mono text-[10px] uppercase tracking-wide">
                   {activity.time}
                 </span>
                 <div className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center shrink-0",
-                  isRelaxed ? "bg-amber-500/30" : "bg-sky-500/30"
+                  "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
+                  isRelaxed ? "bg-amber-400/20" : "bg-sky-400/20"
                 )}>
                   <activity.icon className={cn(
-                    "h-3 w-3",
+                    "h-2.5 w-2.5",
                     isRelaxed ? "text-amber-300" : "text-sky-300"
                   )} />
                 </div>
-                <span className="text-white/90 text-sm">{activity.name}</span>
+                <span className="text-white/85 text-sm leading-snug">{activity.name}</span>
               </motion.div>
             ))}
           </div>
 
-          {/* Vibe Quote */}
+          {/* Vibe Quote - More editorial */}
           <div className={cn(
-            "flex items-center gap-3 pt-4 border-t transition-colors duration-300",
-            isRelaxed ? "border-amber-500/30" : "border-sky-500/30"
+            "flex items-start gap-2 pt-4 border-t",
+            isRelaxed ? "border-amber-400/20" : "border-sky-400/20"
           )}>
             <div className={cn(
-              "w-1 h-8 rounded-full",
+              "w-0.5 h-6 rounded-full mt-0.5 shrink-0",
               isRelaxed ? "bg-amber-400" : "bg-sky-400"
             )} />
-            <p className="text-lg font-serif italic text-white/90">
+            <p className="text-base font-serif italic text-white/80">
               "{option.vibe}"
             </p>
           </div>
@@ -304,12 +303,18 @@ function CinematicDayCard({ option, onClick, variant, isHovered, isOtherHovered,
             initial={false}
             animate={{ 
               opacity: isHovered ? 1 : 0,
-              y: isHovered ? 0 : 10
+              y: isHovered ? 0 : 8
             }}
-            className="mt-6 flex items-center gap-2 text-white font-medium"
+            transition={{ duration: 0.2 }}
+            className={cn(
+              "mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium",
+              isRelaxed 
+                ? "bg-amber-500 text-white"
+                : "bg-sky-500 text-white"
+            )}
           >
             Choose this day
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-3.5 h-3.5" />
           </motion.div>
         </div>
       </div>
