@@ -2303,6 +2303,36 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_usage: {
+        Row: {
+          action_type: string
+          count: number
+          created_at: string
+          id: string
+          updated_at: string
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          count?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+          usage_date?: string
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          count?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+          usage_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       day_balances: {
         Row: {
           active_tier: string | null
@@ -6544,6 +6574,7 @@ export type Database = {
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
       cleanup_expired_search_cache: { Args: never; Returns: number }
       cleanup_expired_venues: { Args: never; Returns: number }
+      cleanup_rate_limits: { Args: never; Returns: undefined }
       generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
@@ -6578,6 +6609,10 @@ export type Database = {
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
+      }
+      increment_daily_usage: {
+        Args: { p_action_type: string; p_usage_date: string; p_user_id: string }
+        Returns: number
       }
       insert_audit_log: {
         Args: {
