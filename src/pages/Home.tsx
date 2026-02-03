@@ -9,6 +9,7 @@ import TheInsightSection from '@/components/home/TheInsightSection';
 import SampleArchetype from '@/components/home/SampleArchetype';
 import CustomizationShowcase from '@/components/home/CustomizationShowcase';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
+import SocialProofSection from '@/components/home/SocialProofSection';
 import FinalCTA from '@/components/home/FinalCTA';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
@@ -107,6 +108,9 @@ export default function Home() {
         <ScrollTarget id="preview-section" className="scroll-mt-16">
           <ItineraryShowcase />
         </ScrollTarget>
+        
+        {/* Social Proof - Honest trust signals */}
+        <SocialProofSection />
         
         {/* Final CTA - Still scrolling? */}
         <ScrollTarget id="cta-section" className="scroll-mt-16">
