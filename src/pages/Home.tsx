@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
@@ -15,13 +15,9 @@ import FreeTierSection from '@/components/home/FreeTierSection';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 import { scrollToTop } from '@/utils/scrollUtils';
-import { DemoFeatureShowcase } from '@/components/demo/DemoFeatureShowcase';
-import { DemoPlayground } from '@/components/demo/DemoPlayground';
 
 export default function Home() {
   const demoRef = useRef<HTMLDivElement>(null);
-  const playgroundRef = useRef<HTMLDivElement>(null);
-  const [showTour, setShowTour] = useState(false);
 
   useEffect(() => {
     scrollToTop();
@@ -34,15 +30,6 @@ export default function Home() {
 
   const handleScrollToDemo = () => {
     demoRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleStartTour = () => {
-    setShowTour(true);
-  };
-
-  const handleTourComplete = () => {
-    setShowTour(false);
-    playgroundRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
@@ -77,19 +64,9 @@ export default function Home() {
         {/* Featured Journeys - Sample itineraries */}
         <ScrollTarget id="demo-section" className="scroll-mt-16">
           <div ref={demoRef}>
-            <ItineraryShowcase onStartTour={handleStartTour} />
+            <ItineraryShowcase />
           </div>
         </ScrollTarget>
-        
-        {/* Feature Tour - Learn how it works */}
-        {showTour && (
-          <DemoFeatureShowcase onComplete={handleTourComplete} />
-        )}
-        
-        {/* Interactive Playground - Play with a real itinerary */}
-        <div ref={playgroundRef}>
-          <DemoPlayground />
-        </div>
         
         {/* Social Proof - Honest trust signals */}
         <SocialProofSection />
