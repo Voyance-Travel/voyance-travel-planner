@@ -11,15 +11,9 @@ import {
   Mail, MessageCircle, FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger,
-  DropdownMenuSeparator
-} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { TripShareModal } from '@/components/sharing/TripShareModal';
 
 interface ItineraryUtilityBarProps {
   tripId: string;
@@ -30,6 +24,7 @@ interface ItineraryUtilityBarProps {
   isSaving?: boolean;
   shareUrl?: string;
   className?: string;
+  onCreateShareLink?: () => Promise<string>;
 }
 
 export function ItineraryUtilityBar({
@@ -41,44 +36,9 @@ export function ItineraryUtilityBar({
   isSaving,
   shareUrl,
   className,
+  onCreateShareLink,
 }: ItineraryUtilityBarProps) {
-  const [copied, setCopied] = useState(false);
-
-  const effectiveShareUrl = shareUrl || `${window.location.origin}/trip/${tripId}`;
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(effectiveShareUrl);
-      setCopied(true);
-      toast.success('Link copied to clipboard');
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error('Failed to copy link');
-    }
-  };
-
-  const handleShare = async (method: 'native' | 'email' | 'whatsapp') => {
-    const shareData = {
-      title: tripName,
-      text: `Check out my ${destination} itinerary!`,
-      url: effectiveShareUrl,
-    };
-
-    if (method === 'native' && navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (err) {
-        // User cancelled or error
-      }
-    } else if (method === 'email') {
-      const subject = encodeURIComponent(`My ${destination} Itinerary`);
-      const body = encodeURIComponent(`Check out my trip to ${destination}!\n\n${effectiveShareUrl}`);
-      window.open(`mailto:?subject=${subject}&body=${body}`);
-    } else if (method === 'whatsapp') {
-      const text = encodeURIComponent(`Check out my ${destination} itinerary! ${effectiveShareUrl}`);
-      window.open(`https://wa.me/?text=${text}`);
-    }
-  };
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const handlePrint = () => {
     window.print();
@@ -95,67 +55,60 @@ export function ItineraryUtilityBar({
   };
 
   return (
-    <div className={cn(
-      'flex items-center justify-center gap-2 py-3 px-4 bg-muted/30 rounded-lg border border-border/50',
-      className
-    )}>
-      {/* Share */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2">
-            <Share2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Share</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="center" className="w-48">
-          <DropdownMenuItem onClick={handleCopyLink} className="gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-            Copy link
-          </DropdownMenuItem>
-          {navigator.share && (
-            <DropdownMenuItem onClick={() => handleShare('native')} className="gap-2">
-              <Share2 className="h-4 w-4" />
-              Share via...
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => handleShare('email')} className="gap-2">
-            <Mail className="h-4 w-4" />
-            Email
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleShare('whatsapp')} className="gap-2">
-            <MessageCircle className="h-4 w-4" />
-            WhatsApp
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Save */}
-      {onSave && (
+    <>
+      <div className={cn(
+        'flex items-center justify-center gap-2 py-3 px-4 bg-muted/30 rounded-lg border border-border/50',
+        className
+      )}>
+        {/* Share - Primary CTA */}
         <Button 
-          variant="ghost" 
+          variant="outline" 
           size="sm" 
-          className="gap-2" 
-          onClick={onSave}
-          disabled={isSaving}
+          className="gap-2 font-medium border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50"
+          onClick={() => setShowShareModal(true)}
         >
-          <Save className="h-4 w-4" />
-          <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Save'}</span>
+          <Share2 className="h-4 w-4" />
+          <span>Share</span>
         </Button>
-      )}
 
-      {/* Export PDF */}
-      <Button variant="ghost" size="sm" className="gap-2" onClick={handleExportPDF}>
-        <FileText className="h-4 w-4" />
-        <span className="hidden sm:inline">Export PDF</span>
-      </Button>
+        {/* Save */}
+        {onSave && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="gap-2" 
+            onClick={onSave}
+            disabled={isSaving}
+          >
+            <Save className="h-4 w-4" />
+            <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Save'}</span>
+          </Button>
+        )}
 
-      {/* Print */}
-      <Button variant="ghost" size="sm" className="gap-2" onClick={handlePrint}>
-        <Printer className="h-4 w-4" />
-        <span className="hidden sm:inline">Print</span>
-      </Button>
-    </div>
+        {/* Export PDF */}
+        <Button variant="ghost" size="sm" className="gap-2" onClick={handleExportPDF}>
+          <FileText className="h-4 w-4" />
+          <span className="hidden sm:inline">Export PDF</span>
+        </Button>
+
+        {/* Print */}
+        <Button variant="ghost" size="sm" className="gap-2" onClick={handlePrint}>
+          <Printer className="h-4 w-4" />
+          <span className="hidden sm:inline">Print</span>
+        </Button>
+      </div>
+
+      {/* Share Modal */}
+      <TripShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        tripId={tripId}
+        tripName={tripName}
+        destination={destination}
+        shareLink={shareUrl}
+        onCreateShareLink={onCreateShareLink}
+      />
+    </>
   );
 }
 

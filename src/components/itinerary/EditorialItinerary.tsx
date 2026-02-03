@@ -76,6 +76,8 @@ import { ItineraryUtilityBar } from './ItineraryUtilityBar';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { calculateItineraryValueStats, getDestinationSkippedItems } from '@/utils/intelligenceAnalytics';
 import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
+import { VoyanceInsight } from './VoyanceInsight';
+import { TransitBadge } from './TransitBadge';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -5055,72 +5057,18 @@ function ActivityRow({
                 </>
               );
             })()}
-            {/* Tips */}
-            {/* Only show tips for venue-type activities, NOT for free time/downtime/transport */}
+            {/* Voyance Insight - Local knowledge for this activity */}
             {activity.tips && !isDowntime && !isTransport && !isCheckIn && (
-              <div className="flex items-start gap-2 mt-2 p-2 bg-primary/5 rounded-md text-xs">
-                <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                <span className="text-muted-foreground">{activity.tips}</span>
-              </div>
+              <VoyanceInsight tip={activity.tips} />
             )}
-            {/* Transportation to next */}
+            {/* Transportation to next - Enhanced with distance/time */}
             {activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
-              <div className="flex flex-col gap-1 mt-2 p-2 bg-secondary/30 rounded border-l-2 border-primary/30">
-                {/* Compact summary - always visible */}
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-2 text-xs text-muted-foreground w-full text-left"
-                >
-                  {activity.transportation.method === 'walk' && <MapPin className="h-3 w-3" />}
-                  {activity.transportation.method === 'metro' && <Train className="h-3 w-3" />}
-                  {(activity.transportation.method === 'uber' || activity.transportation.method === 'driving') && <Car className="h-3 w-3" />}
-                  {!['walk', 'metro', 'uber', 'driving'].includes(activity.transportation.method) && <Car className="h-3 w-3" />}
-                  <span className="capitalize font-medium">{activity.transportation.method}</span>
-                  {activity.transportation.duration && (
-                    <span>• {activity.transportation.duration}</span>
-                  )}
-                  {activity.transportation.distance && (
-                    <span>• {activity.transportation.distance}</span>
-                  )}
-                  {activity.transportation.estimatedCost?.amount && activity.transportation.estimatedCost.amount > 0 && (
-                    <span>• ~{formatCurrency(displayCost(activity.transportation.estimatedCost.amount), tripCurrency)}</span>
-                  )}
-                </button>
-                
-                {/* Expanded details - show when toggle is on */}
-                {showTransportDetails && (
-                  <div className="mt-2 pl-5 space-y-1.5 border-t border-border/50 pt-2">
-                    {activity.transportation.instructions ? (
-                      <>
-                        {/* Parse instructions by → separator for step-by-step format */}
-                        {activity.transportation.instructions.includes('→') ? (
-                          activity.transportation.instructions.split('→').map((step, idx) => {
-                            const trimmedStep = step.trim();
-                            if (!trimmedStep) return null;
-                            return (
-                              <div key={idx} className="flex items-start gap-2 text-xs">
-                                <div className="flex items-center justify-center w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-medium shrink-0 mt-0.5">
-                                  {idx + 1}
-                                </div>
-                                <span className="text-muted-foreground">{trimmedStep}</span>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <p className="text-xs text-muted-foreground/80">
-                            {activity.transportation.instructions}
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground/60 italic">
-                        No detailed route instructions available. Use the summary above.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+              <TransitBadge 
+                transportation={activity.transportation}
+                tripCurrency={tripCurrency}
+                displayCost={displayCost}
+                showDetails={showTransportDetails}
+              />
             )}
           </div>
 
@@ -5176,93 +5124,100 @@ function ActivityRow({
               compact
             />
             {isEditable && (
-              <div className="flex items-center gap-1">
-                {/* Lock button - always visible */}
-                <button
-                  onClick={() => onLock(dayIndex, activity.id)}
-                  className={cn(
-                    "p-1.5 rounded transition-colors",
-                    activity.isLocked
-                      ? "bg-primary/10 text-primary"
-                      : "hover:bg-secondary text-muted-foreground"
+              <div className="flex flex-col gap-2">
+                {/* Primary Actions Row - Find Alternative ALWAYS visible */}
+                <div className="flex items-center gap-1.5">
+                  {!activity.isLocked && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onSwap?.(dayIndex, activity)}
+                      className="gap-1.5 h-7 text-xs font-medium hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                      data-tour="find-alternative"
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" />
+                      Find Alternative
+                    </Button>
                   )}
-                  title={activity.isLocked ? "Unlock to edit" : "Lock"}
-                  data-tour="lock-button"
-                >
-                  {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                </button>
-                
-                {/* More actions - only visible when unlocked */}
-                {!activity.isLocked && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
-                        aria-label="More actions"
-                        data-tour="more-actions"
-                      >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
-                      <DropdownMenuItem
-                        onClick={() => onMove(dayIndex, activity.id, 'up')}
-                        disabled={activityIndex === 0}
-                        className={cn("cursor-pointer gap-2", activityIndex === 0 && "opacity-50")}
-                      >
-                        <MoveUp className="h-4 w-4" />
-                        Move up
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => onMove(dayIndex, activity.id, 'down')}
-                        disabled={activityIndex === totalActivities - 1}
-                        className={cn("cursor-pointer gap-2", activityIndex === totalActivities - 1 && "opacity-50")}
-                      >
-                        <MoveDown className="h-4 w-4" />
-                        Move down
-                      </DropdownMenuItem>
-                      {totalDays > 1 && onMoveToDay && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuSub>
-                            <DropdownMenuSubTrigger className="gap-2">
-                              <Calendar className="h-4 w-4" />
-                              Move to day
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent className="bg-background border shadow-lg">
-                              {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
-                                <DropdownMenuItem
-                                  key={targetDay}
-                                  onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
-                                  className="cursor-pointer"
-                                >
-                                  Day {targetDay + 1}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuSubContent>
-                          </DropdownMenuSub>
-                        </>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => onSwap?.(dayIndex, activity)}
-                        className="cursor-pointer gap-2"
-                        data-tour="find-alternative"
-                      >
-                        <ArrowRightLeft className="h-4 w-4" />
-                        Find alternative
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => onRemove(dayIndex, activity.id)}
-                        className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Remove
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                  
+                  {/* Lock button */}
+                  <button
+                    onClick={() => onLock(dayIndex, activity.id)}
+                    className={cn(
+                      "p-1.5 rounded transition-colors",
+                      activity.isLocked
+                        ? "bg-primary/10 text-primary"
+                        : "hover:bg-secondary text-muted-foreground"
+                    )}
+                    title={activity.isLocked ? "Unlock to edit" : "Lock"}
+                    data-tour="lock-button"
+                  >
+                    {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                  </button>
+                  
+                  {/* More actions overflow - Move, Remove, Save */}
+                  {!activity.isLocked && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                          aria-label="More actions"
+                          data-tour="more-actions"
+                        >
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                        <DropdownMenuItem
+                          onClick={() => onMove(dayIndex, activity.id, 'up')}
+                          disabled={activityIndex === 0}
+                          className={cn("cursor-pointer gap-2", activityIndex === 0 && "opacity-50")}
+                        >
+                          <MoveUp className="h-4 w-4" />
+                          Move up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onMove(dayIndex, activity.id, 'down')}
+                          disabled={activityIndex === totalActivities - 1}
+                          className={cn("cursor-pointer gap-2", activityIndex === totalActivities - 1 && "opacity-50")}
+                        >
+                          <MoveDown className="h-4 w-4" />
+                          Move down
+                        </DropdownMenuItem>
+                        {totalDays > 1 && onMoveToDay && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger className="gap-2">
+                                <Calendar className="h-4 w-4" />
+                                Move to day
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent className="bg-background border shadow-lg">
+                                {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
+                                  <DropdownMenuItem
+                                    key={targetDay}
+                                    onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
+                                    className="cursor-pointer"
+                                  >
+                                    Day {targetDay + 1}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                          </>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => onRemove(dayIndex, activity.id)}
+                          className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
               </div>
             )}
           </div>
