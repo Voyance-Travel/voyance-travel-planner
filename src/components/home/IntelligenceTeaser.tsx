@@ -53,7 +53,7 @@ export function IntelligenceTeaser({
         transition={{ delay: 0.1 }}
         className="text-white/80 mb-8"
       >
-        40+ hours of research. 2 minutes to access.
+        40+ hours of research, curated for you.
       </motion.p>
 
       {/* Intelligence badges */}
