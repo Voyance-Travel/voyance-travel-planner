@@ -224,15 +224,6 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
 
 export default function ItineraryShowcase() {
   const [activeDestination, setActiveDestination] = useState('Tokyo');
-  
-  const filteredItineraries = SAMPLE_ITINERARIES.filter(
-    it => it.destination === activeDestination
-  );
-  
-  // Show all if only one per destination, otherwise show filtered
-  const displayItineraries = filteredItineraries.length > 0 
-    ? filteredItineraries 
-    : SAMPLE_ITINERARIES.slice(0, 2);
 
   return (
     <section className="py-16 sm:py-24 md:py-32 bg-muted/30 relative overflow-hidden">
@@ -253,12 +244,80 @@ export default function ItineraryShowcase() {
           </div>
           
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-normal text-foreground mb-4">
-            Curated <em className="font-normal">for you</em>
+            See what we <em className="font-normal">build</em>
           </h2>
           
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Real sample itineraries with intelligence metrics computed from our recommendation engine.
+            Real sample itineraries with intelligence metrics. Preview a full trip or build something like it.
           </p>
+        </motion.div>
+
+        {/* Embedded Demo Preview */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mb-12"
+        >
+          <div className="relative bg-card border border-border rounded-2xl overflow-hidden shadow-xl">
+            {/* Browser-like header */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b border-border">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-400" />
+                <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                <div className="w-3 h-3 rounded-full bg-green-400" />
+              </div>
+              <div className="flex-1 mx-4">
+                <div className="bg-background rounded-md px-3 py-1.5 text-xs text-muted-foreground text-center max-w-md mx-auto">
+                  voyance.travel/itinerary/tokyo-slow-traveler
+                </div>
+              </div>
+            </div>
+            
+            {/* Demo iframe placeholder - shows a sample itinerary */}
+            <div className="aspect-[16/9] bg-gradient-to-br from-muted to-muted/50 relative">
+              <img
+                src="https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=1200"
+                alt="Tokyo sample itinerary preview"
+                className="w-full h-full object-cover opacity-30"
+              />
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
+                <div className="bg-card/95 backdrop-blur-sm rounded-2xl p-8 max-w-lg border border-border shadow-lg">
+                  <h3 className="text-2xl font-serif text-foreground mb-3">
+                    7 Days in Tokyo
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Built for: The Slow Traveler
+                  </p>
+                  <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground mb-6">
+                    <span className="flex items-center gap-1">
+                      <Gem className="w-3.5 h-3.5 text-primary" /> 3 Finds
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> 2 Timing Hacks
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" /> 3 Traps Skipped
+                    </span>
+                  </div>
+                  <div className="flex gap-3 justify-center">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`${ROUTES.ITINERARY.SAMPLE}?id=tokyo-slow`}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        View Full Trip
+                      </Link>
+                    </Button>
+                    <Button size="sm" asChild>
+                      <Link to={`${ROUTES.START}?destination=Tokyo`}>
+                        Build Like This
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </motion.div>
 
         {/* Destination Tabs */}
@@ -285,7 +344,6 @@ export default function ItineraryShowcase() {
               <ItineraryCard key={itinerary.id} itinerary={itinerary} />
             ))
           ) : (
-            // If no match, show the selected destination's card
             <ItineraryCard itinerary={SAMPLE_ITINERARIES.find(it => it.destination === activeDestination) || SAMPLE_ITINERARIES[0]} />
           )}
         </div>
