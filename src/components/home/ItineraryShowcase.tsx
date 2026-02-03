@@ -222,32 +222,26 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
   );
 }
 
-interface ItineraryShowcaseProps {
-  onStartTour?: () => void;
-}
-
-export default function ItineraryShowcase({ onStartTour }: ItineraryShowcaseProps) {
+export default function ItineraryShowcase() {
   const [activeDestination, setActiveDestination] = useState('Tokyo');
 
   return (
-    <section className="py-16 sm:py-24 md:py-32 bg-muted/30 relative overflow-hidden">
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 md:px-16">
-        {/* Header */}
-        <motion.div
+    <section className="py-24 px-6 bg-muted/30">
+      <div className="max-w-7xl mx-auto">
+        {/* Section Header */}
+        <motion.div 
+          className="text-center mb-16"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-10 md:mb-12"
+          transition={{ duration: 0.6 }}
         >
-          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4">
-            <div className="w-6 sm:w-8 h-px bg-primary" />
-            <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
-              Featured Journeys
-            </span>
-            <div className="w-6 sm:w-8 h-px bg-primary" />
-          </div>
+          <Badge variant="secondary" className="mb-4">
+            <Eye className="w-3 h-3 mr-1" />
+            Sample Itineraries
+          </Badge>
           
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-normal text-foreground mb-4">
+          <h2 className="text-3xl md:text-4xl font-serif font-semibold text-foreground mb-4">
             See what we <em className="font-normal">build</em>
           </h2>
           
@@ -255,17 +249,13 @@ export default function ItineraryShowcase({ onStartTour }: ItineraryShowcaseProp
             Real sample itineraries with intelligence metrics. Preview a full trip or build something like it.
           </p>
 
-          {/* Tour CTA */}
-          {onStartTour && (
-            <Button 
-              variant="outline" 
-              onClick={onStartTour}
-              className="gap-2"
-            >
+          {/* Link to Demo page */}
+          <Link to="/demo">
+            <Button variant="outline" className="gap-2">
               <Play className="w-4 h-4" />
-              Take a guided tour of how it works
+              See how it works
             </Button>
-          )}
+          </Link>
         </motion.div>
 
         {/* Embedded Demo Preview */}
