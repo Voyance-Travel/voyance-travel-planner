@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
-  Sparkles, ChevronDown, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2, Plane, Star, Wifi, Coffee
+  Sparkles, ChevronDown, ChevronUp, PartyPopper, ArrowRight, Check, Clock,
+  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine
 } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
@@ -13,17 +13,22 @@ import { DraftLimitBanner, DraftLimitBlocker } from '@/components/common/DraftLi
 import { useDraftLimitCheck } from '@/hooks/useDraftLimitCheck';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-// Import destination autocomplete
+// Import destination autocomplete and airport autocomplete
 import { DestinationAutocomplete } from '@/components/planner/shared/DestinationAutocomplete';
+import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
+import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
+import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 
 // Types
 interface LocationSelection {
@@ -33,14 +38,12 @@ interface LocationSelection {
   isMetroArea?: boolean;
 }
 
-interface HotelOption {
-  id: string;
+interface ManualHotelEntry {
   name: string;
-  neighborhood: string;
-  stars: number;
-  pricePerNight: number;
-  amenities: string[];
-  imageUrl: string;
+  address: string;
+  neighborhood?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
 }
 
 // Trip occasions
@@ -61,35 +64,12 @@ const tripOccasions = [
 
 const CELEBRATION_TRIP_TYPES = ['birthday', 'anniversary', 'honeymoon'] as const;
 
-// Mock hotel options for quick selection
-const mockHotels: HotelOption[] = [
-  {
-    id: 'hotel-1',
-    name: 'The Grand Heritage',
-    neighborhood: 'Historic Center',
-    stars: 5,
-    pricePerNight: 320,
-    amenities: ['Free WiFi', 'Breakfast included', 'Pool', 'Spa'],
-    imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&q=80',
-  },
-  {
-    id: 'hotel-2',
-    name: 'Boutique Maison',
-    neighborhood: 'Arts District',
-    stars: 4,
-    pricePerNight: 185,
-    amenities: ['Free WiFi', 'Breakfast included', 'Gym'],
-    imageUrl: 'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=400&q=80',
-  },
-  {
-    id: 'hotel-3',
-    name: 'Urban Loft Hotel',
-    neighborhood: 'Downtown',
-    stars: 3,
-    pricePerNight: 120,
-    amenities: ['Free WiFi', 'Restaurant'],
-    imageUrl: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=400&q=80',
-  },
+// Budget presets
+const budgetPresets = [
+  { label: 'Budget', value: 500, description: 'Under $500' },
+  { label: 'Moderate', value: 1000, description: '$500–$1.5k' },
+  { label: 'Premium', value: 2500, description: '$1.5k–$3.5k' },
+  { label: 'Luxury', value: 5000, description: '$3.5k+' },
 ];
 
 // Sample itineraries for sidebar motivation
@@ -115,14 +95,6 @@ const sampleItineraries = [
     tags: ['Wellness', 'Adventure'],
     image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400',
   },
-];
-
-// Budget presets
-const budgetPresets = [
-  { label: 'Budget', value: 500, description: 'Under $500' },
-  { label: 'Moderate', value: 1000, description: '$500–$1.5k' },
-  { label: 'Premium', value: 2500, description: '$1.5k–$3.5k' },
-  { label: 'Luxury', value: 5000, description: '$3.5k+' },
 ];
 
 // Progress Step Indicator
@@ -570,16 +542,22 @@ function TripDetailsStep({
   );
 }
 
-// Step 2: Flight (optional) & Hotel Selection
+// Step 2: Flight (optional) & Hotel Selection with full capabilities
 function FlightHotelStep({
   destination,
   startDate,
   endDate,
   travelers,
-  selectedHotel,
-  setSelectedHotel,
-  flightArrivalTime,
-  setFlightArrivalTime,
+  outboundFlight,
+  setOutboundFlight,
+  returnFlight,
+  setReturnFlight,
+  showReturnFlight,
+  setShowReturnFlight,
+  hotelChoice,
+  setHotelChoice,
+  manualHotel,
+  setManualHotel,
   onSubmit,
   onBack,
   isSubmitting,
@@ -588,18 +566,37 @@ function FlightHotelStep({
   startDate: string;
   endDate: string;
   travelers: number;
-  selectedHotel: HotelOption | null;
-  setSelectedHotel: (h: HotelOption | null) => void;
-  flightArrivalTime: string;
-  setFlightArrivalTime: (t: string) => void;
+  outboundFlight: ManualFlightEntry;
+  setOutboundFlight: (f: ManualFlightEntry) => void;
+  returnFlight: ManualFlightEntry;
+  setReturnFlight: (f: ManualFlightEntry) => void;
+  showReturnFlight: boolean;
+  setShowReturnFlight: (s: boolean) => void;
+  hotelChoice: 'skip' | 'own' | 'search';
+  setHotelChoice: (c: 'skip' | 'own' | 'search') => void;
+  manualHotel: ManualHotelEntry;
+  setManualHotel: (h: ManualHotelEntry) => void;
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
 }) {
   const navigate = useNavigate();
-  const nights = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
+  const [showFlightSection, setShowFlightSection] = useState(false);
+  const [showFlightDetails, setShowFlightDetails] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showHotelModal, setShowHotelModal] = useState(false);
 
-  const handleBrowseMoreHotels = () => {
+  const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
+    setOutboundFlight(outbound);
+    if (returnFlightData) {
+      setReturnFlight(returnFlightData);
+      setShowReturnFlight(true);
+    }
+    setShowFlightSection(true);
+    setShowFlightDetails(true);
+  };
+
+  const handleSearchHotels = () => {
     const params = new URLSearchParams({
       destination,
       checkIn: startDate,
@@ -608,6 +605,8 @@ function FlightHotelStep({
     });
     navigate(`/planner/hotel?${params.toString()}`);
   };
+
+  const hasFlightData = outboundFlight.arrivalTime || outboundFlight.departureAirport;
 
   return (
     <motion.div
@@ -621,122 +620,314 @@ function FlightHotelStep({
           Flight & Hotel
         </h2>
         <p className="text-muted-foreground">
-          Add your travel details for a complete itinerary
+          Add your travel details for a complete itinerary (both optional)
         </p>
       </div>
 
       <div className="max-w-xl mx-auto space-y-8">
-        {/* Flight Section - Optional */}
-        <div className="space-y-3">
+        {/* Flight Section */}
+        <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Plane className="h-4 w-4 text-muted-foreground" />
             <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-              Flight arrival time
+              Flight Details
               <span className="text-muted-foreground/60 ml-1">(optional)</span>
             </label>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Helps us plan Day 1 activities around your arrival
-          </p>
-          <Input
-            type="time"
-            value={flightArrivalTime}
-            onChange={(e) => setFlightArrivalTime(e.target.value)}
-            placeholder="e.g. 14:00"
-            className="h-12 max-w-[200px]"
-          />
+
+          {!showFlightSection && !hasFlightData ? (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowImportModal(true)}
+                className="flex-1"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Paste from confirmation
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowFlightSection(true)}
+                className="flex-1"
+              >
+                <PenLine className="h-4 w-4 mr-2" />
+                Enter manually
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4 p-4 rounded-xl border border-border bg-card">
+              {/* Import button at top */}
+              <div className="flex justify-center border-b border-border pb-3">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-xs"
+                  onClick={() => setShowImportModal(true)}
+                >
+                  <Upload className="h-3 w-3 mr-1.5" />
+                  Paste from airline confirmation
+                </Button>
+              </div>
+
+              {/* Outbound Flight */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <ArrowRight className="h-4 w-4" />
+                  Outbound Flight
+                </h4>
+                
+                {/* Route */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">From</Label>
+                    <AirportAutocomplete
+                      value={outboundFlight.departureAirport}
+                      onChange={(code) => setOutboundFlight({ ...outboundFlight, departureAirport: code })}
+                      placeholder="ATL"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">To</Label>
+                    <AirportAutocomplete
+                      value={outboundFlight.arrivalAirport}
+                      onChange={(code) => setOutboundFlight({ ...outboundFlight, arrivalAirport: code })}
+                      placeholder="FCO"
+                    />
+                  </div>
+                </div>
+
+                {/* Date & Times */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Date</Label>
+                    <Input
+                      type="date"
+                      value={outboundFlight.departureDate}
+                      onChange={(e) => setOutboundFlight({ ...outboundFlight, departureDate: e.target.value })}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Departs</Label>
+                    <Input
+                      type="time"
+                      value={outboundFlight.departureTime}
+                      onChange={(e) => setOutboundFlight({ ...outboundFlight, departureTime: e.target.value })}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Arrives *</Label>
+                    <Input
+                      type="time"
+                      value={outboundFlight.arrivalTime}
+                      onChange={(e) => setOutboundFlight({ ...outboundFlight, arrivalTime: e.target.value })}
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* More details toggle */}
+                <Collapsible open={showFlightDetails} onOpenChange={setShowFlightDetails}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground w-full justify-start px-0">
+                      {showFlightDetails ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                      {showFlightDetails ? 'Less details' : 'Add airline & flight number'}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-3 pt-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Airline</Label>
+                        <Input
+                          placeholder="e.g. Delta"
+                          value={outboundFlight.airline}
+                          onChange={(e) => setOutboundFlight({ ...outboundFlight, airline: e.target.value })}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Flight #</Label>
+                        <Input
+                          placeholder="e.g. DL123"
+                          value={outboundFlight.flightNumber}
+                          onChange={(e) => setOutboundFlight({ ...outboundFlight, flightNumber: e.target.value })}
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+
+              {/* Return Flight Toggle */}
+              <Collapsible open={showReturnFlight} onOpenChange={setShowReturnFlight}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground w-full justify-start">
+                    {showReturnFlight ? <ChevronUp className="h-4 w-4 mr-2" /> : <ChevronDown className="h-4 w-4 mr-2" />}
+                    <ArrowRight className="h-4 w-4 rotate-180 mr-2" />
+                    {showReturnFlight ? 'Return Flight' : 'Add return flight (optional)'}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-3 border-t border-border mt-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">From</Label>
+                      <AirportAutocomplete
+                        value={returnFlight.departureAirport}
+                        onChange={(code) => setReturnFlight({ ...returnFlight, departureAirport: code })}
+                        placeholder="FCO"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">To</Label>
+                      <AirportAutocomplete
+                        value={returnFlight.arrivalAirport}
+                        onChange={(code) => setReturnFlight({ ...returnFlight, arrivalAirport: code })}
+                        placeholder="ATL"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Date</Label>
+                      <Input
+                        type="date"
+                        value={returnFlight.departureDate}
+                        onChange={(e) => setReturnFlight({ ...returnFlight, departureDate: e.target.value })}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Departs *</Label>
+                      <Input
+                        type="time"
+                        value={returnFlight.departureTime}
+                        onChange={(e) => setReturnFlight({ ...returnFlight, departureTime: e.target.value })}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Arrives</Label>
+                      <Input
+                        type="time"
+                        value={returnFlight.arrivalTime}
+                        onChange={(e) => setReturnFlight({ ...returnFlight, arrivalTime: e.target.value })}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* Clear flight button */}
+              <div className="flex justify-end pt-2 border-t border-border">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground"
+                  onClick={() => {
+                    setOutboundFlight({
+                      airline: '',
+                      flightNumber: '',
+                      departureAirport: '',
+                      arrivalAirport: '',
+                      departureTime: '',
+                      arrivalTime: '',
+                      departureDate: startDate,
+                    });
+                    setShowFlightSection(false);
+                  }}
+                >
+                  Clear flight details
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Hotel Section - 3 Options */}
+        {/* Hotel Section */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-              <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                Where will you stay?
-              </label>
-            </div>
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+              Where will you stay?
+            </label>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {/* I have my own */}
             <button
               type="button"
-              onClick={handleBrowseMoreHotels}
-              className="text-xs text-primary hover:underline"
+              onClick={() => {
+                setHotelChoice('own');
+                setShowHotelModal(true);
+              }}
+              className={cn(
+                'p-4 rounded-xl border-2 text-center transition-all',
+                hotelChoice === 'own'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/40'
+              )}
             >
-              Browse more hotels →
+              <PenLine className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
+              <div className="text-sm font-medium text-foreground">I have my own</div>
+              <div className="text-[10px] text-muted-foreground mt-1">Enter details</div>
+            </button>
+
+            {/* Search */}
+            <button
+              type="button"
+              onClick={() => {
+                setHotelChoice('search');
+                handleSearchHotels();
+              }}
+              className={cn(
+                'p-4 rounded-xl border-2 text-center transition-all',
+                hotelChoice === 'search'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/40'
+              )}
+            >
+              <Search className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
+              <div className="text-sm font-medium text-foreground">Search</div>
+              <div className="text-[10px] text-muted-foreground mt-1">Browse hotels</div>
+            </button>
+
+            {/* Skip */}
+            <button
+              type="button"
+              onClick={() => setHotelChoice('skip')}
+              className={cn(
+                'p-4 rounded-xl border-2 text-center transition-all',
+                hotelChoice === 'skip'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/40'
+              )}
+            >
+              <ArrowRight className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
+              <div className="text-sm font-medium text-foreground">Skip</div>
+              <div className="text-[10px] text-muted-foreground mt-1">Add later</div>
             </button>
           </div>
 
-          <div className="grid gap-3">
-            {mockHotels.map((hotel) => (
-              <button
-                key={hotel.id}
-                type="button"
-                onClick={() => setSelectedHotel(selectedHotel?.id === hotel.id ? null : hotel)}
-                className={cn(
-                  'w-full flex gap-4 p-3 rounded-xl border-2 text-left transition-all',
-                  selectedHotel?.id === hotel.id
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/40'
-                )}
-              >
-                <img
-                  src={hotel.imageUrl}
-                  alt={hotel.name}
-                  className="w-20 h-20 rounded-lg object-cover shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="font-medium text-foreground text-sm">{hotel.name}</h4>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        {Array.from({ length: hotel.stars }).map((_, i) => (
-                          <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-                        ))}
-                        <span className="text-xs text-muted-foreground ml-1">{hotel.neighborhood}</span>
-                      </div>
-                    </div>
-                    <div className={cn(
-                      'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0',
-                      selectedHotel?.id === hotel.id
-                        ? 'border-primary bg-primary'
-                        : 'border-muted-foreground/30'
-                    )}>
-                      {selectedHotel?.id === hotel.id && <Check className="w-3 h-3 text-primary-foreground" />}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    {hotel.amenities.slice(0, 2).map((amenity) => (
-                      <span key={amenity} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        {amenity === 'Free WiFi' && <Wifi className="h-3 w-3" />}
-                        {amenity === 'Breakfast included' && <Coffee className="h-3 w-3" />}
-                        {amenity}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-2">
-                    <span className="text-sm font-semibold text-foreground">${hotel.pricePerNight}</span>
-                    <span className="text-xs text-muted-foreground">/night</span>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      · ${hotel.pricePerNight * nights} total
-                    </span>
-                  </div>
+          {/* Show entered hotel info */}
+          {hotelChoice === 'own' && manualHotel.name && (
+            <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Hotel className="h-5 w-5 text-primary" />
+                <div>
+                  <div className="font-medium text-sm">{manualHotel.name}</div>
+                  {manualHotel.address && (
+                    <div className="text-xs text-muted-foreground">{manualHotel.address}</div>
+                  )}
                 </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Skip hotel option */}
-          <button
-            type="button"
-            onClick={() => setSelectedHotel(null)}
-            className={cn(
-              'w-full p-3 rounded-xl border-2 text-center transition-all text-sm',
-              !selectedHotel
-                ? 'border-primary/50 bg-primary/5 text-foreground'
-                : 'border-border text-muted-foreground hover:border-primary/40'
-            )}
-          >
-            I'll add hotel details later
-          </button>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setShowHotelModal(true)}>
+                Edit
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -763,6 +954,95 @@ function FlightHotelStep({
           )}
         </Button>
       </div>
+
+      {/* Flight Import Modal */}
+      <FlightImportModal
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        onImport={handleImportFlight}
+        tripStartDate={startDate}
+        tripEndDate={endDate}
+      />
+
+      {/* Manual Hotel Entry Modal */}
+      <Dialog open={showHotelModal} onOpenChange={setShowHotelModal}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Hotel className="h-5 w-5 text-primary" />
+              Enter Hotel Details
+            </DialogTitle>
+            <DialogDescription>
+              Add your hotel information for a complete itinerary
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Hotel Name *</Label>
+              <Input
+                placeholder="e.g. The Ritz Paris"
+                value={manualHotel.name}
+                onChange={(e) => setManualHotel({ ...manualHotel, name: e.target.value })}
+              />
+            </div>
+            
+            <div>
+              <Label>Address</Label>
+              <Input
+                placeholder="e.g. 15 Place Vendôme, 75001 Paris"
+                value={manualHotel.address}
+                onChange={(e) => setManualHotel({ ...manualHotel, address: e.target.value })}
+              />
+            </div>
+            
+            <div>
+              <Label>Neighborhood</Label>
+              <Input
+                placeholder="e.g. 1st Arrondissement"
+                value={manualHotel.neighborhood || ''}
+                onChange={(e) => setManualHotel({ ...manualHotel, neighborhood: e.target.value })}
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Check-in Time</Label>
+                <Input
+                  type="time"
+                  value={manualHotel.checkInTime || '15:00'}
+                  onChange={(e) => setManualHotel({ ...manualHotel, checkInTime: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Check-out Time</Label>
+                <Input
+                  type="time"
+                  value={manualHotel.checkOutTime || '11:00'}
+                  onChange={(e) => setManualHotel({ ...manualHotel, checkOutTime: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowHotelModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (!manualHotel.name) {
+                  toast.error('Please enter the hotel name');
+                  return;
+                }
+                setShowHotelModal(false);
+              }}
+            >
+              Save Hotel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
@@ -797,9 +1077,46 @@ export default function Start() {
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   
-  // Step 2 state
-  const [selectedHotel, setSelectedHotel] = useState<HotelOption | null>(null);
-  const [flightArrivalTime, setFlightArrivalTime] = useState('');
+  // Flight state
+  const [outboundFlight, setOutboundFlight] = useState<ManualFlightEntry>({
+    airline: '',
+    flightNumber: '',
+    departureAirport: '',
+    arrivalAirport: '',
+    departureTime: '',
+    arrivalTime: '',
+    departureDate: '',
+  });
+  const [returnFlight, setReturnFlight] = useState<ManualFlightEntry>({
+    airline: '',
+    flightNumber: '',
+    departureAirport: '',
+    arrivalAirport: '',
+    departureTime: '',
+    arrivalTime: '',
+    departureDate: '',
+  });
+  const [showReturnFlight, setShowReturnFlight] = useState(false);
+
+  // Hotel state
+  const [hotelChoice, setHotelChoice] = useState<'skip' | 'own' | 'search'>('skip');
+  const [manualHotel, setManualHotel] = useState<ManualHotelEntry>({
+    name: '',
+    address: '',
+    neighborhood: '',
+    checkInTime: '15:00',
+    checkOutTime: '11:00',
+  });
+
+  // Update flight dates when trip dates change
+  useEffect(() => {
+    if (startDate && !outboundFlight.departureDate) {
+      setOutboundFlight(prev => ({ ...prev, departureDate: format(startDate, 'yyyy-MM-dd') }));
+    }
+    if (endDate && !returnFlight.departureDate) {
+      setReturnFlight(prev => ({ ...prev, departureDate: format(endDate, 'yyyy-MM-dd') }));
+    }
+  }, [startDate, endDate]);
 
   // Check draft limit
   useEffect(() => {
@@ -892,10 +1209,16 @@ export default function Start() {
                     startDate={format(startDate, 'yyyy-MM-dd')}
                     endDate={format(endDate, 'yyyy-MM-dd')}
                     travelers={travelers}
-                    selectedHotel={selectedHotel}
-                    setSelectedHotel={setSelectedHotel}
-                    flightArrivalTime={flightArrivalTime}
-                    setFlightArrivalTime={setFlightArrivalTime}
+                    outboundFlight={outboundFlight}
+                    setOutboundFlight={setOutboundFlight}
+                    returnFlight={returnFlight}
+                    setReturnFlight={setReturnFlight}
+                    showReturnFlight={showReturnFlight}
+                    setShowReturnFlight={setShowReturnFlight}
+                    hotelChoice={hotelChoice}
+                    setHotelChoice={setHotelChoice}
+                    manualHotel={manualHotel}
+                    setManualHotel={setManualHotel}
                     onSubmit={handleSubmit}
                     onBack={() => setCurrentStep(1)}
                     isSubmitting={isSubmitting}
