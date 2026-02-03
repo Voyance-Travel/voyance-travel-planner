@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Sparkles, Compass } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -29,32 +29,62 @@ export default function FinalCTA() {
             <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
               <div className="w-6 sm:w-8 h-px bg-primary" />
               <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
-                Ready in Minutes
+                Still scrolling?
               </span>
             </div>
 
             {/* Headline */}
             <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-normal text-foreground mb-4 sm:mb-6 leading-tight">
-              Stop planning,{' '}
-              <em className="font-normal">start traveling</em>
+              Ready to Travel{' '}
+              <em className="font-normal">Like Yourself?</em>
             </h2>
 
             {/* Subhead */}
             <p className="text-base sm:text-lg text-muted-foreground font-sans font-light mb-8 sm:mb-10 max-w-md leading-relaxed">
-              We've done the research. We know what works. All we need to know is who you are.
+              Your archetype. Your pace. Your perfect trip — built in minutes.
             </p>
 
-            {/* CTA Button */}
-            <Button 
-              asChild 
-              size="lg" 
-              className="text-base px-10 py-6 font-sans font-medium tracking-wide"
+            {/* Multi-level CTAs */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+              {/* Primary CTA */}
+              <Button 
+                asChild 
+                size="lg" 
+                className="text-base px-10 py-6 font-sans font-medium tracking-wide"
+              >
+                <Link to={ROUTES.START}>
+                  Build My Itinerary
+                  <ArrowRight className="ml-3 h-4 w-4" />
+                </Link>
+              </Button>
+
+              {/* Secondary CTA */}
+              <Button 
+                asChild 
+                variant="outline"
+                size="lg" 
+                className="text-base px-8 py-6 font-sans font-medium"
+              >
+                <Link to={ROUTES.QUIZ}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Take Quiz
+                </Link>
+              </Button>
+            </div>
+
+            {/* Tertiary CTA */}
+            <Link 
+              to={ROUTES.EXPLORE}
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors font-sans"
             >
-              <Link to={ROUTES.START}>
-                Start Planning
-                <ArrowRight className="ml-3 h-4 w-4" />
-              </Link>
-            </Button>
+              <Compass className="h-4 w-4" />
+              Or explore destinations first
+            </Link>
+
+            {/* Trust text */}
+            <p className="mt-6 text-xs text-muted-foreground/70 font-sans">
+              No credit card required · See your first day free
+            </p>
 
           </motion.div>
 
