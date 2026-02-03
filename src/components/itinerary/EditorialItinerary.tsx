@@ -856,6 +856,78 @@ export function EditorialItinerary({
     preloadCostIndex();
   }, []);
 
+  // Safety fix for already-saved itineraries: ensure checkout renders before airport transfer on last day
+  useEffect(() => {
+    setDays(prev => {
+      if (!prev || prev.length === 0) return prev;
+      const lastIdx = prev.length - 1;
+      const lastDay = prev[lastIdx];
+      const activities = lastDay?.activities;
+      if (!activities || activities.length < 2) return prev;
+
+      const checkoutIdx = activities.findIndex(a => {
+        const t = (a.title || '').toLowerCase();
+        return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
+      });
+      const airportIdx = activities.findIndex(a => {
+        const t = (a.title || '').toLowerCase();
+        const isAirportish = t.includes('airport') || t.includes('departure transfer');
+        const isTransportish = (a.category || '').toLowerCase() === 'transport' || t.includes('transfer') || t.includes('departure');
+        return isAirportish && isTransportish;
+      });
+
+      // Already correct (or not applicable)
+      if (checkoutIdx === -1 || airportIdx === -1 || checkoutIdx < airportIdx) return prev;
+
+      const parseMins = (timeStr?: string): number | null => {
+        if (!timeStr) return null;
+        const parts = timeStr.split(':');
+        if (parts.length !== 2) return null;
+        const h = Number(parts[0]);
+        const m = Number(parts[1]);
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+        return h * 60 + m;
+      };
+      const fmt = (mins: number): string => {
+        const h = Math.floor(mins / 60) % 24;
+        const m = mins % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      };
+      const duration = (start?: string, end?: string, fallback = 15): number => {
+        const s = parseMins(start);
+        const e = parseMins(end);
+        if (s === null || e === null) return fallback;
+        return Math.max(5, e - s);
+      };
+
+      const checkout = { ...activities[checkoutIdx] };
+      const airport = { ...activities[airportIdx] };
+
+      const checkoutDur = duration(checkout.startTime || checkout.time, checkout.endTime, 15);
+      const transferDur = duration(airport.startTime || airport.time, airport.endTime, 60);
+
+      const airportStart = airport.startTime || airport.time;
+      const airportStartMins = parseMins(airportStart);
+      if (airportStartMins === null) return prev;
+
+      checkout.startTime = fmt(airportStartMins);
+      checkout.endTime = fmt(airportStartMins + checkoutDur);
+      airport.startTime = checkout.endTime;
+      airport.endTime = fmt(parseMins(airport.startTime) + transferDur);
+
+      const nextActivities = [...activities];
+      nextActivities[airportIdx] = checkout;
+      nextActivities[checkoutIdx] = airport;
+      nextActivities.sort((a, b) => {
+        const ta = parseMins(a.startTime || a.time) ?? 99999;
+        const tb = parseMins(b.startTime || b.time) ?? 99999;
+        return ta - tb;
+      });
+
+      return prev.map((d, idx) => (idx === lastIdx ? { ...d, activities: nextActivities } : d));
+    });
+  }, [tripId]);
+
   // Fetch payments on mount
   useEffect(() => {
     async function fetchPayments() {
