@@ -142,12 +142,12 @@ export default function HowItWorks() {
                 how you plan, how you recharge, what thrills you, what bores you.
               </p>
               <p className="text-lg text-muted-foreground leading-relaxed">
-                In 5 minutes, we identify your archetype from 27 distinct traveler personalities. 
+                In 2 minutes, we identify your archetype from 27 distinct traveler personalities. 
                 Not a horoscope. A blueprint.
               </p>
               <div className="mt-8 flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="px-3 py-1 bg-muted rounded-full">21 questions</span>
-                <span className="px-3 py-1 bg-muted rounded-full">5 minutes</span>
+                <span className="px-3 py-1 bg-muted rounded-full">2 minutes</span>
                 <span className="px-3 py-1 bg-muted rounded-full">27 archetypes</span>
               </div>
             </div>

@@ -6,7 +6,7 @@ import { strangerCopy } from '@/lib/strangerCopy';
 import { ROUTES } from '@/config/routes';
 
 const promises = [
-  { icon: Clock, text: 'The quiz takes 5 minutes' },
+  { icon: Clock, text: 'The quiz takes 2 minutes' },
   { icon: Lightbulb, text: "It's actually interesting" },
   { icon: Heart, text: "You'll learn something about yourself" },
   { icon: ShieldCheck, text: "And we'll never spam you" },
