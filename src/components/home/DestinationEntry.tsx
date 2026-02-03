@@ -4,22 +4,27 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { POPULAR_DESTINATIONS } from '@/lib/archetypeTeasers';
-import IntelligenceTeaser from './IntelligenceTeaser';
+import ItineraryTeaser from './ItineraryTeaser';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 import { ROUTES } from '@/config/routes';
 
-interface IntelligenceStats {
+interface Day {
+  dayNumber: number;
+  headline: string;
+  description: string;
+}
+
+interface PreviewData {
   destination: string;
-  hiddenGems: number;
-  timingHacks: number;
-  trapsToAvoid: number;
-  insiderTips: number;
+  days: Day[];
+  totalDays: number;
+  archetypeUsed: string;
+  archetypeTagline: string;
 }
 
 export default function DestinationEntry() {
   const [destination, setDestination] = useState('');
-  const [intelligenceStats, setIntelligenceStats] = useState<IntelligenceStats | null>(null);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const navigate = useNavigate();
 
@@ -30,40 +35,48 @@ export default function DestinationEntry() {
     setIsGenerating(true);
     
     try {
-      // Call cached intelligence preview (no login required)
-      const { data, error } = await supabase.functions.invoke('get-destination-intelligence', {
+      // Call quick preview endpoint (generates real 3-day itinerary)
+      const { data, error } = await supabase.functions.invoke('generate-quick-preview', {
         body: { destination: targetDest.trim() }
       });
 
       if (error) {
-        console.error('Intelligence fetch error:', error);
-        // Fallback to mock data for demo
-        setIntelligenceStats({
+        console.error('Preview generation error:', error);
+        // Fallback preview
+        setPreviewData({
           destination: targetDest,
-          hiddenGems: 12,
-          timingHacks: 8,
-          trapsToAvoid: 5,
-          insiderTips: 15,
+          days: [
+            { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites in the heart of the city." },
+            { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and the stories that shape this place." },
+            { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
+          ],
+          totalDays: 7,
+          archetypeUsed: "Slow Traveler",
+          archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
         });
         return;
       }
 
-      setIntelligenceStats({
-        destination: targetDest,
-        hiddenGems: data?.hiddenGems || 12,
-        timingHacks: data?.timingHacks || 8,
-        trapsToAvoid: data?.trapsToAvoid || 5,
-        insiderTips: data?.insiderTips || 15,
+      setPreviewData({
+        destination: data?.destination || targetDest,
+        days: data?.days || [],
+        totalDays: data?.totalDays || 7,
+        archetypeUsed: data?.archetypeUsed || "Slow Traveler",
+        archetypeTagline: data?.archetypeTagline || "Fewer things, done well.",
       });
     } catch (err) {
-      console.error('Intelligence error:', err);
-      // Fallback to mock data
-      setIntelligenceStats({
+      console.error('Preview error:', err);
+      // Fallback preview
+      setPreviewData({
         destination: targetDest,
-        hiddenGems: 12,
-        timingHacks: 8,
-        trapsToAvoid: 5,
-        insiderTips: 15,
+        days: [
+          { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites." },
+          { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and local stories." },
+          { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
+        ],
+        totalDays: 7,
+        archetypeUsed: "Slow Traveler",
+        archetypeTagline: "Fewer things, done well.",
       });
     } finally {
       setIsGenerating(false);
@@ -77,21 +90,24 @@ export default function DestinationEntry() {
   };
 
   const handleStartOver = () => {
-    setIntelligenceStats(null);
+    setPreviewData(null);
     setDestination('');
   };
 
   const handleTakeQuiz = () => {
     // Navigate to quiz with destination pre-filled
-    navigate(`${ROUTES.START}?destination=${encodeURIComponent(intelligenceStats?.destination || destination)}`);
+    navigate(`${ROUTES.ARCHETYPES}?destination=${encodeURIComponent(previewData?.destination || destination)}`);
   };
 
-  // Show intelligence teaser after destination search
-  if (intelligenceStats) {
+  // Show itinerary teaser after generation
+  if (previewData) {
     return (
-      <IntelligenceTeaser 
-        destination={intelligenceStats.destination}
-        stats={intelligenceStats}
+      <ItineraryTeaser 
+        destination={previewData.destination}
+        days={previewData.days}
+        totalDays={previewData.totalDays}
+        archetypeUsed={previewData.archetypeUsed}
+        archetypeTagline={previewData.archetypeTagline}
         onTakeQuiz={handleTakeQuiz}
         onStartOver={handleStartOver}
       />
@@ -161,7 +177,7 @@ export default function DestinationEntry() {
           animate={{ opacity: 1 }}
           className="mt-6 text-white/70"
         >
-          Loading intelligence...
+          Creating your preview...
         </motion.p>
       )}
 
@@ -191,7 +207,7 @@ export default function DestinationEntry() {
       )}
 
       {/* Free tier callout - moderate visibility */}
-      {!isGenerating && !intelligenceStats && (
+      {!isGenerating && !previewData && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
