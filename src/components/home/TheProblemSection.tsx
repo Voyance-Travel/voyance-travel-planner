@@ -224,7 +224,7 @@ function AfterVoyance() {
         
         <div className="space-y-2">
           {[
-            { time: '8:00', activity: 'Yanaka Cemetery walk', badge: 'Voyance Find', badgeType: 'primary' },
+            { time: '8:00', activity: 'Meiji Shrine, first light', badge: 'Voyance Find', badgeType: 'primary' },
             { time: '10:30', activity: 'Kayaba Coffee (1938)', badge: null, badgeType: null },
             { time: '13:00', activity: 'Ueno Park, east gate', badge: 'Crowd Hack', badgeType: 'secondary' },
           ].map((item, i) => (
