@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 // Import destination autocomplete and airport autocomplete
 import { DestinationAutocomplete } from '@/components/planner/shared/DestinationAutocomplete';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
+import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 
@@ -980,11 +981,19 @@ function FlightHotelStep({
           <div className="space-y-4 py-4">
             <div>
               <Label>Hotel Name *</Label>
-              <Input
-                placeholder="e.g. The Ritz Paris"
+              <HotelAutocomplete
                 value={manualHotel.name}
-                onChange={(e) => setManualHotel({ ...manualHotel, name: e.target.value })}
+                destination={destination}
+                placeholder="Start typing to search hotels..."
+                onChange={(hotel) => setManualHotel({ 
+                  ...manualHotel, 
+                  name: hotel.name, 
+                  address: hotel.address || manualHotel.address 
+                })}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Type to search or enter manually
+              </p>
             </div>
             
             <div>
