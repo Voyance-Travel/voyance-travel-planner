@@ -11,6 +11,7 @@ import CustomizationShowcase from '@/components/home/CustomizationShowcase';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
 import SocialProofSection from '@/components/home/SocialProofSection';
 import FinalCTA from '@/components/home/FinalCTA';
+import FreeTierSection from '@/components/home/FreeTierSection';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 import { scrollToTop } from '@/utils/scrollUtils';
@@ -111,6 +112,9 @@ export default function Home() {
         
         {/* Social Proof - Honest trust signals */}
         <SocialProofSection />
+        
+        {/* Free Tier Visibility - Growth engine */}
+        <FreeTierSection />
         
         {/* Final CTA - Still scrolling? */}
         <ScrollTarget id="cta-section" className="scroll-mt-16">
