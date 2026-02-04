@@ -203,7 +203,7 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
     : null;
   const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
 
-  const { imageUrl, onError: onImageError } = useTripHeroImage({
+  const { imageUrl, onError: onImageError, onLoad: onImageLoad } = useTripHeroImage({
     destination: trip.destination,
     seededHeroUrl,
     tripId: trip.id,
@@ -238,6 +238,7 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
           alt={trip.destination} 
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
           onError={onImageError}
+          onLoad={onImageLoad}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
         

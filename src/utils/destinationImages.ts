@@ -169,7 +169,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1555921015-5532091f6026?w=1200',
   ],
 
-  // Americas
+  // Americas - Major US Cities
   'new york': [
     'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200',
     'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=1200',
@@ -180,6 +180,107 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=1200',
     'https://images.unsplash.com/photo-1522083165195-3424ed129620?w=1200',
   ],
+  'baltimore': [
+    'https://images.unsplash.com/photo-1575438276866-8ee7e60acf2d?w=1200', // Inner Harbor
+    'https://images.unsplash.com/photo-1588859211408-94e55a9f2f00?w=1200', // Baltimore skyline
+    'https://images.unsplash.com/photo-1601042879364-f3947d3f9c16?w=1200', // Downtown Baltimore
+  ],
+  'washington dc': [
+    'https://images.unsplash.com/photo-1501466044931-62695aada8e9?w=1200', // Capitol Building
+    'https://images.unsplash.com/photo-1617581629397-a72507c3de9e?w=1200', // Washington Monument
+    'https://images.unsplash.com/photo-1585107403124-b1b9b0c6a69f?w=1200', // Lincoln Memorial
+  ],
+  'washington-dc': [
+    'https://images.unsplash.com/photo-1501466044931-62695aada8e9?w=1200',
+    'https://images.unsplash.com/photo-1617581629397-a72507c3de9e?w=1200',
+    'https://images.unsplash.com/photo-1585107403124-b1b9b0c6a69f?w=1200',
+  ],
+  'washington': [
+    'https://images.unsplash.com/photo-1501466044931-62695aada8e9?w=1200',
+    'https://images.unsplash.com/photo-1617581629397-a72507c3de9e?w=1200',
+    'https://images.unsplash.com/photo-1585107403124-b1b9b0c6a69f?w=1200',
+  ],
+  'philadelphia': [
+    'https://images.unsplash.com/photo-1569761316261-9a8696fa2ca3?w=1200', // Philadelphia skyline
+    'https://images.unsplash.com/photo-1601042879364-f3947d3f9c16?w=1200', // Independence Hall area
+    'https://images.unsplash.com/photo-1544027993-37dbfe43562a?w=1200', // Philadelphia downtown
+  ],
+  'boston': [
+    'https://images.unsplash.com/photo-1501979376754-00b7c04c6a81?w=1200', // Boston skyline
+    'https://images.unsplash.com/photo-1573155993874-d5d48af862ba?w=1200', // Boston Common
+    'https://images.unsplash.com/photo-1559335936-d2b8d7e93d17?w=1200', // Boston waterfront
+  ],
+  'chicago': [
+    'https://images.unsplash.com/photo-1494522855154-9297ac14b55f?w=1200', // Chicago skyline
+    'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1200', // Chicago downtown
+    'https://images.unsplash.com/photo-1581373449483-37449f962b6c?w=1200', // Cloud Gate
+  ],
+  'atlanta': [
+    'https://images.unsplash.com/photo-1575917649705-5b59aaa12e6b?w=1200', // Atlanta skyline
+    'https://images.unsplash.com/photo-1570126618953-d437176e8c79?w=1200', // Atlanta downtown
+    'https://images.unsplash.com/photo-1587162146766-e06b1189b907?w=1200', // Atlanta at night
+  ],
+  'denver': [
+    'https://images.unsplash.com/photo-1546156929-a4c0ac411f47?w=1200', // Denver skyline with mountains
+    'https://images.unsplash.com/photo-1619856699906-09e1f58c98b9?w=1200', // Denver downtown
+    'https://images.unsplash.com/photo-1600041161228-519e6dd27bac?w=1200', // Denver cityscape
+  ],
+  'seattle': [
+    'https://images.unsplash.com/photo-1502175353174-a7a70e73b362?w=1200', // Seattle skyline
+    'https://images.unsplash.com/photo-1516905041604-7935af78f572?w=1200', // Space Needle
+    'https://images.unsplash.com/photo-1542223616-9de9adb5f3c8?w=1200', // Seattle waterfront
+  ],
+  'portland': [
+    'https://images.unsplash.com/photo-1545085799-5b88ea4d36f2?w=1200', // Portland skyline
+    'https://images.unsplash.com/photo-1548039149-e21405d4de92?w=1200', // Portland bridges
+    'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200', // Portland downtown
+  ],
+  'nashville': [
+    'https://images.unsplash.com/photo-1546464677-905db9a3a6c3?w=1200', // Nashville skyline
+    'https://images.unsplash.com/photo-1571690022330-9e951a9ff0f9?w=1200', // Nashville downtown
+    'https://images.unsplash.com/photo-1545601445-4d6a0a0565f0?w=1200', // Nashville music scene
+  ],
+  'austin': [
+    'https://images.unsplash.com/photo-1531218150217-54595bc2b934?w=1200', // Austin skyline
+    'https://images.unsplash.com/photo-1568515387631-8b650bbcdb90?w=1200', // Austin downtown
+    'https://images.unsplash.com/photo-1588580000645-4562a6d2c839?w=1200', // Austin Congress Ave
+  ],
+  'san francisco': [
+    'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=1200', // Golden Gate Bridge
+    'https://images.unsplash.com/photo-1521747116042-5a810fda9664?w=1200', // San Francisco skyline
+    'https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?w=1200', // SF waterfront
+  ],
+  'san-francisco': [
+    'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=1200',
+    'https://images.unsplash.com/photo-1521747116042-5a810fda9664?w=1200',
+    'https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?w=1200',
+  ],
+  'los angeles': [
+    'https://images.unsplash.com/photo-1534190760961-74e8c1c5c3da?w=1200', // LA skyline
+    'https://images.unsplash.com/photo-1580655653885-65763b2597d0?w=1200', // Hollywood
+    'https://images.unsplash.com/photo-1515896769750-31548aa180ed?w=1200', // Santa Monica
+  ],
+  'los-angeles': [
+    'https://images.unsplash.com/photo-1534190760961-74e8c1c5c3da?w=1200',
+    'https://images.unsplash.com/photo-1580655653885-65763b2597d0?w=1200',
+    'https://images.unsplash.com/photo-1515896769750-31548aa180ed?w=1200',
+  ],
+  'miami': [
+    'https://images.unsplash.com/photo-1506966953602-c20cc11f75e3?w=1200', // Miami Beach
+    'https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?w=1200', // Miami skyline
+    'https://images.unsplash.com/photo-1535498730771-e735b998cd64?w=1200', // South Beach
+  ],
+  'las vegas': [
+    'https://images.unsplash.com/photo-1605833556294-ea5c7a74f57d?w=1200', // Las Vegas strip
+    'https://images.unsplash.com/photo-1581351721010-8cf859cb14a4?w=1200', // Vegas at night
+    'https://images.unsplash.com/photo-1516997121675-4c2d1684aa3e?w=1200', // Bellagio
+  ],
+  'las-vegas': [
+    'https://images.unsplash.com/photo-1605833556294-ea5c7a74f57d?w=1200',
+    'https://images.unsplash.com/photo-1581351721010-8cf859cb14a4?w=1200',
+    'https://images.unsplash.com/photo-1516997121675-4c2d1684aa3e?w=1200',
+  ],
+  // Latin America
   'mexico city': [
     'https://images.unsplash.com/photo-1518659526054-190340b32735?w=1200',
     'https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=1200',
