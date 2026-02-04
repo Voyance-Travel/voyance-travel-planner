@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 
 // Initialize Stripe with publishable key
-const stripePromise = loadStripe('pk_test_51SXP3JFYxIg9jcJUJPZOWYLCMbKOdT5MrmM9vEAFzh8TqD12VwxvqJUi0qV8Q7Ua8RLzxw3bLCFmBr7gZfKhWZbZ00aPLT48hG');
+const stripePromise = loadStripe('pk_live_51RJawaJytioXyqq9n5emMW9beYC8p5gGvNyWiNlcYevo4Ibe3YkTtrNGrqA70kSRn1tAX8W8xo0E9eI9x6swFYV700LWTtv0ea');
 
 interface EmbeddedCheckoutModalProps {
   isOpen: boolean;
