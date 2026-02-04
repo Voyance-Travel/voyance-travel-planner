@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendEmail, isConfigured } from "../_shared/zoho-smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,12 +26,15 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const RESEND_API_KEY = Deno.env.get("SENDGRID_API_KEY"); // Using SendGrid which is already configured
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error("Missing Supabase configuration");
+    }
+
+    if (!isConfigured()) {
+      throw new Error("Email service not configured");
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -134,13 +138,22 @@ const handler = async (req: Request): Promise<Response> => {
       archivesUrl: `https://voyance-travel-planner.lovable.app/trips/${tripId}`,
     });
 
-    // For now, log the email content (SendGrid integration can be added later)
-    console.log(`[PostTripEmail] Would send to ${userEmail}:`, {
-      subject: `Your ${trip.destination} memories await 📸`,
+    // Send the email via Zoho SMTP
+    const result = await sendEmail({
       to: userEmail,
+      subject: `Your ${trip.destination} memories await 📸`,
+      html: emailHtml,
+      fromName: "Voyance",
     });
 
-    // Record that we "sent" the notification
+    if (!result.success) {
+      console.error(`[PostTripEmail] Failed to send email to ${userEmail}:`, result.error);
+      throw new Error(`Failed to send email: ${result.error}`);
+    }
+
+    console.log(`[PostTripEmail] Email sent successfully to ${userEmail}`);
+
+    // Record that we sent the notification
     await supabase
       .from('trip_notifications')
       .upsert({
@@ -155,7 +168,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "Post-trip email queued",
+        message: "Post-trip email sent",
         memories: memories.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

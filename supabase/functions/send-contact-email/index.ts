@@ -1,8 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-
-const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
-// Use environment variable if set, otherwise default to contact@travelwithvoyance.com
-const CONTACT_EMAIL = Deno.env.get("CONTACT_EMAIL") || "contact@travelwithvoyance.com";
+import { sendEmail, isConfigured } from "../_shared/zoho-smtp.ts";
 
 // Allowed origins for CORS - restrict to actual domains
 const ALLOWED_ORIGINS = [
@@ -14,7 +11,6 @@ const ALLOWED_ORIGINS = [
 ];
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
-  // Check if origin is allowed
   const allowedOrigin = origin && ALLOWED_ORIGINS.some(allowed => 
     origin === allowed || origin.endsWith('.lovable.app')
   ) ? origin : ALLOWED_ORIGINS[0];
@@ -32,14 +28,13 @@ interface ContactRequest {
   subject?: string;
   message: string;
   type?: "general" | "support" | "feedback" | "bug_report" | "feature_request";
-  // Honeypot field - should always be empty
-  website?: string;
+  website?: string; // Honeypot field
 }
 
-// Simple in-memory rate limiting (resets on function restart)
+// Simple in-memory rate limiting
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const MAX_REQUESTS_PER_WINDOW = 5; // Max 5 submissions per hour per IP/email
+const MAX_REQUESTS_PER_WINDOW = 5;
 
 function isRateLimited(key: string): boolean {
   const now = Date.now();
@@ -58,7 +53,6 @@ function isRateLimited(key: string): boolean {
   return false;
 }
 
-// Input validation
 function validateEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email) && email.length <= 255;
@@ -66,7 +60,6 @@ function validateEmail(email: string): boolean {
 
 function sanitizeInput(input: string, maxLength: number): string {
   if (!input || typeof input !== 'string') return '';
-  // Remove any HTML tags and trim
   return input.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
 }
 
@@ -74,12 +67,10 @@ const handler = async (req: Request): Promise<Response> => {
   const origin = req.headers.get('origin');
   const corsHeaders = getCorsHeaders(origin);
   
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Only allow POST requests
   if (req.method !== "POST") {
     return new Response(
       JSON.stringify({ success: false, error: "Method not allowed" }),
@@ -88,16 +79,15 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    if (!SENDGRID_API_KEY) {
-      throw new Error("SendGrid API key not configured");
+    if (!isConfigured()) {
+      throw new Error("Email service not configured");
     }
 
     const rawBody = await req.json();
     
-    // Honeypot check - bots will fill this hidden field, humans won't
+    // Honeypot check
     if (rawBody.website && rawBody.website.trim() !== '') {
       console.warn('[send-contact-email] Honeypot triggered - likely bot submission');
-      // Return success to not tip off the bot, but don't actually send email
       return new Response(
         JSON.stringify({ success: true, message: "Message sent successfully" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -113,7 +103,6 @@ const handler = async (req: Request): Promise<Response> => {
       ? rawBody.type 
       : 'general';
 
-    // Validate required fields
     if (!name || !email || !message) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields: name, email, message" }),
@@ -121,7 +110,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Validate email format
     if (!validateEmail(email)) {
       return new Response(
         JSON.stringify({ success: false, error: "Invalid email address format" }),
@@ -129,7 +117,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Check minimum message length
     if (message.length < 10) {
       return new Response(
         JSON.stringify({ success: false, error: "Message must be at least 10 characters" }),
@@ -137,7 +124,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Rate limiting by email
     if (isRateLimited(`email:${email}`)) {
       console.warn(`[send-contact-email] Rate limited: ${email}`);
       return new Response(
@@ -146,7 +132,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Get client IP for additional rate limiting (if available)
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
                      req.headers.get('cf-connecting-ip') || 
                      'unknown';
@@ -163,7 +148,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const emailSubject = subject || `[Voyance ${type}] New message from ${name}`;
 
-    // Escape HTML entities for safe display in email
+    // Escape HTML entities
     const escapeHtml = (str: string) => str
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -178,78 +163,53 @@ const handler = async (req: Request): Promise<Response> => {
     const safeType = escapeHtml(type);
 
     // Send notification to support team
-    const supportEmailResponse = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SENDGRID_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: CONTACT_EMAIL }] }],
-        from: { email: "noreply@travelwithvoyance.com", name: "Voyance Contact Form" },
-        reply_to: { email, name },
-        subject: emailSubject,
-        content: [
-          {
-            type: "text/html",
-            value: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #1a1a1a;">New Contact Form Submission</h2>
-                <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Name:</strong> ${safeName}</p>
-                  <p><strong>Email:</strong> ${safeEmail}</p>
-                  <p><strong>Type:</strong> ${safeType}</p>
-                  ${safeSubject ? `<p><strong>Subject:</strong> ${safeSubject}</p>` : ""}
-                  <p><strong>IP:</strong> ${clientIP}</p>
-                </div>
-                <div style="background: #fff; padding: 20px; border: 1px solid #e5e5e5; border-radius: 8px;">
-                  <h3 style="margin-top: 0;">Message:</h3>
-                  <p style="white-space: pre-wrap;">${safeMessage}</p>
-                </div>
-              </div>
-            `,
-          },
-        ],
-      }),
+    const supportEmailResult = await sendEmail({
+      to: "contact@travelwithvoyance.com",
+      subject: emailSubject,
+      replyTo: email,
+      fromName: "Voyance Contact Form",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1a1a1a;">New Contact Form Submission</h2>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Name:</strong> ${safeName}</p>
+            <p><strong>Email:</strong> ${safeEmail}</p>
+            <p><strong>Type:</strong> ${safeType}</p>
+            ${safeSubject ? `<p><strong>Subject:</strong> ${safeSubject}</p>` : ""}
+            <p><strong>IP:</strong> ${clientIP}</p>
+          </div>
+          <div style="background: #fff; padding: 20px; border: 1px solid #e5e5e5; border-radius: 8px;">
+            <h3 style="margin-top: 0;">Message:</h3>
+            <p style="white-space: pre-wrap;">${safeMessage}</p>
+          </div>
+        </div>
+      `,
     });
 
-    if (!supportEmailResponse.ok) {
-      const errorText = await supportEmailResponse.text();
-      console.error("SendGrid error:", errorText);
+    if (!supportEmailResult.success) {
+      console.error("Failed to send support email:", supportEmailResult.error);
       throw new Error("Failed to send email to support");
     }
 
     // Send confirmation to user
-    const confirmationResponse = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SENDGRID_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email }] }],
-        from: { email: "noreply@travelwithvoyance.com", name: "Voyance" },
-        subject: "We received your message!",
-        content: [
-          {
-            type: "text/html",
-            value: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #1a1a1a;">Thank you for reaching out, ${safeName}!</h2>
-                <p>We've received your message and will get back to you as soon as possible, typically within 24-48 hours.</p>
-                <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <h3 style="margin-top: 0;">Your message:</h3>
-                  <p style="white-space: pre-wrap; color: #666;">${safeMessage}</p>
-                </div>
-                <p>Best regards,<br>The Voyance Team</p>
-              </div>
-            `,
-          },
-        ],
-      }),
+    const confirmationResult = await sendEmail({
+      to: email,
+      subject: "We received your message!",
+      fromName: "Voyance",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1a1a1a;">Thank you for reaching out, ${safeName}!</h2>
+          <p>We've received your message and will get back to you as soon as possible, typically within 24-48 hours.</p>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0;">Your message:</h3>
+            <p style="white-space: pre-wrap; color: #666;">${safeMessage}</p>
+          </div>
+          <p>Best regards,<br>The Voyance Team</p>
+        </div>
+      `,
     });
 
-    if (!confirmationResponse.ok) {
+    if (!confirmationResult.success) {
       console.warn("Failed to send confirmation email to user");
     }
 
@@ -259,10 +219,11 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ success: true, message: "Message sent successfully" }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
-  } catch (error: any) {
-    console.error("Error in send-contact-email function:", error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Error in send-contact-email function:", errorMessage);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
