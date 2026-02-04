@@ -1,20 +1,21 @@
 /**
  * Trip Collaborators Panel
  * 
- * Shows trip owner and collaborators with permission management
- * Owner can grant/revoke edit access to guests
+ * Shows trip owner and collaborators with permission management,
+ * DNA status, compatibility scores, and blend toggle
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Crown, Users, Eye, Edit3, UserPlus, MoreVertical, 
-  Check, X, Shield, ChevronDown 
+  Check, X, Shield, ChevronDown, Dna 
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Switch } from '@/components/ui/switch';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +30,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { 
   useTripCollaborators, 
@@ -39,6 +45,9 @@ import {
   type CollaboratorPermission,
 } from '@/services/tripCollaboratorsAPI';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { fetchTravelDNA, calculateGuestCompatibility } from '@/utils/travelDNACompatibility';
+import { DNAQuizPrompt } from './DNAQuizPrompt';
 
 interface TripCollaboratorsPanelProps {
   tripId: string;
@@ -80,8 +89,38 @@ export function TripCollaboratorsPanel({
   const updatePermission = useUpdateCollaboratorPermission();
   const removeCollaborator = useRemoveTripCollaborator();
   const [expanded, setExpanded] = useState(!compact);
+  const [collaboratorDNA, setCollaboratorDNA] = useState<Record<string, { hasDNA: boolean; compatibility: number | null }>>({});
+  const [updatingPreferences, setUpdatingPreferences] = useState<string | null>(null);
 
   const isOwner = permission?.isOwner ?? false;
+
+  // Fetch DNA status for all collaborators
+  useEffect(() => {
+    async function fetchDNAStatus() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const dnaStatus: Record<string, { hasDNA: boolean; compatibility: number | null }> = {};
+      
+      for (const collab of collaborators) {
+        const dna = await fetchTravelDNA(collab.user_id);
+        const hasDNA = !!dna?.trait_scores;
+        let compatibility: number | null = null;
+        
+        if (hasDNA) {
+          compatibility = await calculateGuestCompatibility(user.id, collab.user_id);
+        }
+        
+        dnaStatus[collab.user_id] = { hasDNA, compatibility };
+      }
+      
+      setCollaboratorDNA(dnaStatus);
+    }
+    
+    if (collaborators.length > 0) {
+      fetchDNAStatus();
+    }
+  }, [collaborators]);
 
   const handlePermissionChange = async (collaborator: TripCollaborator, newPermission: CollaboratorPermission) => {
     updatePermission.mutate({ 
@@ -94,6 +133,25 @@ export function TripCollaboratorsPanel({
     if (confirm(`Remove ${collaborator.profile?.display_name || 'this collaborator'} from the trip?`)) {
       removeCollaborator.mutate(collaborator.id);
     }
+  };
+
+  const handleTogglePreferences = async (collaborator: TripCollaborator) => {
+    setUpdatingPreferences(collaborator.id);
+    
+    const newValue = !(collaborator.include_preferences ?? true);
+    
+    const { error } = await supabase
+      .from('trip_collaborators')
+      .update({ include_preferences: newValue })
+      .eq('id', collaborator.id);
+    
+    if (error) {
+      toast.error('Failed to update preference setting');
+    } else {
+      toast.success(newValue ? 'Preferences will be included' : 'Preferences excluded from blend');
+    }
+    
+    setUpdatingPreferences(null);
   };
 
   const getInitials = (name?: string, email?: string) => {
@@ -197,6 +255,10 @@ export function TripCollaboratorsPanel({
               {collaborators.map(collaborator => {
                 const permInfo = permissionLabels[collaborator.permission] || permissionLabels.viewer;
                 const PermIcon = permInfo.icon;
+                const dnaInfo = collaboratorDNA[collaborator.user_id];
+                const hasDNA = dnaInfo?.hasDNA ?? false;
+                const compatibility = dnaInfo?.compatibility;
+                const includesPrefs = collaborator.include_preferences ?? true;
                 
                 return (
                   <motion.div
@@ -204,69 +266,116 @@ export function TripCollaboratorsPanel({
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="flex items-center justify-between py-2 border-t border-border/50"
+                    className="py-2 border-t border-border/50 space-y-2"
                   >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        {collaborator.profile?.avatar_url ? (
-                          <AvatarImage src={collaborator.profile.avatar_url} />
-                        ) : null}
-                        <AvatarFallback className="bg-muted">
-                          {getInitials(collaborator.profile?.display_name, collaborator.profile?.handle)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <span className="font-medium text-sm">
-                          {collaborator.profile?.display_name || collaborator.profile?.handle || 'Guest'}
-                        </span>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <PermIcon className="h-3 w-3" />
-                          <span>{permInfo.label}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9">
+                          {collaborator.profile?.avatar_url ? (
+                            <AvatarImage src={collaborator.profile.avatar_url} />
+                          ) : null}
+                          <AvatarFallback className="bg-muted">
+                            {getInitials(collaborator.profile?.display_name, collaborator.profile?.handle)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">
+                              {collaborator.profile?.display_name || collaborator.profile?.handle || 'Guest'}
+                            </span>
+                            {hasDNA && compatibility !== null && (
+                              <Badge variant="secondary" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20">
+                                <Dna className="h-3 w-3" />
+                                {compatibility}%
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <PermIcon className="h-3 w-3" />
+                            <span>{permInfo.label}</span>
+                          </div>
                         </div>
                       </div>
+
+                      {isOwner && (
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={collaborator.permission}
+                            onValueChange={(value: CollaboratorPermission) => handlePermissionChange(collaborator, value)}
+                          >
+                            <SelectTrigger className="h-8 w-[110px] text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="viewer">
+                                <div className="flex items-center gap-2">
+                                  <Eye className="h-3 w-3" />
+                                  Viewer
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="editor">
+                                <div className="flex items-center gap-2">
+                                  <Edit3 className="h-3 w-3" />
+                                  Editor
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Member options">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleRemove(collaborator)}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Remove from trip
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
                     </div>
 
+                    {/* DNA Status and Blend Toggle */}
                     {isOwner && (
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={collaborator.permission}
-                          onValueChange={(value: CollaboratorPermission) => handlePermissionChange(collaborator, value)}
-                        >
-                          <SelectTrigger className="h-8 w-[110px] text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="viewer">
-                              <div className="flex items-center gap-2">
-                                <Eye className="h-3 w-3" />
-                                Viewer
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="editor">
-                              <div className="flex items-center gap-2">
-                                <Edit3 className="h-3 w-3" />
-                                Editor
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Member options">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => handleRemove(collaborator)}
-                            >
-                              <X className="h-4 w-4 mr-2" />
-                              Remove from trip
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <div className="ml-12">
+                        {hasDNA ? (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Dna className="h-3 w-3" />
+                              <span>Include in blend</span>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Switch
+                                  checked={includesPrefs}
+                                  onCheckedChange={() => handleTogglePreferences(collaborator)}
+                                  disabled={updatingPreferences === collaborator.id}
+                                  className="scale-90"
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                <p className="text-xs">
+                                  {includesPrefs 
+                                    ? 'Their preferences will be blended into the itinerary'
+                                    : 'Preferences excluded from generation'
+                                  }
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        ) : (
+                          <DNAQuizPrompt
+                            guestName={collaborator.profile?.display_name || 'Guest'}
+                            compact
+                          />
+                        )}
                       </div>
                     )}
                   </motion.div>

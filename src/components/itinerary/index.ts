@@ -11,4 +11,7 @@ export { TransitBadge } from './TransitBadge';
 export { ItineraryUtilityBar } from './ItineraryUtilityBar';
 export { PostGenerationCTA } from './PostGenerationCTA';
 export { LockedDayCard } from './LockedDayCard';
+export { BlendedProfilesCard } from './BlendedProfilesCard';
+export { GroupCompatibilityCard } from './GroupCompatibilityCard';
+export { DNAQuizPrompt } from './DNAQuizPrompt';
 export type { EditorialDay, EditorialActivity, EditorialItineraryProps } from './EditorialItinerary';

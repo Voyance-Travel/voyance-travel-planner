@@ -2273,11 +2273,12 @@ function blendGroupPreferences(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getCollaboratorPreferences(supabase: any, tripId: string): Promise<PreferenceProfile[]> {
   try {
-    // Get collaborators linked to this trip
+    // Get collaborators linked to this trip who have include_preferences enabled
     const { data: collaborators, error: collabError } = await supabase
       .from('trip_collaborators')
-      .select('user_id')
-      .eq('trip_id', tripId);
+      .select('user_id, include_preferences')
+      .eq('trip_id', tripId)
+      .eq('include_preferences', true); // Only include if flag is true
 
     if (collabError || !collaborators?.length) {
       return [];

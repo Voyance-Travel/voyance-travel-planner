@@ -4483,6 +4483,7 @@ export type Database = {
           accepted_at: string | null
           created_at: string
           id: string
+          include_preferences: boolean | null
           invited_by: string | null
           permission: string
           trip_id: string
@@ -4492,6 +4493,7 @@ export type Database = {
           accepted_at?: string | null
           created_at?: string
           id?: string
+          include_preferences?: boolean | null
           invited_by?: string | null
           permission?: string
           trip_id: string
@@ -4501,6 +4503,7 @@ export type Database = {
           accepted_at?: string | null
           created_at?: string
           id?: string
+          include_preferences?: boolean | null
           invited_by?: string | null
           permission?: string
           trip_id?: string

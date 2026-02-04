@@ -23,6 +23,7 @@ export interface TripCollaborator {
   invited_by: string | null;
   accepted_at: string | null;
   created_at: string;
+  include_preferences?: boolean;
   profile?: Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>;
 }
 
@@ -30,6 +31,7 @@ export interface AddCollaboratorRequest {
   tripId: string;
   userId: string;
   permission?: CollaboratorPermission;
+  includePreferences?: boolean;
 }
 
 export interface TripPermission {
@@ -76,6 +78,7 @@ export async function getTripCollaborators(tripId: string): Promise<TripCollabor
       invited_by,
       accepted_at,
       created_at,
+      include_preferences,
       profile:profiles!trip_collaborators_user_id_fkey(id, handle, display_name, avatar_url)
     `)
     .eq('trip_id', tripId);
@@ -88,6 +91,7 @@ export async function getTripCollaborators(tripId: string): Promise<TripCollabor
   return (data || []).map(c => ({
     ...c,
     permission: c.permission as CollaboratorPermission,
+    include_preferences: c.include_preferences ?? true,
     profile: c.profile as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
   }));
 }
@@ -95,7 +99,7 @@ export async function getTripCollaborators(tripId: string): Promise<TripCollabor
 /**
  * Add a collaborator to a trip
  */
-export async function addTripCollaborator({ tripId, userId, permission = 'contributor' }: AddCollaboratorRequest): Promise<TripCollaborator> {
+export async function addTripCollaborator({ tripId, userId, permission = 'contributor', includePreferences = true }: AddCollaboratorRequest): Promise<TripCollaborator> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
@@ -119,6 +123,7 @@ export async function addTripCollaborator({ tripId, userId, permission = 'contri
       permission,
       invited_by: user.id,
       accepted_at: new Date().toISOString(), // Auto-accept for friends
+      include_preferences: includePreferences,
     })
     .select(`
       id,
@@ -128,6 +133,7 @@ export async function addTripCollaborator({ tripId, userId, permission = 'contri
       invited_by,
       accepted_at,
       created_at,
+      include_preferences,
       profile:profiles!trip_collaborators_user_id_fkey(id, handle, display_name, avatar_url)
     `)
     .single();
