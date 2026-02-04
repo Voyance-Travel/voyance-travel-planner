@@ -331,12 +331,28 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1547558840-8ad6c4dc309c?w=1200',
     'https://images.unsplash.com/photo-1518638150340-f706e86654de?w=1200',
   ],
+  // US Small Towns (use regional scenic images)
+  'thurmont': [
+    'https://images.unsplash.com/photo-1508193638397-1c4234db14d8?w=1200', // Maryland countryside
+    'https://images.unsplash.com/photo-1470770903676-69b98201ea1c?w=1200', // Small town America
+    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200', // Appalachian hills
+  ],
+  'weymouth': [
+    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200', // New Jersey landscape
+    'https://images.unsplash.com/photo-1470770903676-69b98201ea1c?w=1200', // Small town America
+    'https://images.unsplash.com/photo-1508193638397-1c4234db14d8?w=1200', // East Coast scenery
+  ],
+  'weymouth township': [
+    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200',
+    'https://images.unsplash.com/photo-1470770903676-69b98201ea1c?w=1200',
+    'https://images.unsplash.com/photo-1508193638397-1c4234db14d8?w=1200',
+  ],
 
   // Africa & Middle East
   'cape town': [
-    'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200',
-    'https://images.unsplash.com/photo-1576485290814-1c72aa4bbb8e?w=1200',
-    'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200',
+    'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200', // Table Mountain
+    'https://images.unsplash.com/photo-1576485290814-1c72aa4bbb8e?w=1200', // Cape Town coast
+    'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200', // Cape Town cityscape
   ],
   'cape-town': [
     'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200',
@@ -344,19 +360,44 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200',
   ],
   'marrakech': [
-    'https://images.unsplash.com/photo-1518730518541-d0843268c287?w=1200',
-    'https://images.unsplash.com/photo-1489493512598-d08130f49bea?w=1200',
-    'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=1200',
+    'https://images.unsplash.com/photo-1518730518541-d0843268c287?w=1200', // Marrakech medina
+    'https://images.unsplash.com/photo-1489493512598-d08130f49bea?w=1200', // Moroccan architecture
+    'https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=1200', // Marrakech market
+  ],
+  'inhambane': [
+    'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200', // African coast
+    'https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?w=1200', // Mozambique beach
+    'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200', // Coastal African city
+  ],
+  'mozambique': [
+    'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200',
+    'https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?w=1200',
+    'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200',
   ],
   'petra': [
-    'https://images.unsplash.com/photo-1563177978-4c5fb3c0e3c9?w=1200',
-    'https://images.unsplash.com/photo-1548786811-dd6e453ccca7?w=1200',
-    'https://images.unsplash.com/photo-1553856622-d1b352e9a211?w=1200',
+    'https://images.unsplash.com/photo-1563177978-4c5fb3c0e3c9?w=1200', // The Treasury
+    'https://images.unsplash.com/photo-1548786811-dd6e453ccca7?w=1200', // Petra ruins
+    'https://images.unsplash.com/photo-1553856622-d1b352e9a211?w=1200', // Petra canyon
   ],
   'dubai': [
-    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1200',
-    'https://images.unsplash.com/photo-1518684079-3c830dcef090?w=1200',
-    'https://images.unsplash.com/photo-1546412414-e1885259563a?w=1200',
+    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1200', // Dubai skyline
+    'https://images.unsplash.com/photo-1518684079-3c830dcef090?w=1200', // Burj Khalifa
+    'https://images.unsplash.com/photo-1546412414-e1885259563a?w=1200', // Dubai marina
+  ],
+  'cairo': [
+    'https://images.unsplash.com/photo-1572252009286-268acec5ca0a?w=1200', // Pyramids
+    'https://images.unsplash.com/photo-1539768942893-daf53e448371?w=1200', // Cairo city
+    'https://images.unsplash.com/photo-1553913861-c0fddf2619ee?w=1200', // Egyptian landmarks
+  ],
+  'nairobi': [
+    'https://images.unsplash.com/photo-1611348524140-53c9a25263d6?w=1200', // Nairobi skyline
+    'https://images.unsplash.com/photo-1489392191049-fc10c97e64b6?w=1200', // African wildlife
+    'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200', // African landscape
+  ],
+  'johannesburg': [
+    'https://images.unsplash.com/photo-1577948000111-9c970dfe3743?w=1200', // Johannesburg skyline
+    'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200', // South Africa cityscape
+    'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200', // African urban landscape
   ],
 
   // Oceania

@@ -16,14 +16,24 @@ import {
 const IMAGE_QUERY_VERSION = 'img_v3_no_people_curated';
 
 // Destinations that MUST use curated images (no third-party sources allowed)
+// These destinations have had issues with third-party APIs returning wrong/misleading images
 const CURATED_ONLY_DESTINATIONS = new Set([
+  // Major international cities
   'rome', 'lisbon', 'paris', 'london', 'barcelona', 'santorini', 'amsterdam',
   'vienna', 'copenhagen', 'florence', 'porto', 'tokyo', 'kyoto', 'bali',
   'bangkok', 'singapore', 'hong kong', 'seoul', 'new york', 'los angeles',
   'san francisco', 'miami', 'new orleans', 'hawaii', 'oahu', 'maui',
   'mexico city', 'cabo san lucas', 'cancun', 'buenos aires', 'rio de janeiro',
   'peru', 'cusco', 'oaxaca', 'cape town', 'marrakech', 'dubai', 'melbourne',
-  'sydney', 'auckland', 'cartagena', 'vancouver', 'reykjavik'
+  'sydney', 'auckland', 'cartagena', 'vancouver', 'reykjavik',
+  // US cities that were showing wrong images
+  'baltimore', 'washington dc', 'washington', 'philadelphia', 'boston',
+  'chicago', 'atlanta', 'denver', 'seattle', 'portland', 'nashville',
+  'austin', 'las vegas',
+  // African destinations with curated images
+  'inhambane', 'mozambique', 'cairo', 'nairobi', 'johannesburg',
+  // Small US towns (use generic scenic fallback rather than wrong API results)
+  'thurmont', 'weymouth', 'weymouth township'
 ]);
 
 function isCuratedOnlyDestination(destination?: string): boolean {

@@ -1,94 +1,52 @@
 
-# Fix Image Edge Case: Blank/Expired CDN Images
+# Fix Image Edge Cases - COMPLETED
 
-## Problem Analysis
+## Problem Summary
 
-Based on the screenshot and code investigation, I identified that **destinations like Baltimore and Thurmont show gray gradients** instead of actual images. The root cause:
+Destination cards were showing:
+1. **Blank/expired images** - TripAdvisor CDN URLs returning HTTP 200 but with no content
+2. **Wrong/irrelevant images** - Marrakech showing Italian coast, Inhambane showing flood scene, etc.
+3. **Poor quality images** - Random low-quality photos from API caches
 
-1. **Multiple image sources are in use**: Google Places (1,444 cached), TripAdvisor (797 cached), Wikimedia, and AI generation
-2. **Expired CDN URLs return HTTP 200** with blank or tiny image data (not a network error)
-3. **Current fallback only handles `onError`**: The `HeroImageWithFallback` component and `useTripHeroImage` hook only trigger fallback when the image fails to load, not when it loads but contains no useful content
-4. **Baltimore and Thurmont have TripAdvisor cache entries**: These URLs (`media-cdn.tripadvisor.com`) may be loading "successfully" but rendering as blank
+## Solutions Implemented
 
-```text
-+------------------+     +-------------------+     +-------------------+
-|   Issue Chain    |     |   Current State   |     |   Missing Piece   |
-+------------------+     +-------------------+     +-------------------+
-| TripAdvisor CDN  | --> | HTTP 200 response | --> | onLoad validation |
-| URL expires      |     | (blank image)     |     | not checking size |
-+------------------+     +-------------------+     +-------------------+
-```
+### Phase 1: Client-Side Load Validation ✅
 
-## Solution: Multi-Layer Image Validation
+**Files Modified:**
+- `src/components/common/HeroImageWithFallback.tsx`
+- `src/hooks/useTripHeroImage.ts`
+- `src/pages/TripDashboard.tsx`
 
-### Phase 1: Client-Side Load Validation
+Added `onLoad` handler to detect blank/tiny images:
+- Checks `naturalWidth` and `naturalHeight` after load
+- Triggers fallback if dimensions < 10px (expired CDN responses)
 
-**File: `src/components/common/HeroImageWithFallback.tsx`**
+### Phase 2: Expanded Curated Images ✅
 
-Add `onLoad` handler to detect blank/tiny images that "load" but contain no content:
+**File Modified:** `src/utils/destinationImages.ts`
 
-- Check `naturalWidth` and `naturalHeight` after successful load
-- If image dimensions are below 10x10 pixels, trigger fallback
-- This catches expired CDN responses that return valid HTTP but empty content
+Added curated Unsplash images for:
+- **US Cities**: Baltimore, Washington DC, Philadelphia, Boston, Chicago, Atlanta, Denver, Seattle, Portland, Nashville, Austin, San Francisco, LA, Miami, Las Vegas
+- **African Destinations**: Inhambane, Mozambique, Cairo, Nairobi, Johannesburg
+- **US Small Towns**: Thurmont, Weymouth Township (using regional scenic images)
 
-```typescript
-const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-  const img = e.currentTarget;
-  // Detect blank/tiny images that loaded "successfully"
-  if (img.naturalWidth < 10 || img.naturalHeight < 10) {
-    console.warn('[Image] Loaded but blank/tiny, triggering fallback');
-    handleError();
-  }
-};
-```
+### Phase 3: Curated-Only Enforcement ✅
 
-### Phase 2: Update useTripHeroImage Hook
+**File Modified:** `src/services/destinationImagesAPI.ts`
 
-**File: `src/hooks/useTripHeroImage.ts`**
+Expanded `CURATED_ONLY_DESTINATIONS` list to include:
+- All US cities with curated images
+- All African destinations with curated images
+- Small US towns that were showing wrong API results
 
-Extend the `onError` callback to also handle "blank load" detection:
+### Phase 4: Database Cache Cleanup ✅
 
-- Return both `onError` and `onLoad` handlers
-- Allow components to use both for comprehensive image validation
+Blacklisted problematic TripAdvisor cache entries for:
+- Marrakech, Inhambane, Cape Town, Thurmont, Weymouth
 
-### Phase 3: Add US City Curated Images
+## Expected Results
 
-**File: `src/utils/destinationImages.ts`**
-
-Add curated Unsplash images for common US cities missing from the curated list:
-
-- Baltimore (Inner Harbor, downtown skyline)
-- Washington DC (if not present)
-- Philadelphia, Boston, Atlanta, Denver
-
-This provides instant, reliable images without API calls for popular destinations.
-
-### Phase 4: Backend Cache Health Check (Optional Enhancement)
-
-**File: `supabase/functions/destination-images/index.ts`**
-
-Add URL validation before returning cached TripAdvisor images:
-
-- Perform lightweight HEAD request on TripAdvisor URLs
-- Check `Content-Length` header; reject if suspiciously small (< 1KB)
-- Mark entries for cleanup or skip them in favor of other sources
-
----
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/common/HeroImageWithFallback.tsx` | Add `onLoad` validation for blank image detection |
-| `src/hooks/useTripHeroImage.ts` | Return `onLoad` handler for size validation |
-| `src/utils/destinationImages.ts` | Add Baltimore, DC, and other missing US city images |
-| `src/pages/TripDashboard.tsx` | Wire up both `onError` and `onLoad` handlers |
-| `supabase/functions/destination-images/index.ts` | (Optional) Add URL health check for TripAdvisor cache |
-
-## Expected Outcome
-
-After implementation:
-- All destination cards will display real images or properly fall back to gradients
-- Expired TripAdvisor URLs will be detected at load time and trigger fallback
-- Common US cities will have reliable curated images
-- No more gray boxes for Baltimore, Thurmont, or similar destinations
+- All destinations with curated images will use reliable Unsplash photos
+- Destinations not in curated list will use API with strict matching (or gradient fallback)
+- Expired CDN URLs will be detected client-side and fall back properly
+- No more gray boxes or wrong images for major destinations
