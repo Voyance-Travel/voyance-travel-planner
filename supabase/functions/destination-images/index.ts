@@ -51,7 +51,8 @@ async function checkCuratedCache(
   supabase: any,
   entityType: string,
   entityKey: string,
-  destination?: string
+  destination?: string,
+  category?: string // NEW: category for mismatch validation
 ): Promise<DestinationImage | null> {
   try {
     const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").slice(0, 100);
@@ -85,15 +86,31 @@ async function checkCuratedCache(
     }
 
     // Guardrail: avoid returning airport photos for city-level destination lookups
+    // Also apply category mismatch filtering for activity images
     const pick = data.find((row: any) => {
-      if (entityType !== "destination") return true;
       const alt = String(row.alt_text || "").toLowerCase();
       const key = String(row.entity_key || "").toLowerCase();
-      return !alt.includes("airport") && !key.includes("airport");
+      
+      // Filter out airport photos for destinations
+      if (entityType === "destination") {
+        if (alt.includes("airport") || key.includes("airport")) {
+          return false;
+        }
+      }
+      
+      // NEW: Category mismatch filter for activities
+      if (entityType === "activity" && category) {
+        if (hasMismatchedContent(category, alt)) {
+          console.log(`[Images] Cache entry rejected (content mismatch): ${row.alt_text}`);
+          return false;
+        }
+      }
+      
+      return true;
     });
 
     if (!pick) {
-      console.log(`[Images] Cache entries found for "${entityKey}" but filtered out (airport mismatch)`);
+      console.log(`[Images] Cache entries found for "${entityKey}" but filtered out (mismatch)`);
       return null;
     }
 
@@ -189,6 +206,51 @@ function calculateMatchScore(venueTokens: Set<string>, displayName: string): num
 }
 
 // =============================================================================
+// CONTENT MISMATCH DETECTION (Layer 3: Quality Assurance)
+// =============================================================================
+// Keywords that indicate a mismatch between activity category and image content
+const CATEGORY_MISMATCH_KEYWORDS: Record<string, string[]> = {
+  'dining': ['yoga', 'sumo', 'canyon', 'hiking', 'pool', 'swimming', 'wrestling', 'gym', 'airport', 'train station'],
+  'breakfast': ['yoga', 'sumo', 'canyon', 'hiking', 'tour', 'wrestling', 'gym', 'airport', 'train station'],
+  'lunch': ['yoga', 'sumo', 'canyon', 'hiking', 'tour', 'wrestling', 'gym', 'airport', 'train station'],
+  'dinner': ['yoga', 'sumo', 'canyon', 'hiking', 'tour', 'wrestling', 'gym', 'airport', 'train station'],
+  'brunch': ['yoga', 'sumo', 'canyon', 'hiking', 'tour', 'wrestling', 'gym', 'airport', 'train station'],
+  'accommodation': ['sumo', 'canyon', 'hiking', 'wrestling', 'restaurant', 'cafe', 'yoga studio', 'airport'],
+  'hotel': ['sumo', 'canyon', 'hiking', 'wrestling', 'restaurant', 'cafe', 'yoga studio', 'airport'],
+  'cafe': ['sumo', 'canyon', 'hiking', 'wrestling', 'gym', 'yoga studio', 'airport', 'train station'],
+  'coffee': ['sumo', 'canyon', 'hiking', 'wrestling', 'gym', 'yoga studio', 'airport', 'train station'],
+  'museum': ['yoga', 'sumo', 'canyon', 'hiking', 'pool', 'swimming', 'wrestling', 'gym', 'restaurant'],
+  'cultural': ['yoga studio', 'sumo', 'canyon', 'pool', 'swimming', 'gym'],
+  'spa': ['sumo', 'canyon', 'hiking', 'wrestling', 'airport', 'train station', 'restaurant'],
+  'relaxation': ['sumo', 'canyon', 'hiking', 'wrestling', 'airport', 'train station'],
+  'sightseeing': ['yoga studio', 'sumo wrestling', 'gym', 'pool', 'swimming pool'],
+};
+
+/**
+ * Detect if image content (alt text / display name) contains keywords 
+ * that don't make sense for the requested category.
+ * Returns true if there's a mismatch (image should be rejected).
+ */
+function hasMismatchedContent(category: string, altTextOrName: string): boolean {
+  if (!category || !altTextOrName) return false;
+  
+  const cat = category.toLowerCase();
+  const text = altTextOrName.toLowerCase();
+  
+  for (const [catKey, forbidden] of Object.entries(CATEGORY_MISMATCH_KEYWORDS)) {
+    if (cat.includes(catKey)) {
+      for (const kw of forbidden) {
+        if (text.includes(kw)) {
+          console.log(`[Images] Content mismatch detected: category="${cat}", found forbidden keyword="${kw}" in "${altTextOrName}"`);
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// =============================================================================
 // TIER 2: GOOGLE PLACES PHOTOS (New Places API v1) - HARDENED
 // =============================================================================
 async function getGooglePlacesPhoto(
@@ -222,8 +284,8 @@ async function getGooglePlacesPhoto(
 
     const venueTokens = new Set(tokenize(venueName));
 
-    // Minimum match threshold (0-1): require at least 40% token overlap
-    const MIN_MATCH_SCORE = 0.4;
+    // Minimum match threshold (0-1): require at least 50% token overlap (raised from 0.4)
+    const MIN_MATCH_SCORE = 0.50;
 
     try {
       const searchResponse = await fetch(
@@ -289,6 +351,12 @@ async function getGooglePlacesPhoto(
 
         if (score < MIN_MATCH_SCORE) {
           console.log(`[Images] Rejecting (low score ${score.toFixed(2)}):`, displayName);
+          continue;
+        }
+
+        // NEW: Content mismatch filter - reject if image content doesn't match category
+        if (category && hasMismatchedContent(category, displayName)) {
+          console.log(`[Images] Rejecting (content mismatch):`, displayName);
           continue;
         }
 
@@ -379,12 +447,24 @@ async function getTripAdvisorPhoto(
     const locationName = location.name || '';
     const matchScore = calculateMatchScore(venueTokens, locationName);
     
-    // Lower threshold than Google (0.3 vs 0.4) since TripAdvisor is a fallback
-    const MIN_MATCH_SCORE = 0.3;
+    // Match threshold for TripAdvisor (raised from 0.3 to 0.45)
+    const MIN_MATCH_SCORE = 0.45;
     
     if (matchScore < MIN_MATCH_SCORE) {
       console.log(`[Images] Rejecting TripAdvisor result (low score ${matchScore.toFixed(2)}): ${locationName}`);
       return null;
+    }
+
+    // NEW: Content mismatch filter for TripAdvisor
+    // Category is not passed directly to this function, so we use a broad check
+    // Looking for obviously mismatched content in the location name
+    const suspiciousMismatches = ['yoga studio', 'sumo wrestling', 'gym', 'fitness center', 'airport'];
+    const lowerName = locationName.toLowerCase();
+    for (const mismatch of suspiciousMismatches) {
+      if (lowerName.includes(mismatch) && !venueName.toLowerCase().includes(mismatch.split(' ')[0])) {
+        console.log(`[Images] Rejecting TripAdvisor (content mismatch): ${locationName}`);
+        return null;
+      }
     }
 
     // Step 2: Get photos for the location
@@ -910,7 +990,7 @@ async function fetchImageTiered(
 
   // TIER 1: Check cache first (unless skipCache is true)
   if (!skipCache) {
-    const cached = await checkCuratedCache(supabase, entityType, cleanName, destination);
+    const cached = await checkCuratedCache(supabase, entityType, cleanName, destination, effectiveCategory);
     if (cached) {
       return cached;
     }
