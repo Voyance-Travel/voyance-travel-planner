@@ -93,19 +93,24 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
   },
 };
 
+// Credit pack tiers for scale comparison
+const CREDIT_TIERS = [
+  { key: "topup", label: "Top-Up", price: 5, credits: 50, color: "#94A3B8", description: "Quick refill for small actions" },
+  { key: "single", label: "Single", price: 29, credits: 200, color: "#38BDF8", description: "One complete trip" },
+  { key: "explorer", label: "Explorer", price: 35, credits: 500, color: "#34D399", description: "Multi-day adventures" },
+  { key: "voyager", label: "Voyager", price: 45, credits: 1200, color: "#A78BFA", description: "Frequent travelers" },
+];
+
 // Column definitions with tooltips for per-trip scaling table
 const SCALE_COLUMNS = [
-  { key: "trips", label: "Trips/Mo", tooltip: "Monthly trip volume for this projection row." },
-  { key: "google", label: "Google", tooltip: "Google Places cost per trip after caching (~$0.34). Includes Text Search, Details, Photos, Geocoding." },
-  { key: "ai", label: "AI", tooltip: "Lovable AI cost per trip (~$0.064). Gemini Flash models for itinerary generation." },
-  { key: "perplexity", label: "Perplexity", tooltip: "Perplexity cost per trip (~$0.018). Used for destination intelligence." },
-  { key: "amadeus", label: "Amadeus", tooltip: "Amadeus cost per trip. $0 within free tier (≤400 trips), $0.12 beyond (5 calls × $0.024)." },
-  { key: "variable", label: "Variable", tooltip: "Sum of all per-trip costs (Google + AI + Perplexity + Amadeus). Scales linearly with volume." },
-  { key: "fixedPerTrip", label: "Fixed/Trip", tooltip: "Fixed costs ($29.08/mo) divided by trip count. Decreases as volume increases (economy of scale)." },
-  { key: "loaded", label: "Loaded", tooltip: "Fully-loaded cost per trip = Variable + Fixed/Trip. What each trip really costs you." },
-  { key: "margin", label: "Margin", tooltip: "Gross margin = (Revenue - Loaded Cost) / Revenue. Assumes 100% of trips are paid at selected tier price." },
-  { key: "monthlyRev", label: "Monthly Rev", tooltip: "Total monthly revenue = Trips × Tier Price. Assumes 100% conversion (theoretical max)." },
-  { key: "monthlyProfit", label: "Monthly Profit", tooltip: "Gross profit = Revenue - Total Costs. Does not account for taxes, labor, or marketing." },
+  { key: "trips", label: "Trips/Mo", tooltip: "Monthly trip volume for this projection row. Each trip = 1 full itinerary generation." },
+  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable costs (Google + AI + Perplexity + Amadeus) + Fixed costs / volume. This is your true cost basis." },
+  { key: "topup", label: "Top-Up $5", tooltip: "Margin if user pays $5 (Top-Up pack). Formula: ($5 - Cost) / $5. Low-value transactions that may be loss leaders at low volume." },
+  { key: "single", label: "Single $29", tooltip: "Margin if user pays $29 (Single Trip pack). Formula: ($29 - Cost) / $29. Primary offering for casual travelers." },
+  { key: "explorer", label: "Explorer $35", tooltip: "Margin if user pays $35 (Explorer pack). Formula: ($35 - Cost) / $35. Most popular tier for serious trip planning." },
+  { key: "voyager", label: "Voyager $45", tooltip: "Margin if user pays $45 (Voyager pack). Formula: ($45 - Cost) / $45. Best margins for power users." },
+  { key: "breakeven", label: "Breakeven", tooltip: "Minimum price needed to break even at this volume. If cost/trip is $2.50, you need at least $2.50 revenue per trip." },
+  { key: "monthlyProfit35", label: "Profit @$35", tooltip: "Monthly profit if ALL trips paid Explorer ($35). Formula: Trips × ($35 - Cost). Theoretical max at 100% conversion." },
 ];
 
 
@@ -632,7 +637,7 @@ export default function UnitEconomics() {
           </div>
         </div>
 
-        {/* Scale Economics Table */}
+        {/* Scale Economics Table - All Tiers */}
         <div style={{
           background: "rgba(30, 41, 59, 0.5)",
           borderRadius: 12,
@@ -641,17 +646,36 @@ export default function UnitEconomics() {
           marginBottom: 32,
           overflowX: "auto",
         }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            Economics At Scale · {tier.charAt(0).toUpperCase() + tier.slice(1)} Tier (${revenue}) · Scenario D
-          </h3>
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 8 }}>
+              Economics At Scale · All Tiers Compared · Scenario D
+            </h3>
+            <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
+              Shows <strong style={{ color: "#34D399" }}>gross margin %</strong> for each pricing tier at different volumes.
+              <strong style={{ color: "#A855F7" }}> Scenario D</strong> = Photo caching active (-33% Google), Amadeus beyond free tier (400+ trips).
+              Margins &gt;90% shown in <span style={{ color: "#34D399" }}>green</span>, 50-90% in <span style={{ color: "#FBBF24" }}>yellow</span>, &lt;50% in <span style={{ color: "#F87171" }}>red</span>.
+            </p>
+          </div>
+
+          {/* Tier Legend */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+            {CREDIT_TIERS.map(t => (
+              <div key={t.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: t.color }} />
+                <span style={{ color: "#94A3B8" }}>{t.label}</span>
+                <span style={{ color: "#64748B", fontFamily: "'JetBrains Mono', monospace" }}>${t.price}</span>
+                <span style={{ color: "#475569", fontSize: 10 }}>({t.credits} cr)</span>
+              </div>
+            ))}
+          </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr>
                 {SCALE_COLUMNS.map(col => (
                   <th key={col.key} style={{ 
-                    textAlign: "right", 
-                    padding: "10px 10px", 
+                    textAlign: col.key === "trips" ? "left" : "right", 
+                    padding: "10px 12px", 
                     color: "#64748B", 
                     fontWeight: 500, 
                     borderBottom: "1px solid rgba(100, 116, 139, 0.3)",
@@ -673,48 +697,93 @@ export default function UnitEconomics() {
                 const variable = goog + ai + perp + amad;
                 const fixedPer = 29.08 / vol;
                 const loaded = variable + fixedPer;
-                const margin = ((revenue - loaded) / revenue * 100);
-                const monthlyRev = vol * revenue;
-                const monthlyProfit = vol * (revenue - loaded);
+                
+                // Calculate margin for each tier
+                const margins = CREDIT_TIERS.map(t => ({
+                  key: t.key,
+                  margin: ((t.price - loaded) / t.price) * 100,
+                  color: t.color,
+                }));
+                
+                const explorerProfit = vol * (35 - loaded);
 
-                const isHighlight = vol === 100 || vol === 500;
                 const isAmadeusThreshold = vol === 400;
+                const isKeyVolume = vol === 100 || vol === 500 || vol === 1000;
+                
+                const getMarginColor = (m: number) => {
+                  if (m >= 90) return "#34D399";
+                  if (m >= 50) return "#FBBF24";
+                  if (m >= 0) return "#F87171";
+                  return "#EF4444";
+                };
+
                 return (
                   <tr key={vol} style={{ 
-                    background: isAmadeusThreshold ? "rgba(245, 158, 11, 0.08)" : isHighlight ? "rgba(99, 179, 170, 0.08)" : "transparent" 
+                    background: isAmadeusThreshold ? "rgba(245, 158, 11, 0.08)" : isKeyVolume ? "rgba(99, 179, 170, 0.05)" : "transparent" 
                   }}>
-                    {[
-                      vol.toLocaleString() + (isAmadeusThreshold ? " ⚠️" : ""),
-                      `$${goog.toFixed(3)}`,
-                      `$${ai.toFixed(3)}`,
-                      `$${perp.toFixed(3)}`,
-                      `$${amad.toFixed(3)}`,
-                      `$${variable.toFixed(3)}`,
-                      `$${fixedPer.toFixed(3)}`,
-                      `$${loaded.toFixed(2)}`,
-                      `${margin.toFixed(1)}%`,
-                      `$${monthlyRev.toLocaleString()}`,
-                      `$${monthlyProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-                    ].map((cell, j) => (
-                      <td key={j} style={{
-                        color: j === 4 && amad > 0 ? "#F59E0B" : j === 8 ? (margin > 97 ? "#34D399" : margin > 95 ? "#FBBF24" : "#CBD5E1") : j === 10 ? "#34D399" : "#CBD5E1",
-                        padding: "10px 10px",
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: "#E2E8F0", 
+                      fontWeight: 600,
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      {vol.toLocaleString()}{isAmadeusThreshold ? " ⚠️" : ""}
+                    </td>
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: "#94A3B8", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      ${loaded.toFixed(2)}
+                    </td>
+                    {margins.map(m => (
+                      <td key={m.key} style={{ 
+                        padding: "10px 12px", 
+                        color: getMarginColor(m.margin), 
                         textAlign: "right",
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontWeight: 600,
                         borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                        fontWeight: j === 8 || j === 10 ? 600 : 400,
-                        fontFamily: j > 0 ? "'JetBrains Mono', monospace" : "inherit",
                       }}>
-                        {cell}
+                        {m.margin > 0 ? `${m.margin.toFixed(0)}%` : <span style={{ color: "#EF4444" }}>Loss</span>}
                       </td>
                     ))}
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: "#64748B", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      ${loaded.toFixed(2)}
+                    </td>
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: explorerProfit > 0 ? "#34D399" : "#F87171", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontWeight: 600,
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      ${explorerProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          <p style={{ fontSize: 10, color: "#64748B", marginTop: 12 }}>
-            ⚠️ Amadeus free tier ends at 400 trips/mo. Beyond this, adds $0.12/trip.
-          </p>
+          
+          <div style={{ marginTop: 16, padding: 12, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8 }}>
+            <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
+              <strong style={{ color: "#F59E0B" }}>⚠️ Key Insight:</strong> The $5 Top-Up tier shows 
+              <strong style={{ color: "#F87171" }}> negative or low margins</strong> at low volumes because fixed costs ($29/mo) dominate.
+              At scale (1000+ trips), even $5 purchases become profitable. The <strong style={{ color: "#34D399" }}>Explorer ($35)</strong> tier 
+              is the sweet spot: profitable even at 10 trips/mo.
+            </p>
+          </div>
         </div>
 
         {/* Monthly Expense Projections */}
