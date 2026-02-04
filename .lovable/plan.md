@@ -1,272 +1,302 @@
 
-# Comprehensive Image Quality Assurance Plan
 
-## ✅ IMPLEMENTED (2025-02-04)
+# Collaborative Trip Profile Blending UX
 
-## Problem Summary
+## Overview
 
-The image pipeline has multiple points where wrong/irrelevant images can slip through and appear in production:
+This plan adds user control and visibility to the Travel DNA profile blending system. Currently, when friends are linked to a trip, their preferences are automatically blended with the trip owner's profile (owner gets 1.5x weight). However, users have no control over this process and no visibility into how preferences were merged.
 
-1. **Destination Hero Images** - Wrong photos (canyons for Paris, etc.)
-2. **Activity Images** - Mismatched images (yoga for hotel dining, sumo for breakfast)
-3. **Cached Bad Data** - 137+ entries in `curated_images` table with mismatched content
-4. **Weak Validation** - Match scoring exists but thresholds may be too permissive
-
-## Current Image Resolution Chain
+## Current State
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        HERO / DESTINATION IMAGES                         │
+│                     CURRENT PROFILE BLENDING FLOW                       │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ 1. Seeded Metadata (trip.metadata.hero_image)                           │
-│ 2. Curated Local (CURATED_DESTINATION_IMAGES in destinationImages.ts)   │
-│ 3. API Fetch (destination-images edge function)                         │
-│ 4. Gradient Fallback (deterministic SVG)                                │
+│                                                                         │
+│  Link Friend to Trip ──► Collaborator Added ──► Generation Triggered   │
+│                                                                         │
+│                    (Automatic blending, no user control)                │
+│                                                                         │
+│  Backend fetches all collaborator preferences automatically             │
+│  Owner gets 1.5x weight in blending algorithm                           │
+│  No UI feedback about what was blended                                  │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
+```
 
+## Proposed Solution: Four New Features
+
+### Feature 1: Blend Toggle in Link-to-Trip Flow
+
+Add an option when linking a friend to include or exclude their preferences from itinerary generation.
+
+**Where**: `LinkToTripModal.tsx` and `TripCollaboratorsPanel.tsx`
+
+**Database Change**: Add `include_preferences` boolean column to `trip_collaborators` table (default: true)
+
+**UI Addition**:
+```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          ACTIVITY IMAGES                                 │
+│  Link to Trip                                                     [X]  │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ 1. Existing Photo (activity.photoUrl)                                    │
-│ 2. Database Cache (curated_images table)                                │
-│ 3. Google Places API (with match scoring)                               │
-│ 4. TripAdvisor API (with match scoring)                                 │
-│ 5. Wikimedia Commons                                                     │
-│ 6. AI Generation (Lovable AI)                                           │
-│ 7. Category Fallback (curated Unsplash by category)                     │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  [Avatar] Sarah Chen                                              │  │
+│  │  @sarahchen                                                       │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ [Toggle ON]  Include Travel DNA in itinerary                    │   │
+│  │              Their preferences will blend with yours            │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  Select a trip:                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ [✓] Paris Adventure                                             │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│                                      [Cancel]  [Link]                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Feature 2: Blended Profiles Visibility Card
+
+Show which profiles were combined and highlight any compromises in the itinerary view.
+
+**Where**: New component `BlendedProfilesCard.tsx` displayed in `EditorialItinerary.tsx`
+
+**UI Addition**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Blended Travel DNA                                              [▼]   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  [Avatar] You (organizer)     ●────────── 60% weight                    │
+│  Balanced Story Collector                                               │
+│                                                                         │
+│  [Avatar] Sarah Chen          ○───────── 40% weight                     │
+│  Luxury Curator                                                         │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Blended Result:                                                        │
+│  • Pace: Moderate (both aligned)                                        │
+│  • Budget: Mid-range → Upscale (compromised for Sarah)                  │
+│  • Dining: Balanced mix of local + fine dining                          │
+│  • Dietary: Vegetarian included (Sarah's requirement)                   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Feature 3: DNA Quiz Prompt for Guests
+
+When a friend without Travel DNA is added, show a gentle prompt encouraging them to complete the quiz.
+
+**Where**: `TripCollaboratorsPanel.tsx` and potentially a notification/email
+
+**UI Addition**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Trip Members                                                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  [Avatar] You                              [Crown] Owner                │
+│                                                                         │
+│  [Avatar] Sarah Chen                       [DNA Icon] Contributor       │
+│           87% compatible                                                │
+│                                                                         │
+│  [Avatar] Mike Johnson                     [!] Contributor              │
+│           ┌──────────────────────────────────────────────────────┐     │
+│           │ No Travel DNA yet                                     │     │
+│           │ Invite Mike to take the quiz so their preferences     │     │
+│           │ can be included in your itinerary.                    │     │
+│           │                                                       │     │
+│           │ [Send Quiz Invite]                                    │     │
+│           └──────────────────────────────────────────────────────┘     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Feature 4: Group Compatibility Card
+
+Show overall group travel compatibility and highlight potential preference conflicts.
+
+**Where**: New component `GroupCompatibilityCard.tsx` in `TripCollaboratorsPanel.tsx`
+
+**UI Addition**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Group Compatibility                                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│       ┌────────────────┐                                                │
+│       │                │                                                │
+│       │      78%       │  ← Overall group compatibility                 │
+│       │                │                                                │
+│       └────────────────┘                                                │
+│                                                                         │
+│  Aligned On:                                                            │
+│  ✓ Cultural Experiences    ✓ Food Adventures    ✓ Moderate Pace        │
+│                                                                         │
+│  May Need Compromise:                                                   │
+│  ⚡ Budget (Value vs Luxury)                                            │
+│  ⚡ Morning Schedule (Early Bird vs Late Riser)                          │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Root Causes of Bad Images
+## Technical Implementation
 
-| Issue | Where | Impact |
-|-------|-------|--------|
-| Low match score threshold | Backend (0.3-0.4) | Allows weak matches through |
-| Cached bad images | Database (137+) | Served from cache before validation |
-| Generic activity titles | Frontend/Backend | "Breakfast at Hotel" returns irrelevant results |
-| Missing category awareness | Cache lookup | Doesn't validate category matches content |
-| No image content validation | All tiers | Can't detect if image shows wrong subject |
+### Database Changes
 
----
-
-## Solution: Multi-Layer Quality Assurance
-
-### Layer 1: Database Cleanup (Immediate)
-
-Delete all suspicious cached images:
+**New column on `trip_collaborators` table:**
 
 ```sql
-DELETE FROM curated_images
-WHERE 
-  -- Content clearly mismatches common activity types
-  (entity_key ILIKE '%breakfast%' AND alt_text ILIKE '%sumo%')
-  OR (entity_key ILIKE '%breakfast%' AND alt_text ILIKE '%yoga%')
-  OR (entity_key ILIKE '%hotel%' AND alt_text ILIKE '%sumo%')
-  OR (entity_key ILIKE '%hotel%' AND alt_text ILIKE '%yoga%')
-  OR (entity_key ILIKE '%hotel%' AND alt_text ILIKE '%canyon%')
-  OR (entity_key ILIKE '%hotel%' AND alt_text ILIKE '%swimming%')
-  OR (entity_key ILIKE '%checkout%' AND alt_text NOT ILIKE '%hotel%')
-  OR (entity_key ILIKE '%check-out%' AND alt_text NOT ILIKE '%hotel%')
-  -- City/destination mismatches
-  OR (destination = 'Paris' AND (alt_text ILIKE '%NYC%' OR alt_text ILIKE '%canyon%'))
-  OR (destination = 'Tokyo' AND alt_text ILIKE '%sumo%' AND entity_key NOT ILIKE '%sumo%')
-  -- Yoga studio results for non-yoga activities
-  OR (alt_text ILIKE '%yoga studio%' AND entity_key NOT ILIKE '%yoga%' AND entity_key NOT ILIKE '%wellness%');
+ALTER TABLE trip_collaborators 
+ADD COLUMN include_preferences BOOLEAN DEFAULT true;
+
+COMMENT ON COLUMN trip_collaborators.include_preferences IS 
+'Whether to include this collaborator preferences in itinerary generation blending';
 ```
 
-### Layer 2: Stricter Match Scoring (Backend)
+### Files to Create
 
-Update `destination-images/index.ts` to raise thresholds:
+| File | Purpose |
+|------|---------|
+| `src/components/itinerary/BlendedProfilesCard.tsx` | Shows blended DNA breakdown |
+| `src/components/itinerary/GroupCompatibilityCard.tsx` | Shows overall group compatibility |
+| `src/components/itinerary/DNAQuizPrompt.tsx` | Prompt for guests without DNA |
 
-| Source | Current | Proposed |
-|--------|---------|----------|
-| Google Places | 0.40 | 0.50 |
-| TripAdvisor | 0.30 | 0.45 |
-
-### Layer 3: Content Keyword Validation (Backend)
-
-Add a validation layer that checks if the returned image's `alt_text` / `displayName` contains suspicious mismatches:
-
-```typescript
-// Reject if alt_text contains activity-type keywords that don't match the request
-const MISMATCH_KEYWORDS: Record<string, string[]> = {
-  'dining': ['yoga', 'sumo', 'canyon', 'hiking', 'pool', 'swimming'],
-  'accommodation': ['sumo', 'canyon', 'hiking', 'wrestling'],
-  'breakfast': ['yoga', 'sumo', 'canyon', 'tour', 'wrestling'],
-};
-
-function hasMismatchedContent(category: string, altText: string): boolean {
-  const forbidden = MISMATCH_KEYWORDS[category] || [];
-  const lower = altText.toLowerCase();
-  return forbidden.some(kw => lower.includes(kw));
-}
-```
-
-### Layer 4: Cache Validation on Read (Backend)
-
-When reading from cache, validate the cached entry makes sense for the request:
-
-```typescript
-// In checkCuratedCache()
-// After finding a cached entry, validate it matches the expected category
-if (entityType === 'activity' && category) {
-  const altLower = (pick.alt_text || '').toLowerCase();
-  if (hasMismatchedContent(category, altLower)) {
-    console.log(`[Images] Cache entry rejected (content mismatch): ${pick.alt_text}`);
-    // Optionally: mark for deletion
-    return null;
-  }
-}
-```
-
-### Layer 5: Frontend Image Verification (Frontend)
-
-Add an `onError` handler that falls back gracefully when images fail to load:
-
-This is already implemented in `useTripHeroImage` and `useActivityImage` but can be enhanced to detect invalid image dimensions or broken URLs.
-
----
-
-## Files to Change
+### Files to Modify
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/destination-images/index.ts` | Raise match thresholds, add content mismatch validation |
-| Database | Delete 137+ bad cached images |
+| `src/components/profile/LinkToTripModal.tsx` | Add blend toggle switch |
+| `src/components/itinerary/TripCollaboratorsPanel.tsx` | Add compatibility display, DNA quiz prompt, blend toggle per collaborator |
+| `src/services/tripCollaboratorsAPI.ts` | Add `include_preferences` to types and mutations |
+| `supabase/functions/generate-itinerary/index.ts` | Respect `include_preferences` flag when fetching collaborator preferences |
+| `src/components/itinerary/EditorialItinerary.tsx` | Add BlendedProfilesCard to sidebar |
 
 ---
 
-## Technical Details
+## Detailed Component Specifications
 
-### destination-images/index.ts Changes
-
-**1. Raise match thresholds:**
+### BlendedProfilesCard.tsx
 
 ```typescript
-// Line ~226: Google Places threshold
-const MIN_MATCH_SCORE = 0.50; // Was 0.40
-
-// Line ~383: TripAdvisor threshold
-const MIN_MATCH_SCORE = 0.45; // Was 0.30
-```
-
-**2. Add mismatch keyword detection (~after line 188):**
-
-```typescript
-// Keywords that indicate a mismatch between activity category and image content
-const CATEGORY_MISMATCH_KEYWORDS: Record<string, string[]> = {
-  'dining': ['yoga', 'sumo', 'canyon', 'hiking', 'pool', 'swimming', 'wrestling', 'gym'],
-  'breakfast': ['yoga', 'sumo', 'canyon', 'hiking', 'tour', 'wrestling', 'gym'],
-  'lunch': ['yoga', 'sumo', 'canyon', 'hiking', 'tour', 'wrestling', 'gym'],
-  'dinner': ['yoga', 'sumo', 'canyon', 'hiking', 'tour', 'wrestling', 'gym'],
-  'accommodation': ['sumo', 'canyon', 'hiking', 'wrestling', 'restaurant', 'cafe'],
-  'hotel': ['sumo', 'canyon', 'hiking', 'wrestling', 'restaurant', 'cafe'],
-  'cafe': ['sumo', 'canyon', 'hiking', 'wrestling', 'gym'],
-};
-
-function hasMismatchedContent(category: string, altTextOrName: string): boolean {
-  const cat = category.toLowerCase();
-  const text = altTextOrName.toLowerCase();
-  
-  for (const [catKey, forbidden] of Object.entries(CATEGORY_MISMATCH_KEYWORDS)) {
-    if (cat.includes(catKey)) {
-      for (const kw of forbidden) {
-        if (text.includes(kw)) {
-          console.log(`[Images] Content mismatch detected: category=${cat}, found keyword="${kw}" in "${altTextOrName}"`);
-          return true;
-        }
-      }
-    }
-  }
-  return false;
+interface BlendedProfilesCardProps {
+  tripId: string;
+  ownerId: string;
 }
+
+// Displays:
+// - Owner's archetype and weight (60%)
+// - Each collaborator's archetype and weight (40% / n)
+// - Blended result summary:
+//   - Aligned traits (both users agree)
+//   - Compromised traits (averaged/adjusted)
+//   - Merged requirements (dietary, accessibility)
 ```
 
-**3. Apply mismatch check in Google Places (~line 288):**
+### GroupCompatibilityCard.tsx
 
 ```typescript
-// After match score check, before accepting
-if (hasMismatchedContent(category || 'activity', displayName)) {
-  console.log(`[Images] Rejecting (content mismatch):`, displayName);
-  continue;
+interface GroupCompatibilityCardProps {
+  tripId: string;
+  collaborators: TripCollaborator[];
 }
+
+// Calculates:
+// - Pairwise compatibility between all travelers
+// - Average overall compatibility score
+// - Identifies aligned traits (low variance across group)
+// - Identifies conflict traits (high variance across group)
 ```
 
-**4. Apply mismatch check in TripAdvisor (~line 386):**
+### LinkToTripModal.tsx Changes
+
+Add a Switch component below the friend preview:
+
+```tsx
+<div className="flex items-center justify-between py-3 border-b">
+  <div className="space-y-0.5">
+    <Label htmlFor="blend-toggle" className="text-sm font-medium">
+      Include Travel DNA
+    </Label>
+    <p className="text-xs text-muted-foreground">
+      Blend their preferences when generating itinerary
+    </p>
+  </div>
+  <Switch
+    id="blend-toggle"
+    checked={includePreferences}
+    onCheckedChange={setIncludePreferences}
+  />
+</div>
+```
+
+### Backend Changes (generate-itinerary/index.ts)
+
+Update `getCollaboratorPreferences` to filter by `include_preferences`:
 
 ```typescript
-// After match score check
-if (hasMismatchedContent(category || 'activity', locationName)) {
-  console.log(`[Images] Rejecting TripAdvisor (content mismatch): ${locationName}`);
-  return null;
-}
-```
-
-**5. Apply mismatch check in cache lookup (~line 88):**
-
-```typescript
-// When finding cached entries, validate content matches category
-const pick = data.find((row: any) => {
-  if (entityType !== "destination") {
-    // For activities, validate content doesn't mismatch category
-    const alt = String(row.alt_text || "").toLowerCase();
-    const key = String(row.entity_key || "").toLowerCase();
-    
-    // Existing airport filter
-    if (entityType === 'destination' && (alt.includes("airport") || key.includes("airport"))) {
-      return false;
-    }
-    
-    // NEW: Category mismatch filter
-    if (entityType === 'activity' && category) {
-      if (hasMismatchedContent(category, alt)) {
-        return false;
-      }
-    }
-  }
-  return true;
-});
+// Line ~2277: Add filter for include_preferences
+const { data: collaborators, error: collabError } = await supabase
+  .from('trip_collaborators')
+  .select('user_id, include_preferences')
+  .eq('trip_id', tripId)
+  .eq('include_preferences', true); // Only include if flag is true
 ```
 
 ---
 
-## Database Cleanup Query
+## User Experience Flow
 
-```sql
--- Comprehensive cleanup of mismatched cached images
-DELETE FROM curated_images
-WHERE 
-  -- Breakfast/dining with wrong content
-  ((entity_key ILIKE '%breakfast%' OR entity_key ILIKE '%lunch%' OR entity_key ILIKE '%dinner%' OR entity_key ILIKE '%dining%')
-   AND (alt_text ILIKE '%sumo%' OR alt_text ILIKE '%yoga%' OR alt_text ILIKE '%canyon%' OR alt_text ILIKE '%wrestling%' OR alt_text ILIKE '%gym%'))
-  -- Hotel with wrong content  
-  OR ((entity_key ILIKE '%hotel%' OR entity_key ILIKE '%check%')
-   AND (alt_text ILIKE '%sumo%' OR alt_text ILIKE '%yoga%' OR alt_text ILIKE '%canyon%' OR alt_text ILIKE '%wrestling%' OR alt_text ILIKE '%swimming%' AND alt_text NOT ILIKE '%pool%'))
-  -- Yoga studio results for non-yoga activities
-  OR (alt_text ILIKE '%yoga studio%' AND entity_key NOT ILIKE '%yoga%' AND entity_key NOT ILIKE '%wellness%' AND entity_key NOT ILIKE '%morning wellness%')
-  -- Destination mismatches (Paris with canyon, etc.)
-  OR (destination ILIKE 'Paris' AND (alt_text ILIKE '%canyon%' OR alt_text ILIKE '%NYC%' OR alt_text ILIKE '%new york%'))
-  OR (destination ILIKE 'London' AND (alt_text ILIKE '%canyon%' OR alt_text ILIKE '%NYC%'))
-  OR (destination ILIKE 'Rome' AND (alt_text ILIKE '%canyon%' OR alt_text ILIKE '%NYC%'))
-  OR (destination ILIKE 'Tokyo' AND alt_text ILIKE '%sumo%' AND entity_key NOT ILIKE '%sumo%');
+```text
+1. Link Friend to Trip
+   ├── See friend's compatibility score (if DNA exists)
+   ├── Toggle: "Include Travel DNA" (default: ON)
+   └── If friend has no DNA → Show "Complete Quiz" prompt
+
+2. View Trip Collaborators
+   ├── See each collaborator with compatibility %
+   ├── Toggle blend ON/OFF per collaborator
+   └── "No DNA" badge with quiz invite for incomplete profiles
+
+3. Generate Itinerary
+   ├── Backend filters collaborators by include_preferences
+   ├── Blends only opted-in profiles
+   └── Returns blend metadata with response
+
+4. View Itinerary
+   ├── Blended Profiles Card shows who was included
+   ├── Highlights compromises and alignments
+   └── Group Compatibility Card shows overall match
 ```
 
 ---
 
-## Impact
+## Design Considerations
 
-- **Immediate**: Removes 137+ bad cached images from database
-- **Ongoing**: Higher match thresholds prevent low-quality matches
-- **Defense in Depth**: Content mismatch detection catches semantically wrong results
-- **Backward Compatible**: Falls back to category images when validation fails (always shows something reasonable)
+Following the "Friend, Not Nuisance" philosophy:
+
+- Default blend to ON (invisible helper pattern)
+- Compatibility scores shown as celebration ("87% aligned!")
+- Conflicts framed as "May need compromise" not "Mismatch detected"
+- Quiz prompts are gentle invitations, not blocking gates
+- All toggles remember user preference per collaborator
 
 ---
 
-## Testing Recommendations
+## Summary of Changes
 
-1. Clear cache and regenerate images for a Tokyo trip with "Breakfast at Hotel" activity
-2. Verify Paris trip hero image shows Eiffel Tower / Paris landmarks
-3. Check that activities like "Morning Wellness" show appropriate spa/relaxation images
-4. Confirm hotel checkout activities show hotel exterior/lobby images
+| Area | What's Added |
+|------|--------------|
+| **Database** | `include_preferences` column on `trip_collaborators` |
+| **LinkToTripModal** | Blend toggle switch |
+| **TripCollaboratorsPanel** | Compatibility scores, per-user blend toggle, DNA quiz prompt |
+| **EditorialItinerary** | BlendedProfilesCard in sidebar |
+| **Backend** | Filter by `include_preferences` in blending logic |
+| **New Components** | BlendedProfilesCard, GroupCompatibilityCard, DNAQuizPrompt |
+
