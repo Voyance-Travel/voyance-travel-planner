@@ -144,7 +144,7 @@ export default function SampleItinerary() {
       navigate('/signin?redirect=/sample-itinerary');
       return;
     }
-    navigate('/planner');
+    navigate('/start');
   };
 
   const toggleDay = (dayNumber: number) => {

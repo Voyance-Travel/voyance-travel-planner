@@ -114,7 +114,7 @@ export default function TripSummary({
       if (!selectedHotel) return;
       navigate("/planner/itinerary");
     } else {
-      navigate("/planner");
+      navigate("/start");
     }
   };
 
