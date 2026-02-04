@@ -17,6 +17,9 @@ import {
   Star,
   ArrowRight,
   UserCircle,
+  Bookmark,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -38,6 +41,7 @@ export default function PlannerBooking() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [travelerNames, setTravelerNames] = useState<string[]>([]);
   const [userIsTraveling, setUserIsTraveling] = useState(true); // Default: user is traveling
@@ -196,12 +200,12 @@ export default function PlannerBooking() {
     (sum, day) => sum + day.activities.reduce((daySum, act) => daySum + (act.price || 0), 0),
     0
   );
-  // Only charge service fee if user has selected flights or hotels
-  const hasSelections = flightSubtotal > 0 || hotelSubtotal > 0;
-  const serviceFee = hasSelections ? 29.99 : 0;
+  // No service fee - removed as per user feedback
   const totalTaxes = flightTaxes + hotelTaxes;
-  const grandTotal = flightSubtotal + hotelSubtotal + activitiesTotal + totalTaxes + serviceFee;
-
+  const grandTotal = flightSubtotal + hotelSubtotal + activitiesTotal + totalTaxes;
+  
+  // Trip Pass price (flat fee to lock in prices)
+  const TRIP_PASS_PRICE = 9.99;
   const persistTravelerInfoToDb = async (persistTripId: string) => {
     if (!user?.id) return;
 
@@ -296,8 +300,9 @@ export default function PlannerBooking() {
       // Persist traveler info to DB (so it survives refresh/device changes)
       await persistTravelerInfoToDb(ensuredTripId);
 
-      const { data, error } = await supabase.functions.invoke('create-booking-checkout', {
-        body: { tripId: ensuredTripId, flightTotal, hotelTotal, activitiesTotal },
+      // Use purchase-trip-pass edge function for Trip Pass checkout
+      const { data, error } = await supabase.functions.invoke('purchase-trip-pass', {
+        body: { trip_id: ensuredTripId },
       });
       if (error) throw error;
       if (data?.url) {
@@ -314,6 +319,35 @@ export default function PlannerBooking() {
     }
   };
 
+  // Handle "Save & Build" - free option, no price guarantee
+  const handleSaveAndBuild = async () => {
+    if (!tripId) {
+      toast.error('No trip found');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const savedTripId = await saveTrip();
+      if (!savedTripId) {
+        toast.error('Unable to save your trip. Please try again.');
+        return;
+      }
+
+      // Persist traveler info if user is logged in
+      if (user?.id) {
+        await persistTravelerInfoToDb(savedTripId);
+      }
+
+      toast.success('Trip saved! Building your itinerary...');
+      navigate(`/trip/${savedTripId}?generate=true`);
+    } catch (err: any) {
+      console.error('Save error:', err);
+      toast.error('Failed to save trip. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
   if (isLoading) {
     return (
       <MainLayout>
@@ -644,7 +678,7 @@ export default function PlannerBooking() {
                 <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-lg">
                   {/* Summary Header */}
                   <div className="p-6 bg-gradient-to-br from-primary/5 to-transparent">
-                    <h2 className="text-lg font-medium mb-1">Trip Total</h2>
+                    <h2 className="text-lg font-medium mb-1">Estimated Trip Cost</h2>
                     <p className="text-4xl font-light">${grandTotal.toFixed(2)}</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       ${(grandTotal / travelers).toFixed(2)} per person
@@ -655,48 +689,74 @@ export default function PlannerBooking() {
                   <div className="p-6 space-y-4 text-sm">
                     {flightSubtotal > 0 && (
                       <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Flights ({travelers}×)</span>
-                          <span>${flightSubtotal.toFixed(2)}</span>
+                        <div className="flex justify-between font-medium">
+                          <span className="flex items-center gap-2">
+                            <Plane className="h-3.5 w-3.5 text-muted-foreground" />
+                            Flights ({travelers} traveler{travelers > 1 ? 's' : ''})
+                          </span>
+                          <span>${(flightSubtotal + flightTaxes).toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between text-muted-foreground/70">
-                          <span>Taxes & fees</span>
-                          <span>${flightTaxes.toFixed(2)}</span>
+                        <div className="pl-5 space-y-1 text-muted-foreground/80">
+                          {state.flights?.departure && (
+                            <div className="flex justify-between text-xs">
+                              <span>Outbound: {state.flights.departure.airline}</span>
+                              <span>${(state.flights.departure.price * travelers).toFixed(2)}</span>
+                            </div>
+                          )}
+                          {state.flights?.return && (
+                            <div className="flex justify-between text-xs">
+                              <span>Return: {state.flights.return.airline}</span>
+                              <span>${(state.flights.return.price * travelers).toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-xs">
+                            <span>Taxes & fees</span>
+                            <span>${flightTaxes.toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                     )}
                     
                     {hotelSubtotal > 0 && (
                       <div className="space-y-2 pt-3 border-t border-border/50">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Hotel ({nights} nights)</span>
-                          <span>${hotelSubtotal.toFixed(2)}</span>
+                        <div className="flex justify-between font-medium">
+                          <span className="flex items-center gap-2">
+                            <Hotel className="h-3.5 w-3.5 text-muted-foreground" />
+                            {state.hotel?.name?.substring(0, 20)}{(state.hotel?.name?.length || 0) > 20 ? '...' : ''}
+                          </span>
+                          <span>${(hotelSubtotal + hotelTaxes).toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between text-muted-foreground/70">
-                          <span>Taxes & fees</span>
-                          <span>${hotelTaxes.toFixed(2)}</span>
+                        <div className="pl-5 space-y-1 text-muted-foreground/80">
+                          <div className="flex justify-between text-xs">
+                            <span>${state.hotel?.pricePerNight}/night × {nights} nights</span>
+                            <span>${hotelSubtotal.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span>Taxes & fees (15%)</span>
+                            <span>${hotelTaxes.toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                     )}
                     
                     {activitiesTotal > 0 && (
                       <div className="pt-3 border-t border-border/50">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Activities</span>
+                        <div className="flex justify-between font-medium">
+                          <span className="text-muted-foreground">Planned activities</span>
                           <span>${activitiesTotal.toFixed(2)}</span>
                         </div>
                       </div>
                     )}
                     
-                    <div className="pt-3 border-t border-border/50">
-                      <div className="flex justify-between text-muted-foreground/70">
-                        <span>Service fee</span>
-                        <span>${serviceFee.toFixed(2)}</span>
+                    <div className="pt-3 border-t border-border">
+                      <div className="flex justify-between font-semibold text-base">
+                        <span>Total</span>
+                        <span>${grandTotal.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Action */}
+                  {/* Booking Options */}
                   <div className="p-6 pt-0 space-y-4">
                     {error && (
                       <div className="p-3 bg-destructive/10 rounded-lg">
@@ -707,21 +767,72 @@ export default function PlannerBooking() {
                       </div>
                     )}
 
-                    <Button onClick={handleCheckout} disabled={isProcessing} size="lg" className="w-full h-14 text-lg gap-2">
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard className="h-5 w-5" />
-                          Complete Booking
-                        </>
-                      )}
-                    </Button>
+                    {/* Option 1: Buy Trip Pass */}
+                    <div className="space-y-2">
+                      <Button 
+                        onClick={handleCheckout} 
+                        disabled={isProcessing || isSaving} 
+                        size="lg" 
+                        className="w-full h-14 text-base gap-2"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="h-5 w-5" />
+                            Buy Trip Pass — ${TRIP_PASS_PRICE}
+                          </>
+                        )}
+                      </Button>
+                      <div className="flex items-start gap-2 px-1">
+                        <CheckCircle className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                        <p className="text-xs text-muted-foreground">
+                          Lock in today's prices • Full AI itinerary • Priority support
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-xs text-muted-foreground">or</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+
+                    {/* Option 2: Save & Build */}
+                    <div className="space-y-2">
+                      <Button 
+                        onClick={handleSaveAndBuild} 
+                        disabled={isProcessing || isSaving} 
+                        variant="outline"
+                        size="lg" 
+                        className="w-full h-12 text-base gap-2"
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Bookmark className="h-5 w-5" />
+                            Save & Build Itinerary
+                          </>
+                        )}
+                      </Button>
+                      <div className="flex items-start gap-2 px-1">
+                        <Info className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                        <p className="text-xs text-muted-foreground">
+                          Free • Prices may change • Book later at your own risk
+                        </p>
+                      </div>
+                    </div>
                     
-                    <p className="text-xs text-center text-muted-foreground">
+                    <p className="text-xs text-center text-muted-foreground pt-2">
+                      <Lock className="h-3 w-3 inline mr-1" />
                       Secure checkout powered by Stripe
                     </p>
                   </div>
