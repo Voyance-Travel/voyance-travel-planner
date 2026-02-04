@@ -2303,6 +2303,54 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_reviews: {
+        Row: {
+          archetype: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_approved: boolean | null
+          is_featured: boolean | null
+          name: string
+          photo_consent: boolean | null
+          rating: number
+          review_text: string
+          trip_destination: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          archetype?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_approved?: boolean | null
+          is_featured?: boolean | null
+          name: string
+          photo_consent?: boolean | null
+          rating: number
+          review_text: string
+          trip_destination?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          archetype?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_approved?: boolean | null
+          is_featured?: boolean | null
+          name?: string
+          photo_consent?: boolean | null
+          rating?: number
+          review_text?: string
+          trip_destination?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       daily_usage: {
         Row: {
           action_type: string

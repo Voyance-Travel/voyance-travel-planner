@@ -10,7 +10,8 @@ export type PopupType =
   | 'welcome_credits'
   | 'onboarding_preferences' 
   | 'itinerary_tour'
-  | 'credit_progress_bar';
+  | 'credit_progress_bar'
+  | 'review_capture';
 
 interface PopupPriority {
   type: PopupType;
@@ -24,6 +25,7 @@ const POPUP_PRIORITIES: PopupPriority[] = [
   { type: 'welcome_credits', priority: 1, minDelaySinceLastPopup: 0 },
   { type: 'itinerary_tour', priority: 2, minDelaySinceLastPopup: 500 },
   { type: 'onboarding_preferences', priority: 3, minDelaySinceLastPopup: 1000 },
+  { type: 'review_capture', priority: 4, minDelaySinceLastPopup: 2000 },
   { type: 'credit_progress_bar', priority: 10, minDelaySinceLastPopup: 2000 },
 ];
 
@@ -126,6 +128,7 @@ export const POPUP_STORAGE = {
   ONBOARDING_SHOWN: 'voyance_onboarding_nudge_shown',
   ITINERARY_TOUR_COMPLETED: 'voyance_itinerary_tour_completed',
   PROGRESS_BAR_COLLAPSED: 'voyance_progress_bar_collapsed',
+  REVIEW_SUBMITTED: 'voyance_review_submitted',
 } as const;
 
 // Cooldown periods (in ms)
