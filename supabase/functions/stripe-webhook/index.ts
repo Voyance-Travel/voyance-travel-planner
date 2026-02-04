@@ -190,44 +190,9 @@ serve(async (req) => {
           }
         }
 
-        // Handle credit top-up (existing logic)
-        if (metadata.type === "credit_topup") {
-          const userId = metadata.user_id;
-          const amountCents = parseInt(metadata.amount_cents || "0", 10);
-
-          if (userId && amountCents > 0) {
-            const { data: existingCredits } = await supabaseAdmin
-              .from("user_credits")
-              .select("balance_cents")
-              .eq("user_id", userId)
-              .single();
-
-            const currentBalance = existingCredits?.balance_cents || 0;
-            const newBalance = currentBalance + amountCents;
-
-            await supabaseAdmin
-              .from("user_credits")
-              .upsert({
-                user_id: userId,
-                balance_cents: newBalance,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: "user_id" });
-
-            await supabaseAdmin
-              .from("credit_transactions")
-              .insert({
-                user_id: userId,
-                type: "topup",
-                amount_cents: amountCents,
-                metadata: {
-                  stripe_session_id: metadata.checkout_session_id,
-                  payment_intent: paymentIntent.id,
-                },
-              });
-
-            log("Credit topup fulfilled", { userId, newBalance });
-          }
-        }
+        // NOTE: Legacy credit_topup path removed - now handled via credit_purchase in checkout.session.completed
+        // The old cents-based system (user_credits/credit_transactions) is deprecated.
+        // All credit purchases now flow through the credits-based system (credit_balances/credit_ledger).
 
         break;
       }
