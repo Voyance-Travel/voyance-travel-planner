@@ -1,68 +1,151 @@
 
-# Fix: Currency Bugs in Activity Swap and Add Activity Flows
+# Fix: Activity Images Showing Wrong Photos
 
 ## Problem Summary
 
-Found 4 currency-related bugs that can cause incorrect cost displays:
+Activity cards in the itinerary are showing completely wrong images:
+- **"Park Hyatt Tokyo" (DINING)** → Shows people doing yoga/stretching
+- **"Hotel Checkout"** → Shows a swimming pool
 
-1. **Activity Swap Missing Currency** - Most critical; breaks cost display for swapped activities
-2. **Add Activity Modal Hardcodes USD** - Users adding activities manually get wrong currency
-3. **Handler Fallback Hardcodes USD** - Fallback values ignore trip currency
-4. **API Design Inconsistency** - Activity alternatives returns number instead of object
+## Root Cause Analysis
+
+### Issue 1: Dining Activities at Hotels Get Wrong Search Hints
+When an activity like "Relaxed Morning and Breakfast at Hotel" has:
+- `category: dining` 
+- `location.name: "Park Hyatt Tokyo"`
+
+The frontend sends `imageSearchTerm = "Park Hyatt Tokyo"` with `category = "dining"`. The backend then adds a "restaurant" hint to the search query:
+
+```
+Search query: "Park Hyatt Tokyo restaurant Tokyo"
+```
+
+This returns irrelevant results because Google/TripAdvisor is looking for a *restaurant* called "Park Hyatt Tokyo".
+
+### Issue 2: TripAdvisor Fallback Returns Unrelated Images
+The backend logs show:
+```
+entity_key: "relaxed morning and breakfast at hotel"
+alt_text: "Tokyo Sumo Morning Practice Tour at Stable"
+```
+
+When Google Places filtering rejects results (due to low match score), TripAdvisor returns the first match which can be completely unrelated.
+
+### Issue 3: Insufficient Validation in Backend
+The TripAdvisor tier (Tier 3) lacks the match score validation that exists in Google Places (Tier 2). It blindly accepts the first result without checking if it's actually relevant to the search query.
 
 ---
 
-## Solution Overview
+## Solution: Multi-Layer Fix
 
-### Fix 1: `itineraryActionExecutor.ts` - Add Missing Currency Field
+### Fix 1: Frontend - Detect "Hotel Dining" Activities
+Update `EditorialItinerary.tsx` to detect when a dining activity is at a hotel, and use the hotel image instead of searching for a "restaurant".
 
-Update both swap locations to include `currency: 'USD'`:
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Is category "dining" AND location.name contains "hotel"?  │
+│       ↓ Yes                      ↓ No                       │
+│  Use hotel search term       Use dining search term         │
+│  (e.g. "Park Hyatt Tokyo     (normal restaurant search)     │
+│   hotel")                                                   │
+└─────────────────────────────────────────────────────────────┘
+```
 
-| Location | Line | Current | Fixed |
-|----------|------|---------|-------|
-| `executeSwapAction` | ~295 | `cost: { amount: bestAlternative.estimatedCost }` | `cost: { amount: bestAlternative.estimatedCost, currency: 'USD' }` |
-| `executeFilterAction` | ~590 | `cost: { amount: best.estimatedCost }` | `cost: { amount: best.estimatedCost, currency: 'USD' }` |
+### Fix 2: Backend - Add Match Score Validation to TripAdvisor
+Apply the same tokenization and match scoring logic that exists for Google Places to the TripAdvisor tier. Reject results with low similarity scores.
 
-### Fix 2: `EditorialItinerary.tsx` - Pass tripCurrency to AddActivityModal
+### Fix 3: Backend - Improve Skip Patterns for Hotel Activities
+Add patterns to detect "breakfast/lunch/dinner at hotel" activities and use the `accommodation` category for image search instead of `dining`.
 
-Update the modal to accept and use `tripCurrency`:
+---
+
+## Technical Changes
+
+### File: `src/components/itinerary/EditorialItinerary.tsx`
+
+**Location**: Lines ~4858-4884 (ActivityCard component)
+
+Add detection for hotel dining activities:
 
 ```typescript
-// Modal props
-interface AddActivityModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAdd: (activity: Partial<EditorialActivity>) => void;
-  currency: string;  // NEW
+// Detect if this is a dining activity AT a hotel (breakfast at hotel, etc.)
+const isHotelDiningActivity = isDiningActivity && 
+  activity.location?.name?.toLowerCase().includes('hotel');
+
+// For hotel dining activities, search for the hotel image instead of restaurant
+const effectiveSearchTerm = isHotelDiningActivity
+  ? `${activity.location?.name} hotel`
+  : imageSearchTerm;
+
+const effectiveCategory = isHotelDiningActivity
+  ? 'accommodation'
+  : (isHotelActivity ? 'accommodation' : activityType);
+
+// Updated hook call
+const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
+  isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
+  effectiveCategory,
+  existingPhoto,
+  shouldFetchRealPhoto ? destination : undefined,
+  activity.id
+);
+```
+
+### File: `supabase/functions/destination-images/index.ts`
+
+**Change 1**: Update skip patterns (~line 648) to catch hotel dining activities:
+
+```typescript
+// In skipPatterns array, add:
+/^(?:relaxed|leisurely|early|late)?\s*(?:morning|afternoon|evening)?\s*(?:and\s+)?(?:breakfast|brunch|lunch|dinner)\s+(?:at\s+)?(?:the\s+)?hotel/i,
+/^(?:breakfast|brunch|lunch|dinner|meal)\s+at\s+(?:the\s+)?(?:hotel|resort|inn|lodge)/i,
+```
+
+**Change 2**: Add match score validation to TripAdvisor tier (~line 348-413):
+
+```typescript
+async function getTripAdvisorPhoto(
+  venueName: string,
+  destination: string,
+  apiKey: string
+): Promise<DestinationImage | null> {
+  try {
+    const searchQuery = `${venueName} ${destination}`;
+    // ... existing search code ...
+
+    const location = searchData.data?.[0];
+    if (!location?.location_id) return null;
+
+    // NEW: Validate the result matches our query
+    const venueTokens = new Set(tokenize(venueName));
+    const locationName = location.name || '';
+    const matchScore = calculateMatchScore(venueTokens, locationName);
+    
+    const MIN_MATCH_SCORE = 0.3; // Lower threshold than Google since TripAdvisor is a fallback
+    
+    if (matchScore < MIN_MATCH_SCORE) {
+      console.log(`[Images] Rejecting TripAdvisor result (low score ${matchScore.toFixed(2)}): ${locationName}`);
+      return null;
+    }
+
+    // ... continue with photo fetch ...
+  }
 }
-
-// In handleSubmit
-cost: { amount: parseFloat(cost) || 0, currency: props.currency }
-
-// Usage
-<AddActivityModal
-  ...
-  currency={tripCurrency}
-/>
 ```
 
-### Fix 3: `EditorialItinerary.tsx` - Update handleAddActivity Fallback
-
-Modify to use `tripCurrency` in the dependency array and fallback:
+**Change 3**: Add hotel keyword detection in extractVenueName (~line 693):
 
 ```typescript
-const handleAddActivity = useCallback((dayIndex: number, activity: Partial<EditorialActivity>) => {
-  const newActivity: EditorialActivity = {
-    ...
-    cost: activity.cost || { amount: 0, currency: tripCurrency },
-    ...
+// After existing extractPatterns, add hotel dining detection:
+const hotelDiningMatch = title.match(/(?:breakfast|brunch|lunch|dinner)\s+(?:at\s+)?(.+?\s+(?:hotel|resort|inn|hyatt|hilton|marriott|sheraton|ritz|intercontinental))/i);
+if (hotelDiningMatch) {
+  return { 
+    cleanName: hotelDiningMatch[1].trim(), 
+    shouldSkip: false, 
+    inferredCategory: 'accommodation' // Use hotel category instead of dining
   };
-}, [tripCurrency]);  // Add tripCurrency dependency
+}
 ```
-
-### Fix 4: `ItineraryEditor.tsx` - Same Updates
-
-Apply the same fixes to the ItineraryEditor component's AddActivityModal and handleAddActivity.
 
 ---
 
@@ -70,93 +153,28 @@ Apply the same fixes to the ItineraryEditor component's AddActivityModal and han
 
 | File | Changes |
 |------|---------|
-| `src/services/itineraryActionExecutor.ts` | Add `currency: 'USD'` to cost objects on lines ~295 and ~590 |
-| `src/components/itinerary/EditorialItinerary.tsx` | Update AddActivityModal to accept currency prop; update handleAddActivity fallback |
-| `src/components/itinerary/ItineraryEditor.tsx` | Same updates as EditorialItinerary |
+| `src/components/itinerary/EditorialItinerary.tsx` | Detect hotel dining activities and use accommodation category for image search |
+| `supabase/functions/destination-images/index.ts` | Add skip patterns for hotel dining, add match validation to TripAdvisor, improve hotel detection |
 
 ---
 
-## Technical Details
+## Data Cleanup
 
-### itineraryActionExecutor.ts Changes
+After deploying the fix, run this query to clear bad cached images:
 
-```typescript
-// Line ~295 in executeSwapAction
-cost: { amount: bestAlternative.estimatedCost, currency: 'USD' },
-
-// Line ~590 in executeFilterAction  
-cost: { amount: best.estimatedCost, currency: 'USD' },
-```
-
-### EditorialItinerary.tsx Changes
-
-```typescript
-// AddActivityModal - accept currency prop
-interface AddActivityModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAdd: (activity: Partial<EditorialActivity>) => void;
-  currency?: string;
-}
-
-function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD' }: AddActivityModalProps) {
-  // ... existing state ...
-  
-  const handleSubmit = () => {
-    onAdd({
-      title,
-      description,
-      category,
-      startTime,
-      endTime,
-      cost: { amount: parseFloat(cost) || 0, currency },  // Use prop
-      location: { name: locationName, address: locationAddress },
-    });
-    // ... reset form ...
-  };
-}
-
-// handleAddActivity - use tripCurrency in fallback
-const handleAddActivity = useCallback((dayIndex: number, activity: Partial<EditorialActivity>) => {
-  const newActivity: EditorialActivity = {
-    id: `manual-${Date.now()}`,
-    title: activity.title || 'New Activity',
-    description: activity.description || '',
-    category: activity.category || 'activity',
-    startTime: activity.startTime || '12:00',
-    endTime: activity.endTime || '13:00',
-    location: activity.location || { name: '', address: '' },
-    cost: activity.cost || { amount: 0, currency: tripCurrency },  // Use tripCurrency
-    bookingRequired: activity.bookingRequired || false,
-    tags: activity.tags || [],
-    isLocked: false,
-  };
-  // ...
-}, [tripCurrency]);  // Add dependency
-
-// Usage - pass currency
-<AddActivityModal
-  isOpen={!!addActivityModal}
-  onClose={() => setAddActivityModal(null)}
-  onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
-  currency={tripCurrency}
-/>
+```sql
+-- Delete cached images with mismatched content (sumo, yoga, etc. for hotel activities)
+DELETE FROM curated_images
+WHERE entity_key ILIKE '%breakfast%hotel%'
+   OR entity_key ILIKE '%relaxed morning%'
+   OR entity_key ILIKE '%morning%breakfast%';
 ```
 
 ---
 
 ## Impact
 
-- **Fixes broken cost display** for activities swapped via chat or filter actions
-- **Consistent currency handling** when users manually add activities
-- **No breaking changes** - all changes are additive with safe defaults
-- **Backward compatible** - existing data without currency will fall back to USD
-
----
-
-## Testing Recommendations
-
-1. Swap an activity on a trip with non-USD display currency → verify cost shows correctly
-2. Add a manual activity on a trip set to JPY display → verify cost is stored with JPY
-3. Apply a filter (dietary/budget) → verify replaced activities have correct currency
-4. Toggle currency display after swap → verify conversion works
+- **Fixes wrong images** for dining activities at hotels
+- **Prevents future bad caching** by validating TripAdvisor results
+- **Improves image relevance** by using accommodation category for hotel activities
+- **No breaking changes** - existing correct caches remain valid
