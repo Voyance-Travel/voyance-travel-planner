@@ -368,6 +368,88 @@ interface EnrichedItinerary {
 }
 
 // =============================================================================
+// CURRENCY CONVERSION - Normalize all costs to USD
+// Exchange rates relative to USD (1 USD = X units of local currency)
+// =============================================================================
+const EXCHANGE_RATES_TO_USD: Record<string, number> = {
+  USD: 1,
+  EUR: 0.92,
+  GBP: 0.79,
+  JPY: 149.5,
+  CHF: 0.88,
+  CAD: 1.36,
+  AUD: 1.53,
+  NZD: 1.64,
+  CNY: 7.24,
+  HKD: 7.82,
+  SGD: 1.34,
+  THB: 35.8,
+  MXN: 17.2,
+  BRL: 4.97,
+  INR: 83.1,
+  KRW: 1320,
+  ZAR: 18.9,
+  SEK: 10.45,
+  NOK: 10.62,
+  DKK: 6.87,
+  PLN: 4.02,
+  CZK: 23.1,
+  HUF: 358,
+  ILS: 3.65,
+  AED: 3.67,
+  TRY: 30.5,
+  PHP: 55.8,
+  IDR: 15650,
+  MYR: 4.72,
+  VND: 24500,
+  TWD: 31.5,
+  ARS: 850,
+  COP: 3950,
+  PEN: 3.72,
+  EGP: 30.9,
+  MAD: 10.1,
+  QAR: 3.64,
+  SAR: 3.75,
+  KWD: 0.31,
+  BHD: 0.377,
+  OMR: 0.385,
+  JOD: 0.71,
+};
+
+/**
+ * Convert an amount from any currency to USD
+ * This ensures all stored costs are normalized to USD for consistent display/comparison
+ */
+function convertToUSD(amount: number, sourceCurrency: string): number {
+  if (!sourceCurrency || sourceCurrency.toUpperCase() === 'USD') {
+    return amount;
+  }
+  const rate = EXCHANGE_RATES_TO_USD[sourceCurrency.toUpperCase()];
+  if (!rate || rate === 0) {
+    console.log(`[convertToUSD] Unknown currency ${sourceCurrency}, assuming USD`);
+    return amount; // Fallback: assume already USD if rate not found
+  }
+  const converted = Math.round(amount / rate * 100) / 100; // Round to 2 decimal places
+  console.log(`[convertToUSD] ${amount} ${sourceCurrency} -> ${converted} USD (rate: ${rate})`);
+  return converted;
+}
+
+/**
+ * Normalize cost to USD - handles both cost and estimatedCost fields
+ */
+function normalizeCostToUSD(cost: { amount: number; currency?: string } | undefined): { amount: number; currency: string } {
+  if (!cost) {
+    return { amount: 0, currency: 'USD' };
+  }
+  const currency = cost.currency || 'USD';
+  const amountInUSD = convertToUSD(cost.amount, currency);
+  return { 
+    amount: amountInUSD, 
+    currency: 'USD',
+  };
+}
+
+// =============================================================================
 // PERSONALIZATION VALIDATOR - Phase 3
 // Validates itinerary output against user preferences to ensure real customization
 // =============================================================================
@@ -4401,12 +4483,18 @@ Generate activities for this day following ALL constraints above.`;
 
       // Normalize activities
       generatedDay.activities = generatedDay.activities.map((act, idx) => {
+        // CRITICAL: Convert costs from local currency to USD
+        // AI may return costs in local currency (e.g., JPY 6000 for ¥6000 dinner in Japan)
+        const rawCost = act.cost || (act as any).estimatedCost;
+        const normalizedCost = normalizeCostToUSD(rawCost);
+        
         const normalizedAct = {
           ...act,
           id: act.id || `day${dayNumber}-act${idx + 1}-${Date.now()}`,
           title: act.title || `Activity ${idx + 1}`,
           durationMinutes: calculateDuration(act.startTime, act.endTime),
           categoryIcon: getCategoryIcon(act.category || 'activity'),
+          cost: normalizedCost, // Always use USD-normalized cost
         };
 
         // Auto-fix logistics activities
@@ -4418,7 +4506,7 @@ Generate activities for this day following ALL constraints above.`;
           normalizedAct.bookingRequired = false;
           // Only zero out non-transfer logistics
           if (!normalizedAct.title.toLowerCase().includes('transfer')) {
-            normalizedAct.cost = { amount: 0, currency: act.cost?.currency || 'USD' };
+            normalizedAct.cost = { amount: 0, currency: 'USD' };
           }
         }
 
@@ -7960,8 +8048,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           // Normalize title: use title, fallback to name
           const normalizedTitle = act.title || act.name || `Activity ${idx + 1}`;
           
-          // Normalize cost: use cost or estimatedCost
-          const normalizedCost = act.cost || act.estimatedCost || { amount: 0, currency: 'USD' };
+          // Normalize cost: convert from local currency to USD for consistent storage
+          // AI may return costs in local currency (e.g., JPY 6000 for Japan)
+          const rawCost = act.cost || act.estimatedCost || { amount: 0, currency: 'USD' };
+          const normalizedCost = normalizeCostToUSD(rawCost);
           
           // Normalize location: convert string to object if needed
           let normalizedLocation = act.location;
