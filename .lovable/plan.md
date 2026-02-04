@@ -1,175 +1,115 @@
 
+# Fix: DNA Trait Adjustments Not Persisting After Preference Changes
 
-# Fix: Duplicate Trip Creation Race Condition (1,000+ trips bug)
+## Problem
 
-## Executive Summary
+When users adjust their Travel DNA traits using the sliders in the profile, the adjustments are **disappearing** after being saved. This happens because:
 
-A critical race condition allows hundreds or thousands of duplicate trips to be created within seconds when a user rapidly clicks action buttons. This has happened twice, creating ~1,400 trips for a single user.
+1. **Missing Override Passthrough**: The `recalculateDNAFromPreferences()` function does NOT pass `existingOverrides` to the edge function
+2. **No Cache Invalidation**: The React Query cache for profile/DNA data is not being invalidated after DNA recalculation
 
----
-
-## Investigation Findings
-
-### Evidence from Database
-
-| Time Window | Trips Created | Destination |
-|-------------|---------------|-------------|
-| 03:06:24.772 → 03:06:25.069 (300ms) | 20+ trips | Marrakech |
-| 03:06:00 → 03:06:59 (1 minute) | 594 trips | Marrakech |
-| 03:10:00 → 03:10:59 (1 minute) | 786 trips | Marrakech |
-
-**Total: 1,416 trips for user `abbaca64-3bb9-471f-a05e-d01de24bc05c`**
-
-### Root Cause Analysis
-
-The `saveTrip()` function in `TripPlannerContext.tsx` has **no protection against concurrent calls**:
+### Current Flow (Broken)
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  CURRENT FLOW (BROKEN)                                               │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Click 1 ─────►  saveTrip()                                          │
-│                    │ reads state.tripId = null                       │
-│                    │ starts INSERT (async)                           │
-│                    ▼                                                 │
-│  Click 2 ─────►  saveTrip()                                          │
-│                    │ reads state.tripId = null (INSERT not done yet) │
-│                    │ starts ANOTHER INSERT                           │
-│                    ▼                                                 │
-│  Click 3 ─────►  saveTrip()                                          │
-│                    │ reads state.tripId = null (both INSERTs pending)│
-│                    │ starts YET ANOTHER INSERT                       │
-│                    ▼                                                 │
-│              ... 1000 more clicks ...                                │
-│                                                                      │
-│  Result: 1000+ duplicate trips created                               │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+User adjusts trait slider → Saved to profiles.travel_dna_overrides ✅
+User changes preference → triggers DNA recalculation
+recalculateDNAFromPreferences() called WITHOUT existingOverrides ❌
+Edge function ignores user's manual adjustments
+New DNA saved → overwrites previous values
+User's adjustments "disappear"
 ```
-
-### Vulnerable Code Paths
-
-All these pages call `saveTrip()` from TripPlannerContext without guards:
-
-| File | Function | Problem |
-|------|----------|---------|
-| `PlannerHotelEnhanced.tsx` | `handleContinue`, `handleSkipHotel`, `handleSelectHotel` | No `isSaving` guard |
-| `PlannerFlightEnhanced.tsx` | `handleContinue` | No `isSaving` guard |
-| `PlannerItinerary.tsx` | `initTrip` (useEffect) | Async effect without ref guard |
-| `PlannerBooking.tsx` | Checkout handlers | Multiple calls to `saveTrip()` |
-| `MultiCityPlanner.tsx` | Form submission | No guard |
 
 ---
 
-## Solution: Add Ref-Based Guard in TripPlannerContext
+## Solution
 
-### Why Ref-Based Guard (Not State)?
+### 1. Pass Existing Overrides to Edge Function
 
-React state updates are **asynchronous**. If we use `isSaving` state:
-- Click 1: Sets `isSaving = true` (async, not immediate)
-- Click 2: Reads `isSaving = false` (state not updated yet) → **Bug persists**
+Update `recalculateDNAFromPreferences()` to:
+1. Fetch `travel_dna_overrides` from `profiles` table before recalculating
+2. Pass them to `calculateTravelDNAAdvanced()` as the third parameter
 
-A `useRef` updates **synchronously**, providing immediate blocking.
+### 2. Invalidate React Query Cache After Recalculation
 
-### Implementation Details
+After DNA is saved, invalidate the relevant query keys so the UI refreshes with the new data.
 
-**File: `src/contexts/TripPlannerContext.tsx`**
+---
 
-Add a ref-based guard at the top of the provider:
+## Implementation Details
 
+### File: `src/utils/quizMapping.ts`
+
+**Current code (line 958-978):**
 ```typescript
-// Add import
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
-
-// Inside TripPlannerProvider component, add:
-const savingInProgressRef = useRef(false);
-```
-
-Update the `saveTrip` function:
-
-```typescript
-const saveTrip = async (): Promise<string | null> => {
-  // CRITICAL: Prevent race condition with synchronous ref check
-  if (savingInProgressRef.current) {
-    console.warn('[TripPlanner] Save already in progress, returning existing tripId');
-    return state.tripId;
-  }
-  savingInProgressRef.current = true;
-
-  setState(prev => ({ ...prev, isLoading: true, error: null }));
-
+export async function recalculateDNAFromPreferences(
+  userId: string
+): Promise<{ success: boolean; dna: TravelDNAPayload | null }> {
   try {
-    // ... existing trip creation logic ...
+    // 1. Fetch current preferences
+    const preferences = await getUserPreferences(userId);
+    // ...
     
-    // If trip already exists, just update it
-    let tripId = state.tripId;
-    
-    // Before INSERT, double-check database for existing trip
-    if (!tripId && user) {
-      const { data: existingTrip } = await supabase
-        .from('trips')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('destination', state.basics.destination || 'Unknown')
-        .eq('start_date', state.basics.startDate || new Date().toISOString().split('T')[0])
-        .eq('end_date', state.basics.endDate || new Date().toISOString().split('T')[0])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (existingTrip?.id) {
-        console.log('[TripPlanner] Found existing trip, using that instead:', existingTrip.id);
-        tripId = existingTrip.id;
-        // Set in state so future calls UPDATE instead of INSERT
-        setState(prev => ({ ...prev, tripId }));
-      }
+    // 3. Recalculate DNA via backend
+    let dna: TravelDNAPayload;
+    try {
+      dna = await calculateTravelDNAAdvanced(answers, userId);  // ❌ Missing overrides!
     }
-
-    // ... rest of existing INSERT/UPDATE logic ...
-    
-  } finally {
-    savingInProgressRef.current = false; // Always release the lock
-  }
-};
 ```
 
-### Additional Safeguards
+**Updated code:**
+```typescript
+export async function recalculateDNAFromPreferences(
+  userId: string
+): Promise<{ success: boolean; dna: TravelDNAPayload | null }> {
+  try {
+    // 1. Fetch current preferences AND existing overrides in parallel
+    const [preferences, overridesResult] = await Promise.all([
+      getUserPreferences(userId),
+      supabase
+        .from('profiles')
+        .select('travel_dna_overrides')
+        .eq('id', userId)
+        .maybeSingle()
+    ]);
+    
+    const existingOverrides = overridesResult.data?.travel_dna_overrides as Record<string, number> | null;
+    
+    if (existingOverrides && Object.keys(existingOverrides).length > 0) {
+      console.log('[DNA Recalc] Preserving existing overrides:', Object.keys(existingOverrides));
+    }
+    // ...
+    
+    // 3. Recalculate DNA via backend WITH overrides
+    let dna: TravelDNAPayload;
+    try {
+      dna = await calculateTravelDNAAdvanced(answers, userId, existingOverrides);  // ✅ Pass overrides!
+    }
+```
 
-**1. Button Disabling on UI Components**
+### File: `src/components/profile/EditorialPreferencesView.tsx`
 
-Update pages that call `saveTrip()` to use `state.isLoading` for button disabling:
+**Add cache invalidation after DNA recalculation:**
+
+Import `useQueryClient` from React Query and invalidate relevant queries after DNA update:
 
 ```typescript
-// PlannerHotelEnhanced.tsx
-<Button 
-  onClick={handleContinue}
-  disabled={plannerState.isLoading}  // ADD THIS
->
-  Continue
-</Button>
+import { useQueryClient } from '@tanstack/react-query';
+
+// Inside component:
+const queryClient = useQueryClient();
+
+// In scheduleDNARecalc callback:
+const result = await recalculateDNAFromPreferences(user.id);
+if (result.success) {
+  // Invalidate DNA-related queries so UI refreshes
+  queryClient.invalidateQueries({ queryKey: ['travel-dna'] });
+  queryClient.invalidateQueries({ queryKey: ['profile'] });
+  queryClient.invalidateQueries({ queryKey: ['preference-completion'] });
+  // ... toast success
+}
 ```
 
-**2. Cleanup: Delete Duplicate Trips**
-
-Run this SQL query to clean up existing duplicates (keeps the first trip created):
-
-```sql
--- Identify duplicates (same user, destination, dates)
-WITH duplicates AS (
-  SELECT id, user_id, destination, start_date, end_date,
-         ROW_NUMBER() OVER (
-           PARTITION BY user_id, destination, start_date, end_date 
-           ORDER BY created_at ASC
-         ) as rn
-  FROM trips
-  WHERE user_id = 'abbaca64-3bb9-471f-a05e-d01de24bc05c'
-)
-DELETE FROM trips 
-WHERE id IN (
-  SELECT id FROM duplicates WHERE rn > 1
-);
-```
+Also update `handleRecalculateDNA` with the same invalidation.
 
 ---
 
@@ -177,35 +117,39 @@ WHERE id IN (
 
 | File | Change |
 |------|--------|
-| `src/contexts/TripPlannerContext.tsx` | Add ref-based guard, database-first validation before INSERT |
-| `src/pages/planner/PlannerHotelEnhanced.tsx` | Disable buttons when `plannerState.isLoading` |
-| `src/pages/planner/PlannerFlightEnhanced.tsx` | Disable buttons when `plannerState.isLoading` |
-| `src/pages/planner/PlannerBooking.tsx` | Disable checkout when `plannerState.isLoading` |
+| `src/utils/quizMapping.ts` | Fetch `travel_dna_overrides` and pass to `calculateTravelDNAAdvanced()` |
+| `src/components/profile/EditorialPreferencesView.tsx` | Add React Query cache invalidation after DNA recalculation |
 
 ---
 
-## Expected Outcome After Fix
+## Technical Details
+
+### Why This Fixes the Issue
+
+1. **Override Preservation**: By fetching and passing `existingOverrides`, the edge function will blend them with computed scores (70% computed, 30% override influence per line 1986 in edge function)
+
+2. **UI Refresh**: Invalidating React Query cache ensures components fetching DNA data will refetch fresh data from the database
+
+### Expected Flow After Fix
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  FIXED FLOW                                                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Click 1 ─────►  saveTrip()                                          │
-│                    │ savingInProgressRef.current = true (SYNC)       │
-│                    │ starts INSERT (async)                           │
-│                    ▼                                                 │
-│  Click 2 ─────►  saveTrip()                                          │
-│                    │ savingInProgressRef.current = true? YES         │
-│                    │ EARLY RETURN with existing tripId               │
-│                    ▼                                                 │
-│  Click 3 ─────►  saveTrip()                                          │
-│                    │ EARLY RETURN                                    │
-│                    ▼                                                 │
-│                                                                      │
-│  INSERT completes → savingInProgressRef.current = false              │
-│  Result: Only 1 trip created                                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+User adjusts trait slider → Saved to profiles.travel_dna_overrides ✅
+User changes preference → triggers DNA recalculation
+recalculateDNAFromPreferences() fetches existingOverrides first ✅
+Edge function blends overrides with new computed scores ✅
+New DNA saved (with override influence)
+React Query cache invalidated → UI refreshes ✅
+User's adjustments are preserved in the final result ✅
 ```
 
+---
+
+## Testing Verification
+
+After implementation:
+1. Go to Profile → Adjust trait sliders (e.g., set Planning to +5)
+2. Save the adjustments
+3. Go to Preferences tab → Change travel pace
+4. Verify toast shows "Updating your Travel DNA..."
+5. Return to DNA section → Verify Planning adjustment is still visible
+6. Verify the archetype reflects the blended scores
