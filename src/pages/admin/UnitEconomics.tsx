@@ -27,7 +27,15 @@ const FALLBACK_DATA = {
     domain: 4.08,
     email: 0.00, // Zoho free tier
   },
-  revenue: { single: 29, explorer: 35, voyager: 45 } as Record<string, number>,
+  revenue: { topup: 5, single: 29, explorer: 35, voyager: 45 } as Record<string, number>,
+};
+
+// Revenue mix presets - what % of paying users buy each tier
+const REVENUE_MIX_PRESETS = {
+  pessimistic: { topup: 60, single: 25, explorer: 10, voyager: 5, label: "Pessimistic", description: "60% buy $5 top-ups only" },
+  conservative: { topup: 40, single: 35, explorer: 20, voyager: 5, label: "Conservative", description: "40% buy $5 top-ups" },
+  balanced: { topup: 20, single: 40, explorer: 30, voyager: 10, label: "Balanced", description: "Most buy Single/Explorer" },
+  optimistic: { topup: 10, single: 30, explorer: 40, voyager: 20, label: "Optimistic", description: "Heavy Explorer/Voyager" },
 };
 
 // Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
@@ -69,12 +77,26 @@ export default function UnitEconomics() {
   const [volume, setVolume] = useState(61);
   const [tier, setTier] = useState("explorer");
   const [scenario, setScenario] = useState<Scenario>('A');
+  const [conversionRate, setConversionRate] = useState(10); // % of trips that convert to paid
+  const [revenueMix, setRevenueMix] = useState<keyof typeof REVENUE_MIX_PRESETS>('conservative');
   
   // Fetch real data from trip_cost_tracking table
   const { data: realMetrics, isLoading: metricsLoading } = useRealCostMetrics();
   
   // Use real data when available, otherwise fallback
   const hasRealData = !!realMetrics && realMetrics.totalTrips > 0;
+  
+  // Calculate blended average order value based on revenue mix
+  const mixConfig = REVENUE_MIX_PRESETS[revenueMix];
+  const blendedAOV = useMemo(() => {
+    const tiers = FALLBACK_DATA.revenue;
+    return (
+      (mixConfig.topup / 100) * tiers.topup +
+      (mixConfig.single / 100) * tiers.single +
+      (mixConfig.explorer / 100) * tiers.explorer +
+      (mixConfig.voyager / 100) * tiers.voyager
+    );
+  }, [revenueMix, mixConfig]);
   
   const VERIFIED_DATA = useMemo(() => {
     if (!hasRealData) return FALLBACK_DATA;
@@ -152,8 +174,24 @@ export default function UnitEconomics() {
     const fixedPerTrip = fixedTotal / volume;
 
     const fullyLoaded = variablePerTrip + fixedPerTrip;
+    
+    // Per-trip margin (assuming 100% paid)
     const margin = ((revenue - fullyLoaded) / revenue) * 100;
     const contributionMargin = ((revenue - variablePerTrip) / revenue) * 100;
+
+    // BLENDED ECONOMICS: Factor in conversion rate and revenue mix
+    // Total trips * cost = total cost
+    // Paying trips * blended AOV = total revenue
+    const payingTrips = volume * (conversionRate / 100);
+    const totalRevenue = payingTrips * blendedAOV;
+    const totalCost = variableTotal + fixedTotal;
+    
+    const blendedProfit = totalRevenue - totalCost;
+    const blendedMargin = totalRevenue > 0 ? (blendedProfit / totalRevenue) * 100 : -100;
+    
+    // Revenue per trip (blended across all trips, not just paying)
+    const revenuePerTrip = totalRevenue / volume;
+    const realMarginPerTrip = revenuePerTrip - fullyLoaded;
 
     const googleShare = variablePerTrip > 0 ? (googlePerTrip / variablePerTrip) * 100 : 0;
 
@@ -167,15 +205,24 @@ export default function UnitEconomics() {
       fullyLoaded,
       margin,
       contributionMargin,
+      // Blended economics
+      blendedAOV,
+      payingTrips,
+      totalRevenue,
+      totalCost,
+      blendedProfit,
+      blendedMargin,
+      revenuePerTrip,
+      realMarginPerTrip,
     };
-  }, [volume, tier, scenario, scenarioConfig, revenue]);
+  }, [volume, tier, scenario, scenarioConfig, revenue, conversionRate, blendedAOV]);
 
   const verifiedMargins = useMemo(() => {
     return Object.entries(VERIFIED_DATA.revenue).map(([key, rev]) => {
       const cost = costs.fullyLoaded;
       return { tier: key, revenue: rev, cost, margin: ((rev - cost) / rev * 100), profit: rev - cost };
     });
-  }, [costs.fullyLoaded]);
+  }, [costs.fullyLoaded, VERIFIED_DATA.revenue]);
 
   // Scale points matching the reference doc
   const scalePoints = [10, 50, 100, 250, 400, 500, 750, 1000];
@@ -227,35 +274,36 @@ export default function UnitEconomics() {
       </div>
 
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        {/* Hero Metrics */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 32 }}>
+        {/* Hero Metrics - Blended Economics */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
           {[
-            { label: "Variable Cost / Trip", value: `$${costs.variable.perTrip.toFixed(4)}`, sub: `Scenario ${scenario}: ${scenarioConfig.name}`, accent: "#63B3AA" },
-            { label: "Fully-Loaded / Trip", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `At ${volume} trips/mo`, accent: "#A78BFA" },
-            { label: "Gross Margin", value: `${costs.margin.toFixed(1)}%`, sub: `${tier.charAt(0).toUpperCase() + tier.slice(1)} tier · $${revenue}`, accent: costs.margin > 97 ? "#34D399" : costs.margin > 95 ? "#FBBF24" : "#F87171" },
-            { label: "Contribution Margin", value: `${costs.contributionMargin.toFixed(1)}%`, sub: "Variable costs only", accent: "#38BDF8" },
+            { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171" },
+            { label: "Monthly Profit", value: `$${costs.blendedProfit.toFixed(0)}`, sub: `$${costs.totalRevenue.toFixed(0)} rev - $${costs.totalCost.toFixed(0)} cost`, accent: costs.blendedProfit > 0 ? "#34D399" : "#F87171" },
+            { label: "Revenue / Trip", value: `$${costs.revenuePerTrip.toFixed(2)}`, sub: `${costs.payingTrips.toFixed(0)} paying of ${volume}`, accent: "#38BDF8" },
+            { label: "Cost / Trip", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `Scenario ${scenario}`, accent: "#A78BFA" },
+            { label: "Margin / Trip", value: `$${costs.realMarginPerTrip.toFixed(2)}`, sub: costs.realMarginPerTrip > 0 ? "Profitable" : "Loss", accent: costs.realMarginPerTrip > 0 ? "#34D399" : "#F87171" },
           ].map((m, i) => (
             <div key={i} style={{
               background: "rgba(30, 41, 59, 0.5)",
               borderRadius: 12,
-              padding: "24px 28px",
+              padding: "20px 24px",
               border: "1px solid rgba(100, 116, 139, 0.2)",
               position: "relative",
               overflow: "hidden",
             }}>
               <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: m.accent }} />
-              <p style={{ fontSize: 12, color: "#64748B", marginBottom: 8, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <p style={{ fontSize: 11, color: "#64748B", marginBottom: 6, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 {m.label}
               </p>
-              <p style={{ fontSize: 32, fontWeight: 700, color: m.accent, marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>
+              <p style={{ fontSize: 28, fontWeight: 700, color: m.accent, marginBottom: 2, fontFamily: "'JetBrains Mono', monospace" }}>
                 {m.value}
               </p>
-              <p style={{ fontSize: 12, color: "#94A3B8" }}>{m.sub}</p>
+              <p style={{ fontSize: 11, color: "#94A3B8" }}>{m.sub}</p>
             </div>
           ))}
         </div>
 
-        {/* Controls */}
+        {/* Controls - 2x2 Grid */}
         <div style={{ 
           display: "grid", 
           gridTemplateColumns: "1fr 1fr", 
@@ -291,15 +339,88 @@ export default function UnitEconomics() {
             )}
           </div>
 
-          {/* Scenario & Tier */}
+          {/* Conversion Rate Slider */}
           <div style={{
             background: "rgba(30, 41, 59, 0.5)",
             borderRadius: 12,
             padding: "24px 28px",
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
-            <p style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500, marginBottom: 12 }}>Scenario & Pricing Tier</p>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Conversion Rate</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{conversionRate}%</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              value={conversionRate}
+              onChange={(e) => setConversionRate(+e.target.value)}
+              style={{ width: "100%", accentColor: "#F59E0B", cursor: "pointer" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 8 }}>
+              <span>1%</span><span>10%</span><span>25%</span><span>50%</span><span>100%</span>
+            </div>
+            <p style={{ fontSize: 10, color: "#64748B", marginTop: 8 }}>
+              {costs.payingTrips.toFixed(0)} paying users of {volume} total trips
+            </p>
+          </div>
+
+          {/* Revenue Mix */}
+          <div style={{
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            padding: "24px 28px",
+            border: "1px solid rgba(100, 116, 139, 0.2)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Revenue Mix</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#38BDF8", fontFamily: "'JetBrains Mono', monospace" }}>
+                Avg ${blendedAOV.toFixed(2)}
+              </span>
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              {(Object.keys(REVENUE_MIX_PRESETS) as (keyof typeof REVENUE_MIX_PRESETS)[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setRevenueMix(key)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    border: revenueMix === key ? "1px solid #38BDF8" : "1px solid rgba(100,116,139,0.3)",
+                    background: revenueMix === key ? "rgba(56, 189, 248, 0.15)" : "transparent",
+                    color: revenueMix === key ? "#38BDF8" : "#64748B",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  {REVENUE_MIX_PRESETS[key].label}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: 10, color: "#64748B" }}>
+              {mixConfig.description}
+            </p>
+            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {Object.entries(FALLBACK_DATA.revenue).map(([tier, price]) => (
+                <span key={tier} style={{ fontSize: 9, color: "#94A3B8", background: "rgba(30, 41, 59, 0.8)", padding: "2px 6px", borderRadius: 4 }}>
+                  {tier}: {mixConfig[tier as keyof typeof mixConfig]}% @ ${price}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Scenario */}
+          <div style={{
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            padding: "24px 28px",
+            border: "1px solid rgba(100, 116, 139, 0.2)",
+          }}>
+            <p style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500, marginBottom: 12 }}>Cost Scenario</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               {(Object.keys(SCENARIOS) as Scenario[]).map((key) => (
                 <button
                   key={key}
@@ -320,28 +441,7 @@ export default function UnitEconomics() {
                 </button>
               ))}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {Object.entries(VERIFIED_DATA.revenue).map(([key, val]) => (
-                <button
-                  key={key}
-                  onClick={() => setTier(key)}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: 6,
-                    border: tier === key ? "1px solid #63B3AA" : "1px solid rgba(100,116,139,0.3)",
-                    background: tier === key ? "rgba(99, 179, 170, 0.15)" : "transparent",
-                    color: tier === key ? "#63B3AA" : "#64748B",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {key.charAt(0).toUpperCase() + key.slice(1)} · ${val}
-                </button>
-              ))}
-            </div>
-            <p style={{ fontSize: 10, color: "#64748B", marginTop: 10 }}>
+            <p style={{ fontSize: 10, color: "#64748B" }}>
               {scenarioConfig.description}
             </p>
           </div>
