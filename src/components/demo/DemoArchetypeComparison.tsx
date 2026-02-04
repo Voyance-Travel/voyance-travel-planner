@@ -239,9 +239,9 @@ export function DemoArchetypeComparison() {
           </p>
         </motion.div>
 
-        {/* Archetype Toggle */}
-        <div className="flex justify-center mb-8">
-          <div className="inline-flex bg-muted rounded-full p-1 gap-1">
+        {/* Archetype Toggle - Mobile optimized */}
+        <div className="flex justify-center mb-8 px-2">
+          <div className="inline-flex bg-muted rounded-full p-1 gap-1 w-full max-w-md md:w-auto">
             {data.archetypes.map((arch, idx) => {
               const Icon = arch.archetype.icon;
               const isActive = selectedArchetype === idx;
@@ -250,14 +250,14 @@ export function DemoArchetypeComparison() {
                   key={arch.archetype.id}
                   onClick={() => setSelectedArchetype(idx as 0 | 1)}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all",
+                    "flex items-center justify-center gap-1.5 md:gap-2 flex-1 md:flex-initial px-3 md:px-4 py-2.5 rounded-full text-xs md:text-sm font-medium transition-all",
                     isActive 
                       ? "bg-background shadow-md text-foreground" 
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <Icon className={cn("h-4 w-4", isActive && arch.archetype.color)} />
-                  {arch.archetype.name}
+                  <Icon className={cn("h-4 w-4 shrink-0", isActive && arch.archetype.color)} />
+                  <span className="truncate">{arch.archetype.name}</span>
                 </button>
               );
             })}
