@@ -374,6 +374,19 @@ async function getTripAdvisorPhoto(
       return null;
     }
 
+    // NEW: Validate the result matches our query (same logic as Google Places)
+    const venueTokens = new Set(tokenize(venueName));
+    const locationName = location.name || '';
+    const matchScore = calculateMatchScore(venueTokens, locationName);
+    
+    // Lower threshold than Google (0.3 vs 0.4) since TripAdvisor is a fallback
+    const MIN_MATCH_SCORE = 0.3;
+    
+    if (matchScore < MIN_MATCH_SCORE) {
+      console.log(`[Images] Rejecting TripAdvisor result (low score ${matchScore.toFixed(2)}): ${locationName}`);
+      return null;
+    }
+
     // Step 2: Get photos for the location
     const photosUrl = `https://api.content.tripadvisor.com/api/v1/location/${location.location_id}/photos?key=${apiKey}&language=en`;
 
@@ -394,7 +407,7 @@ async function getTripAdvisorPhoto(
       return null;
     }
 
-    console.log("[Images] ✅ Found TripAdvisor photo for:", venueName);
+    console.log(`[Images] ✅ Found TripAdvisor photo for: ${venueName} (score ${matchScore.toFixed(2)})`);
 
     return {
       id: `tripadvisor-${location.location_id}`,
@@ -646,6 +659,9 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
     /^(arrival|departure|transfer|airport)/i,
     /^(pack|unpack|settle\s+in)/i,
     /^(breakfast|lunch|dinner|brunch)\s+(break|time)$/i,
+    // Hotel dining activities - should skip generic search (frontend will handle with hotel name)
+    /^(?:relaxed|leisurely|early|late)?\s*(?:morning|afternoon|evening)?\s*(?:and\s+)?(?:breakfast|brunch|lunch|dinner)\s+(?:at\s+)?(?:the\s+)?hotel/i,
+    /^(?:breakfast|brunch|lunch|dinner|meal)\s+at\s+(?:the\s+)?(?:hotel|resort|inn|lodge)/i,
     // Generic meal descriptors without a venue name
     /^(?:organic|vegetarian|vegan|local|seasonal|farm[\-\s]?to[\-\s]?table|tasting|traditional|street|authentic|gourmet|artisan|homemade|rustic|contemporary|modern|classic|regional|coastal)\b.*\b(?:breakfast|brunch|lunch|dinner|meal|cuisine|food|fare)\b/i,
     /^(?:breakfast|brunch|lunch|dinner|meal)\b(?!.*\b(?:at|@|:)\b).*/i,
@@ -664,6 +680,16 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
       const inferredCat = inferCategoryFromTitle(title);
       return { cleanName: title, shouldSkip: true, inferredCategory: inferredCat };
     }
+  }
+  
+  // SPECIAL: Detect hotel dining activities - extract hotel name and use accommodation category
+  const hotelDiningMatch = title.match(/(?:breakfast|brunch|lunch|dinner)\s+(?:at\s+)?(.+?\s+(?:hotel|resort|inn|hyatt|hilton|marriott|sheraton|ritz|intercontinental|four\s+seasons|peninsula|mandarin|waldorf|st\.?\s*regis))/i);
+  if (hotelDiningMatch) {
+    return { 
+      cleanName: hotelDiningMatch[1].trim(), 
+      shouldSkip: false, 
+      inferredCategory: 'accommodation' // Use hotel category instead of dining
+    };
   }
   
   // ENHANCED: Extract venue from more patterns
