@@ -1,150 +1,149 @@
 
-# Fix: Activity Images Showing Wrong Photos
+
+# Fix: Destination Hero Images Showing Wrong Photos (Paris Canyon Issue)
 
 ## Problem Summary
 
-Activity cards in the itinerary are showing completely wrong images:
-- **"Park Hyatt Tokyo" (DINING)** → Shows people doing yoga/stretching
-- **"Hotel Checkout"** → Shows a swimming pool
+The Paris trip is showing a canyon/desert landscape image instead of Paris landmarks. This happens because:
+
+1. **Paris is NOT in the curated-only list** - The frontend has beautiful Unsplash images for Paris, but the code calls the backend API instead of using them
+2. **Random POI Selection** - Backend picks a random POI from the destination, leading to inconsistent images
+3. **Stale/Polluted Cache** - The `curated_images` database has some mismatched entries (e.g., NYC carriage rides cached for Paris activities)
 
 ## Root Cause Analysis
 
-### Issue 1: Dining Activities at Hotels Get Wrong Search Hints
-When an activity like "Relaxed Morning and Breakfast at Hotel" has:
-- `category: dining` 
-- `location.name: "Park Hyatt Tokyo"`
+The image resolution flow:
 
-The frontend sends `imageSearchTerm = "Park Hyatt Tokyo"` with `category = "dining"`. The backend then adds a "restaurant" hint to the search query:
-
+```text
+DynamicDestinationPhotos (Paris trip)
+        │
+        ▼
+getDestinationImages() in destinationImagesAPI.ts
+        │
+        ▼ Paris is NOT in CURATED_ONLY_DESTINATIONS
+        │
+        ▼ Calls backend edge function
+        │
+destination-images edge function
+        │
+        ▼ Picks random POI → "Musée d'Orsay"
+        │
+        ▼ Searches Google Places / TripAdvisor
+        │
+        ▼ May return cached bad image or network-cached wrong image
 ```
-Search query: "Park Hyatt Tokyo restaurant Tokyo"
-```
 
-This returns irrelevant results because Google/TripAdvisor is looking for a *restaurant* called "Park Hyatt Tokyo".
+The frontend already has high-quality curated Unsplash images for Paris:
+- Eiffel Tower panorama
+- Paris cityscape with Seine
+- Parisian architecture
 
-### Issue 2: TripAdvisor Fallback Returns Unrelated Images
-The backend logs show:
-```
-entity_key: "relaxed morning and breakfast at hotel"
-alt_text: "Tokyo Sumo Morning Practice Tour at Stable"
-```
-
-When Google Places filtering rejects results (due to low match score), TripAdvisor returns the first match which can be completely unrelated.
-
-### Issue 3: Insufficient Validation in Backend
-The TripAdvisor tier (Tier 3) lacks the match score validation that exists in Google Places (Tier 2). It blindly accepts the first result without checking if it's actually relevant to the search query.
+But these are ONLY used if Paris is in `CURATED_ONLY_DESTINATIONS`.
 
 ---
 
-## Solution: Multi-Layer Fix
+## Solution
 
-### Fix 1: Frontend - Detect "Hotel Dining" Activities
-Update `EditorialItinerary.tsx` to detect when a dining activity is at a hotel, and use the hotel image instead of searching for a "restaurant".
+### Fix 1: Add Major Destinations to Curated-Only List
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Is category "dining" AND location.name contains "hotel"?  │
-│       ↓ Yes                      ↓ No                       │
-│  Use hotel search term       Use dining search term         │
-│  (e.g. "Park Hyatt Tokyo     (normal restaurant search)     │
-│   hotel")                                                   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Fix 2: Backend - Add Match Score Validation to TripAdvisor
-Apply the same tokenization and match scoring logic that exists for Google Places to the TripAdvisor tier. Reject results with low similarity scores.
-
-### Fix 3: Backend - Improve Skip Patterns for Hotel Activities
-Add patterns to detect "breakfast/lunch/dinner at hotel" activities and use the `accommodation` category for image search instead of `dining`.
-
----
-
-## Technical Changes
-
-### File: `src/components/itinerary/EditorialItinerary.tsx`
-
-**Location**: Lines ~4858-4884 (ActivityCard component)
-
-Add detection for hotel dining activities:
+Update `src/services/destinationImagesAPI.ts` to include all destinations that have curated images:
 
 ```typescript
-// Detect if this is a dining activity AT a hotel (breakfast at hotel, etc.)
-const isHotelDiningActivity = isDiningActivity && 
-  activity.location?.name?.toLowerCase().includes('hotel');
-
-// For hotel dining activities, search for the hotel image instead of restaurant
-const effectiveSearchTerm = isHotelDiningActivity
-  ? `${activity.location?.name} hotel`
-  : imageSearchTerm;
-
-const effectiveCategory = isHotelDiningActivity
-  ? 'accommodation'
-  : (isHotelActivity ? 'accommodation' : activityType);
-
-// Updated hook call
-const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-  isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
-  effectiveCategory,
-  existingPhoto,
-  shouldFetchRealPhoto ? destination : undefined,
-  activity.id
-);
+// Destinations that MUST use curated images (no third-party sources allowed)
+const CURATED_ONLY_DESTINATIONS = new Set([
+  'rome', 
+  'lisbon', 
+  'paris',
+  'london',
+  'barcelona',
+  'santorini',
+  'amsterdam',
+  'vienna',
+  'copenhagen',
+  'florence',
+  'porto',
+  'tokyo',
+  'kyoto',
+  'bali',
+  'bangkok',
+  'singapore',
+  'hong kong',
+  'seoul',
+  'new york',
+  'los angeles',
+  'san francisco',
+  'miami',
+  'new orleans',
+  'hawaii',
+  'oahu',
+  'maui',
+  'mexico city',
+  'cabo san lucas',
+  'cancun',
+  'buenos aires',
+  'rio de janeiro',
+  'peru',
+  'cusco',
+  'oaxaca',
+  'cape town',
+  'marrakech',
+  'dubai',
+  'melbourne',
+  'sydney',
+  'auckland',
+  'cartagena',
+  'vancouver'
+]);
 ```
 
-### File: `supabase/functions/destination-images/index.ts`
+This ensures that for hero images, we use the reliable curated Unsplash images instead of unpredictable API results.
 
-**Change 1**: Update skip patterns (~line 648) to catch hotel dining activities:
+### Fix 2: Improve Fallback Logic
 
-```typescript
-// In skipPatterns array, add:
-/^(?:relaxed|leisurely|early|late)?\s*(?:morning|afternoon|evening)?\s*(?:and\s+)?(?:breakfast|brunch|lunch|dinner)\s+(?:at\s+)?(?:the\s+)?hotel/i,
-/^(?:breakfast|brunch|lunch|dinner|meal)\s+at\s+(?:the\s+)?(?:hotel|resort|inn|lodge)/i,
-```
-
-**Change 2**: Add match score validation to TripAdvisor tier (~line 348-413):
+Update `getDestinationImages()` to ALWAYS check for curated images first, regardless of the curated-only list:
 
 ```typescript
-async function getTripAdvisorPhoto(
-  venueName: string,
-  destination: string,
-  apiKey: string
-): Promise<DestinationImage | null> {
-  try {
-    const searchQuery = `${venueName} ${destination}`;
-    // ... existing search code ...
+export async function getDestinationImages(
+  params: GetImagesParams = {}
+): Promise<DestinationImage[]> {
+  const normalizedDestination = normalizeDestinationQuery(params.destination);
 
-    const location = searchData.data?.[0];
-    if (!location?.location_id) return null;
-
-    // NEW: Validate the result matches our query
-    const venueTokens = new Set(tokenize(venueName));
-    const locationName = location.name || '';
-    const matchScore = calculateMatchScore(venueTokens, locationName);
-    
-    const MIN_MATCH_SCORE = 0.3; // Lower threshold than Google since TripAdvisor is a fallback
-    
-    if (matchScore < MIN_MATCH_SCORE) {
-      console.log(`[Images] Rejecting TripAdvisor result (low score ${matchScore.toFixed(2)}): ${locationName}`);
-      return null;
-    }
-
-    // ... continue with photo fetch ...
+  // For hero/gallery, ALWAYS prefer curated images if available
+  if (
+    normalizedDestination &&
+    (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all') &&
+    hasCuratedImages(normalizedDestination)
+  ) {
+    const type = (params.imageType === 'gallery' ? 'gallery' : 'hero') as DestinationImage['type'];
+    const limit = params.limit ?? (params.imageType === 'gallery' ? 6 : 1);
+    const urls = getCuratedDestinationImages(normalizedDestination, limit);
+    return urls.map((url, i) => ({
+      id: `curated-local-${type}-${i}`,
+      url,
+      alt: `${normalizedDestination} photo ${i + 1}`,
+      type,
+      source: 'database',
+    }));
   }
+
+  // ... rest of function for API fallback
 }
 ```
 
-**Change 3**: Add hotel keyword detection in extractVenueName (~line 693):
+### Fix 3: Database Cleanup
 
-```typescript
-// After existing extractPatterns, add hotel dining detection:
-const hotelDiningMatch = title.match(/(?:breakfast|brunch|lunch|dinner)\s+(?:at\s+)?(.+?\s+(?:hotel|resort|inn|hyatt|hilton|marriott|sheraton|ritz|intercontinental))/i);
-if (hotelDiningMatch) {
-  return { 
-    cleanName: hotelDiningMatch[1].trim(), 
-    shouldSkip: false, 
-    inferredCategory: 'accommodation' // Use hotel category instead of dining
-  };
-}
+Clear mismatched cached images:
+
+```sql
+-- Delete cached images with NYC content for Paris
+DELETE FROM curated_images
+WHERE destination ILIKE '%Paris%'
+  AND (alt_text ILIKE '%NYC%' OR alt_text ILIKE '%New York%');
+
+-- Delete any canyon/desert images mistakenly cached for European cities
+DELETE FROM curated_images  
+WHERE destination IN ('Paris', 'London', 'Rome', 'Barcelona')
+  AND (alt_text ILIKE '%canyon%' OR alt_text ILIKE '%desert%');
 ```
 
 ---
@@ -153,28 +152,46 @@ if (hotelDiningMatch) {
 
 | File | Changes |
 |------|---------|
-| `src/components/itinerary/EditorialItinerary.tsx` | Detect hotel dining activities and use accommodation category for image search |
-| `supabase/functions/destination-images/index.ts` | Add skip patterns for hotel dining, add match validation to TripAdvisor, improve hotel detection |
+| `src/services/destinationImagesAPI.ts` | Add more destinations to `CURATED_ONLY_DESTINATIONS`; improve logic to always prefer curated images first |
 
 ---
 
-## Data Cleanup
+## Technical Details
 
-After deploying the fix, run this query to clear bad cached images:
+### src/services/destinationImagesAPI.ts Changes
 
-```sql
--- Delete cached images with mismatched content (sumo, yoga, etc. for hotel activities)
-DELETE FROM curated_images
-WHERE entity_key ILIKE '%breakfast%hotel%'
-   OR entity_key ILIKE '%relaxed morning%'
-   OR entity_key ILIKE '%morning%breakfast%';
+1. Expand `CURATED_ONLY_DESTINATIONS` to include all destinations with curated images
+2. Modify `getDestinationImages()` to check for curated images FIRST before calling backend
+
+```typescript
+// Line ~19: Expand curated destinations list
+const CURATED_ONLY_DESTINATIONS = new Set([
+  'rome', 'lisbon', 'paris', 'london', 'barcelona', 'santorini', 'amsterdam',
+  'vienna', 'copenhagen', 'florence', 'porto', 'tokyo', 'kyoto', 'bali',
+  'bangkok', 'singapore', 'hong kong', 'seoul', 'new york', 'los angeles',
+  'san francisco', 'miami', 'new orleans', 'hawaii', 'oahu', 'maui',
+  'mexico city', 'cabo san lucas', 'cancun', 'buenos aires', 'rio de janeiro',
+  'peru', 'cusco', 'oaxaca', 'cape town', 'marrakech', 'dubai', 'melbourne',
+  'sydney', 'auckland', 'cartagena', 'vancouver', 'reykjavik'
+]);
+
+// Line ~77: Modify the curated check to not require destination to be in the curated-only list
+// For hero/gallery, prefer curated images if available (any destination)
+if (
+  normalizedDestination &&
+  (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all') &&
+  hasCuratedImages(normalizedDestination)
+) {
+  // Use curated images...
+}
 ```
 
 ---
 
 ## Impact
 
-- **Fixes wrong images** for dining activities at hotels
-- **Prevents future bad caching** by validating TripAdvisor results
-- **Improves image relevance** by using accommodation category for hotel activities
-- **No breaking changes** - existing correct caches remain valid
+- **Paris and other major cities** will show correct, high-quality Unsplash images
+- **Consistent hero images** - no more random POI selection
+- **Faster loading** - curated images don't require backend API calls
+- **No breaking changes** - destinations without curated images still use API fallback
+
