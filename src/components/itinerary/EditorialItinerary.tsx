@@ -42,6 +42,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isToday } from 'date-fns';
+import { safeFormatDate } from '@/utils/dateUtils';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
@@ -4362,7 +4363,7 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
                 )}
                 {hotelSelection?.checkInDate && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Check-in: {format(parseISO(hotelSelection.checkInDate), 'MMM d')}
+                    Check-in: {safeFormatDate(hotelSelection.checkInDate, 'MMM d', 'Date TBD')}
                     {hotelSelection?.checkInTime && ` at ${hotelSelection.checkInTime}`}
                   </p>
                 )}
