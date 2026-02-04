@@ -75,6 +75,7 @@ export default function Planner() {
   
   const [currentStep, setCurrentStep] = useState<PlannerStep>('context');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Keep destination in sync with the URL when explicitly provided.
   // This prevents a previously-saved destination from "sticking" when navigating from Explore.
@@ -244,16 +245,24 @@ export default function Planner() {
 
   // Save trip to database
   const saveTrip = async (): Promise<string | null> => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    
-    let sessionId = localStorage.getItem('voyance_anonymous_session');
-    if (!sessionId) {
-      sessionId = crypto.randomUUID();
-      localStorage.setItem('voyance_anonymous_session', sessionId);
+    // Prevent duplicate submissions
+    if (isSaving) {
+      console.warn('[Planner] Save already in progress, ignoring duplicate call');
+      return formData.tripId;
     }
-
+    
+    setIsSaving(true);
+    
     try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      let sessionId = localStorage.getItem('voyance_anonymous_session');
+      if (!sessionId) {
+        sessionId = crypto.randomUUID();
+        localStorage.setItem('voyance_anonymous_session', sessionId);
+      }
+
       if (isAuthenticated && user) {
         // Serialize companions to JSON-compatible format
         const companionsJson = formData.companions.map(c => ({
@@ -318,6 +327,8 @@ export default function Planner() {
       console.error('Failed to save trip:', err);
       toast.error('Failed to save trip');
       return null;
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -516,6 +527,7 @@ export default function Planner() {
             onContinue={() => handleStepComplete('context')}
             onSkipToItinerary={handleSkipToItinerary}
             onBack={() => navigate('/start')}
+            isSubmitting={isSaving}
           />
         )}
 
@@ -531,6 +543,7 @@ export default function Planner() {
             })}
             onContinue={() => handleStepComplete('hotels')}
             onBack={handleBack}
+            isSubmitting={isSaving || isLoading}
           />
         )}
 
