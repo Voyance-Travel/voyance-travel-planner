@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { trackCost, CostTracker } from "../_shared/cost-tracker.ts";
 
 // =============================================================================
 // NEW PERSONALIZATION MODULES (Phase 8 - Make Itineraries Impossible to be Generic)
@@ -4493,6 +4494,16 @@ Generate activities for this day following ALL constraints above.`;
       if (!data) {
         throw new Error('AI generation failed');
       }
+
+      // Track cost for this day generation
+      // Note: This is cumulative - we're tracking per-day for now
+      const dayTracker = trackCost('full_itinerary_day', 'google/gemini-3-flash-preview');
+      dayTracker.setTripId(context.tripId);
+      if (context.userId) dayTracker.setUserId(context.userId);
+      dayTracker.recordAiUsage(data);
+      dayTracker.addMetadata('dayNumber', dayNumber);
+      dayTracker.addMetadata('destination', context.destination);
+      await dayTracker.save();
 
       const message = data.choices?.[0]?.message;
       const toolCall = message?.tool_calls?.[0];
