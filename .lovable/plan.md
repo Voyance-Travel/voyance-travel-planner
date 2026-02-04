@@ -1,63 +1,159 @@
 
 
-# Add Screen Recordings to CustomizationShowcase Section
+# Fix: Duplicate Trip Creation Bug (Graham's 800 Trips)
 
-## Overview
+## Problem Analysis
 
-Update the "Full Control. Your Way." section to display real screen recordings (GIFs or MP4 videos) of Voyance features in action. The component is already structured with placeholders, so we'll enhance it to display your recordings once uploaded.
+**Root Cause**: The Trip Planner form lacks double-submission protection. When `saveTrip()` is called, it creates a new trip via `.insert()` every time if `formData.tripId` is null. On Feb 3rd, 2026 at 13:22:48, something triggered 787 rapid-fire calls to `saveTrip()` within ~2 seconds, all for the same Rome trip.
 
----
+**Evidence**:
+- 787 "Trip to Rome" entries created in a 2-second window (timestamps: 13:22:48.002 to 13:22:49.653)
+- All trips have `status: draft` and `itinerary_status: not_started`
+- Creation rate: ~395 trips per second
 
-## What You Need to Record
-
-Create 4 screen recordings demonstrating these features:
-
-| Feature | Filename | What to Record |
-|---------|----------|----------------|
-| **Find Alternatives** | `swap-activity-demo.gif` | Show the swap modal opening, filtering options, selecting a new activity, and the itinerary updating |
-| **Budget Updates** | `budget-update-demo.gif` | Swap an activity and show the budget bar recalculating in real-time |
-| **AI Chat** | `ai-chat-demo.gif` | Type a request to the Trip Assistant and show it modifying the itinerary |
-| **Reserve & Book** | `booking-links-demo.gif` | Click on booking links showing Viator, Google Maps, reservation options |
-
-### Recording Recommendations
-- **Format**: GIF (for auto-loop) or MP4/WebM (for smaller file size with controls)
-- **Aspect ratio**: 4:3 (matches card layout)
-- **Duration**: 5-10 seconds each, looping
-- **Resolution**: 800x600px or similar
-- **Tools**: Loom, QuickTime, Kap (Mac), ScreenToGif (Windows)
+**Missing Safeguards**:
+1. No `isSubmitting` state to disable buttons during save
+2. No debouncing on button clicks
+3. No check for existing in-flight requests
+4. `formData.tripId` not set immediately (only after insert completes)
 
 ---
 
-## Implementation Steps
+## Solution
 
-### 1. Upload Your Recordings
-Once you have the files ready, upload them through the chat and I'll copy them to `public/demos/`
+### 1. Add Submission Guard to Planner.tsx
 
-### 2. Update CustomizationShowcase Component
-Modify the component to display actual video/GIF content:
+Add `isSaving` state and prevent concurrent `saveTrip()` calls:
 
-- Replace placeholder divs with `<video>` elements for MP4/WebM (auto-play, loop, muted)
-- Or use `<img>` elements for GIF files
-- Add loading states and fallback UI
-- Ensure responsive sizing
+```text
+┌─────────────────────────────────────────────────┐
+│  Button Click                                   │
+│       ↓                                         │
+│  isSaving === true?  ──Yes──→  Return early     │
+│       ↓ No                                      │
+│  Set isSaving = true                            │
+│       ↓                                         │
+│  Call saveTrip()                                │
+│       ↓                                         │
+│  Set tripId immediately                         │
+│       ↓                                         │
+│  Set isSaving = false                           │
+└─────────────────────────────────────────────────┘
+```
 
-### 3. Add Fallback Behavior
-Keep the current placeholder UI as a fallback if videos fail to load
+### 2. Pass Loading State to Child Components
+
+Update `TripContext` and other step components to receive and use `isSubmitting` prop to disable buttons.
+
+### 3. Clean Up Graham's Duplicate Trips
+
+Run a data cleanup migration to:
+- Keep the most recent trip with an itinerary (or oldest if none have itineraries)
+- Delete the 791 duplicate Rome trips
 
 ---
 
-## File Changes
+## Files to Change
 
-| File | Change |
-|------|--------|
-| `public/demos/` | New directory for demo recordings |
-| `src/components/home/CustomizationShowcase.tsx` | Update to display real recordings |
+| File | Changes |
+|------|---------|
+| `src/pages/planner/Planner.tsx` | Add `isSaving` state, wrap `saveTrip()` with guard, pass loading state to children |
+| `src/components/planner/steps/TripContext.tsx` | Accept `isSubmitting` prop, disable action buttons when true |
+| `src/components/planner/steps/HotelSelection.tsx` | Accept and use `isSubmitting` prop |
+| `src/components/planner/steps/BookingOptions.tsx` | Already has `isLoading`, verify it's wired correctly |
 
 ---
 
-## Next Steps
+## Data Cleanup
 
-1. Create your 4 screen recordings following the specs above
-2. Upload them to the chat (GIF, MP4, or WebM format)
-3. I'll implement the component changes and copy files to the project
+**SQL Migration to delete duplicate Rome trips:**
+
+```sql
+-- Keep only the newest Rome trip for Graham, delete the other 791
+WITH keep_trip AS (
+  SELECT t.id
+  FROM trips t
+  JOIN profiles p ON t.user_id = p.id
+  WHERE p.display_name = 'Graham Lightfoot'
+    AND t.destination = 'Rome'
+  ORDER BY 
+    CASE WHEN t.itinerary_data IS NOT NULL THEN 0 ELSE 1 END,
+    t.created_at DESC
+  LIMIT 1
+)
+DELETE FROM trips
+WHERE id IN (
+  SELECT t.id 
+  FROM trips t
+  JOIN profiles p ON t.user_id = p.id
+  WHERE p.display_name = 'Graham Lightfoot'
+    AND t.destination = 'Rome'
+    AND t.id NOT IN (SELECT id FROM keep_trip)
+);
+```
+
+**Expected result**: Delete ~791 duplicate Rome trips, keeping 1.
+
+---
+
+## Technical Implementation
+
+### Planner.tsx Changes
+
+```typescript
+// Add new state
+const [isSaving, setIsSaving] = useState(false);
+
+// Wrap saveTrip with guard
+const saveTrip = async (): Promise<string | null> => {
+  // Prevent double-submission
+  if (isSaving) {
+    console.warn('[Planner] Save already in progress, ignoring duplicate call');
+    return formData.tripId;
+  }
+  
+  setIsSaving(true);
+  
+  try {
+    // ... existing save logic ...
+  } finally {
+    setIsSaving(false);
+  }
+};
+
+// Pass to TripContext
+<TripContext
+  ...
+  isSubmitting={isSaving}
+  onContinue={() => handleStepComplete('context')}
+/>
+```
+
+### TripContext.tsx Changes
+
+```typescript
+interface TripContextProps {
+  // ... existing props ...
+  isSubmitting?: boolean;
+}
+
+// Disable buttons when saving
+<Button
+  variant="ghost"
+  onClick={onContinue}
+  disabled={isSubmitting}
+  className="text-slate-500 hover:text-primary gap-2"
+>
+  {isSubmitting ? 'Saving...' : 'Skip this step'}
+</Button>
+```
+
+---
+
+## Impact
+
+- **Prevents future duplicates**: Button clicks during save are ignored
+- **Improves UX**: Users see loading feedback during save
+- **Data cleanup**: Removes Graham's 791 duplicate trips
+- **No breaking changes**: Existing functionality preserved
 
