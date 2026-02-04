@@ -296,7 +296,9 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     }
 
     const hotelsData = await hotelsResponse.json();
-    const hotelIds = (hotelsData.data || []).slice(0, 15).map((h: any) => h.hotelId);
+    // Amadeus allows up to 50 hotel IDs per offers request - use full capacity in production
+    const maxHotels = isProduction ? 50 : 15;
+    const hotelIds = (hotelsData.data || []).slice(0, maxHotels).map((h: any) => h.hotelId);
 
     if (hotelIds.length === 0) {
       console.log('[Hotels] No hotels found for city:', cityCode);
