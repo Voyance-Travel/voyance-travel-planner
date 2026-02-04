@@ -28,6 +28,11 @@ interface UseTripHeroImageResult {
   isLoading: boolean;
   source: 'seeded' | 'curated' | 'api' | 'gradient';
   onError: (e: React.SyntheticEvent<HTMLImageElement>) => void;
+  /** 
+   * Handler to validate image dimensions after load
+   * Detects blank/tiny images that load successfully but contain no content
+   */
+  onLoad: (e: React.SyntheticEvent<HTMLImageElement>) => void;
 }
 
 export function useTripHeroImage({
@@ -112,7 +117,7 @@ export function useTripHeroImage({
 
   const { url: imageUrl, source } = getImageUrl();
 
-  const onError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleFallback = useCallback(() => {
     // Handle seeded image failure
     if (seededHeroUrl && !seededFailed) {
       setSeededFailed(true);
@@ -135,13 +140,6 @@ export function useTripHeroImage({
       setApiFailed(true);
       return;
     }
-
-    // All sources failed - gradient fallback is always safe
-    // Prevent infinite loop by setting a data-url placeholder
-    const img = e.currentTarget;
-    if (!img.src.startsWith('data:')) {
-      img.src = generateDestinationGradient(tripId || destination);
-    }
   }, [
     seededHeroUrl, 
     seededFailed, 
@@ -151,14 +149,42 @@ export function useTripHeroImage({
     curatedImages.length,
     apiImageUrl,
     apiFailed,
-    tripId,
-    destination
   ]);
+
+  const onError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    handleFallback();
+
+    // All sources failed - gradient fallback is always safe
+    // Prevent infinite loop by setting a data-url placeholder
+    const img = e.currentTarget;
+    if (!img.src.startsWith('data:')) {
+      img.src = generateDestinationGradient(tripId || destination);
+    }
+  }, [handleFallback, tripId, destination]);
+
+  /**
+   * Validate image dimensions after load
+   * Detects blank/tiny images that return HTTP 200 but contain no useful content
+   * (e.g., expired TripAdvisor CDN URLs)
+   */
+  const onLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    
+    // Check for blank/tiny images (expired CDN responses)
+    if (img.naturalWidth < 10 || img.naturalHeight < 10) {
+      console.warn('[useTripHeroImage] Loaded but blank/tiny, triggering fallback:', imageUrl);
+      handleFallback();
+      
+      // Force a re-render by setting a gradient fallback
+      img.src = generateDestinationGradient(tripId || destination);
+    }
+  }, [imageUrl, handleFallback, tripId, destination]);
 
   return {
     imageUrl,
     isLoading,
     source,
     onError,
+    onLoad,
   };
 }
