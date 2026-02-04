@@ -562,7 +562,7 @@ export default function About() {
                     { feature: 'Budget tracking & expense management', status: 'live' },
                     { feature: 'Weather-aware scheduling', status: 'live' },
                     { feature: 'Direct booking via Viator', status: 'live' },
-                    { feature: 'Flight & hotel booking', status: 'external', note: 'Links to partners' },
+                    { feature: 'Flight tracking & sync', status: 'live', note: 'Add your flight, we sync the itinerary' },
                     { feature: 'Mobile app', status: 'coming', note: 'Q2 2026' },
                     { feature: 'Offline access', status: 'coming', note: 'Q2 2026' },
                   ].map((item, idx) => (
@@ -719,7 +719,7 @@ export default function About() {
               {
                 step: '03',
                 title: 'Plan, Customize, Perfect',
-                description: 'Get a complete itinerary with flights, hotels, and activities. Tweak anything until it\'s exactly right.',
+                description: 'Get a complete itinerary with hotels and activities. Add your flights and we sync everything to your arrival.',
                 icon: <Calendar className="w-6 h-6" />,
                 image: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400&q=80',
               },
