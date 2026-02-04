@@ -32,12 +32,12 @@ export const FIXED_COSTS = [
     note: 'Free tier (Team would be $4/user/mo)',
     category: 'platform',
   },
-  // Email - Update if you upgrade from free tier
+  // Email - Zoho Mail free tier
   { 
-    name: 'SendGrid', 
+    name: 'Zoho Mail', 
     cost: 0, 
     frequency: 'monthly',
-    note: 'Free tier: 100 emails/day',
+    note: 'Free tier: 50 emails/day via SMTP',
     category: 'email',
   },
   // Google Cloud - $200/mo free credit
