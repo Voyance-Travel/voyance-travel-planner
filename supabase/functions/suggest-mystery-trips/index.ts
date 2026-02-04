@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -259,6 +260,13 @@ Return EXACTLY 3 destinations as JSON.`;
     }
 
     const aiResult = await response.json();
+    
+    // Track AI usage
+    const costTracker = trackCost('suggest_mystery_trips', 'google/gemini-3-flash-preview');
+    costTracker.setUserId(user.id);
+    costTracker.recordAiUsage(aiResult);
+    await costTracker.save();
+    
     const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
     
     if (!toolCall?.function?.arguments) {

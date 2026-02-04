@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -452,12 +453,19 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('flights_search', 'amadeus');
+
   try {
     if (req.method === 'POST') {
       const body = await req.json();
       console.log('[Flights] Request body:', JSON.stringify(body));
+      if (body.tripId) costTracker.setTripId(body.tripId);
       
       const { results, returnResults } = await searchFlights(body);
+      
+      // Track Amadeus API call (1 call per search)
+      costTracker.recordAmadeus(1);
+      await costTracker.save();
       
       return new Response(JSON.stringify({ 
         flights: results,

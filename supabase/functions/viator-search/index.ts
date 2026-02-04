@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -241,6 +242,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('viator_search', 'viator');
+
   try {
     const apiKey = Deno.env.get('VIATOR_API_KEY');
     if (!apiKey) {
@@ -273,6 +276,10 @@ serve(async (req) => {
       matchScore: bestMatch?.matchScore,
       alternatives: alternatives.length 
     });
+
+    // Track Viator API call
+    costTracker.addMetadata('results_count', results.length);
+    await costTracker.save();
 
     return new Response(
       JSON.stringify({
