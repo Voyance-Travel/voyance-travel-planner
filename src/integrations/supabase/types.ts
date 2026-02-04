@@ -5733,6 +5733,36 @@ export type Database = {
           },
         ]
       }
+      user_credit_bonuses: {
+        Row: {
+          bonus_type: string
+          credits_granted: number
+          expires_at: string | null
+          granted_at: string
+          id: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          bonus_type: string
+          credits_granted: number
+          expires_at?: string | null
+          granted_at?: string
+          id?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          bonus_type?: string
+          credits_granted?: number
+          expires_at?: string | null
+          granted_at?: string
+          id?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_credits: {
         Row: {
           balance_cents: number

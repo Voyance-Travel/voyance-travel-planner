@@ -42,6 +42,7 @@ import EditorialPreferencesView from '@/components/profile/EditorialPreferencesV
 import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
 import CreditBalanceCard from '@/components/profile/CreditBalanceCard';
 import CreditPacksGrid from '@/components/profile/CreditPacksGrid';
+import { CreditEarningChecklist } from '@/components/common/CreditEarningChecklist';
 import { useCredits, useRefreshCredits } from '@/hooks/useCredits';
 import { getTripStats, TripStats } from '@/services/userAPI';
 import { getArchetypeNarrative } from '@/data/archetypeNarratives';
@@ -878,6 +879,9 @@ export default function Profile() {
           >
             {/* Credit Balance Card - Primary Focus */}
             <CreditBalanceCard />
+
+            {/* Earn Free Credits Checklist */}
+            <CreditEarningChecklist />
 
             {/* Credit Packs Purchase Grid */}
             <div className="bg-card rounded-xl border border-border p-6">

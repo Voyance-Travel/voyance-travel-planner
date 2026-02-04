@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, ArrowRight, Check, Compass, Plane,
   Clock, Users, MapPin, Wand2, 
-  Mountain, Coffee, Luggage, Globe, Star, AlertCircle, MessageCircle
+  Mountain, Coffee, Luggage, Globe, Star, AlertCircle, MessageCircle, Gift
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -14,6 +14,7 @@ import QuizFeedbackV3 from '@/components/quiz/QuizFeedbackV3';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
+import { useBonusCredits, BONUS_INFO } from '@/hooks/useBonusCredits';
 import { 
   submitQuizComplete, 
   createQuizSession, 
@@ -127,6 +128,8 @@ const FloatingMotif = ({ icon, delay, x, y }: { icon: React.ReactNode; delay: nu
 // Welcome/Intro Screen Component
 function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {
   const [showSkipWarning, setShowSkipWarning] = useState(false);
+  const { hasClaimedBonus } = useBonusCredits();
+  const canEarnBonus = !hasClaimedBonus('quiz_completion');
   
   return (
     <motion.div
@@ -190,7 +193,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
           transition={{ delay: 0.6 }}
           className="space-y-4"
         >
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mb-8">
+          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mb-4">
             <motion.div 
               className="flex items-center gap-2"
               whileHover={{ scale: 1.05 }}
@@ -206,6 +209,21 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
               <span>21 questions</span>
             </motion.div>
           </div>
+
+          {/* Credit earning nudge */}
+          {canEarnBonus && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.7 }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 mb-6"
+            >
+              <Gift className="w-4 h-4 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Earn +{BONUS_INFO.quiz_completion.credits} credits for completing!
+              </span>
+            </motion.div>
+          )}
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <motion.div

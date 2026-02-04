@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, MapPin, Plane, CheckCircle2 } from 'lucide-react';
+import { Sparkles, MapPin, Plane, CheckCircle2, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
+import { useBonusCredits, BONUS_INFO } from '@/hooks/useBonusCredits';
+import { toast } from 'sonner';
 
 interface QuizCompletionProps {
   onContinue?: () => void;
@@ -44,11 +46,35 @@ function ConfettiParticle({ delay, x }: { delay: number; x: number }) {
 export function QuizCompletion({ onContinue }: QuizCompletionProps) {
   const navigate = useNavigate();
   const [showConfetti, setShowConfetti] = useState(true);
+  const [bonusGranted, setBonusGranted] = useState(false);
+  const { claimBonus, hasClaimedBonus } = useBonusCredits();
   
   useEffect(() => {
     const timer = setTimeout(() => setShowConfetti(false), 4000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Grant quiz completion bonus
+  useEffect(() => {
+    const grantQuizBonus = async () => {
+      if (hasClaimedBonus('quiz_completion')) return;
+      
+      try {
+        const result = await claimBonus('quiz_completion');
+        if (result.granted) {
+          setBonusGranted(true);
+          toast.success(`+${BONUS_INFO.quiz_completion.credits} credits earned!`, {
+            description: BONUS_INFO.quiz_completion.description,
+            icon: '🧬',
+          });
+        }
+      } catch (error) {
+        console.error('[QuizCompletion] Error granting bonus:', error);
+      }
+    };
+    
+    grantQuizBonus();
+  }, [claimBonus, hasClaimedBonus]);
 
   const handleContinue = () => {
     if (onContinue) {
@@ -170,9 +196,23 @@ export function QuizCompletion({ onContinue }: QuizCompletionProps) {
           <p className="text-lg text-muted-foreground mb-2">
             We've created your Travel DNA profile.
           </p>
-          <p className="text-muted-foreground mb-8">
+          <p className="text-muted-foreground mb-4">
             View your unique travel personality and start planning your perfect trip.
           </p>
+          
+          {/* Bonus earned notification */}
+          {bonusGranted && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 mb-6"
+            >
+              <Gift className="w-4 h-4 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                +{BONUS_INFO.quiz_completion.credits} credits earned!
+              </span>
+            </motion.div>
+          )}
         </motion.div>
 
         <motion.div
