@@ -4871,13 +4871,41 @@ function ActivityRow({
     ? (activity.location?.name || activityTitle.replace(/check[\-\s]?(in|out)/gi, '').replace(/at\s+/gi, '').trim())
     : null;
   
+  // Detect if this is a dining activity AT a hotel (breakfast at hotel, etc.)
+  // These should use the hotel image instead of searching for a "restaurant"
+  const locationName = activity.location?.name?.toLowerCase() || '';
+  const isHotelDiningActivity = isDiningActivity && (
+    locationName.includes('hotel') ||
+    locationName.includes('hyatt') ||
+    locationName.includes('hilton') ||
+    locationName.includes('marriott') ||
+    locationName.includes('sheraton') ||
+    locationName.includes('ritz') ||
+    locationName.includes('intercontinental') ||
+    locationName.includes('resort') ||
+    locationName.includes('inn') ||
+    activityTitle.toLowerCase().includes('breakfast at hotel') ||
+    activityTitle.toLowerCase().includes('breakfast at the hotel') ||
+    activityTitle.toLowerCase().includes('lunch at hotel') ||
+    activityTitle.toLowerCase().includes('dinner at hotel')
+  );
+  
+  // For hotel dining activities, use accommodation category and hotel search term
+  const effectiveSearchTerm = isHotelDiningActivity
+    ? `${activity.location?.name || 'hotel'} hotel`
+    : imageSearchTerm;
+  
+  const effectiveCategory = isHotelDiningActivity
+    ? 'accommodation'
+    : (isHotelActivity ? 'accommodation' : activityType);
+  
   // Fetch real photos for most activities, including hotels (but not generic check-ins without hotel name)
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
   const shouldFetchRealPhoto = showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-    isHotelActivity && hasHotelName ? `${hotelName} hotel` : imageSearchTerm,
-    isHotelActivity ? 'accommodation' : activityType,
+    isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
+    effectiveCategory,
     existingPhoto,
     shouldFetchRealPhoto ? destination : undefined,
     activity.id
