@@ -8,26 +8,38 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 // =============================================================================
-// PRICING DATA - Lovable AI Gateway (as of Feb 2026)
-// These are our COSTS, not what Lovable charges end-users
-// TODO: Verify these rates against Lovable billing dashboard
+// PRICING DATA - Lovable AI Gateway (VERIFIED Feb 4, 2026)
+// 
+// ACTUAL PRODUCTION USAGE (303 calls, $3.93 total):
+//   - gemini-3-flash-preview: 125 calls (41%)
+//   - gemini-2.5-flash-image: 92 calls (30%)
+//   - gemini-2.5-flash-lite: 75 calls (25%)
+//   - gemini-2.5-flash: 11 calls (4%)
+//
+// REAL COST: $3.93 ÷ 60 trips = $0.065/trip (~5 AI calls per trip)
+// 
+// NOTE: GPT-5 models are NOT used in production despite earlier docs.
+// Lovable pricing is transitional - may change after early 2026.
 // =============================================================================
 
 export const MODEL_PRICING = {
-  // OpenAI models (per 1M tokens)
+  // PRODUCTION MODELS (actually in use)
+  'google/gemini-3-flash-preview': { input: 0.10, output: 0.40 },   // Primary - 41% of calls
+  'google/gemini-2.5-flash-image': { input: 0.10, output: 0.40 },   // Image gen - 30% of calls
+  'google/gemini-2.5-flash-lite': { input: 0.05, output: 0.20 },    // Light tasks - 25% of calls
+  'google/gemini-2.5-flash': { input: 0.10, output: 0.40 },         // Fallback - 4% of calls
+  
+  // Available but NOT currently used in production
+  'google/gemini-2.5-pro': { input: 5.00, output: 15.00 },
+  'google/gemini-3-pro-preview': { input: 5.00, output: 15.00 },
   'openai/gpt-5': { input: 10.00, output: 30.00 },
   'openai/gpt-5-mini': { input: 0.40, output: 1.60 },
   'openai/gpt-5-nano': { input: 0.15, output: 0.60 },
-  
-  // Google models (per 1M tokens)
-  'google/gemini-2.5-pro': { input: 5.00, output: 15.00 },
-  'google/gemini-2.5-flash': { input: 0.10, output: 0.40 },
-  'google/gemini-2.5-flash-lite': { input: 0.05, output: 0.20 },
-  'google/gemini-3-flash-preview': { input: 0.10, output: 0.40 }, // Default model
-  'google/gemini-3-pro-preview': { input: 5.00, output: 15.00 },
 } as const;
 
-// Google API pricing (per 1k calls) - Updated for March 2025 per-SKU free tiers
+// Google API pricing (per call) - March 2025 per-SKU free tiers
+// WARNING: At 60 trips × 40-60 calls/trip = 2,400-3,600 calls/period
+// FREE TIER STATUS: UNKNOWN - must check Google Cloud Console billing
 export const GOOGLE_API_PRICING = {
   places_text_search: { perCall: 0.017, freeTierMonthly: 5000 },
   places_details: { perCall: 0.017, freeTierMonthly: 5000 },
