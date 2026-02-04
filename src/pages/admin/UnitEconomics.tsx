@@ -101,16 +101,17 @@ const CREDIT_TIERS = [
   { key: "voyager", label: "Voyager", price: 45, credits: 1200, color: "#A78BFA", description: "Frequent travelers" },
 ];
 
-// Column definitions with tooltips for per-trip scaling table
+// Column definitions with tooltips for per-trip scaling table (now includes free user economics)
 const SCALE_COLUMNS = [
-  { key: "trips", label: "Trips/Mo", tooltip: "Monthly trip volume for this projection row. Each trip = 1 full itinerary generation." },
-  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable costs (Google + AI + Perplexity + Amadeus) + Fixed costs / volume. This is your true cost basis." },
-  { key: "topup", label: "Top-Up $5", tooltip: "Margin if user pays $5 (Top-Up pack). Formula: ($5 - Cost) / $5. Low-value transactions that may be loss leaders at low volume." },
-  { key: "single", label: "Single $29", tooltip: "Margin if user pays $29 (Single Trip pack). Formula: ($29 - Cost) / $29. Primary offering for casual travelers." },
-  { key: "explorer", label: "Explorer $35", tooltip: "Margin if user pays $35 (Explorer pack). Formula: ($35 - Cost) / $35. Most popular tier for serious trip planning." },
-  { key: "voyager", label: "Voyager $45", tooltip: "Margin if user pays $45 (Voyager pack). Formula: ($45 - Cost) / $45. Best margins for power users." },
-  { key: "breakeven", label: "Breakeven", tooltip: "Minimum price needed to break even at this volume. If cost/trip is $2.50, you need at least $2.50 revenue per trip." },
-  { key: "monthlyProfit35", label: "Profit @$35", tooltip: "Monthly profit if ALL trips paid Explorer ($35). Formula: Trips × ($35 - Cost). Theoretical max at 100% conversion." },
+  { key: "trips", label: "Total Trips", tooltip: "Total monthly trip volume (paid + free users combined)." },
+  { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
+  { key: "free", label: "Free", tooltip: "Number of free users who cost you money but pay nothing. Formula: Total × (100% - Conversion %)." },
+  { key: "freeCost", label: "Free $ Cost", tooltip: "Total cost of serving free users this month. This is pure loss. Formula: Free Users × Cost/Trip." },
+  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable + Fixed/volume. Applies to both paid AND free users." },
+  { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
+  { key: "totalCost", label: "Total Cost", tooltip: "Cost to serve ALL users (paid + free). Formula: Total Trips × Cost/Trip." },
+  { key: "netProfit", label: "Net Profit", tooltip: "Actual profit after accounting for free user costs. Formula: Revenue - Total Cost. This is real money." },
+  { key: "realMargin", label: "Real Margin", tooltip: "True margin after free user drag. Formula: Net Profit / Revenue. Much lower than per-tier margins shown above." },
 ];
 
 
@@ -637,7 +638,7 @@ export default function UnitEconomics() {
           </div>
         </div>
 
-        {/* Scale Economics Table - All Tiers */}
+        {/* Scale Economics Table - With Free User Economics */}
         <div style={{
           background: "rgba(30, 41, 59, 0.5)",
           borderRadius: 12,
@@ -648,25 +649,42 @@ export default function UnitEconomics() {
         }}>
           <div style={{ marginBottom: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 8 }}>
-              Economics At Scale · All Tiers Compared · Scenario D
+              Economics At Scale · Including Free User Costs · Scenario D
             </h3>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              Shows <strong style={{ color: "#34D399" }}>gross margin %</strong> for each pricing tier at different volumes.
-              <strong style={{ color: "#A855F7" }}> Scenario D</strong> = Photo caching active (-33% Google), Amadeus beyond free tier (400+ trips).
-              Margins &gt;90% shown in <span style={{ color: "#34D399" }}>green</span>, 50-90% in <span style={{ color: "#FBBF24" }}>yellow</span>, &lt;50% in <span style={{ color: "#F87171" }}>red</span>.
+              Shows <strong style={{ color: "#F87171" }}>real profitability</strong> accounting for free users who cost money but pay nothing.
+              Uses your <strong style={{ color: "#38BDF8" }}>{conversionRate}% conversion rate</strong> and 
+              <strong style={{ color: "#A78BFA" }}> {REVENUE_MIX_PRESETS[revenueMix].label}</strong> revenue mix (${blendedAOV.toFixed(2)} blended AOV).
             </p>
           </div>
 
-          {/* Tier Legend */}
-          <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-            {CREDIT_TIERS.map(t => (
-              <div key={t.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
-                <div style={{ width: 12, height: 12, borderRadius: 3, background: t.color }} />
-                <span style={{ color: "#94A3B8" }}>{t.label}</span>
-                <span style={{ color: "#64748B", fontFamily: "'JetBrains Mono', monospace" }}>${t.price}</span>
-                <span style={{ color: "#475569", fontSize: 10 }}>({t.credits} cr)</span>
-              </div>
-            ))}
+          {/* Current Settings Reminder */}
+          <div style={{ 
+            display: "flex", 
+            gap: 24, 
+            marginBottom: 16, 
+            padding: 12, 
+            background: "rgba(15, 23, 42, 0.5)", 
+            borderRadius: 8,
+            flexWrap: "wrap",
+          }}>
+            <div style={{ fontSize: 11 }}>
+              <span style={{ color: "#64748B" }}>Conversion:</span>
+              <span style={{ color: "#38BDF8", fontWeight: 600, marginLeft: 6 }}>{conversionRate}%</span>
+            </div>
+            <div style={{ fontSize: 11 }}>
+              <span style={{ color: "#64748B" }}>Revenue Mix:</span>
+              <span style={{ color: "#A78BFA", fontWeight: 600, marginLeft: 6 }}>{REVENUE_MIX_PRESETS[revenueMix].label}</span>
+            </div>
+            <div style={{ fontSize: 11 }}>
+              <span style={{ color: "#64748B" }}>Blended AOV:</span>
+              <span style={{ color: "#34D399", fontWeight: 600, marginLeft: 6 }}>${blendedAOV.toFixed(2)}</span>
+            </div>
+            <div style={{ fontSize: 11 }}>
+              <span style={{ color: "#64748B" }}>Free user cost/trip:</span>
+              <span style={{ color: "#F87171", fontWeight: 600, marginLeft: 6 }}>~$0.42</span>
+              <span style={{ color: "#475569", marginLeft: 4 }}>(variable only, no revenue)</span>
+            </div>
           </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -689,31 +707,32 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {scalePoints.map((vol) => {
-                const goog = VERIFIED_DATA.services.google.perTrip * (1 - PHOTO_CACHE_SAVINGS_RATIO); // Scenario D uses caching
+                const goog = VERIFIED_DATA.services.google.perTrip * (1 - PHOTO_CACHE_SAVINGS_RATIO);
                 const ai = VERIFIED_DATA.services.lovableAI.perTrip;
                 const perp = VERIFIED_DATA.services.perplexity.perTrip;
-                // Amadeus: free under 400, $0.12/trip after
                 const amad = vol > AMADEUS_FREE_TRIPS ? AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL : 0;
                 const variable = goog + ai + perp + amad;
                 const fixedPer = 29.08 / vol;
                 const loaded = variable + fixedPer;
                 
-                // Calculate margin for each tier
-                const margins = CREDIT_TIERS.map(t => ({
-                  key: t.key,
-                  margin: ((t.price - loaded) / t.price) * 100,
-                  color: t.color,
-                }));
+                // Free user economics
+                const paidUsers = Math.round(vol * (conversionRate / 100));
+                const freeUsers = vol - paidUsers;
+                const freeCost = freeUsers * variable; // Free users only cost variable (no fixed allocation to them)
                 
-                const explorerProfit = vol * (35 - loaded);
+                // Revenue from paying users
+                const revenue = paidUsers * blendedAOV;
+                const totalCost = (vol * variable) + 29.08; // All variable + fixed
+                const netProfit = revenue - totalCost;
+                const realMargin = revenue > 0 ? (netProfit / revenue) * 100 : -100;
 
                 const isAmadeusThreshold = vol === 400;
                 const isKeyVolume = vol === 100 || vol === 500 || vol === 1000;
                 
                 const getMarginColor = (m: number) => {
-                  if (m >= 90) return "#34D399";
-                  if (m >= 50) return "#FBBF24";
-                  if (m >= 0) return "#F87171";
+                  if (m >= 50) return "#34D399";
+                  if (m >= 20) return "#FBBF24";
+                  if (m >= 0) return "#F59E0B";
                   return "#EF4444";
                 };
 
@@ -731,6 +750,34 @@ export default function UnitEconomics() {
                     </td>
                     <td style={{ 
                       padding: "10px 12px", 
+                      color: "#34D399", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      {paidUsers.toLocaleString()}
+                    </td>
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: "#F87171", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      {freeUsers.toLocaleString()}
+                    </td>
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: "#F87171", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontWeight: 600,
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      -${freeCost.toFixed(0)}
+                    </td>
+                    <td style={{ 
+                      padding: "10px 12px", 
                       color: "#94A3B8", 
                       textAlign: "right",
                       fontFamily: "'JetBrains Mono', monospace",
@@ -738,37 +785,43 @@ export default function UnitEconomics() {
                     }}>
                       ${loaded.toFixed(2)}
                     </td>
-                    {margins.map(m => (
-                      <td key={m.key} style={{ 
-                        padding: "10px 12px", 
-                        color: getMarginColor(m.margin), 
-                        textAlign: "right",
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontWeight: 600,
-                        borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                      }}>
-                        {m.margin > 0 ? `${m.margin.toFixed(0)}%` : <span style={{ color: "#EF4444" }}>Loss</span>}
-                      </td>
-                    ))}
                     <td style={{ 
                       padding: "10px 12px", 
-                      color: "#64748B", 
+                      color: "#34D399", 
                       textAlign: "right",
                       fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: 11,
                       borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
                     }}>
-                      ${loaded.toFixed(2)}
+                      ${revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td style={{ 
                       padding: "10px 12px", 
-                      color: explorerProfit > 0 ? "#34D399" : "#F87171", 
+                      color: "#F87171", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      -${totalCost.toFixed(0)}
+                    </td>
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: netProfit > 0 ? "#34D399" : "#EF4444", 
                       textAlign: "right",
                       fontFamily: "'JetBrains Mono', monospace",
                       fontWeight: 600,
                       borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
                     }}>
-                      ${explorerProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {netProfit >= 0 ? "$" : "-$"}{Math.abs(netProfit).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </td>
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: getMarginColor(realMargin), 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontWeight: 600,
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      {realMargin.toFixed(0)}%
                     </td>
                   </tr>
                 );
@@ -778,10 +831,11 @@ export default function UnitEconomics() {
           
           <div style={{ marginTop: 16, padding: 12, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8 }}>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              <strong style={{ color: "#F59E0B" }}>⚠️ Key Insight:</strong> The $5 Top-Up tier shows 
-              <strong style={{ color: "#F87171" }}> negative or low margins</strong> at low volumes because fixed costs ($29/mo) dominate.
-              At scale (1000+ trips), even $5 purchases become profitable. The <strong style={{ color: "#34D399" }}>Explorer ($35)</strong> tier 
-              is the sweet spot: profitable even at 10 trips/mo.
+              <strong style={{ color: "#F59E0B" }}>⚠️ Reality Check:</strong> At <strong style={{ color: "#38BDF8" }}>{conversionRate}% conversion</strong>, 
+              {100 - conversionRate}% of users are free and cost ~$0.42 each in API calls alone. 
+              The <strong style={{ color: "#F87171" }}>"Free $ Cost"</strong> column shows how much free users drain monthly.
+              <strong style={{ color: "#34D399" }}> Real Margin</strong> = what you actually keep after serving everyone.
+              Adjust conversion rate and revenue mix sliders above to model different scenarios.
             </p>
           </div>
         </div>
