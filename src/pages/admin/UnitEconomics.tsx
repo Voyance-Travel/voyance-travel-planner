@@ -419,7 +419,7 @@ export default function UnitEconomics() {
             </p>
           </div>
 
-          {/* Revenue Mix */}
+          {/* Revenue Mix - Visual */}
           <div style={{
             background: "rgba(30, 41, 59, 0.5)",
             borderRadius: 12,
@@ -432,7 +432,7 @@ export default function UnitEconomics() {
                 Avg ${blendedAOV.toFixed(2)}
               </span>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
               {(Object.keys(REVENUE_MIX_PRESETS) as (keyof typeof REVENUE_MIX_PRESETS)[]).map((key) => (
                 <button
                   key={key}
@@ -453,16 +453,69 @@ export default function UnitEconomics() {
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 10, color: "#64748B" }}>
+            
+            {/* Visual Bar Chart */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", height: 24, borderRadius: 6, overflow: "hidden", background: "rgba(15, 23, 42, 0.5)" }}>
+                {CREDIT_TIERS.map((tier) => {
+                  const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
+                  if (pct === 0) return null;
+                  return (
+                    <div
+                      key={tier.key}
+                      style={{
+                        width: `${pct}%`,
+                        background: tier.color,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "width 0.3s ease",
+                        position: "relative",
+                      }}
+                      title={`${tier.label}: ${pct}% @ $${tier.price}`}
+                    >
+                      {pct >= 15 && (
+                        <span style={{ 
+                          fontSize: 9, 
+                          fontWeight: 600, 
+                          color: tier.key === "topup" ? "#1E293B" : "#FFF",
+                          textShadow: tier.key === "topup" ? "none" : "0 1px 2px rgba(0,0,0,0.3)",
+                        }}>
+                          {pct}%
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Tier Labels with $ */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+              {CREDIT_TIERS.map((tier) => {
+                const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
+                return (
+                  <div key={tier.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 2, background: tier.color }} />
+                    <span style={{ fontSize: 10, color: pct > 0 ? "#CBD5E1" : "#475569" }}>
+                      {tier.label}
+                    </span>
+                    <span style={{ 
+                      fontSize: 10, 
+                      color: pct > 0 ? tier.color : "#475569", 
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontWeight: pct > 20 ? 600 : 400,
+                    }}>
+                      ${tier.price}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <p style={{ fontSize: 10, color: "#64748B", marginTop: 4 }}>
               {mixConfig.description}
             </p>
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {Object.entries(FALLBACK_DATA.revenue).map(([tier, price]) => (
-                <span key={tier} style={{ fontSize: 9, color: "#94A3B8", background: "rgba(30, 41, 59, 0.8)", padding: "2px 6px", borderRadius: 4 }}>
-                  {tier}: {mixConfig[tier as keyof typeof mixConfig]}% @ ${price}
-                </span>
-              ))}
-            </div>
           </div>
 
           {/* Scenario */}
