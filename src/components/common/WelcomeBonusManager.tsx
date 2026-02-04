@@ -2,42 +2,49 @@
  * Welcome Bonus Manager
  * Handles triggering welcome modal for new users after email verification
  * Also manages the floating credit progress bar
+ * 
+ * Uses popup coordination to prevent modal conflicts
  */
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBonusCredits } from '@/hooks/useBonusCredits';
+import { usePopupCoordination, POPUP_STORAGE } from '@/stores/popup-coordination-store';
 import WelcomeCreditsModal from './WelcomeCreditsModal';
 import CreditEarningProgressBar from './CreditEarningProgressBar';
-
-const WELCOME_SHOWN_KEY = 'voyance_welcome_shown';
 
 export function WelcomeBonusManager() {
   const { user, isLoading: authLoading } = useAuth();
   const { hasClaimedBonus, isLoading: bonusLoading } = useBonusCredits();
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  
+  const { requestPopup, closePopup, hasActiveModal } = usePopupCoordination();
 
   useEffect(() => {
     // Wait for auth and bonus data to load
     if (authLoading || bonusLoading || !user) return;
 
     // Check if we've already shown the welcome modal this session
-    const welcomeShown = sessionStorage.getItem(WELCOME_SHOWN_KEY);
+    const welcomeShown = sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN);
     if (welcomeShown) return;
 
     // Check if user hasn't claimed welcome bonus yet (new user)
     if (!hasClaimedBonus('welcome')) {
-      // Small delay to let the page settle
+      // Request permission from coordination system
       const timer = setTimeout(() => {
-        setShowWelcomeModal(true);
-        sessionStorage.setItem(WELCOME_SHOWN_KEY, 'true');
-      }, 500);
+        const allowed = requestPopup('welcome_credits');
+        if (allowed) {
+          setShowWelcomeModal(true);
+          sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, 'true');
+        }
+      }, 800); // Slightly longer delay to let page settle
       return () => clearTimeout(timer);
     }
-  }, [user, authLoading, bonusLoading, hasClaimedBonus]);
+  }, [user, authLoading, bonusLoading, hasClaimedBonus, requestPopup]);
 
   const handleCloseWelcome = () => {
     setShowWelcomeModal(false);
+    closePopup('welcome_credits');
   };
 
   // Don't render anything if not authenticated
@@ -51,8 +58,8 @@ export function WelcomeBonusManager() {
         onClose={handleCloseWelcome} 
       />
 
-      {/* Floating progress bar for earning more credits */}
-      <CreditEarningProgressBar />
+      {/* Floating progress bar - hide when modals are active */}
+      {!hasActiveModal() && <CreditEarningProgressBar />}
     </>
   );
 }

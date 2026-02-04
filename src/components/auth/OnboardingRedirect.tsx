@@ -3,6 +3,8 @@
  * 
  * Checks if a newly authenticated user has completed their preferences.
  * If not, shows a gentle nudge modal encouraging them to fill out preferences for better itineraries.
+ * 
+ * Uses popup coordination to prevent conflicts with other modals.
  */
 
 import { useState, useEffect } from 'react';
@@ -12,47 +14,57 @@ import { Settings, ArrowRight, X, Clock, Utensils, MapPin, Heart } from 'lucide-
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreferenceCompletion } from '@/hooks/usePreferenceCompletion';
+import { usePopupCoordination, POPUP_STORAGE, POPUP_COOLDOWNS } from '@/stores/popup-coordination-store';
 import { ROUTES } from '@/config/routes';
-
-const ONBOARDING_SHOWN_KEY = 'voyance_onboarding_nudge_shown';
-const NUDGE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export function OnboardingRedirect() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const { data: preferenceStatus, isLoading: isLoadingPreferences } = usePreferenceCompletion();
   const navigate = useNavigate();
   const [showNudge, setShowNudge] = useState(false);
+  
+  const { requestPopup, closePopup } = usePopupCoordination();
 
   useEffect(() => {
     // Only check after auth and preferences are fully loaded
     if (isLoading || isLoadingPreferences || !isAuthenticated || !user) return;
 
-    // If user has excellent personalization, don't show anything
+    // If user has good personalization, don't show anything
     if (preferenceStatus?.personalizationLevel === 'excellent' || preferenceStatus?.personalizationLevel === 'good') {
       return;
     }
 
-    // Check if we've shown the nudge recently
-    const lastShown = localStorage.getItem(ONBOARDING_SHOWN_KEY);
+    // Check if we've shown the nudge recently (24 hour cooldown)
+    const lastShown = localStorage.getItem(POPUP_STORAGE.ONBOARDING_SHOWN);
     if (lastShown) {
       const lastShownTime = parseInt(lastShown, 10);
-      if (Date.now() - lastShownTime < NUDGE_COOLDOWN_MS) {
+      if (Date.now() - lastShownTime < POPUP_COOLDOWNS.ONBOARDING_PREFERENCES) {
         return; // Don't show again within cooldown
       }
     }
 
-    // Show the nudge modal
-    setShowNudge(true);
-    localStorage.setItem(ONBOARDING_SHOWN_KEY, Date.now().toString());
-  }, [isLoading, isLoadingPreferences, isAuthenticated, user, preferenceStatus]);
+    // Request permission from coordination system with delay
+    // This gives welcome modal priority if it's also trying to show
+    const timer = setTimeout(() => {
+      const allowed = requestPopup('onboarding_preferences');
+      if (allowed) {
+        setShowNudge(true);
+        localStorage.setItem(POPUP_STORAGE.ONBOARDING_SHOWN, Date.now().toString());
+      }
+    }, 2000); // 2 second delay to let welcome modal show first if applicable
+
+    return () => clearTimeout(timer);
+  }, [isLoading, isLoadingPreferences, isAuthenticated, user, preferenceStatus, requestPopup]);
 
   const handleGoToPreferences = () => {
     setShowNudge(false);
+    closePopup('onboarding_preferences');
     navigate(ROUTES.PROFILE.VIEW + '?tab=preferences');
   };
 
   const handleDismiss = () => {
     setShowNudge(false);
+    closePopup('onboarding_preferences');
   };
 
   return (
@@ -130,8 +142,16 @@ export function OnboardingRedirect() {
                 </div>
               </div>
 
+              {/* Bonus credits nudge */}
+              <div className="mt-4 p-3 rounded-lg bg-accent/10 border border-accent/20">
+                <p className="text-sm text-center">
+                  <span className="font-medium text-accent">+50 bonus credits</span>
+                  <span className="text-muted-foreground"> when you complete your preferences</span>
+                </p>
+              </div>
+
               {/* Actions - Simple and clear */}
-              <div className="mt-8 space-y-3">
+              <div className="mt-6 space-y-3">
                 <Button
                   onClick={handleGoToPreferences}
                   className="w-full h-12 gap-2"
