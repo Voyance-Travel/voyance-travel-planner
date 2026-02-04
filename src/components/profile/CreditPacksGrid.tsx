@@ -9,7 +9,7 @@ import { motion } from 'framer-motion';
 import { Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
+import { CREDIT_PACKS, BOOST_PACK, formatCredits } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -24,13 +24,13 @@ interface CheckoutConfig {
 }
 
 interface CreditPacksGridProps {
-  showTopUp?: boolean;
+  showBoost?: boolean;
   returnPath?: string;
   className?: string;
 }
 
 export default function CreditPacksGrid({ 
-  showTopUp = true, 
+  showBoost = true, 
   returnPath = '/profile?payment=success',
   className = '' 
 }: CreditPacksGridProps) {
@@ -114,21 +114,21 @@ export default function CreditPacksGrid({
           })}
         </div>
 
-        {/* Quick Top-Up */}
-        {showTopUp && (
+        {/* Quick Boost */}
+        {showBoost && (
           <div className="mt-4 pt-4 border-t border-border">
             <div className="flex items-center justify-between gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">Quick refill: </span>
-                <span className="text-foreground font-medium">50 credits for $5</span>
+                <span className="text-muted-foreground">Quick boost: </span>
+                <span className="text-foreground font-medium">80 credits for $8</span>
               </div>
               <Button 
                 variant="ghost"
                 size="sm"
-                onClick={() => openCheckout(TOPUP_PACK, 'topup')}
-                disabled={loadingPlan === 'topup'}
+                onClick={() => openCheckout(BOOST_PACK, 'boost')}
+                disabled={loadingPlan === 'boost'}
               >
-                {loadingPlan === 'topup' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Top-Up'}
+                {loadingPlan === 'boost' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Boost'}
               </Button>
             </div>
           </div>

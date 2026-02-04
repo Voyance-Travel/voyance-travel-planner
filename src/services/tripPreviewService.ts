@@ -1,12 +1,15 @@
 /**
  * Trip Preview Service - Optimized Free Tier
  * 
- * Generates AI-only trip previews that cost ~$0.02-0.03
- * Does NOT call expensive APIs (Google Places, Amadeus)
- * Returns teaser content without real venue names
+ * ZERO-COST FIRST ARCHITECTURE:
+ * 1. FIRST: Check for static template ($0 cost)
+ * 2. FALLBACK: AI-generated preview (~$0.02-0.03 cost)
+ * 
+ * This reduces free user acquisition cost from ~$0.40 to ~$0.00-0.03
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getDestinationTemplate, hasStaticTemplate, type DestinationTemplate } from '@/data/destinationTemplates';
 
 // =============================================================================
 // Types
@@ -35,6 +38,7 @@ export interface TripPreview {
   highlights: string[];
   dnaCallouts: string[];
   isPreview: true;
+  isStatic: boolean; // true = $0 template, false = AI-generated
   generatedAt: string;
 }
 
@@ -55,6 +59,39 @@ export interface PreviewResponse {
   preview?: TripPreview;
   message?: string;
   error?: string;
+  source?: 'static' | 'ai';
+}
+
+// =============================================================================
+// Static Template Conversion
+// =============================================================================
+
+/**
+ * Convert a static template to a preview format with date alignment
+ */
+function templateToPreview(template: DestinationTemplate, startDate: string, requestedDays: number): TripPreview {
+  const start = new Date(startDate);
+  const cappedDays = Math.min(requestedDays, template.totalDays);
+  
+  const days: PreviewDay[] = template.days.slice(0, cappedDays).map((day, index) => ({
+    dayNumber: index + 1,
+    date: new Date(start.getTime() + index * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    title: day.title,
+    theme: day.theme,
+    neighborhood: day.neighborhood,
+    timeBlocks: day.timeBlocks,
+  }));
+
+  return {
+    destination: template.destination,
+    totalDays: cappedDays,
+    days,
+    highlights: template.highlights,
+    dnaCallouts: template.dnaCallouts,
+    isPreview: true,
+    isStatic: true,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 // =============================================================================
@@ -62,13 +99,34 @@ export interface PreviewResponse {
 // =============================================================================
 
 /**
- * Generate a FREE trip preview (AI-only, no expensive APIs)
- * This is the cost-optimized free tier experience
+ * Generate a FREE trip preview
+ * ZERO-COST FIRST: Uses static template if available, falls back to AI
  */
 export async function generateTripPreview(
   params: GeneratePreviewParams
 ): Promise<PreviewResponse> {
   try {
+    // Calculate trip duration
+    const start = new Date(params.startDate);
+    const end = new Date(params.endDate);
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const cappedDays = Math.min(totalDays, 7);
+
+    // FIRST: Try static template ($0 cost)
+    const template = getDestinationTemplate(params.destination);
+    if (template) {
+      console.log(`[tripPreviewService] Using static template for ${params.destination} ($0 cost)`);
+      return {
+        success: true,
+        preview: templateToPreview(template, params.startDate, cappedDays),
+        message: 'This is a free preview. Unlock the full itinerary to see real venues, booking links, and optimized routing.',
+        source: 'static',
+      };
+    }
+
+    // FALLBACK: AI-generated preview (~$0.02-0.03 cost)
+    console.log(`[tripPreviewService] No template for ${params.destination}, using AI preview`);
+    
     const { data, error } = await supabase.functions.invoke('generate-trip-preview', {
       body: params,
     });
@@ -81,7 +139,11 @@ export async function generateTripPreview(
       };
     }
 
-    return data as PreviewResponse;
+    return {
+      ...data,
+      source: 'ai',
+      preview: data.preview ? { ...data.preview, isStatic: false } : undefined,
+    } as PreviewResponse;
   } catch (err) {
     console.error('[tripPreviewService] Exception:', err);
     return {
@@ -93,18 +155,21 @@ export async function generateTripPreview(
 
 /**
  * Check if user can generate a free preview
- * (rate limiting, daily limits, etc.)
+ * Returns cost estimate based on whether static template exists
  */
-export async function canGeneratePreview(): Promise<{
+export async function canGeneratePreview(destination?: string): Promise<{
   canGenerate: boolean;
   remaining: number;
+  hasTemplate: boolean;
+  estimatedCost: number;
   resetAt?: string;
 }> {
-  // For now, allow unlimited previews since they're cheap (~$0.025 each)
-  // TODO: Add rate limiting if abuse occurs
+  const hasTemplate = destination ? hasStaticTemplate(destination) : false;
   return {
     canGenerate: true,
     remaining: 10, // Soft daily limit
+    hasTemplate,
+    estimatedCost: hasTemplate ? 0 : 0.025,
   };
 }
 
@@ -125,13 +190,14 @@ export function useGenerateTripPreview() {
 }
 
 /**
- * Hook for checking preview availability
+ * Hook for checking preview availability and cost
  */
-export function usePreviewAvailability() {
+export function usePreviewAvailability(destination?: string) {
   return useQuery({
-    queryKey: ['preview-availability'],
-    queryFn: canGeneratePreview,
+    queryKey: ['preview-availability', destination],
+    queryFn: () => canGeneratePreview(destination),
     staleTime: 60 * 1000, // 1 minute
+    enabled: !!destination,
   });
 }
 

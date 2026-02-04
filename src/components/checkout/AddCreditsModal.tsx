@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Wallet, Loader2, Plus, Minus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-// Minimum top-up amount in dollars
-const TOPUP_MINIMUM = 5;
+// Minimum boost amount in dollars (matches $8 Boost pack)
+const BOOST_MINIMUM = 8;
 
 interface AddCreditsModalProps {
   isOpen: boolean;
@@ -15,7 +15,7 @@ interface AddCreditsModalProps {
   currentBalance?: number;
 }
 
-const PRESET_AMOUNTS = [5, 10, 20, 50];
+const PRESET_AMOUNTS = [8, 12, 29, 55];
 
 export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCreditsModalProps) {
   const [amount, setAmount] = useState(10);
@@ -26,8 +26,8 @@ export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCred
   const handleAddCredits = async () => {
     const finalAmount = showCustom ? parseFloat(customAmount) : amount;
     
-    if (isNaN(finalAmount) || finalAmount < TOPUP_MINIMUM) {
-      toast.error(`Minimum top-up is $${TOPUP_MINIMUM}`);
+    if (isNaN(finalAmount) || finalAmount < BOOST_MINIMUM) {
+      toast.error(`Minimum is $${BOOST_MINIMUM}`);
       return;
     }
 
@@ -126,8 +126,8 @@ export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCred
                   variant="outline"
                   size="icon"
                   onClick={() => {
-                    const current = parseFloat(customAmount) || TOPUP_MINIMUM;
-                    setCustomAmount(Math.max(TOPUP_MINIMUM, current - 5).toString());
+                    const current = parseFloat(customAmount) || BOOST_MINIMUM;
+                    setCustomAmount(Math.max(BOOST_MINIMUM, current - 5).toString());
                   }}
                 >
                   <Minus className="h-4 w-4" />
@@ -137,12 +137,12 @@ export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCred
                   <Input
                     id="custom-amount"
                     type="number"
-                    min={TOPUP_MINIMUM}
+                    min={BOOST_MINIMUM}
                     step="1"
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
                     className="pl-7 text-center text-lg"
-                    placeholder={TOPUP_MINIMUM.toString()}
+                    placeholder={BOOST_MINIMUM.toString()}
                   />
                 </div>
                 <Button
@@ -197,7 +197,7 @@ export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCred
           </div>
 
           <p className="text-xs text-center text-muted-foreground">
-            Minimum top-up is ${TOPUP_MINIMUM}. Credits never expire.
+            Minimum is ${BOOST_MINIMUM}. Credits never expire.
           </p>
         </div>
       </DialogContent>
