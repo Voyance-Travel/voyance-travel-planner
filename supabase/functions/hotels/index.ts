@@ -296,45 +296,62 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     }
 
     const hotelsData = await hotelsResponse.json();
-    // Amadeus allows up to 50 hotel IDs per offers request - use full capacity in production
-    const maxHotels = isProduction ? 50 : 15;
-    const hotelIds = (hotelsData.data || []).slice(0, maxHotels).map((h: any) => h.hotelId);
+    // Production: up to 5 batches of 50 = 250 hotels max; Sandbox: 15
+    const maxBatches = isProduction ? 5 : 1;
+    const batchSize = 50;
+    const maxHotels = isProduction ? maxBatches * batchSize : 15;
+    const allHotelIds = (hotelsData.data || []).slice(0, maxHotels).map((h: any) => h.hotelId);
 
-    if (hotelIds.length === 0) {
+    if (allHotelIds.length === 0) {
       console.log('[Hotels] No hotels found for city:', cityCode);
       return generateFallbackHotels(params, cityCode);
     }
 
-    console.log('[Hotels] Step 2 - Getting offers for', hotelIds.length, 'hotels');
-
-    const offersParams = new URLSearchParams({
-      hotelIds: hotelIds.join(','),
-      checkInDate: params.checkIn,
-      checkOutDate: params.checkOut,
-      adults: String(params.guests || 1),
-      roomQuantity: String(params.rooms || 1),
-      currency: 'USD',
-    });
-
-    const offersResponse = await fetch(
-      `${baseUrl}/v3/shopping/hotel-offers?${offersParams}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    if (!offersResponse.ok) {
-      const errorText = await offersResponse.text();
-      console.error('[Hotels] Offers search failed:', offersResponse.status, errorText);
-      
-      return hotelsData.data.slice(0, 10).map((hotel: any) => 
-        normalizeHotelData(hotel, null, params)
-      );
+    // Split into batches of 50 for Amadeus API limit
+    const hotelIdBatches: string[][] = [];
+    for (let i = 0; i < allHotelIds.length; i += batchSize) {
+      hotelIdBatches.push(allHotelIds.slice(i, i + batchSize));
     }
 
-    const offersData = await offersResponse.json();
-    console.log('[Hotels] Got offers for', offersData.data?.length || 0, 'hotels');
+    console.log('[Hotels] Step 2 - Getting offers for', allHotelIds.length, 'hotels in', hotelIdBatches.length, 'batches');
+
+    // Fetch all batches in parallel
+    const batchPromises = hotelIdBatches.map(async (hotelIds, batchIndex) => {
+      const offersParams = new URLSearchParams({
+        hotelIds: hotelIds.join(','),
+        checkInDate: params.checkIn,
+        checkOutDate: params.checkOut,
+        adults: String(params.guests || 1),
+        roomQuantity: String(params.rooms || 1),
+        currency: 'USD',
+      });
+
+      try {
+        const offersResponse = await fetch(
+          `${baseUrl}/v3/shopping/hotel-offers?${offersParams}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (!offersResponse.ok) {
+          console.error(`[Hotels] Batch ${batchIndex + 1} failed:`, offersResponse.status);
+          return [];
+        }
+
+        const offersData = await offersResponse.json();
+        console.log(`[Hotels] Batch ${batchIndex + 1}: ${offersData.data?.length || 0} offers`);
+        return offersData.data || [];
+      } catch (err) {
+        console.error(`[Hotels] Batch ${batchIndex + 1} error:`, err);
+        return [];
+      }
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    const allOffers = batchResults.flat();
+    console.log('[Hotels] Total offers from all batches:', allOffers.length);
 
     // Sandbox fix for empty results
-    if (!offersData.data?.length) {
+    if (!allOffers.length) {
       const originalNights = Math.max(
         1,
         Math.ceil(
@@ -354,7 +371,7 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
       })();
 
       const relaxedOffersParams = new URLSearchParams({
-        hotelIds: hotelIds.slice(0, 10).join(','),
+        hotelIds: allHotelIds.slice(0, 10).join(','),
         checkInDate: params.checkIn,
         checkOutDate: relaxedCheckOut,
         adults: '1',
@@ -411,7 +428,7 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     }
 
     // Transform with full normalization
-    const results = (offersData.data || []).map((hotelOffer: any) => 
+    const results = allOffers.map((hotelOffer: any) => 
       normalizeHotelData(hotelOffer, hotelOffer.offers?.[0], params)
     );
     
