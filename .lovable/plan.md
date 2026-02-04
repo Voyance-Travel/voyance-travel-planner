@@ -1,159 +1,102 @@
 
-
-# Fix: Duplicate Trip Creation Bug (Graham's 800 Trips)
+# Fix: "Invalid time value" Crash When Filtering Restaurants
 
 ## Problem Analysis
 
-**Root Cause**: The Trip Planner form lacks double-submission protection. When `saveTrip()` is called, it creates a new trip via `.insert()` every time if `formData.tripId` is null. On Feb 3rd, 2026 at 13:22:48, something triggered 787 rapid-fire calls to `saveTrip()` within ~2 seconds, all for the same Rome trip.
+The app crashes with "Invalid time value" when rendering the `AirportGamePlan` component. This happens because:
 
-**Evidence**:
-- 787 "Trip to Rome" entries created in a 2-second window (timestamps: 13:22:48.002 to 13:22:49.653)
-- All trips have `status: draft` and `itinerary_status: not_started`
-- Creation rate: ~395 trips per second
+1. **Legacy hotel data** in the database has a `checkIn` field with a **time value** like `"3:00 PM"` (not a date)
+2. The `normalizeLegacyHotelSelection()` function incorrectly uses this time value as `checkInDate`:
+   ```typescript
+   checkInDate: (hotel.checkInDate as string) || (hotel.checkIn as string) || tripStartDate
+   ```
+3. When the component renders, `parseISO("3:00 PM")` returns an invalid Date object
+4. `format(invalidDate, 'MMM d')` throws "Invalid time value"
 
-**Missing Safeguards**:
-1. No `isSubmitting` state to disable buttons during save
-2. No debouncing on button clicks
-3. No check for existing in-flight requests
-4. `formData.tripId` not set immediately (only after insert completes)
+**Why restaurant filtering triggers the crash**: Any state change (like filtering) causes React to re-render the itinerary view, which re-renders `AirportGamePlan`, hitting the unsafe date formatting code.
 
 ---
 
-## Solution
+## Solution Overview
 
-### 1. Add Submission Guard to Planner.tsx
+We need to fix this at multiple levels:
 
-Add `isSaving` state and prevent concurrent `saveTrip()` calls:
+1. **Fix the normalization function** to validate that `checkIn` is a valid ISO date before using it as `checkInDate`
+2. **Add defensive date formatting** in `AirportGamePlan` with try/catch
+3. **Add a utility function** for safe date formatting that returns a fallback on invalid dates
 
-```text
-┌─────────────────────────────────────────────────┐
-│  Button Click                                   │
-│       ↓                                         │
-│  isSaving === true?  ──Yes──→  Return early     │
-│       ↓ No                                      │
-│  Set isSaving = true                            │
-│       ↓                                         │
-│  Call saveTrip()                                │
-│       ↓                                         │
-│  Set tripId immediately                         │
-│       ↓                                         │
-│  Set isSaving = false                           │
-└─────────────────────────────────────────────────┘
+---
+
+## Technical Changes
+
+### 1. Fix `hotelValidation.ts` - Validate Date Format
+
+Update `normalizeHotel()` to only use `checkIn` as `checkInDate` if it's a valid ISO date (contains hyphens and has the right format):
+
+```typescript
+function isValidISODate(str: string): boolean {
+  // Must match YYYY-MM-DD format
+  return /^\d{4}-\d{2}-\d{2}$/.test(str);
+}
+
+// In normalizeHotel():
+checkInDate: (hotel.checkInDate as string) || 
+  (isValidISODate(hotel.checkIn as string) ? hotel.checkIn as string : null) || 
+  tripStartDate,
 ```
 
-### 2. Pass Loading State to Child Components
+### 2. Add Safe Date Formatting Utility
 
-Update `TripContext` and other step components to receive and use `isSubmitting` prop to disable buttons.
+Create a helper function that safely formats dates with a fallback:
 
-### 3. Clean Up Graham's Duplicate Trips
+```typescript
+export function safeFormatDate(
+  dateString: string | undefined | null,
+  formatStr: string,
+  fallback: string = ''
+): string {
+  if (!dateString) return fallback;
+  try {
+    const date = parseISO(dateString);
+    if (isNaN(date.getTime())) return fallback;
+    return format(date, formatStr);
+  } catch {
+    return fallback;
+  }
+}
+```
 
-Run a data cleanup migration to:
-- Keep the most recent trip with an itinerary (or oldest if none have itineraries)
-- Delete the 791 duplicate Rome trips
+### 3. Update `EditorialItinerary.tsx` - Safe Date Formatting
+
+Replace the unsafe `format(parseISO(...))` call in `AirportGamePlan`:
+
+**Before:**
+```typescript
+Check-in: {format(parseISO(hotelSelection.checkInDate), 'MMM d')}
+```
+
+**After:**
+```typescript
+Check-in: {safeFormatDate(hotelSelection.checkInDate, 'MMM d', 'Date TBD')}
+```
 
 ---
 
 ## Files to Change
 
-| File | Changes |
-|------|---------|
-| `src/pages/planner/Planner.tsx` | Add `isSaving` state, wrap `saveTrip()` with guard, pass loading state to children |
-| `src/components/planner/steps/TripContext.tsx` | Accept `isSubmitting` prop, disable action buttons when true |
-| `src/components/planner/steps/HotelSelection.tsx` | Accept and use `isSubmitting` prop |
-| `src/components/planner/steps/BookingOptions.tsx` | Already has `isLoading`, verify it's wired correctly |
+| File | Change |
+|------|--------|
+| `src/utils/hotelValidation.ts` | Add `isValidISODate()` check, fix `normalizeHotel()` |
+| `src/utils/dateUtils.ts` | New file with `safeFormatDate()` utility |
+| `src/components/itinerary/EditorialItinerary.tsx` | Use `safeFormatDate()` in `AirportGamePlan` |
 
 ---
 
-## Data Cleanup
+## Database Impact
 
-**SQL Migration to delete duplicate Rome trips:**
+The fix handles existing data gracefully:
+- Hotels with `checkIn: "3:00 PM"` will now use `tripStartDate` as `checkInDate`
+- Hotels with proper `checkInDate: "2026-03-05"` continue to work
+- UI shows "Date TBD" for any remaining invalid dates
 
-```sql
--- Keep only the newest Rome trip for Graham, delete the other 791
-WITH keep_trip AS (
-  SELECT t.id
-  FROM trips t
-  JOIN profiles p ON t.user_id = p.id
-  WHERE p.display_name = 'Graham Lightfoot'
-    AND t.destination = 'Rome'
-  ORDER BY 
-    CASE WHEN t.itinerary_data IS NOT NULL THEN 0 ELSE 1 END,
-    t.created_at DESC
-  LIMIT 1
-)
-DELETE FROM trips
-WHERE id IN (
-  SELECT t.id 
-  FROM trips t
-  JOIN profiles p ON t.user_id = p.id
-  WHERE p.display_name = 'Graham Lightfoot'
-    AND t.destination = 'Rome'
-    AND t.id NOT IN (SELECT id FROM keep_trip)
-);
-```
-
-**Expected result**: Delete ~791 duplicate Rome trips, keeping 1.
-
----
-
-## Technical Implementation
-
-### Planner.tsx Changes
-
-```typescript
-// Add new state
-const [isSaving, setIsSaving] = useState(false);
-
-// Wrap saveTrip with guard
-const saveTrip = async (): Promise<string | null> => {
-  // Prevent double-submission
-  if (isSaving) {
-    console.warn('[Planner] Save already in progress, ignoring duplicate call');
-    return formData.tripId;
-  }
-  
-  setIsSaving(true);
-  
-  try {
-    // ... existing save logic ...
-  } finally {
-    setIsSaving(false);
-  }
-};
-
-// Pass to TripContext
-<TripContext
-  ...
-  isSubmitting={isSaving}
-  onContinue={() => handleStepComplete('context')}
-/>
-```
-
-### TripContext.tsx Changes
-
-```typescript
-interface TripContextProps {
-  // ... existing props ...
-  isSubmitting?: boolean;
-}
-
-// Disable buttons when saving
-<Button
-  variant="ghost"
-  onClick={onContinue}
-  disabled={isSubmitting}
-  className="text-slate-500 hover:text-primary gap-2"
->
-  {isSubmitting ? 'Saving...' : 'Skip this step'}
-</Button>
-```
-
----
-
-## Impact
-
-- **Prevents future duplicates**: Button clicks during save are ignored
-- **Improves UX**: Users see loading feedback during save
-- **Data cleanup**: Removes Graham's 791 duplicate trips
-- **No breaking changes**: Existing functionality preserved
-
+No database migration needed - the normalization happens at runtime.
