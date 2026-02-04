@@ -49,29 +49,36 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 
 // =============================================================================
 // FREE USER CREDIT ECONOMICS
+// Day 1 is generated FREE (no credits spent) - this is the "try before you buy" hook
 // Free users get 150 credits/month (expires after 2 months)
-// Max bonus credits: ~100 (referral) + ~100 (share trip) = 250 total possible
+// Those credits can unlock 1 additional day OR be used for smaller actions
+// Max bonus credits: ~100 (referral) = 250 total possible in month 1
 // =============================================================================
 const FREE_USER_ECONOMICS = {
   monthlyCredits: 150,          // Base monthly grant
-  maxBonusCredits: 100,         // Referral + share bonuses (requires engagement)
+  maxBonusCredits: 100,         // Referral bonus (requires engagement)
   maxFirstMonthCredits: 250,    // 150 base + 100 referral bonus max
   creditExpiry: "2 months",
   
-  // What can 150 credits buy?
-  // Option A: 1 day unlock (150 credits) = $0.065 cost
-  // Option B: Smaller actions only = ~$0.05 cost
-  //   - 10 swaps (50 credits) = $0.125
-  //   - 2 regenerates (30 credits) = $0.10
-  //   - 15 AI messages (30 credits) = $0.19
-  //   - 4 restaurants (40 credits) = $0.10
-  // Reality: Most free users will unlock 1 day (the main value prop)
+  // Day 1 is FREE (no credits spent) - costs us ~$0.065 per user
+  day1GenerationCost: 0.065,    // AI + Places API for 1 day
   
-  baseCostToUs: 0.065,          // 1 day unlock = $0.065
-  withBonusCostToUs: 0.10,      // 1 day + 100 credits of extras = ~$0.10
+  // With 150 credits, user can do ONE of:
+  // Option A: Unlock 1 additional day (150 credits) = $0.065 additional cost
+  // Option B: Smaller actions only (swaps, AI, regenerates)
+  //   - 30 swaps (150 credits) = $0.375 cost (but unlikely usage pattern)
+  //   - More realistic: 10 swaps + 3 regenerates + 10 AI = 105 credits, ~$0.25 cost
   
-  // Conservative: assume 70% just unlock 1 day, 30% get bonus + extras
-  blendedCostToUs: 0.065 * 0.7 + 0.10 * 0.3, // = ~$0.0755
+  // Blended free user cost:
+  // - 100% get Day 1 free = $0.065
+  // - 60% use credits for Day 2 unlock = 0.6 × $0.065 = $0.039
+  // - 40% use credits for smaller actions = 0.4 × $0.08 = $0.032
+  // Total: $0.065 + $0.036 = ~$0.10
+  blendedCostToUs: 0.10,
+  
+  // Breakdown for display
+  day1Cost: 0.065,              // Base cost (Day 1 is always generated)
+  creditsUsageCost: 0.035,      // Blended cost of using their 150 credits
 };
 
 // Free tier thresholds (API quotas)
@@ -1218,7 +1225,7 @@ export default function UnitEconomics() {
                     1
                   </td>
                   <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    ${FREE_USER_ECONOMICS.withBonusCostToUs.toFixed(2)}
+                    ${(FREE_USER_ECONOMICS.day1Cost + FREE_USER_ECONOMICS.creditsUsageCost * 1.5).toFixed(2)}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     -100%
@@ -1258,9 +1265,9 @@ export default function UnitEconomics() {
             </div>
             <div style={{ padding: 12, background: "rgba(248, 113, 113, 0.1)", border: "1px solid rgba(248, 113, 113, 0.3)", borderRadius: 8 }}>
               <p style={{ fontSize: 11, color: "#F87171", margin: 0, lineHeight: 1.6 }}>
-                <strong>🆓 Free User Economics:</strong> {FREE_USER_ECONOMICS.monthlyCredits} credits/mo = 1 day max = <strong>${FREE_USER_ECONOMICS.baseCostToUs.toFixed(3)} cost</strong>. 
-                With referral bonus ({FREE_USER_ECONOMICS.maxFirstMonthCredits} credits): ~${FREE_USER_ECONOMICS.withBonusCostToUs.toFixed(2)} cost. 
-                <strong>NOT $0.42</strong> (that assumes 7-day trip).
+                <strong>🆓 Free User Economics:</strong> Day 1 is FREE (costs us <strong>${FREE_USER_ECONOMICS.day1Cost.toFixed(3)}</strong>). 
+                {FREE_USER_ECONOMICS.monthlyCredits} credits/mo can unlock Day 2 OR smaller actions (+${FREE_USER_ECONOMICS.creditsUsageCost.toFixed(3)}). 
+                <strong>Total: ~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}/free user</strong>.
               </p>
             </div>
           </div>
