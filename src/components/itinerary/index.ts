@@ -14,4 +14,5 @@ export { LockedDayCard } from './LockedDayCard';
 export { BlendedProfilesCard } from './BlendedProfilesCard';
 export { GroupCompatibilityCard } from './GroupCompatibilityCard';
 export { DNAQuizPrompt } from './DNAQuizPrompt';
+export { MapNavigationButton, TransitNavigation } from './MapNavigationButton';
 export type { EditorialDay, EditorialActivity, EditorialItineraryProps } from './EditorialItinerary';
