@@ -375,6 +375,19 @@ export default function TraitOverrideSliders({
           },
         });
 
+      // Recalculate DNA with the new overrides so the user sees immediate effect
+      // This updates archetypes and trait scores in travel_dna_profiles
+      try {
+        const { recalculateDNAFromPreferences } = await import('@/utils/quizMapping');
+        const result = await recalculateDNAFromPreferences(userId);
+        if (result.success) {
+          console.log('[TraitOverrideSliders] DNA recalculated with overrides');
+        }
+      } catch (recalcError) {
+        console.warn('[TraitOverrideSliders] Could not recalculate DNA:', recalcError);
+        // Non-fatal - overrides are saved and will apply on next generation
+      }
+
       setOriginalValues(traitValues);
       setHasChanges(false);
       
@@ -383,7 +396,7 @@ export default function TraitOverrideSliders({
         overrideCount > 0 
           ? `${overrideCount} trait adjustment${overrideCount > 1 ? 's' : ''} saved!`
           : 'Traits reset to quiz-calculated values!',
-        { description: 'Your next itinerary will reflect these changes.' }
+        { description: 'Your Travel DNA has been updated.' }
       );
       
       onSave?.(overrides);
