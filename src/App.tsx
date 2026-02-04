@@ -85,6 +85,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import BulkImport from "./pages/admin/BulkImport";
 import DataCleanup from "./pages/admin/DataCleanup";
 import ImageCuration from "./pages/admin/ImageCuration";
+import UnitEconomics from "./pages/admin/UnitEconomics";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
@@ -220,6 +221,11 @@ function AnimatedRoutes() {
           <Route path="/admin/image-curation" element={
             <ProtectedRoute>
               <ImageCuration />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/margins" element={
+            <ProtectedRoute>
+              <UnitEconomics />
             </ProtectedRoute>
           } />
           
