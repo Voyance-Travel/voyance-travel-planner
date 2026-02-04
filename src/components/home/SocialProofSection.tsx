@@ -40,12 +40,11 @@ const INTELLIGENCE_LAYERS = [
   { icon: Brain, label: "Learning loop", description: "Gets smarter from every trip rated" },
 ];
 
-// Real metrics - update these with actual numbers
+// Real metrics - these represent the 27 archetype system we've built
 const REAL_METRICS = {
-  tripsGenerated: 127, // Replace with actual count
-  archetypesActive: 27,
-  destinationsCovered: 12,
-  // Only show metrics we can verify
+  archetypesAvailable: 27, // Our complete archetype system
+  intelligenceLayers: 7,   // Layers of trip intelligence
+  questionsInQuiz: 21,     // Quiz questions that map to archetypes
 };
 
 function TestimonialCard({ testimonial }: { testimonial: typeof BETA_TESTIMONIALS[0] }) {
@@ -146,7 +145,7 @@ export default function SocialProofSection() {
           </div>
         </motion.div>
 
-        {/* Real Beta Metrics */}
+        {/* System Metrics - What We've Built */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -155,21 +154,21 @@ export default function SocialProofSection() {
         >
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.tripsGenerated}
+              {REAL_METRICS.archetypesAvailable}
             </p>
-            <p className="text-sm text-muted-foreground">Trips Generated</p>
+            <p className="text-sm text-muted-foreground">Travel Archetypes</p>
           </div>
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.archetypesActive}
+              {REAL_METRICS.intelligenceLayers}
             </p>
-            <p className="text-sm text-muted-foreground">Unique Archetypes</p>
+            <p className="text-sm text-muted-foreground">Intelligence Layers</p>
           </div>
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.destinationsCovered}
+              {REAL_METRICS.questionsInQuiz}
             </p>
-            <p className="text-sm text-muted-foreground">Destinations</p>
+            <p className="text-sm text-muted-foreground">Quiz Questions</p>
           </div>
         </motion.div>
 
