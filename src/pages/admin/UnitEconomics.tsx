@@ -66,12 +66,59 @@ const FALLBACK_AI_MODELS = [
 
 type Scenario = 'A' | 'B' | 'C' | 'D';
 
-const SCENARIOS: Record<Scenario, { name: string; description: string; caching: boolean; amadeus: boolean; amadeusWithinFree: boolean }> = {
-  A: { name: "Current Production", description: "Pre-cache, no Amadeus", caching: false, amadeus: false, amadeusWithinFree: true },
-  B: { name: "Post Photo-Cache", description: "With caching, no Amadeus", caching: true, amadeus: false, amadeusWithinFree: true },
-  C: { name: "Cache + Amadeus (Free)", description: "Within Amadeus free tier", caching: true, amadeus: true, amadeusWithinFree: true },
-  D: { name: "Cache + Amadeus (Paid)", description: "Beyond 400 trips/mo", caching: true, amadeus: true, amadeusWithinFree: false },
+const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescription: string; caching: boolean; amadeus: boolean; amadeusWithinFree: boolean }> = {
+  A: { 
+    name: "Current Production", 
+    description: "Pre-cache, no Amadeus", 
+    fullDescription: "Current live state: No photo caching (full Google Places costs), no Amadeus hotel integration. Baseline for comparison.",
+    caching: false, amadeus: false, amadeusWithinFree: true 
+  },
+  B: { 
+    name: "Post Photo-Cache", 
+    description: "With caching, no Amadeus", 
+    fullDescription: "After deploying photo caching: Reduces Google Places costs by ~33% by storing photos locally. No hotel search yet.",
+    caching: true, amadeus: false, amadeusWithinFree: true 
+  },
+  C: { 
+    name: "Cache + Amadeus (Free)", 
+    description: "Within Amadeus free tier", 
+    fullDescription: "Full feature set within free limits: Caching active + Amadeus hotels. At <400 trips/mo, Amadeus is free (2000 calls/mo quota).",
+    caching: true, amadeus: true, amadeusWithinFree: true 
+  },
+  D: { 
+    name: "Cache + Amadeus (Paid)", 
+    description: "Beyond 400 trips/mo", 
+    fullDescription: "Scale mode: Beyond Amadeus free tier. At 400+ trips/mo, each additional trip costs $0.12 for hotel search (5 API calls × $0.024).",
+    caching: true, amadeus: true, amadeusWithinFree: false 
+  },
 };
+
+// Column definitions with tooltips for per-trip scaling table
+const SCALE_COLUMNS = [
+  { key: "trips", label: "Trips/Mo", tooltip: "Monthly trip volume for this projection row." },
+  { key: "google", label: "Google", tooltip: "Google Places cost per trip after caching (~$0.34). Includes Text Search, Details, Photos, Geocoding." },
+  { key: "ai", label: "AI", tooltip: "Lovable AI cost per trip (~$0.064). Gemini Flash models for itinerary generation." },
+  { key: "perplexity", label: "Perplexity", tooltip: "Perplexity cost per trip (~$0.018). Used for destination intelligence." },
+  { key: "amadeus", label: "Amadeus", tooltip: "Amadeus cost per trip. $0 within free tier (≤400 trips), $0.12 beyond (5 calls × $0.024)." },
+  { key: "variable", label: "Variable", tooltip: "Sum of all per-trip costs (Google + AI + Perplexity + Amadeus). Scales linearly with volume." },
+  { key: "fixedPerTrip", label: "Fixed/Trip", tooltip: "Fixed costs ($29.08/mo) divided by trip count. Decreases as volume increases (economy of scale)." },
+  { key: "loaded", label: "Loaded", tooltip: "Fully-loaded cost per trip = Variable + Fixed/Trip. What each trip really costs you." },
+  { key: "margin", label: "Margin", tooltip: "Gross margin = (Revenue - Loaded Cost) / Revenue. Assumes 100% of trips are paid at selected tier price." },
+  { key: "monthlyRev", label: "Monthly Rev", tooltip: "Total monthly revenue = Trips × Tier Price. Assumes 100% conversion (theoretical max)." },
+  { key: "monthlyProfit", label: "Monthly Profit", tooltip: "Gross profit = Revenue - Total Costs. Does not account for taxes, labor, or marketing." },
+];
+
+
+const EXPENSE_COLUMNS = [
+  { key: "trips", label: "Trips/Mo", tooltip: "Number of itineraries generated per month. Each trip = 1 full AI-powered travel plan." },
+  { key: "google", label: "Google", tooltip: "Google Places API costs: Text Search, Place Details, Photos, Geocoding. Rate: ~$0.34/trip with caching." },
+  { key: "lovableFixed", label: "Lovable (fixed)", tooltip: "Lovable Cloud platform fee: $25/mo flat. Includes hosting, DB, auth, edge functions. Does not scale with usage." },
+  { key: "lovableAI", label: "Lovable AI", tooltip: "AI token costs via Lovable AI Gateway (Gemini models). Rate: ~$0.064/trip. Scales linearly with volume." },
+  { key: "perplexity", label: "Perplexity", tooltip: "Perplexity Sonar API for destination intelligence & travel advisories. Rate: $0.005/call × ~3.4 calls/trip = $0.018/trip." },
+  { key: "amadeus", label: "Amadeus", tooltip: "Amadeus hotel search: 5 calls/trip × $0.024/call = $0.12/trip. FREE for first 400 trips/mo (2000 call quota)." },
+  { key: "domain", label: "Domain", tooltip: "Custom domain cost: $49/year ÷ 12 = $4.08/mo. Fixed regardless of volume." },
+  { key: "total", label: "Total", tooltip: "Sum of all costs for that month. This is your total infrastructure spend before any revenue." },
+];
 
 export default function UnitEconomics() {
   const [volume, setVolume] = useState(61);
@@ -420,11 +467,12 @@ export default function UnitEconomics() {
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
             <p style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500, marginBottom: 12 }}>Cost Scenario</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {(Object.keys(SCENARIOS) as Scenario[]).map((key) => (
                 <button
                   key={key}
                   onClick={() => setScenario(key)}
+                  title={SCENARIOS[key].fullDescription}
                   style={{
                     padding: "6px 12px",
                     borderRadius: 6,
@@ -441,9 +489,19 @@ export default function UnitEconomics() {
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 10, color: "#64748B" }}>
-              {scenarioConfig.description}
-            </p>
+            <div style={{ 
+              background: "rgba(15, 23, 42, 0.5)", 
+              borderRadius: 8, 
+              padding: 12,
+              borderLeft: "3px solid #A78BFA",
+            }}>
+              <p style={{ fontSize: 11, color: "#E2E8F0", fontWeight: 500, marginBottom: 4 }}>
+                {scenarioConfig.name}
+              </p>
+              <p style={{ fontSize: 10, color: "#94A3B8", lineHeight: 1.5, margin: 0 }}>
+                {scenarioConfig.fullDescription}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -590,15 +648,18 @@ export default function UnitEconomics() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr>
-                {["Trips/Mo", "Google", "AI", "Perplexity", "Amadeus", "Variable", "Fixed/Trip", "Loaded", "Margin", "Monthly Rev", "Monthly Profit"].map(h => (
-                  <th key={h} style={{ 
+                {SCALE_COLUMNS.map(col => (
+                  <th key={col.key} style={{ 
                     textAlign: "right", 
                     padding: "10px 10px", 
                     color: "#64748B", 
                     fontWeight: 500, 
                     borderBottom: "1px solid rgba(100, 116, 139, 0.3)",
                     whiteSpace: "nowrap",
-                  }}>{h}</th>
+                    cursor: "help",
+                  }} title={col.tooltip}>
+                    <span style={{ borderBottom: "1px dotted #64748B" }}>{col.label}</span>
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -665,22 +726,32 @@ export default function UnitEconomics() {
           marginBottom: 32,
           overflowX: "auto",
         }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            Monthly Expense Projections · Scenario D
-          </h3>
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 8 }}>
+              Monthly Expense Projections · Scenario D
+            </h3>
+            <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.5 }}>
+              <strong style={{ color: "#A855F7" }}>Scenario D</strong> = Best-case operational state: Photo caching active (-33% Google costs), 
+              Amadeus hotel search live. Shows total monthly $ spend at each volume level, assuming every trip uses all services.
+            </p>
+          </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr>
-                {["Trips/Mo", "Google", "Lovable (fixed)", "Lovable AI", "Perplexity", "Amadeus", "Domain", "Total"].map(h => (
-                  <th key={h} style={{ 
+                {EXPENSE_COLUMNS.map(col => (
+                  <th key={col.key} style={{ 
                     textAlign: "right", 
                     padding: "10px 10px", 
                     color: "#64748B", 
                     fontWeight: 500, 
                     borderBottom: "1px solid rgba(100, 116, 139, 0.3)",
                     whiteSpace: "nowrap",
-                  }}>{h}</th>
+                    position: "relative",
+                    cursor: "help",
+                  }} title={col.tooltip}>
+                    <span style={{ borderBottom: "1px dotted #64748B" }}>{col.label}</span>
+                  </th>
                 ))}
               </tr>
             </thead>
