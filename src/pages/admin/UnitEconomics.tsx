@@ -6,55 +6,88 @@
 
 import { useState, useMemo } from "react";
 
+// =============================================================================
+// VERIFIED PRODUCTION DATA (Feb 4, 2026)
+// Source: Google Cloud Console, Lovable Cloud, Perplexity API, Amadeus Docs
+// =============================================================================
+
 const VERIFIED_DATA = {
   trips: 61,
   period: "Jan 25 – Feb 4, 2026",
   services: {
-    google: { total: 30.82, perTrip: 0.505, calls: null, label: "Google Places", color: "#4285F4" },
-    lovableAI: { total: 3.93, perTrip: 0.064, calls: 303, label: "Lovable AI (Gemini)", color: "#A855F7" },
-    perplexity: { total: 1.10, perTrip: 0.018, calls: 208, label: "Perplexity (Sonar)", color: "#06B6D4" },
-    amadeus: { total: 0, perTrip: 0, calls: 0, label: "Amadeus Hotels", color: "#F59E0B" },
+    google: { total: 30.82, perTrip: 0.5052, calls: null, callsPerTrip: 55, label: "Google Places", color: "#4285F4" },
+    lovableAI: { total: 3.93, perTrip: 0.0644, perCall: 0.013, calls: 303, callsPerTrip: 4.97, label: "Lovable AI (Gemini)", color: "#A855F7" },
+    perplexity: { total: 1.10, perTrip: 0.0180, perCall: 0.005, calls: 208, callsPerTrip: 3.41, label: "Perplexity (Sonar)", color: "#06B6D4" },
+    amadeus: { total: 0, perTrip: 0, perCall: 0.024, calls: 0, callsPerTrip: 5, label: "Amadeus Hotels", color: "#F59E0B" },
   },
   fixed: {
     lovableCloud: 25.00,
     domain: 4.08,
+    email: 0.00, // Zoho free tier
   },
   revenue: { single: 29, explorer: 35, voyager: 45 } as Record<string, number>,
 };
 
-const PHOTO_CACHE_SAVINGS_RATIO = 0.33;
-// Production: 1 hotel list + up to 5 batch offers (50 hotels each) = 6 calls max
-const AMADEUS_CALLS_PER_TRIP = 6;
+// Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
+const AMADEUS_CALLS_PER_TRIP = 5;
 const AMADEUS_COST_PER_CALL = 0.024;
-const AMADEUS_FREE_MONTHLY = 2000;
+const AMADEUS_FREE_MONTHLY = 2000; // per endpoint
+const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_TRIP); // 400 trips
 
-const GOOGLE_FREE_TIERS = {
-  textSearch: { free: 5000, price: 0.032 },
-  placeDetails: { free: 5000, price: 0.020 },
-  geocoding: { free: 10000, price: 0.005 },
-  photos: { free: 10000, price: 0.007 },
+const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
+
+// AI Model breakdown (7-day production data)
+const AI_MODELS = [
+  { model: "gemini-3-flash-preview", calls: 125, usage: "Primary generation" },
+  { model: "gemini-2.5-flash-image", calls: 92, usage: "Image-related tasks" },
+  { model: "gemini-2.5-flash-lite", calls: 75, usage: "Lightweight tasks" },
+  { model: "gemini-2.5-flash", calls: 11, usage: "Fallback" },
+];
+
+// Free tier thresholds
+const FREE_TIERS = {
+  googleTextSearch: { free: 5000, price: 0.032, callsPerTrip: 18 },
+  googleDetails: { free: 5000, price: 0.020, callsPerTrip: 28 },
+  googleGeocoding: { free: 10000, price: 0.005, callsPerTrip: 5 },
+  googlePhotos: { free: 10000, price: 0.007, callsPerTrip: 15 },
+  lovableAI: { free: 1.00, perTrip: 0.0644 }, // ~15 trips/mo
+  amadeus: { free: 2000, callsPerTrip: 5 }, // 400 trips/mo
+};
+
+type Scenario = 'A' | 'B' | 'C' | 'D';
+
+const SCENARIOS: Record<Scenario, { name: string; description: string; caching: boolean; amadeus: boolean; amadeusWithinFree: boolean }> = {
+  A: { name: "Current Production", description: "Pre-cache, no Amadeus", caching: false, amadeus: false, amadeusWithinFree: true },
+  B: { name: "Post Photo-Cache", description: "With caching, no Amadeus", caching: true, amadeus: false, amadeusWithinFree: true },
+  C: { name: "Cache + Amadeus (Free)", description: "Within Amadeus free tier", caching: true, amadeus: true, amadeusWithinFree: true },
+  D: { name: "Cache + Amadeus (Paid)", description: "Beyond 400 trips/mo", caching: true, amadeus: true, amadeusWithinFree: false },
 };
 
 export default function UnitEconomics() {
   const [volume, setVolume] = useState(61);
   const [tier, setTier] = useState("explorer");
-  const [showCaching, setShowCaching] = useState(true);
-  const [showAmadeus, setShowAmadeus] = useState(true);
+  const [scenario, setScenario] = useState<Scenario>('A');
 
   const revenue = VERIFIED_DATA.revenue[tier];
+  const scenarioConfig = SCENARIOS[scenario];
 
   const costs = useMemo(() => {
     const googleBase = VERIFIED_DATA.services.google.perTrip;
-    const googleCached = googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO);
-    const googlePerTrip = showCaching ? googleCached : googleBase;
+    const googlePerTrip = scenarioConfig.caching ? googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO) : googleBase;
 
     const aiPerTrip = VERIFIED_DATA.services.lovableAI.perTrip;
     const perplexityPerTrip = VERIFIED_DATA.services.perplexity.perTrip;
 
-    const amadeusCallsTotal = volume * AMADEUS_CALLS_PER_TRIP;
-    const amadeusPaidCalls = Math.max(0, amadeusCallsTotal - AMADEUS_FREE_MONTHLY);
-    const amadeusTotal = amadeusPaidCalls * AMADEUS_COST_PER_CALL;
-    const amadeusPerTrip = showAmadeus ? amadeusTotal / volume : 0;
+    // Amadeus: $0 within free tier (400 trips), $0.12/trip beyond
+    let amadeusPerTrip = 0;
+    if (scenarioConfig.amadeus) {
+      if (scenarioConfig.amadeusWithinFree || volume <= AMADEUS_FREE_TRIPS) {
+        amadeusPerTrip = 0;
+      } else {
+        // Beyond free tier: pay for all calls
+        amadeusPerTrip = AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL; // $0.12
+      }
+    }
 
     const variablePerTrip = googlePerTrip + aiPerTrip + perplexityPerTrip + amadeusPerTrip;
     const variableTotal = variablePerTrip * volume;
@@ -66,29 +99,30 @@ export default function UnitEconomics() {
     const margin = ((revenue - fullyLoaded) / revenue) * 100;
     const contributionMargin = ((revenue - variablePerTrip) / revenue) * 100;
 
-    const googleShare = (googlePerTrip / variablePerTrip) * 100;
+    const googleShare = variablePerTrip > 0 ? (googlePerTrip / variablePerTrip) * 100 : 0;
 
     return {
       google: { perTrip: googlePerTrip, total: googlePerTrip * volume, share: googleShare },
       ai: { perTrip: aiPerTrip, total: aiPerTrip * volume },
       perplexity: { perTrip: perplexityPerTrip, total: perplexityPerTrip * volume },
-      amadeus: { perTrip: amadeusPerTrip, total: amadeusTotal, freeTierLeft: Math.max(0, AMADEUS_FREE_MONTHLY - amadeusCallsTotal) },
+      amadeus: { perTrip: amadeusPerTrip, total: amadeusPerTrip * volume },
       variable: { perTrip: variablePerTrip, total: variableTotal },
       fixed: { perTrip: fixedPerTrip, total: fixedTotal },
       fullyLoaded,
       margin,
       contributionMargin,
     };
-  }, [volume, tier, showCaching, showAmadeus, revenue]);
+  }, [volume, tier, scenario, scenarioConfig, revenue]);
 
   const verifiedMargins = useMemo(() => {
     return Object.entries(VERIFIED_DATA.revenue).map(([key, rev]) => {
       const cost = costs.fullyLoaded;
-      return { tier: key, revenue: rev, cost, margin: ((rev - cost) / rev * 100) };
+      return { tier: key, revenue: rev, cost, margin: ((rev - cost) / rev * 100), profit: rev - cost };
     });
   }, [costs.fullyLoaded]);
 
-  const scalePoints = [10, 50, 100, 250, 500, 1000];
+  // Scale points matching the reference doc
+  const scalePoints = [10, 50, 100, 250, 400, 500, 750, 1000];
 
   return (
     <div style={{ 
@@ -140,7 +174,7 @@ export default function UnitEconomics() {
         {/* Hero Metrics */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 32 }}>
           {[
-            { label: "Variable Cost / Trip", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: "All APIs combined", accent: "#63B3AA" },
+            { label: "Variable Cost / Trip", value: `$${costs.variable.perTrip.toFixed(4)}`, sub: `Scenario ${scenario}: ${scenarioConfig.name}`, accent: "#63B3AA" },
             { label: "Fully-Loaded / Trip", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `At ${volume} trips/mo`, accent: "#A78BFA" },
             { label: "Gross Margin", value: `${costs.margin.toFixed(1)}%`, sub: `${tier.charAt(0).toUpperCase() + tier.slice(1)} tier · $${revenue}`, accent: costs.margin > 97 ? "#34D399" : costs.margin > 95 ? "#FBBF24" : "#F87171" },
             { label: "Contribution Margin", value: `${costs.contributionMargin.toFixed(1)}%`, sub: "Variable costs only", accent: "#38BDF8" },
@@ -192,20 +226,45 @@ export default function UnitEconomics() {
               style={{ width: "100%", accentColor: "#63B3AA", cursor: "pointer" }}
             />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 8 }}>
-              <span>5</span><span>250</span><span>500</span><span>1,000</span>
+              <span>1</span><span>250</span><span>400</span><span>500</span><span>1,000</span>
             </div>
+            {volume > AMADEUS_FREE_TRIPS && scenarioConfig.amadeus && (
+              <p style={{ fontSize: 10, color: "#F59E0B", marginTop: 8 }}>
+                ⚠️ Beyond Amadeus free tier ({AMADEUS_FREE_TRIPS} trips)
+              </p>
+            )}
           </div>
 
-          {/* Toggles & Tier */}
+          {/* Scenario & Tier */}
           <div style={{
             background: "rgba(30, 41, 59, 0.5)",
             borderRadius: 12,
             padding: "24px 28px",
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
-            <p style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500, marginBottom: 12 }}>Configuration</p>
+            <p style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500, marginBottom: 12 }}>Scenario & Pricing Tier</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              {(Object.keys(SCENARIOS) as Scenario[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setScenario(key)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    border: scenario === key ? "1px solid #A78BFA" : "1px solid rgba(100,116,139,0.3)",
+                    background: scenario === key ? "rgba(167, 139, 250, 0.15)" : "transparent",
+                    color: scenario === key ? "#A78BFA" : "#64748B",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  {key}: {SCENARIOS[key].name}
+                </button>
+              ))}
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {/* Tier selector */}
               {Object.entries(VERIFIED_DATA.revenue).map(([key, val]) => (
                 <button
                   key={key}
@@ -225,38 +284,10 @@ export default function UnitEconomics() {
                   {key.charAt(0).toUpperCase() + key.slice(1)} · ${val}
                 </button>
               ))}
-              {/* Toggles */}
-              <button
-                onClick={() => setShowCaching(!showCaching)}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 6,
-                  border: showCaching ? "1px solid #34D399" : "1px solid rgba(100,116,139,0.3)",
-                  background: showCaching ? "rgba(52, 211, 153, 0.12)" : "transparent",
-                  color: showCaching ? "#34D399" : "#64748B",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                {showCaching ? "✓" : "○"} Photo Cache
-              </button>
-              <button
-                onClick={() => setShowAmadeus(!showAmadeus)}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 6,
-                  border: showAmadeus ? "1px solid #F59E0B" : "1px solid rgba(100,116,139,0.3)",
-                  background: showAmadeus ? "rgba(245, 158, 11, 0.12)" : "transparent",
-                  color: showAmadeus ? "#F59E0B" : "#64748B",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                {showAmadeus ? "✓" : "○"} Amadeus Hotels
-              </button>
             </div>
+            <p style={{ fontSize: 10, color: "#64748B", marginTop: 10 }}>
+              {scenarioConfig.description}
+            </p>
           </div>
         </div>
 
@@ -271,14 +302,14 @@ export default function UnitEconomics() {
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 24, display: "flex", alignItems: "center", gap: 8 }}>
-              Variable Cost Breakdown · Per Trip
+              Variable Cost Breakdown · Scenario {scenario}
             </h3>
 
             {[
-              { label: "Google Places", cost: costs.google.perTrip, color: "#4285F4", verified: true, note: showCaching ? "Post-cache estimate" : "Verified pre-cache" },
-              { label: "Lovable AI (Gemini)", cost: costs.ai.perTrip, color: "#A855F7", verified: true, note: "303 calls / 61 trips" },
-              { label: "Perplexity (Sonar)", cost: costs.perplexity.perTrip, color: "#06B6D4", verified: true, note: "208 calls / 61 trips" },
-              { label: "Amadeus Hotels", cost: costs.amadeus.perTrip, color: "#F59E0B", verified: false, note: showAmadeus ? (costs.amadeus.freeTierLeft > 0 ? `${Math.round(costs.amadeus.freeTierLeft)} free calls left` : `${AMADEUS_CALLS_PER_TRIP} calls × $0.024`) : "Not active" },
+              { label: "Google Places", cost: costs.google.perTrip, color: "#4285F4", verified: scenario === 'A', note: scenarioConfig.caching ? "Post-cache estimate (-33%)" : "Verified: $30.82 ÷ 61 trips" },
+              { label: "Lovable AI (Gemini)", cost: costs.ai.perTrip, color: "#A855F7", verified: true, note: `${VERIFIED_DATA.services.lovableAI.calls} calls ÷ ${VERIFIED_DATA.trips} trips = ${VERIFIED_DATA.services.lovableAI.callsPerTrip} calls/trip` },
+              { label: "Perplexity (Sonar)", cost: costs.perplexity.perTrip, color: "#06B6D4", verified: true, note: `${VERIFIED_DATA.services.perplexity.calls} calls × $${VERIFIED_DATA.services.perplexity.perCall}/call` },
+              { label: "Amadeus Hotels", cost: costs.amadeus.perTrip, color: "#F59E0B", verified: false, note: scenarioConfig.amadeus ? (volume <= AMADEUS_FREE_TRIPS || scenarioConfig.amadeusWithinFree ? `Free tier (${AMADEUS_FREE_TRIPS} trips/mo)` : `${AMADEUS_CALLS_PER_TRIP} calls × $${AMADEUS_COST_PER_CALL} = $0.12/trip`) : "Not active" },
             ].map((item, i) => {
               const maxCost = Math.max(costs.google.perTrip, costs.ai.perTrip, costs.perplexity.perTrip, costs.amadeus.perTrip, 0.01);
               const barWidth = (item.cost / maxCost) * 100;
@@ -356,7 +387,7 @@ export default function UnitEconomics() {
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "#64748B" }}>
                     <span>Revenue: ${m.revenue.toFixed(2)}</span>
                     <span>Cost: ${m.cost.toFixed(2)}</span>
-                    <span>Profit: ${(m.revenue - m.cost).toFixed(2)}</span>
+                    <span style={{ color: "#34D399" }}>Profit: ${m.profit.toFixed(2)}</span>
                   </div>
                 </div>
               );
@@ -368,12 +399,16 @@ export default function UnitEconomics() {
                 Fixed Costs · $29.08/mo
               </p>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", marginBottom: 4 }}>
-                <span>Lovable Cloud + AI base</span>
+                <span>Lovable Cloud</span>
                 <span>$25.00</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", marginBottom: 4 }}>
                 <span>Domain</span>
                 <span>$4.08</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", marginBottom: 4 }}>
+                <span>Email (Zoho)</span>
+                <span>$0.00</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#94A3B8", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(100, 116, 139, 0.2)" }}>
                 <span>Per-trip allocation at {volume}/mo</span>
@@ -393,7 +428,7 @@ export default function UnitEconomics() {
           overflowX: "auto",
         }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            Economics At Scale · {tier.charAt(0).toUpperCase() + tier.slice(1)} Tier (${revenue})
+            Economics At Scale · {tier.charAt(0).toUpperCase() + tier.slice(1)} Tier (${revenue}) · Scenario D
           </h3>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -412,13 +447,12 @@ export default function UnitEconomics() {
               </tr>
             </thead>
             <tbody>
-              {scalePoints.map((vol, i) => {
-                const goog = showCaching ? VERIFIED_DATA.services.google.perTrip * (1 - PHOTO_CACHE_SAVINGS_RATIO) : VERIFIED_DATA.services.google.perTrip;
+              {scalePoints.map((vol) => {
+                const goog = VERIFIED_DATA.services.google.perTrip * (1 - PHOTO_CACHE_SAVINGS_RATIO); // Scenario D uses caching
                 const ai = VERIFIED_DATA.services.lovableAI.perTrip;
                 const perp = VERIFIED_DATA.services.perplexity.perTrip;
-                const amadeusCalls = vol * AMADEUS_CALLS_PER_TRIP;
-                const amadeusPaid = Math.max(0, amadeusCalls - AMADEUS_FREE_MONTHLY);
-                const amad = showAmadeus ? (amadeusPaid * AMADEUS_COST_PER_CALL) / vol : 0;
+                // Amadeus: free under 400, $0.12/trip after
+                const amad = vol > AMADEUS_FREE_TRIPS ? AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL : 0;
                 const variable = goog + ai + perp + amad;
                 const fixedPer = 29.08 / vol;
                 const loaded = variable + fixedPer;
@@ -426,11 +460,14 @@ export default function UnitEconomics() {
                 const monthlyRev = vol * revenue;
                 const monthlyProfit = vol * (revenue - loaded);
 
-                const isHighlight = vol === 61 || vol === 100;
+                const isHighlight = vol === 100 || vol === 500;
+                const isAmadeusThreshold = vol === 400;
                 return (
-                  <tr key={vol} style={{ background: isHighlight ? "rgba(99, 179, 170, 0.08)" : "transparent" }}>
+                  <tr key={vol} style={{ 
+                    background: isAmadeusThreshold ? "rgba(245, 158, 11, 0.08)" : isHighlight ? "rgba(99, 179, 170, 0.08)" : "transparent" 
+                  }}>
                     {[
-                      vol.toLocaleString(),
+                      vol.toLocaleString() + (isAmadeusThreshold ? " ⚠️" : ""),
                       `$${goog.toFixed(3)}`,
                       `$${ai.toFixed(3)}`,
                       `$${perp.toFixed(3)}`,
@@ -443,11 +480,82 @@ export default function UnitEconomics() {
                       `$${monthlyProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
                     ].map((cell, j) => (
                       <td key={j} style={{
-                        color: j === 8 ? (margin > 97 ? "#34D399" : margin > 95 ? "#FBBF24" : "#CBD5E1") : j === 10 ? "#34D399" : "#CBD5E1",
+                        color: j === 4 && amad > 0 ? "#F59E0B" : j === 8 ? (margin > 97 ? "#34D399" : margin > 95 ? "#FBBF24" : "#CBD5E1") : j === 10 ? "#34D399" : "#CBD5E1",
                         padding: "10px 10px",
                         textAlign: "right",
                         borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
                         fontWeight: j === 8 || j === 10 ? 600 : 400,
+                        fontFamily: j > 0 ? "'JetBrains Mono', monospace" : "inherit",
+                      }}>
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p style={{ fontSize: 10, color: "#64748B", marginTop: 12 }}>
+            ⚠️ Amadeus free tier ends at 400 trips/mo. Beyond this, adds $0.12/trip.
+          </p>
+        </div>
+
+        {/* Monthly Expense Projections */}
+        <div style={{
+          background: "rgba(30, 41, 59, 0.5)",
+          borderRadius: 12,
+          padding: "28px",
+          border: "1px solid rgba(100, 116, 139, 0.2)",
+          marginBottom: 32,
+          overflowX: "auto",
+        }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
+            Monthly Expense Projections · Scenario D
+          </h3>
+
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr>
+                {["Trips/Mo", "Google", "Lovable (fixed)", "Lovable AI", "Perplexity", "Amadeus", "Domain", "Total"].map(h => (
+                  <th key={h} style={{ 
+                    textAlign: "right", 
+                    padding: "10px 10px", 
+                    color: "#64748B", 
+                    fontWeight: 500, 
+                    borderBottom: "1px solid rgba(100, 116, 139, 0.3)",
+                    whiteSpace: "nowrap",
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[50, 100, 250, 500, 1000].map((vol) => {
+                const google = 0.3385 * vol;
+                const lovableFixed = 25.00;
+                const lovableAI = 0.0644 * vol;
+                const perplexity = 0.018 * vol;
+                const amadeus = vol > AMADEUS_FREE_TRIPS ? (vol - AMADEUS_FREE_TRIPS) * 0.12 : 0;
+                const domain = 4.08;
+                const total = google + lovableFixed + lovableAI + perplexity + amadeus + domain;
+
+                return (
+                  <tr key={vol}>
+                    {[
+                      vol.toLocaleString(),
+                      `$${google.toFixed(2)}`,
+                      `$${lovableFixed.toFixed(2)}`,
+                      `$${lovableAI.toFixed(2)}`,
+                      `$${perplexity.toFixed(2)}`,
+                      `$${amadeus.toFixed(2)}`,
+                      `$${domain.toFixed(2)}`,
+                      `$${total.toFixed(2)}`,
+                    ].map((cell, j) => (
+                      <td key={j} style={{
+                        color: j === 7 ? "#F87171" : "#CBD5E1",
+                        padding: "10px 10px",
+                        textAlign: "right",
+                        borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                        fontWeight: j === 7 ? 600 : 400,
                         fontFamily: j > 0 ? "'JetBrains Mono', monospace" : "inherit",
                       }}>
                         {cell}
@@ -478,10 +586,11 @@ export default function UnitEconomics() {
                 source: "Google Cloud Console",
                 icon: "☁️",
                 data: [
+                  { k: "Project", v: "voyance-462423" },
                   { k: "Service", v: "Places API (New)" },
-                  { k: "Period", v: "Jan 1 – Feb 4, 2026" },
-                  { k: "Total Billed", v: "$30.82" },
+                  { k: "YTD Billed", v: "$30.82" },
                   { k: "SKUs Active", v: "7" },
+                  { k: "Free Tiers", v: "EXCEEDED" },
                   { k: "Charges Since", v: "Jan 25, 2026" },
                 ],
                 color: "#4285F4",
@@ -490,11 +599,12 @@ export default function UnitEconomics() {
                 source: "Lovable Cloud",
                 icon: "🧡",
                 data: [
-                  { k: "AI Usage", v: "$3.93" },
-                  { k: "Cloud Usage", v: "$0.89 / $25" },
+                  { k: "Cloud Usage", v: "$0.89 / $25.00" },
+                  { k: "AI Usage", v: "$3.93 ($1 free + $2.93)" },
+                  { k: "Top-up Balance", v: "$37.00 remaining" },
                   { k: "Total Requests", v: "303" },
                   { k: "Models", v: "4 (all Gemini Flash)" },
-                  { k: "Top Model", v: "gemini-3-flash-preview" },
+                  { k: "⚠️ Pricing", v: "Temporary until 2026" },
                 ],
                 color: "#A855F7",
               },
@@ -502,11 +612,12 @@ export default function UnitEconomics() {
                 source: "Perplexity API",
                 icon: "🔍",
                 data: [
-                  { k: "API Requests", v: "208" },
-                  { k: "Rate", v: "$0.005/call" },
-                  { k: "Total Cost", v: "$1.04 + tokens" },
                   { k: "Model", v: "sonar (s4qP)" },
+                  { k: "API Requests", v: "208" },
+                  { k: "Request Cost", v: "$1.04" },
+                  { k: "Token Cost", v: "~$0.04" },
                   { k: "Budget Loaded", v: "$5.00" },
+                  { k: "Remaining", v: "~$3.90" },
                 ],
                 color: "#06B6D4",
               },
@@ -514,11 +625,12 @@ export default function UnitEconomics() {
                 source: "Amadeus Self-Service",
                 icon: "✈️",
                 data: [
-                  { k: "Status", v: "Production (5 batches)" },
-                  { k: "Endpoint", v: "Hotel List + Offers" },
-                  { k: "Price/Call", v: "$0.024 (documented)" },
-                  { k: "Calls/Trip", v: "Up to 6 (1 list + 5 batches)" },
-                  { k: "Free Tier", v: "2,000/mo/endpoint" },
+                  { k: "Status", v: "Configured (not live)" },
+                  { k: "Endpoints", v: "Hotel List + Offers" },
+                  { k: "Price/Call", v: "$0.024" },
+                  { k: "Calls/Trip", v: "5 (1 list + 4 batches)" },
+                  { k: "Cost/Trip", v: "$0.12 (beyond free)" },
+                  { k: "Free Tier", v: "2,000/mo = 400 trips" },
                 ],
                 color: "#F59E0B",
               },
@@ -534,13 +646,48 @@ export default function UnitEconomics() {
                 </p>
                 {src.data.map((d, j) => (
                   <div key={j} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 6 }}>
-                    <span style={{ color: "#64748B" }}>{d.k}</span>
+                    <span style={{ color: d.k.startsWith("⚠️") ? "#F59E0B" : "#64748B" }}>{d.k}</span>
                     <span style={{ color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace" }}>{d.v}</span>
                   </div>
                 ))}
               </div>
             ))}
           </div>
+        </div>
+
+        {/* AI Models in Production */}
+        <div style={{
+          background: "rgba(30, 41, 59, 0.5)",
+          borderRadius: 12,
+          padding: "28px",
+          border: "1px solid rgba(100, 116, 139, 0.2)",
+          marginBottom: 32,
+        }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
+            AI Models in Production · NOT GPT-5, NOT Claude
+          </h3>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            {AI_MODELS.map((m, i) => (
+              <div key={i} style={{
+                background: "rgba(15, 23, 42, 0.5)",
+                borderRadius: 8,
+                padding: 14,
+                borderLeft: "3px solid #A855F7",
+              }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", marginBottom: 4 }}>
+                  {m.model}
+                </p>
+                <p style={{ fontSize: 20, fontWeight: 700, color: "#A855F7", fontFamily: "'JetBrains Mono', monospace" }}>
+                  {m.calls} calls
+                </p>
+                <p style={{ fontSize: 10, color: "#64748B" }}>{m.usage}</p>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: "#64748B", marginTop: 16, padding: 12, background: "rgba(248, 113, 113, 0.1)", borderRadius: 6, borderLeft: "3px solid #F87171" }}>
+            <strong style={{ color: "#F87171" }}>CORRECTED:</strong> Production runs Gemini Flash variants, not GPT-5/GPT-5-mini. Previous internal docs were wrong. Real AI cost is 3-10× lower than documented estimates.
+          </p>
         </div>
 
         {/* Key Findings */}
@@ -556,11 +703,11 @@ export default function UnitEconomics() {
           </h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: 16 }}>
             {[
-              { title: "AI is a rounding error", body: "Lovable AI (Gemini Flash) + Perplexity combined = $0.082/trip. At $35 revenue, AI is 0.23% of revenue. Model selection barely matters for margins.", tag: "VERIFIED", tagColor: "#34D399" },
-              { title: "Google Places is 86% of variable cost", body: "$0.505/trip pre-caching. Photo caching fix should reduce ~33%. Every optimization dollar should target Places API efficiency.", tag: "CRITICAL", tagColor: "#F87171" },
-              { title: "Internal docs were wrong about the stack", body: "Production runs Gemini Flash variants, not GPT-5/GPT-5-mini. Real AI cost is 3-10x lower than documented estimates of $0.15-$0.60/trip.", tag: "CORRECTED", tagColor: "#FBBF24" },
-              { title: "AI cost includes non-trip overhead", body: "The $0.064/trip includes quiz, explore, homepage preview — not just itinerary generation. Marginal cost of one more trip is lower. This is the conservative number.", tag: "NOTE", tagColor: "#38BDF8" },
-              { title: "Amadeus scales to 250 hotels per search", body: "Production now fetches up to 5 batches of 50 hotels = 6 API calls max. Free tier covers ~333 trips/month at full capacity.", tag: "UPDATED", tagColor: "#F59E0B" },
+              { title: "AI is a rounding error", body: "Lovable AI + Perplexity combined = $0.082/trip. At $35 revenue, AI is 0.23% of revenue. Model selection barely matters for margins.", tag: "VERIFIED", tagColor: "#34D399" },
+              { title: "Google Places is 63-86% of variable cost", body: "$0.505/trip pre-caching. Photo caching deployed but not yet measured — 33% reduction is estimated, not verified.", tag: "CRITICAL", tagColor: "#F87171" },
+              { title: "AI cost includes non-trip overhead", body: "The $0.064/trip includes quiz, explore, homepage preview — not just itinerary generation. Marginal cost of one more trip is lower.", tag: "NOTE", tagColor: "#38BDF8" },
+              { title: "Amadeus adds $0.12/trip beyond 400/mo", body: "5 calls × $0.024/call. Free tier covers 400 trips/month. Step change visible in economics at scale table.", tag: "PROJECTED", tagColor: "#F59E0B" },
+              { title: "Google free tiers already exceeded", body: "As of Jan 25, 2026, Google Places free tiers are exhausted. All usage now billable. Need SKU breakdown to optimize.", tag: "ACTION", tagColor: "#FBBF24" },
               { title: "Lovable pricing is temporary", body: "Billing page states pricing model being refined through early 2026. Current margins depend partly on a structure the vendor may change.", tag: "RISK", tagColor: "#F87171" },
             ].map((f, i) => (
               <div key={i} style={{
@@ -578,13 +725,50 @@ export default function UnitEconomics() {
           </div>
         </div>
 
+        {/* What to Track */}
+        <div style={{
+          background: "rgba(30, 41, 59, 0.5)",
+          borderRadius: 12,
+          padding: "28px",
+          border: "1px solid rgba(100, 116, 139, 0.2)",
+          marginBottom: 32,
+        }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
+            What to Track Going Forward
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
+            {[
+              { metric: "Google Places spend", where: "console.cloud.google.com/billing", freq: "Weekly" },
+              { metric: "Google SKU breakdown", where: "Cloud Console → Cost breakdown", freq: "Weekly" },
+              { metric: "Lovable AI spend", where: "Lovable → Cloud & AI balance", freq: "Weekly" },
+              { metric: "Perplexity balance", where: "perplexity.ai/account/api/billing", freq: "Monthly" },
+              { metric: "Amadeus calls (when live)", where: "developers.amadeus.com dashboard", freq: "Weekly" },
+              { metric: "Photo cache hit rate", where: "curated_images + storage bucket", freq: "Weekly" },
+              { metric: "Cost per trip (actual)", where: "Total spend ÷ trips", freq: "Weekly" },
+            ].map((item, i) => (
+              <div key={i} style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center",
+                padding: "10px 14px",
+                background: "rgba(15, 23, 42, 0.5)",
+                borderRadius: 6,
+                fontSize: 11,
+              }}>
+                <span style={{ color: "#E2E8F0", fontWeight: 500 }}>{item.metric}</span>
+                <span style={{ color: "#64748B", fontSize: 10 }}>{item.freq}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Footer */}
         <div style={{ textAlign: "center", paddingTop: 20, borderTop: "1px solid rgba(100, 116, 139, 0.2)" }}>
           <p style={{ fontSize: 11, color: "#64748B" }}>
             Voyance Unit Economics · Built from verified production billing data · {VERIFIED_DATA.trips} trips · {VERIFIED_DATA.period}
           </p>
           <p style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
-            Google Cloud Console · Lovable Cloud Dashboard · Perplexity API Billing · Amadeus Documentation
+            Generated Feb 4, 2026. "Verified" = from billing dashboards. "Projected" = documented pricing + estimates. Update weekly.
           </p>
         </div>
       </div>
