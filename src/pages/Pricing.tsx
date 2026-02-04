@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronDown, Sparkles, Loader2, ArrowRight } from 'lucide-react';
+import { Check, ChevronDown, Sparkles, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { CREDIT_PACKS, TOPUP_PACK, formatCredits, CREDIT_COSTS } from '@/config/pricing';
@@ -146,7 +146,6 @@ const sampleDay = [
 export default function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutConfig, setCheckoutConfig] = useState<CheckoutConfig | null>(null);
-  const [expandedTier, setExpandedTier] = useState<number | null>(1); // Weekend is expanded by default
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
@@ -270,7 +269,6 @@ export default function Pricing() {
         <div className="max-w-5xl mx-auto px-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {tiers.map((tier, index) => {
-              const isExpanded = expandedTier === index;
               const isFeatured = tier.featured;
               
               return (
@@ -280,12 +278,10 @@ export default function Pricing() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05 }}
-                  onClick={() => setExpandedTier(isExpanded ? null : index)}
                   className={cn(
-                    'relative rounded-2xl p-5 sm:p-6 cursor-pointer transition-all duration-300',
+                    'relative rounded-2xl p-5 sm:p-6 transition-all duration-300',
                     'bg-card border hover:-translate-y-1',
-                    isFeatured ? 'border-primary shadow-md' : 'border-border',
-                    isExpanded && !isFeatured && 'border-primary/50'
+                    isFeatured ? 'border-primary shadow-md' : 'border-border'
                   )}
                 >
                   {isFeatured && (
@@ -296,20 +292,12 @@ export default function Pricing() {
 
                   {/* Header */}
                   <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-foreground">{tier.name}</h3>
-                      <ChevronDown className={cn(
-                        'w-4 h-4 text-muted-foreground mt-1 transition-transform',
-                        isExpanded && 'rotate-180'
-                      )} />
-                    </div>
-                    <div className="text-right">
-                      <span className="text-2xl font-bold text-foreground">${tier.price}</span>
-                    </div>
+                    <h3 className="font-semibold text-foreground">{tier.name}</h3>
+                    <span className="text-2xl font-bold text-foreground">${tier.price}</span>
                   </div>
 
                   <p className="text-xs text-muted-foreground mb-4">
-                    {formatCredits(tier.credits)} credits · ${tier.perDay} per day
+                    {formatCredits(tier.credits)} credits{index > 0 && ` · $${tier.perDay} per day`}
                   </p>
 
                   {/* Translation - the key part */}
@@ -322,33 +310,21 @@ export default function Pricing() {
                     </p>
                   </div>
 
-                  {/* Expanded details */}
-                  <AnimatePresence>
-                    {isExpanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="space-y-2 text-xs text-muted-foreground pb-4 border-b border-border mb-4">
-                          <p className="flex items-start gap-2">
-                            <span>📅</span>
-                            <span>{tier.breakdown.days} of personalized itinerary</span>
-                          </p>
-                          <p className="flex items-start gap-2">
-                            <span>🏦</span>
-                            <span>{tier.breakdown.leftover}</span>
-                          </p>
-                          <p className="flex items-start gap-2">
-                            <span>💡</span>
-                            <span>{tier.breakdown.example}</span>
-                          </p>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {/* Breakdown - always visible */}
+                  <div className="space-y-2 text-xs text-muted-foreground pb-4 border-b border-border mb-4">
+                    <p className="flex items-start gap-2">
+                      <span>📅</span>
+                      <span>{tier.breakdown.days} of personalized itinerary</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span>🏦</span>
+                      <span>{tier.breakdown.leftover}</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span>💡</span>
+                      <span className="italic">{tier.breakdown.example}</span>
+                    </p>
+                  </div>
 
                   {/* CTA */}
                   <Button 
@@ -415,47 +391,26 @@ export default function Pricing() {
             className="bg-card rounded-2xl border border-border overflow-hidden"
           >
             {/* Header */}
-            <div className="grid grid-cols-3 text-xs font-medium text-muted-foreground bg-muted/50 px-4 py-3 border-b border-border">
+            <div className="grid grid-cols-2 text-xs font-medium text-muted-foreground bg-muted/50 px-4 py-3 border-b border-border">
               <span>What you're generating</span>
-              <span className="text-center">Credits used</span>
-              <span className="text-right">Cost at best rate</span>
+              <span className="text-right">Credits used</span>
             </div>
 
             {/* Rows */}
             {creditBreakdown.map((row, i) => (
-              <div key={i} className="grid grid-cols-3 px-4 py-3 border-b border-border last:border-0 text-sm">
+              <div key={i} className="grid grid-cols-2 px-4 py-3 border-b border-border last:border-0 text-sm">
                 <div>
                   <p className="font-medium text-foreground">{row.item}</p>
                   <p className="text-xs text-muted-foreground">{row.note}</p>
                 </div>
-                <div className="flex items-center justify-center gap-1.5">
+                <div className="flex items-center justify-end gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-primary" />
                   <span className="font-medium text-foreground">{row.credits}</span>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-foreground">
-                    ${(row.credits * bestRate).toFixed(2)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">Adventurer rate</p>
                 </div>
               </div>
             ))}
           </motion.div>
 
-          {/* Rate comparison */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="flex flex-wrap justify-center gap-3 mt-6"
-          >
-            {tiers.map((t) => (
-              <div key={t.id} className="text-center px-4 py-2 bg-card border border-border rounded-xl">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{t.name}</p>
-                <p className="text-sm font-semibold text-foreground">${t.perDay}/day</p>
-              </div>
-            ))}
-          </motion.div>
         </div>
       </section>
 
@@ -529,9 +484,9 @@ export default function Pricing() {
                 <p className="font-medium text-foreground">Cultural Immersion</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-muted-foreground">Day cost range</p>
+                <p className="text-xs text-muted-foreground">Your on-the-ground spending</p>
                 <p className="font-medium text-foreground">$33 — $560</p>
-                <p className="text-[10px] text-muted-foreground">Safe → Splurge</p>
+                <p className="text-[10px] text-muted-foreground">Safe → Splurge at each stop</p>
               </div>
             </div>
 
@@ -559,6 +514,26 @@ export default function Pricing() {
                 This is 1 day · 150 credits · A 5-day trip generates five days like this.
               </p>
             </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Guarantee */}
+      <section className="py-10 sm:py-12">
+        <div className="max-w-2xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="bg-primary/5 border border-primary/20 rounded-2xl p-6 sm:p-8 text-center"
+          >
+            <ShieldCheck className="w-10 h-10 text-primary mx-auto mb-4" />
+            <h3 className="text-lg sm:text-xl font-serif font-medium text-foreground mb-2">
+              Not worth it? We'll make it right.
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+              If your itinerary doesn't meet expectations, contact us within 7 days for a full credit refund — no questions asked. We're building trust, one trip at a time.
+            </p>
           </motion.div>
         </div>
       </section>
