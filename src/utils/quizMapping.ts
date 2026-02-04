@@ -959,20 +959,34 @@ export async function recalculateDNAFromPreferences(
   userId: string
 ): Promise<{ success: boolean; dna: TravelDNAPayload | null }> {
   try {
-    // 1. Fetch current preferences
-    const preferences = await getUserPreferences(userId);
+    // 1. Fetch current preferences AND existing overrides in parallel
+    const [preferences, overridesResult] = await Promise.all([
+      getUserPreferences(userId),
+      supabase
+        .from('profiles')
+        .select('travel_dna_overrides')
+        .eq('id', userId)
+        .maybeSingle()
+    ]);
+    
     if (!preferences) {
       console.error('No preferences found for user:', userId);
       return { success: false, dna: null };
     }
     
+    const existingOverrides = overridesResult.data?.travel_dna_overrides as Record<string, number> | null;
+    
+    if (existingOverrides && Object.keys(existingOverrides).length > 0) {
+      console.log('[DNA Recalc] Preserving existing overrides:', Object.keys(existingOverrides));
+    }
+    
     // 2. Convert preferences to quiz answer format
     const answers = preferencesToQuizAnswers(preferences);
     
-    // 3. Recalculate DNA via backend
+    // 3. Recalculate DNA via backend WITH overrides
     let dna: TravelDNAPayload;
     try {
-      dna = await calculateTravelDNAAdvanced(answers, userId);
+      dna = await calculateTravelDNAAdvanced(answers, userId, existingOverrides);
     } catch {
       dna = calculateTravelDNA(answers);
     }

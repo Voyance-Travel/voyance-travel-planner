@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Plane,
   Hotel,
@@ -167,6 +168,7 @@ interface UserPreferences {
 
 export default function EditorialPreferencesView() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -188,10 +190,17 @@ export default function EditorialPreferencesView() {
       setIsRecalculating(true);
       try {
         const result = await recalculateDNAFromPreferences(user.id);
-        if (result.success && result.dna?.primary_archetype_display) {
-          toast.success('Travel DNA updated!', {
-            description: `You're now: ${result.dna.primary_archetype_display}`,
-          });
+        if (result.success) {
+          // Invalidate DNA-related queries so UI refreshes with preserved overrides
+          queryClient.invalidateQueries({ queryKey: ['travel-dna'] });
+          queryClient.invalidateQueries({ queryKey: ['profile'] });
+          queryClient.invalidateQueries({ queryKey: ['preference-completion'] });
+          
+          if (result.dna?.primary_archetype_display) {
+            toast.success('Travel DNA updated!', {
+              description: `You're now: ${result.dna.primary_archetype_display}`,
+            });
+          }
         }
       } catch (err) {
         console.error('Background DNA recalculation failed:', err);
@@ -199,7 +208,7 @@ export default function EditorialPreferencesView() {
         setIsRecalculating(false);
       }
     }, 1500); // Wait 1.5s after last change
-  }, [user?.id]);
+  }, [user?.id, queryClient]);
   
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -275,6 +284,11 @@ export default function EditorialPreferencesView() {
     try {
       const result = await recalculateDNAFromPreferences(user.id);
       if (result.success && result.dna) {
+        // Invalidate DNA-related queries so UI refreshes with preserved overrides
+        queryClient.invalidateQueries({ queryKey: ['travel-dna'] });
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+        queryClient.invalidateQueries({ queryKey: ['preference-completion'] });
+        
         toast.success('Travel DNA updated based on your preferences!', {
           description: result.dna.primary_archetype_display 
             ? `You're now: ${result.dna.primary_archetype_display}`
