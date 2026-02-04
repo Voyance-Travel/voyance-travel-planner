@@ -58,6 +58,7 @@ import { InlineBookingActions } from '@/components/booking/InlineBookingActions'
 import { PaymentsTab } from './PaymentsTab';
 import { BudgetTab } from '@/components/planner/budget/BudgetTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
+import { useTripBudget } from '@/hooks/useTripBudget';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
@@ -884,6 +885,9 @@ export function EditorialItinerary({
   // Get trip permission for current user
   const { data: tripPermission } = useTripPermission(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
+  
+  // Get budget settings to pass limit to PaymentsTab
+  const { settings: budgetSettings } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
   
   // Determine effective editability based on permission
   const effectiveIsEditable = isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
@@ -2280,6 +2284,7 @@ export function EditorialItinerary({
             flightSelection={flightSelection}
             hotelSelection={hotelSelection}
             travelers={travelers}
+            budgetLimitCents={budgetSettings?.budget_total_cents || undefined}
           />
         )}
 
