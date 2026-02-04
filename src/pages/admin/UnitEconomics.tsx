@@ -101,13 +101,27 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 // Free users see COMPLETE itinerary with REAL venue names, times, and reasoning
 // BUT gated details: addresses, hours, photos, tips, booking links
 //
-// Cost breakdown:
-//   - AI generation (gemini-3-flash): ~$0.04
-//   - Light venue validation (1-3 Google searches): ~$0.05-0.08
-//   - DNA lookup: ~$0.01
-//   Total: ~$0.10-0.14 per preview
+// Cost breakdown (per full preview generation):
+//   - AI generation (gemini-3-flash-preview): ~$0.04
+//   - Light venue validation (1-3 Google Text Searches): ~$0.05-0.08
+//   - DNA lookup (Supabase): ~$0.01
+//   - Total: ~$0.10-0.14 per preview
 //
-// Psychology: User sees exactly what they get, but can't ACT on it
+// What FREE users SEE:
+//   ✓ Complete 1-7 day itinerary structure
+//   ✓ Real venue names with specific times
+//   ✓ Personalized "why this fits your DNA" reasoning
+//   ✓ Day themes and neighborhood context
+//
+// What's GATED (requires credits):
+//   ✗ Full addresses + Google Maps
+//   ✗ Hours of operation
+//   ✗ High-quality venue photos
+//   ✗ Booking links & reservations
+//   ✗ Insider tips for each stop
+//   ✗ Offline PDF export
+//
+// Psychology: User sees EXACTLY what they'll get, but can't ACT on it
 // =============================================================================
 const FREE_USER_ECONOMICS = {
   // Credit grants
@@ -116,16 +130,20 @@ const FREE_USER_ECONOMICS = {
   maxFirstMonthCredits: 250,
   creditExpiry: "2 months",
   
-  // Cost model (FULL PREVIEW with gated details)
+  // Cost model ("FULL PREVIEW, NO DETAILS")
   costs: {
     lightBrowse: 0.02,          // Explore + quiz, no trip gen
-    fullPreview: 0.12,          // Full itinerary with real venues
+    fullPreview: 0.12,          // Full itinerary with real venues (gated details)
+    venueValidation: 0.06,      // 1-3 Google Text Searches for existence check
     dnaQuiz: 0.02,              // DNA calculation
   },
   
-  // Blended cost: 70% generate full preview ($0.12) + 30% light browse ($0.02)
-  // = 0.084 + 0.006 = ~$0.09
-  blendedCostToUs: 0.09,
+  // Blended cost: 80% generate full preview ($0.12) + 20% light browse ($0.02)
+  // = 0.096 + 0.004 = ~$0.10 per free user
+  blendedCostToUs: 0.10,
+  
+  // Model name for display
+  modelName: "Full Preview, No Details",
 };
 
 // Helper function: Calculate variable cost for N days
@@ -256,8 +274,8 @@ const ACTION_COSTS = {
 const SCALE_COLUMNS = [
   { key: "trips", label: "Total Trips", tooltip: "Total monthly trip volume (paid + free users combined)." },
   { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
-  { key: "free", label: "Free", tooltip: "Number of free users who cost you money but pay nothing. Formula: Total × (100% - Conversion %)." },
-  { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of free users. Free users get ${FREE_USER_ECONOMICS.monthlyCredits} credits/mo → 1 day max unlock = ~$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}/user (NOT full trip cost).` },
+  { key: "free", label: "Free", tooltip: "Number of free users who generate Full Preview (real venues, gated details). Formula: Total × (100% - Conversion %)." },
+  { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of free users under 'Full Preview, No Details' model. Each preview costs ~$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)} (AI + light venue validation).` },
   { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable + Fixed ($29.08)/volume. Applies to both paid AND free users." },
   { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
   { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES FIXED COSTS. Formula: (All Trips × Variable Cost) + $29.08 fixed. This is your total monthly infrastructure spend." },
@@ -921,8 +939,8 @@ export default function UnitEconomics() {
             </div>
             <div style={{ fontSize: 11 }}>
               <span style={{ color: "#64748B" }}>Free user cost:</span>
-              <span style={{ color: "#34D399", fontWeight: 600, marginLeft: 6 }}>~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}</span>
-              <span style={{ color: "#475569", marginLeft: 4 }}>(optimized AI-only preview)</span>
+              <span style={{ color: "#F59E0B", fontWeight: 600, marginLeft: 6 }}>~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}</span>
+              <span style={{ color: "#475569", marginLeft: 4 }}>(Full Preview, No Details)</span>
             </div>
           </div>
 
@@ -1081,10 +1099,11 @@ export default function UnitEconomics() {
             </tbody>
           </table>
           
-          <div style={{ marginTop: 16, padding: 12, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8 }}>
+          <div style={{ marginTop: 16, padding: 12, background: "rgba(245, 158, 11, 0.1)", borderRadius: 8, borderLeft: "3px solid #F59E0B" }}>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              <strong style={{ color: "#34D399" }}>✓ Optimized Free Tier Active:</strong> Free users get AI-only preview at ~$0.08 blended cost. 
-              <strong style={{ color: "#38BDF8" }}> Top-Up users</strong> cost only ~$0.10 (no day unlocks). 
+              <strong style={{ color: "#F59E0B" }}>📋 Full Preview, No Details Model:</strong> Free users see complete itinerary with real venue names, times, and DNA reasoning — but gated logistics.
+              Cost: <strong style={{ color: "#F59E0B" }}>~$0.10/user</strong> (AI generation + light venue validation).
+              <strong style={{ color: "#38BDF8" }}> Boost users</strong> cost ~$0.12 (swaps/AI only). 
               <strong style={{ color: "#34D399" }}> Explorer users</strong> cost ~$1.13 (8 days across 2 trips). 
               Blended paid user cost at <strong style={{ color: "#A78BFA" }}>{REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(2)}</strong>.
             </p>
@@ -1308,15 +1327,15 @@ export default function UnitEconomics() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div style={{ padding: 12, background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 8 }}>
               <p style={{ fontSize: 11, color: "#34D399", margin: 0, lineHeight: 1.6 }}>
-                <strong>💰 Paid User Economics:</strong> $5 Top-Up can't unlock days (only swaps/AI) = <strong>$0.16 cost (97% margin)</strong>. 
-                Adventurer unlocks 16 days = <strong>$1.35 cost vs $89 (98% margin)</strong>. All tiers profitable.
+                <strong>💰 Paid User Economics:</strong> $8 Boost can't unlock days (only swaps/AI) = <strong>$0.12 cost (98.5% margin)</strong>. 
+                Adventurer unlocks 16 days = <strong>$2.25 cost vs $89 (97.5% margin)</strong>. All tiers profitable.
               </p>
             </div>
-            <div style={{ padding: 12, background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 8 }}>
-              <p style={{ fontSize: 11, color: "#34D399", margin: 0, lineHeight: 1.6 }}>
-                <strong>🆓 Free User Economics (Optimized):</strong> AI-only preview costs ~$0.025. 
-                {FREE_USER_ECONOMICS.monthlyCredits} credits/mo. 
-                <strong>Blended: ~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}/free user</strong>.
+            <div style={{ padding: 12, background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: 8 }}>
+              <p style={{ fontSize: 11, color: "#F59E0B", margin: 0, lineHeight: 1.6 }}>
+                <strong>📋 Free User: Full Preview, No Details</strong><br/>
+                Complete itinerary with real venues + DNA reasoning — gated logistics. 
+                Cost: AI ($0.04) + validation ($0.06) = <strong>~$0.10/user</strong>.
               </p>
             </div>
           </div>
