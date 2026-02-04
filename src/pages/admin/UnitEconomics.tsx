@@ -106,12 +106,12 @@ const SCALE_COLUMNS = [
   { key: "trips", label: "Total Trips", tooltip: "Total monthly trip volume (paid + free users combined)." },
   { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
   { key: "free", label: "Free", tooltip: "Number of free users who cost you money but pay nothing. Formula: Total × (100% - Conversion %)." },
-  { key: "freeCost", label: "Free $ Cost", tooltip: "Total cost of serving free users this month. This is pure loss. Formula: Free Users × Cost/Trip." },
-  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable + Fixed/volume. Applies to both paid AND free users." },
+  { key: "freeCost", label: "Free Var $", tooltip: "Variable cost of serving free users (API calls only: ~$0.42/user). Does NOT include fixed cost allocation. This is the incremental cost of each non-paying user." },
+  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable (~$0.42) + Fixed ($29.08)/volume. Applies to both paid AND free users." },
   { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
-  { key: "totalCost", label: "Total Cost", tooltip: "Cost to serve ALL users (paid + free). Formula: Total Trips × Cost/Trip." },
-  { key: "netProfit", label: "Net Profit", tooltip: "Actual profit after accounting for free user costs. Formula: Revenue - Total Cost. This is real money." },
-  { key: "realMargin", label: "Real Margin", tooltip: "True margin after free user drag. Formula: Net Profit / Revenue. Much lower than per-tier margins shown above." },
+  { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES FIXED COSTS. Formula: (All Trips × Variable Cost) + $29.08 fixed. This is your total monthly infrastructure spend." },
+  { key: "netProfit", label: "Net Profit", tooltip: "Revenue minus ALL costs (variable + fixed). Formula: Revenue - Total Cost. This is what hits your bank account." },
+  { key: "realMargin", label: "Real Margin", tooltip: "True margin after ALL costs including fixed overhead. Formula: Net Profit / Revenue. Much lower than per-tier margins." },
 ];
 
 
