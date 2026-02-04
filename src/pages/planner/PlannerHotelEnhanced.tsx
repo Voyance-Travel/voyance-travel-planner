@@ -488,24 +488,13 @@ export default function PlannerHotelEnhanced() {
       return;
     }
 
-    // Save trip to database with hotel selection and get the tripId
-    let savedTripId: string | null = null;
-    try {
-      savedTripId = await saveTrip();
-      if (savedTripId) {
-        // Trip saved with hotel selection
-      }
-    } catch (error) {
-      console.error('[PlannerHotel] Failed to save trip:', error);
-      // Continue navigation even if save fails - data is still in context
+    // Save trip and navigate to itinerary generation (same as skip/manual flows)
+    const tripId = plannerState.tripId || await saveTrip();
+    if (tripId) {
+      navigate(`/trip/${tripId}?generate=true`);
+    } else {
+      toast.error('Could not save trip. Please try again.');
     }
-
-    const params = getNavigationParams();
-    // CRITICAL: Pass tripId in URL so it persists across navigation/refresh
-    if (savedTripId) {
-      params.set('tripId', savedTripId);
-    }
-    navigate(`/planner/summary?${params.toString()}`);
   };
 
   const handleSkipHotel = async () => {
