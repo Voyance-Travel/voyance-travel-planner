@@ -16,7 +16,15 @@ import {
 const IMAGE_QUERY_VERSION = 'img_v3_no_people_curated';
 
 // Destinations that MUST use curated images (no third-party sources allowed)
-const CURATED_ONLY_DESTINATIONS = new Set(['rome', 'lisbon']);
+const CURATED_ONLY_DESTINATIONS = new Set([
+  'rome', 'lisbon', 'paris', 'london', 'barcelona', 'santorini', 'amsterdam',
+  'vienna', 'copenhagen', 'florence', 'porto', 'tokyo', 'kyoto', 'bali',
+  'bangkok', 'singapore', 'hong kong', 'seoul', 'new york', 'los angeles',
+  'san francisco', 'miami', 'new orleans', 'hawaii', 'oahu', 'maui',
+  'mexico city', 'cabo san lucas', 'cancun', 'buenos aires', 'rio de janeiro',
+  'peru', 'cusco', 'oaxaca', 'cape town', 'marrakech', 'dubai', 'melbourne',
+  'sydney', 'auckland', 'cartagena', 'vancouver', 'reykjavik'
+]);
 
 function isCuratedOnlyDestination(destination?: string): boolean {
   if (!destination) return false;
@@ -79,10 +87,9 @@ export async function getDestinationImages(
 ): Promise<DestinationImage[]> {
   const normalizedDestination = normalizeDestinationQuery(params.destination);
 
-  // Hard rule: Curated-only destinations (Rome, Lisbon, etc.) must never use third-party sources
-  // as those can include inappropriate images (people, tuk-tuks, etc.)
+  // For hero/gallery, ALWAYS prefer curated images if available (any destination)
+  // This ensures reliable, high-quality images without unpredictable API results
   if (
-    isCuratedOnlyDestination(normalizedDestination) &&
     normalizedDestination &&
     (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all') &&
     hasCuratedImages(normalizedDestination)
