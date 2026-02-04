@@ -539,10 +539,13 @@ export default function PlannerHotelEnhanced() {
       toast.success('Hotel details saved');
     }
     
-    const params = getNavigationParams();
-    params.set('skippedHotel', 'true');
-    if (data.hotel) params.set('manualHotel', 'true');
-    navigate(`/planner/summary?${params.toString()}`);
+    // Navigate directly to itinerary generation (same as skip flow)
+    const tripId = plannerState.tripId || await saveTrip();
+    if (tripId) {
+      navigate(`/trip/${tripId}?generate=true`);
+    } else {
+      toast.error('Could not save trip. Please try again.');
+    }
   };
 
   return (
