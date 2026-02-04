@@ -40,11 +40,11 @@ const INTELLIGENCE_LAYERS = [
   { icon: Brain, label: "Learning loop", description: "Gets smarter from every trip rated" },
 ];
 
-// Real metrics - these represent the 27 archetype system we've built
+// Real metrics from actual database
 const REAL_METRICS = {
-  archetypesAvailable: 27, // Our complete archetype system
-  intelligenceLayers: 7,   // Layers of trip intelligence
-  questionsInQuiz: 21,     // Quiz questions that map to archetypes
+  tripsBuilt: 22,           // Trips with itineraries generated
+  archetypesAvailable: 27,  // Our complete archetype system
+  destinations: 19,         // Unique destinations with trips
 };
 
 function TestimonialCard({ testimonial }: { testimonial: typeof BETA_TESTIMONIALS[0] }) {
@@ -145,7 +145,7 @@ export default function SocialProofSection() {
           </div>
         </motion.div>
 
-        {/* System Metrics - What We've Built */}
+        {/* Real Platform Metrics */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -154,21 +154,21 @@ export default function SocialProofSection() {
         >
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
+              {REAL_METRICS.tripsBuilt}+
+            </p>
+            <p className="text-sm text-muted-foreground">Trips Built</p>
+          </div>
+          <div className="text-center">
+            <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
               {REAL_METRICS.archetypesAvailable}
             </p>
             <p className="text-sm text-muted-foreground">Travel Archetypes</p>
           </div>
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.intelligenceLayers}
+              {REAL_METRICS.destinations}+
             </p>
-            <p className="text-sm text-muted-foreground">Intelligence Layers</p>
-          </div>
-          <div className="text-center">
-            <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.questionsInQuiz}
-            </p>
-            <p className="text-sm text-muted-foreground">Quiz Questions</p>
+            <p className="text-sm text-muted-foreground">Destinations</p>
           </div>
         </motion.div>
 
