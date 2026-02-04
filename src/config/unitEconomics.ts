@@ -56,30 +56,39 @@ export const TOTAL_FIXED_MONTHLY = FIXED_COSTS.reduce((sum, c) => sum + c.cost, 
 // ============================================================================
 // VARIABLE COSTS - AI (Lovable AI Gateway)
 // From docs/PRICE_SHEET.md Section 2
+// See also: src/config/userLifecycleCosts.ts for detailed per-feature breakdown
 // ============================================================================
 
 export const AI_COSTS = {
   // Model pricing (per 1k tokens)
   models: {
-    'openai/gpt-5': { input: 0.01, output: 0.03 },
-    'openai/gpt-5-mini': { input: 0.0004, output: 0.0016 },
-    'google/gemini-2.5-flash': { input: 0.0001, output: 0.0004 },
-    'google/gemini-2.5-flash-image-preview': { input: 0.01, output: 0.05 },
+    'openai/gpt-5': { input: 0.01, output: 0.03, useCase: 'Full itinerary generation' },
+    'openai/gpt-5-mini': { input: 0.0004, output: 0.0016, useCase: 'DNA, swaps, chat, regeneration' },
+    'openai/gpt-5-nano': { input: 0.00015, output: 0.0006, useCase: 'Simple classification' },
+    'google/gemini-2.5-flash': { input: 0.0001, output: 0.0004, useCase: 'Quick preview, roast' },
+    'google/gemini-2.5-flash-lite': { input: 0.00005, output: 0.0002, useCase: 'Simple tasks' },
+    'google/gemini-2.5-pro': { input: 0.005, output: 0.015, useCase: 'Complex reasoning' },
   },
   
   // Per-feature costs (from PRICE_SHEET.md)
   features: {
-    // High-cost (AI-intensive)
-    full_itinerary: { min: 0.15, max: 0.60, model: 'gpt-5', desc: 'Full trip generation (5 days)' },
-    day_regeneration: { min: 0.02, max: 0.08, model: 'gpt-5-mini', desc: 'Regenerate single day' },
-    activity_swap: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'Swap one activity' },
-    travel_dna: { min: 0.01, max: 0.03, model: 'gpt-5-mini', desc: 'Calculate DNA from quiz' },
-    restaurant_rec: { min: 0.01, max: 0.04, model: 'gpt-5-mini', desc: 'Restaurant recommendation' },
-    itinerary_chat: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'AI chat message' },
-    quick_preview: { min: 0.003, max: 0.01, model: 'gemini-2.5-flash', desc: '3-day teaser' },
+    // Pre-signup (free to user, cost to us)
+    quick_preview: { min: 0.003, max: 0.01, model: 'gemini-2.5-flash', desc: '3-day teaser on homepage' },
     analyze_itinerary: { min: 0.003, max: 0.01, model: 'gemini-2.5-flash', desc: 'Roast existing itinerary' },
+    
+    // One-time per user
+    travel_dna: { min: 0.01, max: 0.03, model: 'gpt-5-mini', desc: 'Calculate DNA from 21-question quiz' },
+    
+    // Credit-based (paid features)
+    full_itinerary: { min: 0.15, max: 0.60, model: 'gpt-5', desc: 'Full trip generation (5 days)' },
+    day1_only: { min: 0.03, max: 0.08, model: 'gpt-5', desc: 'Day 1 only for free users' },
+    day_regeneration: { min: 0.02, max: 0.08, model: 'gpt-5-mini', desc: 'Regenerate single day (15 credits)' },
+    activity_swap: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'Swap one activity (5 credits)' },
+    restaurant_rec: { min: 0.01, max: 0.04, model: 'gpt-5-mini', desc: 'Restaurant recommendation (10 credits)' },
+    itinerary_chat: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'AI chat message (2 credits)' },
     mystery_trip: { min: 0.01, max: 0.04, model: 'gpt-5-mini', desc: 'Mystery destination suggestion' },
     parse_story: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'Parse travel story text' },
+    explain_recommendation: { min: 0.002, max: 0.008, model: 'gpt-5-mini', desc: 'Why this activity?' },
   },
 } as const;
 
@@ -108,15 +117,41 @@ export const EXTERNAL_API_COSTS = {
   
   // Free APIs
   openMeteo: { cost: 0, desc: 'Weather & geocoding - completely free' },
-  viator: { cost: 0, desc: 'Activity search - free, affiliate revenue' },
+  viator: { cost: 0, desc: 'Activity search - free, earns 8-10% affiliate commission' },
   foursquare: { cost: 0, freeTier: 950, desc: '950 calls/day free' },
   
   // Usage-based
-  perplexity: { costPerCall: 0.005, desc: 'Destination intelligence' },
-  tripadvisor: { cost: 0, desc: 'Photo fallback - basic tier' },
+  perplexity: { costPerCall: 0.005, desc: 'Destination intelligence, travel advisories' },
+  
+  // Photo fallbacks (tiered system)
+  tripadvisor: { cost: 0, desc: 'Photo fallback - basic tier free' },
   pexels: { cost: 0, desc: 'Photo fallback - free' },
   wikimedia: { cost: 0, desc: 'Photo fallback - free' },
+  lovable_ai_image: { min: 0.01, max: 0.05, desc: 'AI image generation - last resort' },
 } as const;
+
+// ============================================================================
+// USER LIFECYCLE COSTS (Summary)
+// Full details in src/config/userLifecycleCosts.ts
+// ============================================================================
+
+export const USER_LIFECYCLE_COSTS = {
+  bounce: { min: 0.001, max: 0.003, desc: 'Visitor who leaves without signup' },
+  freeUser: { min: 0.04, max: 0.16, desc: 'Signs up, uses free credits, never pays' },
+  singlePurchase: { min: 0.30, max: 1.25, desc: 'Buys one trip pass' },
+  repeatUser: { min: 0.92, max: 3.40, desc: '3 trips per year' },
+  powerUser: { min: 3.11, max: 11.38, desc: '10+ trips per year' },
+} as const;
+
+// Blended cost per visitor (weighted by distribution)
+// 60% bounce, 25% free, 10% single, 4% repeat, 1% power
+export const BLENDED_COST_PER_VISITOR = 
+  0.60 * ((0.001 + 0.003) / 2) +
+  0.25 * ((0.04 + 0.16) / 2) +
+  0.10 * ((0.30 + 1.25) / 2) +
+  0.04 * ((0.92 + 3.40) / 2) +
+  0.01 * ((3.11 + 11.38) / 2);
+// ≈ $0.12 per visitor on average
 
 // ============================================================================
 // CREDIT SYSTEM COSTS
