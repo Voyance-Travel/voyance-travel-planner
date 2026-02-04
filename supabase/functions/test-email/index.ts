@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendEmail, isConfigured } from "../_shared/zoho-smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +18,7 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
 
 const templates = {
   test: {
-    subject: "🧪 Voyance Test Email - SendGrid is Working!",
+    subject: "🧪 Voyance Test Email - Zoho SMTP is Working!",
     html: `
       <!DOCTYPE html>
       <html>
@@ -29,7 +30,7 @@ const templates = {
           </div>
           <div style="padding: 30px;">
             <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-              Great news! Your SendGrid integration is working correctly.
+              Great news! Your Zoho SMTP integration is working correctly.
             </p>
             <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
               Sent at: ${new Date().toISOString()}
@@ -39,7 +40,7 @@ const templates = {
       </body>
       </html>
     `,
-    text: `Email Test Successful!\n\nYour SendGrid integration is working correctly.\n\nSent at: ${new Date().toISOString()}`,
+    text: `Email Test Successful!\n\nYour Zoho SMTP integration is working correctly.\n\nSent at: ${new Date().toISOString()}`,
   },
   welcome: {
     subject: "🌟 Welcome to Voyance - Your Journey Begins!",
@@ -141,19 +142,17 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     logStep("Test email request received");
 
-    const sendgridApiKey = Deno.env.get("SENDGRID_API_KEY");
-    if (!sendgridApiKey) {
+    if (!isConfigured()) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: "SENDGRID_API_KEY not configured",
-          hint: "Add the SENDGRID_API_KEY secret in your Lovable Cloud settings"
+          error: "Zoho SMTP not configured",
+          hint: "Add ZOHO_SMTP_USER and ZOHO_SMTP_PASSWORD secrets in your Lovable Cloud settings"
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get authenticated user's email or use provided email
     let targetEmail: string | undefined;
     let templateName: keyof typeof templates = "test";
 
@@ -196,33 +195,22 @@ const handler = async (req: Request): Promise<Response> => {
     logStep("Sending test email", { to: targetEmail, template: templateName });
 
     const template = templates[templateName];
-    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${sendgridApiKey}`,
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: targetEmail }] }],
-        from: { email: "no-reply@voyancetravel.com", name: "Voyance Travel" },
-        subject: template.subject,
-        content: [
-          { type: "text/plain", value: template.text },
-          { type: "text/html", value: template.html },
-        ],
-      }),
+    const result = await sendEmail({
+      to: targetEmail,
+      subject: template.subject,
+      html: template.html,
+      text: template.text,
+      fromName: "Voyance Travel",
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      logStep("SendGrid API error", { status: response.status, error: errorText });
+    if (!result.success) {
+      logStep("Email send failed", { error: result.error });
       
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: "SendGrid API error",
-          details: errorText,
-          status: response.status
+          error: "Failed to send email",
+          details: result.error
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

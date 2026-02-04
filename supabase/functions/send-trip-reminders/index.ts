@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendEmail, isConfigured } from "../_shared/zoho-smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,43 +18,31 @@ interface TripReminder {
   userName: string;
 }
 
-// Track sent reminders to avoid duplicates
-interface ReminderRecord {
-  tripId: string;
-  reminderType: string;
-  weekNumber?: number; // For weekly reminders
-}
-
 const logStep = (step: string, details?: Record<string, unknown>) => {
   console.log(`[TRIP-REMINDERS] ${step}`, details ? JSON.stringify(details) : "");
 };
 
-// Determine reminder type based on days until trip
 function getReminderType(daysUntil: number): "daily" | "weekly" | "monthly" | null {
-  if (daysUntil <= 0) return null; // Trip already started
-  if (daysUntil <= 7) return "daily"; // Week of
-  if (daysUntil <= 30) return "weekly"; // Month before
-  return "monthly"; // More than a month out
+  if (daysUntil <= 0) return null;
+  if (daysUntil <= 7) return "daily";
+  if (daysUntil <= 30) return "weekly";
+  return "monthly";
 }
 
-// Check if we should send a reminder today based on schedule
 function shouldSendReminder(daysUntil: number, reminderType: "daily" | "weekly" | "monthly"): boolean {
   if (reminderType === "daily") {
-    // Send daily during the week of the trip
     return daysUntil > 0 && daysUntil <= 7;
   }
   if (reminderType === "weekly") {
-    // Send weekly on Mondays (or specific days before: 28, 21, 14, 8)
     return [28, 21, 14, 8].includes(daysUntil);
   }
   if (reminderType === "monthly") {
-    // Send monthly on 60, 45, 30 days out
     return [60, 45, 30].includes(daysUntil);
   }
   return false;
 }
 
-// Daily messages (week of trip) - 7 unique messages
+// Daily messages (week of trip)
 const dailyMessages = [
   {
     subject: "🎉 Only {{days}} days until {{destination}}!",
@@ -106,7 +95,7 @@ const dailyMessages = [
   },
 ];
 
-// Weekly messages (month before) - 4 unique messages
+// Weekly messages (month before)
 const weeklyMessages = [
   {
     subject: "📅 {{destination}} in {{weeks}} weeks – Time to plan!",
@@ -138,7 +127,7 @@ const weeklyMessages = [
   },
 ];
 
-// Monthly messages (more than a month out) - 3 unique messages
+// Monthly messages (more than a month out)
 const monthlyMessages = [
   {
     subject: "🗓️ {{destination}} is {{months}} month(s) away!",
@@ -164,7 +153,6 @@ const monthlyMessages = [
 ];
 
 function getRandomMessage(messages: typeof dailyMessages, daysUntil: number, destination: string): typeof dailyMessages[0] {
-  // Use days as a seed for consistency (same message for same day)
   const index = daysUntil % messages.length;
   const message = messages[index];
   
@@ -315,10 +303,7 @@ function generateEmailHtml(reminder: TripReminder, message: ReturnType<typeof ge
   `;
 }
 
-async function sendReminderEmail(
-  reminder: TripReminder,
-  sendgridApiKey: string
-): Promise<boolean> {
+async function sendReminderEmail(reminder: TripReminder): Promise<boolean> {
   const messages = reminder.reminderType === "daily" 
     ? dailyMessages 
     : reminder.reminderType === "weekly" 
@@ -354,26 +339,16 @@ Manage notifications: https://voyance-travel-planner.lovable.app/settings
   `;
 
   try {
-    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${sendgridApiKey}`,
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: reminder.userEmail }] }],
-        from: { email: "no-reply@voyancetravel.com", name: "Voyance Travel" },
-        subject: message.subject,
-        content: [
-          { type: "text/plain", value: textContent },
-          { type: "text/html", value: html },
-        ],
-      }),
+    const result = await sendEmail({
+      to: reminder.userEmail,
+      subject: message.subject,
+      html: html,
+      text: textContent,
+      fromName: "Voyance Travel",
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      logStep("SendGrid error", { status: response.status, error: errorText });
+    if (!result.success) {
+      logStep("Email send failed", { error: result.error });
       return false;
     }
 
@@ -392,9 +367,8 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     logStep("Starting smart trip reminder check");
 
-    const sendgridApiKey = Deno.env.get("SENDGRID_API_KEY");
-    if (!sendgridApiKey) {
-      throw new Error("SENDGRID_API_KEY not configured");
+    if (!isConfigured()) {
+      throw new Error("Email service not configured");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -404,7 +378,6 @@ const handler = async (req: Request): Promise<Response> => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Fetch all upcoming trips (next 90 days)
     const futureDate = new Date(today);
     futureDate.setDate(futureDate.getDate() + 90);
     
@@ -429,7 +402,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     logStep("Found upcoming trips", { count: trips.length });
 
-    // Filter trips that should receive a reminder today
     const tripsToRemind: Array<typeof trips[0] & { daysUntil: number; reminderType: "daily" | "weekly" | "monthly" }> = [];
     
     for (const trip of trips) {
@@ -452,7 +424,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Get user IDs and check preferences
     const userIds = [...new Set(tripsToRemind.map(t => t.user_id))];
 
     const { data: preferences } = await supabase
@@ -463,7 +434,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     const usersWithReminders = new Set(preferences?.map(p => p.user_id) || []);
     
-    // Filter to only users who want reminders
     const filteredTrips = tripsToRemind.filter(t => usersWithReminders.has(t.user_id));
     
     if (filteredTrips.length === 0) {
@@ -474,7 +444,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Get user profiles and emails
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, display_name")
@@ -482,7 +451,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     const profileMap = new Map(profiles?.map(p => [p.id, p.display_name]) || []);
 
-    // Get emails from auth
     const userEmails: Record<string, string> = {};
     for (const userId of usersWithReminders) {
       const { data: userData } = await supabase.auth.admin.getUserById(userId);
@@ -491,7 +459,6 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send reminders
     let sentCount = 0;
     const results: { tripId: string; reminderType: string; success: boolean; error?: string }[] = [];
 
@@ -513,7 +480,7 @@ const handler = async (req: Request): Promise<Response> => {
         userName: profileMap.get(trip.user_id) || "",
       };
 
-      const success = await sendReminderEmail(reminder, sendgridApiKey);
+      const success = await sendReminderEmail(reminder);
       results.push({ tripId: trip.id, reminderType: trip.reminderType, success });
       
       if (success) {
