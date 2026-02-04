@@ -1,38 +1,43 @@
 import { motion } from 'framer-motion';
 import { Search, DollarSign, MessageSquare, ExternalLink } from 'lucide-react';
 
+import swapActivityImg from '@/assets/features/swap-activity.jpg';
+import budgetTrackerImg from '@/assets/features/budget-tracker.jpg';
+import aiChatImg from '@/assets/features/ai-chat.jpg';
+import bookingLinksImg from '@/assets/features/booking-links.jpg';
+
 const FEATURES = [
   {
     id: 'swap',
     title: 'Find Alternatives in Seconds',
     description: 'Search, filter, see 6 options, swap, done. Your itinerary updates instantly.',
     icon: Search,
-    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
-    imageAlt: 'Activity swap interface showing alternative options',
+    image: swapActivityImg,
+    imageAlt: 'Voyance activity swap interface showing alternative options',
   },
   {
     id: 'budget',
     title: 'Budget Updates Instantly',
     description: 'Swap an activity and watch your trip budget recalculate in real-time.',
     icon: DollarSign,
-    image: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&q=80',
-    imageAlt: 'Budget tracking dashboard with real-time updates',
+    image: budgetTrackerImg,
+    imageAlt: 'Voyance budget tracking dashboard with real-time updates',
   },
   {
     id: 'ai-chat',
     title: 'Chat With AI to Customize',
     description: 'Tell the Trip Assistant what you want in plain English. It modifies your itinerary for you.',
     icon: MessageSquare,
-    image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80',
-    imageAlt: 'AI chat interface for trip customization',
+    image: aiChatImg,
+    imageAlt: 'Voyance AI chat interface for trip customization',
   },
   {
     id: 'book',
     title: 'Reserve & Book Directly',
     description: 'One-click links to Viator, Google Maps, and restaurant sites. Book where you prefer.',
     icon: ExternalLink,
-    image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&q=80',
-    imageAlt: 'Booking interface with direct reservation links',
+    image: bookingLinksImg,
+    imageAlt: 'Voyance booking interface with direct reservation links',
   },
 ];
 
