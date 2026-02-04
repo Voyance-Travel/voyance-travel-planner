@@ -748,16 +748,17 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                   computedTraits={(dnaData.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || 
                     (dnaData.trait_scores as Record<string, number>) || {}}
                   existingOverrides={(dnaData as { overrides?: Record<string, number> }).overrides || {}}
-                  onSave={async () => {
-                    // Reload DNA data after save to reflect changes
-                    const { data } = await supabase
-                      .from('travel_dna_profiles')
-                      .select('*')
-                      .eq('user_id', userId)
-                      .maybeSingle();
-                    if (data) {
-                      setDnaData(prev => prev ? { ...prev, ...data, has_overrides: true } : null);
-                    }
+                  onSave={async (overrides) => {
+                    // Persist the just-saved overrides in local state so the sliders
+                    // don't re-initialize from stale overrides after a refetch.
+                    setDnaData(prev => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        overrides,
+                        has_overrides: Object.keys(overrides || {}).length > 0,
+                      };
+                    });
                   }}
                 />
               </motion.div>
