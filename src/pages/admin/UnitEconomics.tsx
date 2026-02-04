@@ -114,8 +114,8 @@ const FREE_USER_ECONOMICS = {
     tripPreview: 0.025,         // AI-only trip structure (no Google/Amadeus)
   },
   
-  // What we use in calculations (switch when optimization deployed)
-  isOptimized: false, // TODO: Set to true after implementing AI-only preview
+  // What we use in calculations - OPTIMIZED is now the go-forward model
+  isOptimized: true, // AI-only preview is now live (generate-trip-preview endpoint)
   
   // Calculated blended cost
   get blendedCostToUs() {
