@@ -525,12 +525,22 @@ export default function PlannerHotelEnhanced() {
       return;
     }
 
-    // Save trip and navigate to itinerary generation (same as skip/manual flows)
+    // Save trip first
     const tripId = plannerState.tripId || await saveTrip();
-    if (tripId) {
-      navigate(`/trip/${tripId}?generate=true`);
-    } else {
+    if (!tripId) {
       toast.error('Could not save trip. Please try again.');
+      return;
+    }
+
+    // If hotel has a price (Amadeus booking), go to checkout page
+    // Otherwise (manual entry, free), go directly to itinerary
+    const hotelPrice = plannerState.hotel?.pricePerNight || 0;
+    if (hotelPrice > 0 && plannerState.hotel?.id !== 'manual') {
+      // Navigate to booking/checkout page for payment
+      navigate(`/planner/booking?tripId=${tripId}`);
+    } else {
+      // Free/manual hotel - skip to itinerary generation
+      navigate(`/trip/${tripId}?generate=true`);
     }
   };
 
@@ -685,7 +695,9 @@ export default function PlannerHotelEnhanced() {
                   Back
                 </Button>
                 <Button onClick={handleContinue} disabled={!plannerState.hotel?.id} size="lg" className="lg:hidden">
-                  Continue to Trip Summary
+                  {plannerState.hotel?.pricePerNight && plannerState.hotel?.id !== 'manual' 
+                    ? 'Continue to Checkout' 
+                    : 'Build Itinerary'}
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </motion.div>
@@ -718,7 +730,7 @@ export default function PlannerHotelEnhanced() {
                     size="lg"
                     className="w-full h-12"
                   >
-                    {plannerState.isLoading ? 'Saving...' : 'Continue to Trip Summary'}
+                    {plannerState.isLoading ? 'Saving...' : (plannerState.hotel?.pricePerNight && plannerState.hotel?.id !== 'manual' ? 'Continue to Checkout' : 'Build Itinerary')}
                     {!plannerState.isLoading && <ArrowRight className="h-4 w-4 ml-2" />}
                   </Button>
                 </motion.div>

@@ -504,9 +504,9 @@ export default function TripConfirmation() {
                 <div className="px-8 md:px-12 py-6 bg-muted/30 border-t border-border">
                   <div className="flex flex-col sm:flex-row gap-4">
                     <Button size="lg" className="flex-1 h-12 text-base shadow-lg shadow-primary/20" asChild>
-                      <Link to={`/trip/${tripId}`}>
-                        View Full Itinerary
-                        <ArrowRight className="h-4 w-4 ml-2" />
+                      <Link to={`/trip/${tripId}?generate=true`}>
+                        Build My Itinerary
+                        <Sparkles className="h-4 w-4 ml-2" />
                       </Link>
                     </Button>
                     <Button size="lg" variant="outline" className="h-12 text-base" asChild>
