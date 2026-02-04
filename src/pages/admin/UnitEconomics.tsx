@@ -13,6 +13,35 @@ import { useRealCostMetrics } from "@/hooks/useRealCostMetrics";
 // Source: Google Cloud Console, Lovable Cloud, Perplexity API, Amadeus Docs
 // =============================================================================
 
+// =============================================================================
+// COST MODEL: Per-Trip Base + Per-Day Scaling (from verified production data)
+// 
+// Decomposition of $35.85 variable across 61 trips:
+//   Per-trip base: $0.163 (Perplexity + Amadeus + AI setup)
+//   Per-day increment: $0.100 (Google Places + AI content)
+//
+// Validation: 5-day average = $0.163 + (5 × $0.100) = $0.663
+// Observed: $0.587/trip (estimates slightly conservative = correct for planning)
+// =============================================================================
+
+const COST_MODEL = {
+  // Per-trip (once) costs
+  tripBase: {
+    perplexity: 0.018,      // Destination intelligence
+    amadeus: 0.120,         // Hotel search (5 calls × $0.024) when live
+    aiSetup: 0.025,         // DNA calculation, trip structure
+    total: 0.163,
+  },
+  // Per-day costs
+  perDay: {
+    googleRestaurants: 0.045,
+    googleActivities: 0.030,
+    googlePhotos: 0.015,    // Post-cache estimate
+    aiContent: 0.010,       // Day content generation
+    total: 0.100,
+  },
+};
+
 const FALLBACK_DATA = {
   trips: 61,
   period: "Jan 25 – Feb 4, 2026",
@@ -48,48 +77,66 @@ const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_T
 const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
 
 // =============================================================================
-// FREE USER CREDIT ECONOMICS
-// Day 1 is generated FREE (no credits spent) - this is the "try before you buy" hook
-// Free users get 150 credits/month (expires after 2 months)
-// Those credits can unlock 1 additional day OR be used for smaller actions
-// Max bonus credits: ~100 (referral) = 250 total possible in month 1
+// FREE USER ECONOMICS - OPTIMIZED MODEL
+// 
+// CURRENT STATE (high cost):
+//   Free users can generate Day 1 FREE (costs us ~$0.25-$0.40)
+//   This is expensive because it triggers Google Places APIs
+//
+// OPTIMIZED STATE (target):
+//   Free users get AI-only "Trip Preview" (costs us ~$0.02-$0.03)
+//   - Shows day structure, themes, neighborhoods
+//   - Does NOT trigger Google Places (no real venue names)
+//   - Does NOT trigger Amadeus (no hotel search)
+//   Real venue details require credits/purchase
+//
+// TRANSITION METRICS:
+//   Pre-optimization: ~$0.30-$0.50 per free user
+//   Post-optimization: ~$0.10-$0.17 per free user
 // =============================================================================
 const FREE_USER_ECONOMICS = {
+  // Credit grants
   monthlyCredits: 150,          // Base monthly grant
   maxBonusCredits: 100,         // Referral bonus (requires engagement)
   maxFirstMonthCredits: 250,    // 150 base + 100 referral bonus max
   creditExpiry: "2 months",
   
-  // Day 1 is FREE (no credits spent) - costs us ~$0.065 per user
-  day1GenerationCost: 0.065,    // AI + Places API for 1 day
+  // CURRENT STATE costs (pre-optimization)
+  currentState: {
+    fullFunnel: 0.40,           // Homepage preview + quiz + Day 1 gen + photos
+    lightBrowse: 0.15,          // Just explore + quiz, no trip gen
+  },
   
-  // With 150 credits, user can do ONE of:
-  // Option A: Unlock 1 additional day (150 credits) = $0.065 additional cost
-  // Option B: Smaller actions only (swaps, AI, regenerates)
-  //   - 30 swaps (150 credits) = $0.375 cost (but unlikely usage pattern)
-  //   - More realistic: 10 swaps + 3 regenerates + 10 AI = 105 credits, ~$0.25 cost
+  // OPTIMIZED STATE costs (target)
+  optimizedState: {
+    fullFunnel: 0.15,           // Preview (AI-only) + quiz + explore
+    lightBrowse: 0.05,          // Minimal API calls
+    tripPreview: 0.025,         // AI-only trip structure (no Google/Amadeus)
+  },
   
-  // Blended free user cost:
-  // - 100% get Day 1 free = $0.065
-  // - 60% use credits for Day 2 unlock = 0.6 × $0.065 = $0.039
-  // - 40% use credits for smaller actions = 0.4 × $0.08 = $0.032
-  // Total: $0.065 + $0.036 = ~$0.10
-  blendedCostToUs: 0.10,
+  // What we use in calculations (switch when optimization deployed)
+  isOptimized: false, // TODO: Set to true after implementing AI-only preview
   
-  // Breakdown for display
-  day1Cost: 0.065,              // Base cost (Day 1 is always generated)
-  creditsUsageCost: 0.035,      // Blended cost of using their 150 credits
+  // Calculated blended cost
+  get blendedCostToUs() {
+    if (this.isOptimized) {
+      // Post-optimization: most users just preview (cheap)
+      // 70% light browse ($0.05) + 30% full funnel ($0.15)
+      return 0.70 * 0.05 + 0.30 * 0.15;
+    }
+    // Pre-optimization: full Day 1 generation is expensive
+    // 40% light browse ($0.15) + 60% full funnel ($0.40)
+    return 0.40 * 0.15 + 0.60 * 0.40;
+  },
 };
 
-// Free tier thresholds (API quotas)
-const FREE_TIERS = {
-  googleTextSearch: { free: 5000, price: 0.032, callsPerTrip: 18 },
-  googleDetails: { free: 5000, price: 0.020, callsPerTrip: 28 },
-  googleGeocoding: { free: 10000, price: 0.005, callsPerTrip: 5 },
-  googlePhotos: { free: 10000, price: 0.007, callsPerTrip: 15 },
-  lovableAI: { free: 1.00, perTrip: 0.0644 }, // ~15 trips/mo
-  amadeus: { free: 2000, callsPerTrip: 5 }, // 400 trips/mo
-};
+// Helper function: Calculate variable cost for N days
+function calculateTripCost(days: number, includeAmadeus: boolean = false): number {
+  const base = COST_MODEL.tripBase.perplexity + COST_MODEL.tripBase.aiSetup;
+  const amadeus = includeAmadeus ? COST_MODEL.tripBase.amadeus : 0;
+  const perDay = days * COST_MODEL.perDay.total;
+  return base + amadeus + perDay;
+}
 
 // AI Model breakdown (fallback static data)
 const FALLBACK_AI_MODELS = [
@@ -129,7 +176,7 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 };
 
 // Credit pack tiers with USAGE-BASED COST MODELING
-// Each tier has different usage patterns = different costs to serve
+// Uses the decomposed cost model: $0.163 base + $0.10/day
 const CREDIT_TIERS = [
   { 
     key: "topup", 
@@ -138,34 +185,36 @@ const CREDIT_TIERS = [
     credits: 50, 
     color: "#94A3B8", 
     description: "Quick refill for small actions",
-    // Top-Up users CAN'T unlock days (need 150), so they only do swaps/AI messages
+    // Top-Up users CAN'T unlock days (need 150 credits), so they only do swaps/AI messages
     typicalUsage: { daysUnlocked: 0, swaps: 8, regenerates: 0, restaurants: 0, aiMessages: 5 },
-    // Cost breakdown: 8 swaps × $0.0125 + 5 AI × $0.0125 = ~$0.16
-    estimatedCostToUs: 0.16,
+    // Cost: No trip base (no day unlock), just light AI calls
+    estimatedCostToUs: 0.10,   // Reduced: only light actions
+    notes: "Cannot unlock days - 50 credits insufficient",
   },
   { 
     key: "single", 
-    label: "Single", 
+    label: "Single/Starter", 
     price: 12, 
     credits: 200, 
     color: "#38BDF8", 
-    description: "One complete trip",
-    // 1 day = 150, leaving 50 for extras
+    description: "One complete day",
+    // 1 day = 150 credits (new trip), leaving 50 for extras
     typicalUsage: { daysUnlocked: 1, swaps: 6, regenerates: 1, restaurants: 1, aiMessages: 5 },
-    // 1 day × $0.065 + extras = ~$0.22
-    estimatedCostToUs: 0.22,
+    // Cost: $0.163 base + 1 × $0.100/day = $0.263
+    estimatedCostToUs: 0.263,
+    notes: "1 new trip with 1 day",
   },
   { 
     key: "starter", 
-    label: "Starter", 
+    label: "Weekend", 
     price: 29, 
     credits: 500, 
-    color: "#A78BFA", 
     description: "3-day trip",
-    // 3 days = 450, leaving 50 for extras
+    // 3 days = 450 credits, leaving 50 for extras
     typicalUsage: { daysUnlocked: 3, swaps: 6, regenerates: 1, restaurants: 2, aiMessages: 8 },
-    // 3 days × $0.065 + extras = ~$0.38
-    estimatedCostToUs: 0.38,
+    // Cost: $0.163 base + 3 × $0.100/day = $0.463
+    estimatedCostToUs: 0.463,
+    notes: "1 new trip with 3 days",
   },
   { 
     key: "explorer", 
@@ -174,10 +223,11 @@ const CREDIT_TIERS = [
     credits: 1200, 
     color: "#34D399", 
     description: "Multi-day adventures",
-    // 7 days = 1050, leaving 150 for extras
-    typicalUsage: { daysUnlocked: 7, swaps: 12, regenerates: 3, restaurants: 4, aiMessages: 15 },
-    // 7 days × $0.065 + extras = ~$0.72
-    estimatedCostToUs: 0.72,
+    // 8 days across potentially 2 trips (5+3)
+    typicalUsage: { daysUnlocked: 8, swaps: 12, regenerates: 3, restaurants: 4, aiMessages: 15 },
+    // Cost: 2 × $0.163 base + 8 × $0.100/day = $1.126
+    estimatedCostToUs: 1.126,
+    notes: "May generate 2 trips (5+3 days)",
   },
   { 
     key: "adventurer", 
@@ -186,10 +236,11 @@ const CREDIT_TIERS = [
     credits: 2500, 
     color: "#F59E0B", 
     description: "Frequent travelers",
-    // 16 days = 2400, leaving 100 for extras
+    // 16 days across multiple trips (5+5+5+1 pattern)
     typicalUsage: { daysUnlocked: 16, swaps: 16, regenerates: 4, restaurants: 6, aiMessages: 20 },
-    // 16 days × $0.065 + extras = ~$1.35
-    estimatedCostToUs: 1.35,
+    // Cost: 4 × $0.163 base + 16 × $0.100/day = $2.252
+    estimatedCostToUs: 2.252,
+    notes: "May generate 4 trips (5+5+5+1)",
   },
 ];
 
@@ -1225,7 +1276,7 @@ export default function UnitEconomics() {
                     1
                   </td>
                   <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    ${(FREE_USER_ECONOMICS.day1Cost + FREE_USER_ECONOMICS.creditsUsageCost * 1.5).toFixed(2)}
+                    ${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     -100%
@@ -1265,9 +1316,11 @@ export default function UnitEconomics() {
             </div>
             <div style={{ padding: 12, background: "rgba(248, 113, 113, 0.1)", border: "1px solid rgba(248, 113, 113, 0.3)", borderRadius: 8 }}>
               <p style={{ fontSize: 11, color: "#F87171", margin: 0, lineHeight: 1.6 }}>
-                <strong>🆓 Free User Economics:</strong> Day 1 is FREE (costs us <strong>${FREE_USER_ECONOMICS.day1Cost.toFixed(3)}</strong>). 
-                {FREE_USER_ECONOMICS.monthlyCredits} credits/mo can unlock Day 2 OR smaller actions (+${FREE_USER_ECONOMICS.creditsUsageCost.toFixed(3)}). 
-                <strong>Total: ~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}/free user</strong>.
+                <strong>🆓 Free User Economics ({FREE_USER_ECONOMICS.isOptimized ? 'Optimized' : 'Current'}):</strong> {FREE_USER_ECONOMICS.isOptimized 
+                  ? `AI-only preview costs ~$${FREE_USER_ECONOMICS.optimizedState.tripPreview.toFixed(3)}.`
+                  : `Full Day 1 gen costs ~$${FREE_USER_ECONOMICS.currentState.fullFunnel.toFixed(2)}.`} 
+                {FREE_USER_ECONOMICS.monthlyCredits} credits/mo. 
+                <strong>Blended: ~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}/free user</strong>.
               </p>
             </div>
           </div>

@@ -77,13 +77,41 @@ export const STRIPE_PRODUCTS = {
   },
 } as const;
 
-// Free Tier
+// Free Tier - OPTIMIZED MODEL
+// Free users get AI-only previews (cheap) - real venues require credits
 export const FREE_TIER = {
-  signupBonus: 150,              // 150 credits = 1 free day
+  // Credit grants
+  signupBonus: 150,              // 150 credits = 1 free day unlock
   monthlyFree: 150,              // 150 credits/month
   maxBankedFree: 750,            // Can accumulate up to 5 months worth
-  freeExpirationMonths: 6,       // Free credits expire after 6 months
+  freeExpirationMonths: 2,       // Free credits expire after 2 months
   referralBonus: 200,            // 200 credits per referral
+  
+  // Free tier features (no credits required)
+  freeFeatures: [
+    'AI-only trip preview (structure, themes, neighborhoods)',
+    'Travel DNA quiz',
+    'Explore destination cards',
+    'Day 1 structure preview',
+  ],
+  
+  // What requires credits
+  paidFeatures: [
+    'Real venue names, addresses, photos',
+    'Google Maps integration',
+    'Restaurant booking links',
+    'Hotel search & recommendations',
+    'Activity swaps & regeneration',
+    'AI companion chat',
+  ],
+  
+  // Cost model (internal use)
+  internalCosts: {
+    previewCost: 0.025,          // AI-only preview
+    fullDayCost: 0.263,          // $0.163 base + $0.10/day
+    perDayIncrement: 0.100,      // Each additional day
+    tripBaseCost: 0.163,         // Per-trip overhead (Perplexity + AI setup)
+  },
 } as const;
 
 // Top-Up Pack (for insufficient credits prompts)
