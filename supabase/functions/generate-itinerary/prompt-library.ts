@@ -730,9 +730,11 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
   lines.push(`⚠️ HARD CONSTRAINTS (NON-NEGOTIABLE)`);
   lines.push(`${'─'.repeat(50)}`);
   
+  // Dynamic dietary enforcement - import and use buildDietaryEnforcementPrompt
+  // For now, keep the basic reference here and the full enforcement is injected separately
   if (dna.dietaryRestrictions.length > 0) {
-    lines.push(`   🍽️ DIETARY: ${dna.dietaryRestrictions.join(', ')}`);
-    lines.push(`      ALL food recommendations MUST accommodate these restrictions`);
+    lines.push(`   🍽️ DIETARY RESTRICTIONS: ${dna.dietaryRestrictions.join(', ')}`);
+    lines.push(`      ⚠️ SEE CRITICAL DIETARY CONSTRAINTS SECTION BELOW FOR FULL RULES`);
   }
   
   if (dna.mobilityLevel && dna.mobilityLevel !== 'full') {

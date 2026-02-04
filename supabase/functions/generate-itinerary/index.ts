@@ -79,6 +79,17 @@ import {
 } from './prompt-library.ts';
 
 // =============================================================================
+// PHASE 15: DYNAMIC DIETARY ENFORCEMENT ENGINE
+// =============================================================================
+import {
+  buildDietaryEnforcementPrompt,
+  expandDietaryAvoidList,
+  checkDietaryViolations,
+  getMaxDietarySeverity,
+  type DietaryViolation
+} from './dietary-rules.ts';
+
+// =============================================================================
 // PHASE 12: Trip Duration + Reservation Urgency + Children Ages
 // =============================================================================
 import {
@@ -581,21 +592,55 @@ function validateItineraryPersonalization(
         }
       }
       
-      // Check dietary restrictions (critical for dining)
+      // Check dietary restrictions using dynamic enforcement engine
       if (activity.category === 'dining') {
-        for (const restriction of ctx.dietaryRestrictions.map(r => r.toLowerCase())) {
-          // Check if the activity explicitly accommodates the restriction
-          const accommodates = 
-            tagsLower.some(t => t.includes(restriction) || t.includes('vegan') || t.includes('vegetarian')) ||
-            descLower.includes(restriction) ||
-            descLower.includes('dietary') ||
-            descLower.includes('allergy');
+        const dietaryViolations = checkDietaryViolations(
+          activity.title,
+          activity.description || '',
+          activity.tags || [],
+          ctx.dietaryRestrictions
+        );
+        
+        for (const dv of dietaryViolations) {
+          // Map dietary severity to validation severity
+          const severity = dv.severity === 'critical' ? 'critical' : 'major';
           
-          // Only warn, don't fail - dining may not explicitly state "vegetarian friendly"
-          if (!accommodates && restriction.length > 3) {
+          violations.push({
+            type: 'dietary',
+            activityId: activity.id,
+            activityTitle: activity.title,
+            dayNumber: day.dayNumber,
+            details: `${dv.violationType === 'cuisine' ? 'Venue type' : 'Ingredient'} "${dv.violatedTerm}" violates ${dv.ruleName} restriction`,
+            severity
+          });
+        }
+        
+        // Also check non-dining activities that might serve food (tours, experiences)
+      } else if (['tour', 'experience', 'cultural'].includes(activity.category)) {
+        // Lighter check for non-dining but still important
+        const dietaryViolations = checkDietaryViolations(
+          activity.title,
+          activity.description || '',
+          activity.tags || [],
+          ctx.dietaryRestrictions
+        );
+        
+        // Only warn for non-dining activities
+        for (const dv of dietaryViolations) {
+          if (dv.severity === 'critical') {
+            // Critical allergies still matter for tours (e.g., food tours, cooking classes)
+            violations.push({
+              type: 'dietary',
+              activityId: activity.id,
+              activityTitle: activity.title,
+              dayNumber: day.dayNumber,
+              details: `Activity mentions "${dv.violatedTerm}" which may conflict with ${dv.ruleName} (critical)`,
+              severity: 'major'
+            });
+          } else {
             warnings.push({
-              type: 'dietary_unchecked',
-              message: `Dining "${activity.title}" doesn't explicitly mention accommodation for: ${restriction}`,
+              type: 'dietary_concern',
+              message: `"${activity.title}" mentions "${dv.violatedTerm}" - verify compatibility with ${dv.ruleName}`,
               activityId: activity.id
             });
           }
@@ -6638,11 +6683,31 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
         console.log(`[Stage 1.997] ✓ Skip list built for ${context.destination}`);
       }
       
+      // =======================================================================
+      // STAGE 1.998: Dynamic Dietary Enforcement (Phase 15)
+      // Builds cuisine/ingredient avoidance rules based on user dietary restrictions
+      // =======================================================================
+      const dietaryRestrictions = unifiedProfile.dietaryRestrictions.length > 0 
+        ? unifiedProfile.dietaryRestrictions 
+        : (prefs?.dietary_restrictions || []);
+      const dietaryEnforcementPrompt = buildDietaryEnforcementPrompt(dietaryRestrictions);
+      if (dietaryEnforcementPrompt) {
+        const maxSeverity = getMaxDietarySeverity(dietaryRestrictions);
+        console.log(`[Stage 1.998] ✓ Dietary enforcement built for ${dietaryRestrictions.length} restrictions (max severity: ${maxSeverity})`);
+        console.log(`[Stage 1.998]   restrictions: ${dietaryRestrictions.join(', ')}`);
+        
+        // Also expand the avoid list with dietary-based cuisine/ingredient avoids
+        const dietaryAvoids = expandDietaryAvoidList(dietaryRestrictions);
+        if (dietaryAvoids.length > 0) {
+          console.log(`[Stage 1.998]   auto-avoided: ${dietaryAvoids.slice(0, 10).join(', ')}${dietaryAvoids.length > 10 ? ` + ${dietaryAvoids.length - 10} more` : ''}`);
+        }
+      }
+      
       // Combine all context for maximum personalization
-      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
+      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
