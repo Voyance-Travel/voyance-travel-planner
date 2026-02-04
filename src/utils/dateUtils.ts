@@ -1,3 +1,5 @@
+import { format as dateFnsFormat, parseISO } from 'date-fns';
+
 /**
  * Format a date for display
  */
@@ -112,4 +114,39 @@ export const formatDateRange = (start: string | Date, end: string | Date): strin
   }
   
   return `${formatDateShort(startDate)}, ${startDate.getFullYear()} - ${formatDateShort(endDate)}, ${endDate.getFullYear()}`;
+};
+
+/**
+ * Check if a string is a valid ISO date format (YYYY-MM-DD)
+ */
+export const isValidISODateString = (str: unknown): str is string => {
+  if (typeof str !== 'string') return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(str);
+};
+
+/**
+ * Safely format a date string with a fallback value.
+ * Prevents "Invalid time value" crashes from malformed date strings.
+ */
+export const safeFormatDate = (
+  dateString: string | undefined | null,
+  formatStr: string,
+  fallback: string = ''
+): string => {
+  if (!dateString) return fallback;
+  
+  // Early return if it doesn't look like an ISO date
+  if (!isValidISODateString(dateString)) {
+    console.warn(`[safeFormatDate] Invalid date string: "${dateString}"`);
+    return fallback;
+  }
+  
+  try {
+    const date = parseISO(dateString);
+    if (isNaN(date.getTime())) return fallback;
+    return dateFnsFormat(date, formatStr);
+  } catch {
+    console.warn(`[safeFormatDate] Failed to format date: "${dateString}"`);
+    return fallback;
+  }
 };

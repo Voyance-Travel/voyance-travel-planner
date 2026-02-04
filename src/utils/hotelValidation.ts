@@ -93,6 +93,15 @@ export function sortHotelsByDate(hotels: HotelBooking[]): HotelBooking[] {
 }
 
 /**
+ * Check if a string is a valid ISO date format (YYYY-MM-DD)
+ * Used to distinguish actual dates from time strings like "3:00 PM"
+ */
+function isValidISODate(str: unknown): str is string {
+  if (typeof str !== 'string') return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(str);
+}
+
+/**
  * Normalize a single hotel object to standard HotelBooking format
  * Supports both legacy field names (location, checkIn) and new format (address, checkInDate)
  */
@@ -103,15 +112,25 @@ function normalizeHotel(
 ): HotelBooking | null {
   if (!hotel.name) return null;
   
+  // Determine checkInDate: prefer checkInDate, only use checkIn if it's a valid ISO date
+  const checkInDateValue = (hotel.checkInDate as string) || 
+    (isValidISODate(hotel.checkIn) ? hotel.checkIn : null) || 
+    tripStartDate;
+  
+  // Determine checkOutDate: prefer checkOutDate, only use checkOut if it's a valid ISO date
+  const checkOutDateValue = (hotel.checkOutDate as string) || 
+    (isValidISODate(hotel.checkOut) ? hotel.checkOut : null) || 
+    tripEndDate;
+  
   return {
     id: (hotel.id as string) || `migrated-${Date.now()}`,
     name: hotel.name as string,
     // Support both 'address' and 'location' fields
     address: (hotel.address as string) || (hotel.location as string) || undefined,
     neighborhood: hotel.neighborhood as string | undefined,
-    // Support multiple date field formats
-    checkInDate: (hotel.checkInDate as string) || (hotel.checkIn as string) || tripStartDate,
-    checkOutDate: (hotel.checkOutDate as string) || (hotel.checkOut as string) || tripEndDate,
+    // Use validated date values
+    checkInDate: checkInDateValue,
+    checkOutDate: checkOutDateValue,
     checkInTime: hotel.checkInTime as string | undefined,
     checkOutTime: hotel.checkOutTime as string | undefined,
     website: hotel.website as string | undefined,
