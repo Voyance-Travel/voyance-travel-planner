@@ -72,6 +72,7 @@ interface ItineraryEditorProps {
   overview?: TripOverview;
   flightSelection?: FlightSelection | null;
   hotelSelection?: HotelSelection | null;
+  currency?: string;
   onSave?: (days: GeneratedDay[]) => Promise<void>;
   onRegenerateDay?: (dayNumber: number) => Promise<GeneratedDay | null>;
 }
@@ -194,6 +195,7 @@ export function ItineraryEditor({
   overview,
   flightSelection,
   hotelSelection,
+  currency = 'USD',
   onSave,
   onRegenerateDay,
 }: ItineraryEditorProps) {
@@ -366,7 +368,7 @@ export function ItineraryEditor({
       startTime: activity.startTime || '12:00',
       endTime: activity.endTime || '13:00',
       location: activity.location || { name: '', address: '' },
-      cost: activity.cost || { amount: 0, currency: 'USD' },
+      cost: activity.cost || { amount: 0, currency: currency },
       bookingRequired: activity.bookingRequired || false,
       tags: activity.tags || [],
       transportation: activity.transportation || { method: 'walk', duration: '10 min', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' }
@@ -379,7 +381,7 @@ export function ItineraryEditor({
     setHasChanges(true);
     setAddActivityModal(null);
     toast.success('Activity added!');
-  }, []);
+  }, [currency]);
 
   // ==========================================================================
   // RENDER
@@ -625,6 +627,7 @@ export function ItineraryEditor({
         isOpen={!!addActivityModal}
         onClose={() => setAddActivityModal(null)}
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
+        currency={currency}
       />
     </div>
   );
@@ -1113,9 +1116,10 @@ interface AddActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (activity: Partial<GeneratedActivity>) => void;
+  currency?: string;
 }
 
-function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
+function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD' }: AddActivityModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>('activity');
@@ -1132,7 +1136,7 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
       category,
       startTime,
       endTime,
-      cost: { amount: parseFloat(cost) || 0, currency: 'USD' },
+      cost: { amount: parseFloat(cost) || 0, currency },
       location: { name: locationName, address: locationAddress },
     });
     // Reset form

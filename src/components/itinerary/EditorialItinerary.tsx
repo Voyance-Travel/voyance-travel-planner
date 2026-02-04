@@ -1786,7 +1786,7 @@ export function EditorialItinerary({
       startTime: activity.startTime || '12:00',
       endTime: activity.endTime || '13:00',
       location: activity.location || { name: '', address: '' },
-      cost: activity.cost || { amount: 0, currency: 'USD' },
+      cost: activity.cost || { amount: 0, currency: tripCurrency },
       bookingRequired: activity.bookingRequired || false,
       tags: activity.tags || [],
       isLocked: false,
@@ -1799,7 +1799,7 @@ export function EditorialItinerary({
     setHasChanges(true);
     setAddActivityModal(null);
     toast.success('Activity added!');
-  }, []);
+  }, [tripCurrency]);
 
   // Update activity time
   const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string) => {
@@ -2768,6 +2768,7 @@ export function EditorialItinerary({
         isOpen={!!addActivityModal}
         onClose={() => setAddActivityModal(null)}
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
+        currency={tripCurrency}
       />
 
       {/* Time Edit Modal */}
@@ -5238,9 +5239,10 @@ interface AddActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (activity: Partial<EditorialActivity>) => void;
+  currency?: string;
 }
 
-function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
+function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD' }: AddActivityModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>('activity');
@@ -5257,7 +5259,7 @@ function AddActivityModal({ isOpen, onClose, onAdd }: AddActivityModalProps) {
       category,
       startTime,
       endTime,
-      cost: { amount: parseFloat(cost) || 0, currency: 'USD' },
+      cost: { amount: parseFloat(cost) || 0, currency },
       location: { name: locationName, address: locationAddress },
     });
     setTitle('');

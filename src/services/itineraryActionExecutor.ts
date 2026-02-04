@@ -88,7 +88,7 @@ export interface Activity {
   category?: string;
   startTime?: string;
   time?: string;
-  cost?: { amount?: number };
+  cost?: { amount?: number; currency?: string };
   isLocked?: boolean;
   location?: { name?: string; address?: string };
   [key: string]: unknown;
@@ -292,7 +292,7 @@ async function executeSwapAction(
           name: bestAlternative.name,
           description: bestAlternative.description,
           category: bestAlternative.category,
-          cost: { amount: bestAlternative.estimatedCost },
+          cost: { amount: bestAlternative.estimatedCost, currency: 'USD' },
           location: { name: bestAlternative.location },
           // Preserve timing
           startTime: act.startTime,
@@ -587,7 +587,7 @@ async function executeFilterAction(
             name: best.name,
             description: best.description,
             category: best.category,
-            cost: { amount: best.estimatedCost },
+            cost: { amount: best.estimatedCost, currency: 'USD' },
             location: { name: best.location },
             isLocked: false,
           };
