@@ -27,15 +27,16 @@ const FALLBACK_DATA = {
     domain: 4.08,
     email: 0.00, // Zoho free tier
   },
-  revenue: { topup: 5, single: 29, explorer: 35, voyager: 45 } as Record<string, number>,
+  revenue: { topup: 5, single: 12, starter: 29, explorer: 55, adventurer: 89 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
+// Now includes per-tier COSTS to calculate true blended margin
 const REVENUE_MIX_PRESETS = {
-  pessimistic: { topup: 60, single: 25, explorer: 10, voyager: 5, label: "Pessimistic", description: "60% buy $5 top-ups only" },
-  conservative: { topup: 40, single: 35, explorer: 20, voyager: 5, label: "Conservative", description: "40% buy $5 top-ups" },
-  balanced: { topup: 20, single: 40, explorer: 30, voyager: 10, label: "Balanced", description: "Most buy Single/Explorer" },
-  optimistic: { topup: 10, single: 30, explorer: 40, voyager: 20, label: "Optimistic", description: "Heavy Explorer/Voyager" },
+  pessimistic: { topup: 50, single: 25, starter: 15, explorer: 8, adventurer: 2, label: "Pessimistic", description: "50% buy $5 top-ups (low cost, low revenue)" },
+  conservative: { topup: 30, single: 30, starter: 25, explorer: 12, adventurer: 3, label: "Conservative", description: "30% top-ups, spread across tiers" },
+  balanced: { topup: 15, single: 25, starter: 30, explorer: 22, adventurer: 8, label: "Balanced", description: "Most buy Starter/Explorer (higher cost, higher revenue)" },
+  optimistic: { topup: 5, single: 15, starter: 25, explorer: 35, adventurer: 20, label: "Optimistic", description: "Heavy Explorer/Adventurer (highest cost, highest revenue)" },
 };
 
 // Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
@@ -93,13 +94,79 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
   },
 };
 
-// Credit pack tiers for scale comparison
+// Credit pack tiers with USAGE-BASED COST MODELING
+// Each tier has different usage patterns = different costs to serve
 const CREDIT_TIERS = [
-  { key: "topup", label: "Top-Up", price: 5, credits: 50, color: "#94A3B8", description: "Quick refill for small actions" },
-  { key: "single", label: "Single", price: 29, credits: 200, color: "#38BDF8", description: "One complete trip" },
-  { key: "explorer", label: "Explorer", price: 35, credits: 500, color: "#34D399", description: "Multi-day adventures" },
-  { key: "voyager", label: "Voyager", price: 45, credits: 1200, color: "#A78BFA", description: "Frequent travelers" },
+  { 
+    key: "topup", 
+    label: "Top-Up", 
+    price: 5, 
+    credits: 50, 
+    color: "#94A3B8", 
+    description: "Quick refill for small actions",
+    // Top-Up users CAN'T unlock days (need 150), so they only do swaps/AI messages
+    typicalUsage: { daysUnlocked: 0, swaps: 8, regenerates: 0, restaurants: 0, aiMessages: 5 },
+    // Cost breakdown: 8 swaps × $0.0125 + 5 AI × $0.0125 = ~$0.16
+    estimatedCostToUs: 0.16,
+  },
+  { 
+    key: "single", 
+    label: "Single", 
+    price: 12, 
+    credits: 200, 
+    color: "#38BDF8", 
+    description: "One complete trip",
+    // 1 day = 150, leaving 50 for extras
+    typicalUsage: { daysUnlocked: 1, swaps: 6, regenerates: 1, restaurants: 1, aiMessages: 5 },
+    // 1 day × $0.065 + extras = ~$0.22
+    estimatedCostToUs: 0.22,
+  },
+  { 
+    key: "starter", 
+    label: "Starter", 
+    price: 29, 
+    credits: 500, 
+    color: "#A78BFA", 
+    description: "3-day trip",
+    // 3 days = 450, leaving 50 for extras
+    typicalUsage: { daysUnlocked: 3, swaps: 6, regenerates: 1, restaurants: 2, aiMessages: 8 },
+    // 3 days × $0.065 + extras = ~$0.38
+    estimatedCostToUs: 0.38,
+  },
+  { 
+    key: "explorer", 
+    label: "Explorer", 
+    price: 55, 
+    credits: 1200, 
+    color: "#34D399", 
+    description: "Multi-day adventures",
+    // 7 days = 1050, leaving 150 for extras
+    typicalUsage: { daysUnlocked: 7, swaps: 12, regenerates: 3, restaurants: 4, aiMessages: 15 },
+    // 7 days × $0.065 + extras = ~$0.72
+    estimatedCostToUs: 0.72,
+  },
+  { 
+    key: "adventurer", 
+    label: "Adventurer", 
+    price: 89, 
+    credits: 2500, 
+    color: "#F59E0B", 
+    description: "Frequent travelers",
+    // 16 days = 2400, leaving 100 for extras
+    typicalUsage: { daysUnlocked: 16, swaps: 16, regenerates: 4, restaurants: 6, aiMessages: 20 },
+    // 16 days × $0.065 + extras = ~$1.35
+    estimatedCostToUs: 1.35,
+  },
 ];
+
+// Cost per action (midpoint estimates from verified data)
+const ACTION_COSTS = {
+  dayUnlock: 0.065,     // AI generation + Places API for full day
+  swap: 0.0125,         // Light AI call
+  regenerate: 0.05,     // Medium AI call  
+  restaurant: 0.025,    // AI + Places lookup
+  aiMessage: 0.0125,    // Chat interaction
+};
 
 // Column definitions with tooltips for per-trip scaling table (now includes free user economics)
 const SCALE_COLUMNS = [
@@ -139,16 +206,34 @@ export default function UnitEconomics() {
   // Use real data when available, otherwise fallback
   const hasRealData = !!realMetrics && realMetrics.totalTrips > 0;
   
-  // Calculate blended average order value based on revenue mix
+  // Calculate blended average order value AND blended cost based on revenue mix
   const mixConfig = REVENUE_MIX_PRESETS[revenueMix];
-  const blendedAOV = useMemo(() => {
+  
+  const { blendedAOV, blendedCostPerUser } = useMemo(() => {
     const tiers = FALLBACK_DATA.revenue;
-    return (
+    const aov = (
       (mixConfig.topup / 100) * tiers.topup +
       (mixConfig.single / 100) * tiers.single +
+      (mixConfig.starter / 100) * tiers.starter +
       (mixConfig.explorer / 100) * tiers.explorer +
-      (mixConfig.voyager / 100) * tiers.voyager
+      (mixConfig.adventurer / 100) * tiers.adventurer
     );
+    
+    // Calculate blended cost based on tier mix (each tier has different usage = different costs)
+    const tierCosts = CREDIT_TIERS.reduce((acc, tier) => {
+      acc[tier.key] = tier.estimatedCostToUs;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const cost = (
+      (mixConfig.topup / 100) * (tierCosts.topup || 0.16) +
+      (mixConfig.single / 100) * (tierCosts.single || 0.22) +
+      (mixConfig.starter / 100) * (tierCosts.starter || 0.38) +
+      (mixConfig.explorer / 100) * (tierCosts.explorer || 0.72) +
+      (mixConfig.adventurer / 100) * (tierCosts.adventurer || 1.35)
+    );
+    
+    return { blendedAOV: aov, blendedCostPerUser: cost };
   }, [revenueMix, mixConfig]);
   
   const VERIFIED_DATA = useMemo(() => {
@@ -428,9 +513,14 @@ export default function UnitEconomics() {
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
               <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Revenue Mix</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#38BDF8", fontFamily: "'JetBrains Mono', monospace" }}>
-                Avg ${blendedAOV.toFixed(2)}
-              </span>
+              <div style={{ display: "flex", gap: 16 }}>
+                <span style={{ fontSize: 12, color: "#64748B" }}>
+                  AOV: <span style={{ color: "#34D399", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>${blendedAOV.toFixed(2)}</span>
+                </span>
+                <span style={{ fontSize: 12, color: "#64748B" }}>
+                  Cost: <span style={{ color: "#F87171", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>${blendedCostPerUser.toFixed(2)}</span>
+                </span>
+              </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
               {(Object.keys(REVENUE_MIX_PRESETS) as (keyof typeof REVENUE_MIX_PRESETS)[]).map((key) => (
@@ -490,24 +580,36 @@ export default function UnitEconomics() {
               </div>
             </div>
             
-            {/* Tier Labels with $ */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+            {/* Tier Labels with $ - Compact for 5 tiers */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               {CREDIT_TIERS.map((tier) => {
                 const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
                 return (
-                  <div key={tier.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: 2, background: tier.color }} />
-                    <span style={{ fontSize: 10, color: pct > 0 ? "#CBD5E1" : "#475569" }}>
+                  <div key={tier.key} style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: 4,
+                    padding: "2px 6px",
+                    background: pct > 0 ? "rgba(15, 23, 42, 0.5)" : "transparent",
+                    borderRadius: 4,
+                  }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 2, background: tier.color }} />
+                    <span style={{ fontSize: 9, color: pct > 0 ? "#CBD5E1" : "#475569" }}>
                       {tier.label}
                     </span>
                     <span style={{ 
-                      fontSize: 10, 
+                      fontSize: 9, 
                       color: pct > 0 ? tier.color : "#475569", 
                       fontFamily: "'JetBrains Mono', monospace",
                       fontWeight: pct > 20 ? 600 : 400,
                     }}>
                       ${tier.price}
                     </span>
+                    {pct > 0 && (
+                      <span style={{ fontSize: 8, color: "#64748B" }}>
+                        ({pct}%)
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -768,14 +870,27 @@ export default function UnitEconomics() {
                 const fixedPer = 29.08 / vol;
                 const loaded = variable + fixedPer;
                 
-                // Free user economics
+                // Free user economics - free users generate a trip but don't pay
+                // They cost the FULL variable rate (full trip generation)
                 const paidUsers = Math.round(vol * (conversionRate / 100));
                 const freeUsers = vol - paidUsers;
-                const freeCost = freeUsers * variable; // Free users only cost variable (no fixed allocation to them)
+                const freeUserCost = 0.42; // Full trip generation cost for free users
+                const freeCost = freeUsers * freeUserCost;
+                
+                // Paid users cost LESS because tier usage varies:
+                // - Top-Up users ($5) can only do swaps/AI (cost ~$0.16)
+                // - Single users ($12) unlock 1 day + extras (cost ~$0.22)
+                // - Explorer users ($55) unlock 7 days (cost ~$0.72)
+                // Use blended cost based on revenue mix
+                const paidUserCost = blendedCostPerUser; // From tier mix calculation
+                const paidCost = paidUsers * paidUserCost;
+                
+                // Total variable cost = free users at full rate + paid users at blended rate
+                const totalVariableCost = freeCost + paidCost;
                 
                 // Revenue from paying users
                 const revenue = paidUsers * blendedAOV;
-                const totalCost = (vol * variable) + 29.08; // All variable + fixed
+                const totalCost = totalVariableCost + 29.08; // Variable + fixed
                 const netProfit = revenue - totalCost;
                 const realMargin = revenue > 0 ? (netProfit / revenue) * 100 : -100;
 
@@ -884,16 +999,16 @@ export default function UnitEconomics() {
           
           <div style={{ marginTop: 16, padding: 12, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8 }}>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              <strong style={{ color: "#F59E0B" }}>⚠️ Reality Check:</strong> At <strong style={{ color: "#38BDF8" }}>{conversionRate}% conversion</strong>, 
-              {100 - conversionRate}% of users are free and cost ~$0.42 each in API calls alone. 
-              The <strong style={{ color: "#F87171" }}>"Free $ Cost"</strong> column shows how much free users drain monthly.
-              <strong style={{ color: "#34D399" }}> Real Margin</strong> = what you actually keep after serving everyone.
-              Adjust conversion rate and revenue mix sliders above to model different scenarios.
+              <strong style={{ color: "#F59E0B" }}>⚠️ Tier-Aware Costing:</strong> Costs now vary by tier! 
+              <strong style={{ color: "#94A3B8" }}> Free users</strong> cost ~$0.42 (full trip generation). 
+              <strong style={{ color: "#38BDF8" }}> Top-Up users</strong> cost only ~$0.16 (no day unlocks). 
+              <strong style={{ color: "#34D399" }}> Explorer users</strong> cost ~$0.72 (7 days). 
+              Blended paid user cost at <strong style={{ color: "#A78BFA" }}> {REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(2)}</strong>.
             </p>
           </div>
         </div>
 
-        {/* Credit ↔ Cost Economics */}
+        {/* Credit ↔ Cost Economics - ENHANCED with Tier Breakdown */}
         <div style={{
           background: "rgba(30, 41, 59, 0.5)",
           borderRadius: 12,
@@ -903,7 +1018,7 @@ export default function UnitEconomics() {
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", margin: 0 }}>
-              Credit ↔ Cost Economics
+              Credit Pack → True Cost Conversion
             </h3>
             <span style={{ fontSize: 10, color: "#64748B", background: "rgba(15, 23, 42, 0.5)", padding: "4px 8px", borderRadius: 4 }}>
               What users pay vs. what it costs us
@@ -961,54 +1076,121 @@ export default function UnitEconomics() {
             *User payment based on Explorer tier ($55 ÷ 1200 credits = $0.046/credit). Top-Up users pay more ($0.10/credit).
           </p>
 
-          {/* Pack Analysis */}
-          <div style={{ marginBottom: 16 }}>
-            <h4 style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8", marginBottom: 12 }}>Credit Pack → Trip Capacity</h4>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-              {[
-                { name: "Top-Up", price: 5, credits: 50, color: "#94A3B8" },
-                { name: "Single", price: 12, credits: 200, color: "#38BDF8" },
-                { name: "Starter", price: 29, credits: 500, color: "#A78BFA" },
-                { name: "Explorer", price: 55, credits: 1200, color: "#34D399" },
-                { name: "Adventurer", price: 89, credits: 2500, color: "#F59E0B" },
-              ].map((pack) => {
-                const daysCanUnlock = Math.floor(pack.credits / 150);
-                const leftover = pack.credits - (daysCanUnlock * 150);
-                const swapsWithLeftover = Math.floor(leftover / 5);
-                
-                return (
-                  <div key={pack.name} style={{ 
-                    padding: 12, 
-                    background: "rgba(15, 23, 42, 0.5)", 
-                    borderRadius: 8,
-                    borderLeft: `3px solid ${pack.color}`,
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0" }}>{pack.name}</span>
-                      <span style={{ fontSize: 12, color: pack.color, fontWeight: 600 }}>${pack.price}</span>
+          {/* TIER-BASED COST BREAKDOWN TABLE */}
+          <div style={{ marginBottom: 24 }}>
+            <h4 style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8", marginBottom: 12 }}>
+              Tier → Usage Pattern → True Cost
+            </h4>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ background: "rgba(15, 23, 42, 0.5)" }}>
+                  <th style={{ textAlign: "left", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Tier</th>
+                  <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Price</th>
+                  <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Credits</th>
+                  <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Days</th>
+                  <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Swaps</th>
+                  <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Regens</th>
+                  <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Our Cost</th>
+                  <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CREDIT_TIERS.map((tier, i) => {
+                  const margin = ((tier.price - tier.estimatedCostToUs) / tier.price) * 100;
+                  const marginColor = margin > 97 ? "#34D399" : margin > 95 ? "#FBBF24" : "#F87171";
+                  
+                  return (
+                    <tr key={tier.key} style={{ background: i % 2 === 0 ? "rgba(15, 23, 42, 0.2)" : "transparent" }}>
+                      <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: 2, background: tier.color }} />
+                          <span style={{ color: "#E2E8F0", fontWeight: 500 }}>{tier.label}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: "8px 10px", color: tier.color, textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        ${tier.price}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {tier.credits}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: tier.typicalUsage.daysUnlocked === 0 ? "#F87171" : "#34D399", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {tier.typicalUsage.daysUnlocked === 0 ? "—" : tier.typicalUsage.daysUnlocked}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#94A3B8", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {tier.typicalUsage.swaps}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#94A3B8", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {tier.typicalUsage.regenerates}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        ${tier.estimatedCostToUs.toFixed(2)}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: marginColor, textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {margin.toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+                {/* Free user row */}
+                <tr style={{ background: "rgba(248, 113, 113, 0.08)" }}>
+                  <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 2, background: "#EF4444" }} />
+                      <span style={{ color: "#F87171", fontWeight: 500 }}>Free User</span>
                     </div>
-                    <div style={{ fontSize: 11, color: "#94A3B8" }}>
-                      {pack.credits} credits
-                    </div>
-                    <div style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>
-                      {daysCanUnlock === 0 ? (
-                        <span style={{ color: "#F87171" }}>❌ Can't unlock any days</span>
-                      ) : (
-                        <span style={{ color: "#34D399" }}>✓ {daysCanUnlock} day{daysCanUnlock > 1 ? "s" : ""} + {swapsWithLeftover} swaps</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    $0
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    150
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    1
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    0
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    0
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    $0.42
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    -100%
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Blended Cost Summary */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div style={{ padding: 16, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8, borderLeft: "3px solid #A78BFA" }}>
+              <p style={{ fontSize: 10, color: "#64748B", margin: "0 0 4px 0" }}>Blended Paid User Cost</p>
+              <p style={{ fontSize: 24, fontWeight: 700, color: "#A78BFA", margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>
+                ${blendedCostPerUser.toFixed(2)}
+              </p>
+              <p style={{ fontSize: 10, color: "#64748B", margin: "4px 0 0 0" }}>Based on {REVENUE_MIX_PRESETS[revenueMix].label} mix</p>
+            </div>
+            <div style={{ padding: 16, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8, borderLeft: "3px solid #34D399" }}>
+              <p style={{ fontSize: 10, color: "#64748B", margin: "0 0 4px 0" }}>Blended AOV</p>
+              <p style={{ fontSize: 24, fontWeight: 700, color: "#34D399", margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>
+                ${blendedAOV.toFixed(2)}
+              </p>
+              <p style={{ fontSize: 10, color: "#64748B", margin: "4px 0 0 0" }}>
+                Gross margin: {(((blendedAOV - blendedCostPerUser) / blendedAOV) * 100).toFixed(1)}%
+              </p>
             </div>
           </div>
 
           {/* Key Insight */}
           <div style={{ padding: 12, background: "rgba(248, 113, 113, 0.1)", border: "1px solid rgba(248, 113, 113, 0.3)", borderRadius: 8 }}>
             <p style={{ fontSize: 11, color: "#F87171", margin: 0, lineHeight: 1.6 }}>
-              <strong>🔒 $5 Top-Up Protection:</strong> At 50 credits vs 150 credits/day, the $5 pack <strong>cannot unlock any itinerary days</strong>. 
-              Users must purchase at least the $12 Single pack (200 credits) to unlock even 1 day. 
-              This prevents micro-paying for full trip generation.
+              <strong>🔒 $5 Top-Up = Lowest Cost:</strong> Top-Up users can't unlock days, so they only consume swaps/AI messages = <strong>$0.16 cost vs $5 revenue (97% margin)</strong>. 
+              But Adventurer users unlock 16 days = <strong>$1.35 cost vs $89 revenue (98% margin)</strong>. 
+              Revenue mix affects both AOV AND cost structure.
             </p>
           </div>
         </div>
