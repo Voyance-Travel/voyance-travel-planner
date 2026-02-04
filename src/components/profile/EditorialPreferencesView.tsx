@@ -5,7 +5,7 @@
  * the many preference questions into manageable sections.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -75,6 +75,26 @@ const PREFERENCE_TABS = [
 ] as const;
 
 type PreferenceTabId = typeof PREFERENCE_TABS[number]['id'];
+
+// DNA-affecting fields that should trigger automatic recalculation
+const DNA_AFFECTING_FIELDS = new Set([
+  'travel_pace',
+  'interests',
+  'budget_tier',
+  'accommodation_style',
+  'planning_preference',
+  'activity_level',
+  'travel_vibes',
+  'traveler_type',
+  'travel_companions',
+  'hotel_style',
+  'eco_friendly',
+  'dining_style',
+  'climate_preferences',
+  'primary_goal',
+  'trip_structure_preference',
+  'preferred_regions',
+]);
 
 interface UserPreferences {
   // Travel Style
@@ -152,6 +172,43 @@ export default function EditorialPreferencesView() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [activeTab, setActiveTab] = useState<PreferenceTabId>('travel-style');
+  
+  // Debounce ref for DNA recalculation
+  const dnaRecalcTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Debounced DNA recalculation
+  const scheduleDNARecalc = useCallback(() => {
+    if (dnaRecalcTimeoutRef.current) {
+      clearTimeout(dnaRecalcTimeoutRef.current);
+    }
+    
+    dnaRecalcTimeoutRef.current = setTimeout(async () => {
+      if (!user?.id) return;
+      
+      setIsRecalculating(true);
+      try {
+        const result = await recalculateDNAFromPreferences(user.id);
+        if (result.success && result.dna?.primary_archetype_display) {
+          toast.success('Travel DNA updated!', {
+            description: `You're now: ${result.dna.primary_archetype_display}`,
+          });
+        }
+      } catch (err) {
+        console.error('Background DNA recalculation failed:', err);
+      } finally {
+        setIsRecalculating(false);
+      }
+    }, 1500); // Wait 1.5s after last change
+  }, [user?.id]);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (dnaRecalcTimeoutRef.current) {
+        clearTimeout(dnaRecalcTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load preferences from Supabase
   useEffect(() => {
@@ -192,7 +249,16 @@ export default function EditorialPreferencesView() {
       if (error) throw error;
       
       setPreferences(prev => prev ? { ...prev, [field]: value } : null);
-      toast.success('Preference saved');
+      
+      // Check if this field affects DNA - trigger debounced recalculation
+      if (DNA_AFFECTING_FIELDS.has(field)) {
+        toast.success('Preference saved', {
+          description: 'Updating your Travel DNA...',
+        });
+        scheduleDNARecalc();
+      } else {
+        toast.success('Preference saved');
+      }
     } catch (error) {
       console.error('Failed to update preference:', error);
       toast.error('Failed to save');
