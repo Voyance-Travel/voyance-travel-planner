@@ -58,7 +58,7 @@ export const copy = {
     invalidEmail: "That email doesn't look quite right.",
     required: "We need this one.",
     tooShort: "A bit more detail would help.",
-    tooLong: "That's a lot—can you trim it down?",
+    tooLong: "That's a lot. Can you trim it down?",
     invalidFormat: "That doesn't look quite right.",
   },
 

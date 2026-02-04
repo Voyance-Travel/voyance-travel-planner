@@ -105,7 +105,7 @@ export function UpgradePrompt({
         <DialogContent className="max-w-sm">
           <DialogHeader className="space-y-1">
             <DialogTitle className="text-center text-lg font-serif">
-              {actionLabel} — {actionCost} credits
+              {actionLabel}: {actionCost} credits
             </DialogTitle>
             <DialogDescription className="text-center text-sm">
               Your balance: {formatCredits(currentBalance)} credits
@@ -131,7 +131,7 @@ export function UpgradePrompt({
                   ) : (
                     <>
                       <Plus className="mr-2 h-4 w-4" />
-                      +50 credits — $5
+                      +50 credits · $5
                     </>
                   )}
                 </Button>
@@ -148,7 +148,7 @@ export function UpgradePrompt({
                     <span className="text-sm font-semibold">${recommended.price}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">
-                    {formatCredits(recommended.credits)} credits — {recommended.description}
+                    {formatCredits(recommended.credits)} credits · {recommended.description}
                   </p>
                   <Button 
                     size="sm" 
@@ -198,7 +198,7 @@ export function UpgradePrompt({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Ticket className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Single — 200 credits</span>
+                      <span className="text-sm">Single · 200 credits</span>
                     </div>
                     <Button 
                       size="sm" 
