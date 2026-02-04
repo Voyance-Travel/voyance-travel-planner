@@ -1,207 +1,81 @@
 
-# Add Budget, Payment & Need to Know to Itinerary Teaser
 
-## Overview
+# Fix: Hotel Selection Navigation to Itinerary Generation Page
 
-Enhance the homepage itinerary preview (what users see after entering a destination) to include practical travel information upfront: daily budget estimates, payment/currency tips, and essential "need to know" details like visa requirements and safety level.
+## Problem
 
-This transforms the teaser from a pure itinerary preview into a more complete "trip at a glance" that demonstrates Voyance's depth of knowledge.
+After selecting a hotel from the search results, users are being redirected to the deprecated `/planner/summary` page, which then sends them to the old `/planner` page showing "Tell us about your trip." This is the wrong flow - users should go directly to the itinerary generation page.
 
-## Current State vs. Proposed
+## Root Cause
 
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          CURRENT TEASER                                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│  Your Tokyo Preview                                                     │
-│  Built as a "Slow Traveler"                                             │
-│                                                                         │
-│  [Day 1] Cultural Immersion...                                          │
-│  [Day 2] Local Discovery...                                             │
-│  [Day 3] Hidden Gems...                                                 │
-│                                                                         │
-│  + 4 more days                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
+The `handleContinue` function in `PlannerHotelEnhanced.tsx` (line 485-509) still navigates to the old booking summary route instead of the itinerary generator.
 
-                              ▼
+There are 3 hotel selection paths in `PlannerHotelEnhanced.tsx`:
 
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          ENHANCED TEASER                                │
-├─────────────────────────────────────────────────────────────────────────┤
-│  Your Tokyo Preview                                                     │
-│  Built as a "Slow Traveler"                                             │
-│                                                                         │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │ BUDGET      │ PAYMENT              │ NEED TO KNOW                 │  │
-│  │ $85–$180    │ Yen (¥)              │ Visa-free 90 days            │  │
-│  │ per day     │ Cards + cash both    │ Low-risk destination         │  │
-│  └───────────────────────────────────────────────────────────────────┘  │
-│                                                                         │
-│  [Day 1] Cultural Immersion...                                          │
-│  [Day 2] Local Discovery...                                             │
-│  [Day 3] Hidden Gems...                                                 │
-│                                                                         │
-│  + 4 more days                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+| Path | Function | Current Destination | Status |
+|------|----------|---------------------|--------|
+| Select hotel from results | `handleContinue` | `/planner/summary` | BROKEN |
+| "I have my own" manual entry | `handleManualHotelSubmit` | `/trip/{id}?generate=true` | Fixed |
+| Skip hotel | `handleSkipHotel` | `/trip/{id}?generate=true` | Fixed |
 
-## Implementation Plan
+## Solution
 
-### 1. Backend: Enhance Quick Preview Edge Function
+Update `handleContinue` to navigate directly to the itinerary generation page (`/trip/${tripId}?generate=true`) instead of `/planner/summary`, matching the behavior of the other two paths.
 
-Update `generate-quick-preview` to fetch and return practical travel data alongside the itinerary.
+## Technical Changes
 
-**Data sources:**
-- **Budget**: Query `destination_cost_index` table for cost multipliers and base prices
-- **Payment/Need to Know**: Call the existing `lookup-travel-advisory` function inline (or fetch from Perplexity directly)
+### File: `src/pages/planner/PlannerHotelEnhanced.tsx`
 
-**New response fields:**
+**Before (lines 485-509):**
 ```typescript
-interface QuickPreviewResponse {
-  // Existing fields
-  destination: string;
-  days: QuickPreviewDay[];
-  totalDays: number;
-  archetypeUsed: string;
-  archetypeTagline: string;
-  
-  // New fields
-  budgetEstimate?: {
-    dailyLow: number;     // e.g., 85 (in USD)
-    dailyHigh: number;    // e.g., 180
-    currency: string;     // "USD"
-    costLevel: 'budget' | 'moderate' | 'expensive' | 'luxury';
-  };
-  paymentInfo?: {
-    localCurrency: string;      // "Yen (¥)"
-    currencyCode: string;       // "JPY"
-    paymentTips: string;        // "Cards + cash both common"
-  };
-  needToKnow?: {
-    visaSummary: string;        // "Visa-free 90 days"
-    safetyLevel: string;        // "low-risk"
-    keyRequirement?: string;    // "Passport valid 6+ months" (optional)
-  };
-}
+const handleContinue = async () => {
+  if (!plannerState.hotel?.id) {
+    toast.error('Please select a hotel and room first');
+    return;
+  }
+
+  let savedTripId: string | null = null;
+  try {
+    savedTripId = await saveTrip();
+  } catch (error) {
+    console.error('[PlannerHotel] Failed to save trip:', error);
+  }
+
+  const params = getNavigationParams();
+  if (savedTripId) {
+    params.set('tripId', savedTripId);
+  }
+  navigate(`/planner/summary?${params.toString()}`);  // ❌ OLD BROKEN ROUTE
+};
 ```
 
-**Implementation approach:**
-1. After AI generates itinerary, query `destination_cost_index` for budget data
-2. Call Perplexity for travel advisory (cached for 12 hours)
-3. Combine and return with preview response
-
-### 2. Frontend: Update Type Definitions
-
-Extend the `PreviewData` interface in `DestinationEntry.tsx`:
-
+**After:**
 ```typescript
-interface PreviewData {
-  destination: string;
-  days: Day[];
-  totalDays: number;
-  archetypeUsed: string;
-  archetypeTagline: string;
-  // New
-  budgetEstimate?: {
-    dailyLow: number;
-    dailyHigh: number;
-    currency: string;
-    costLevel: string;
-  };
-  paymentInfo?: {
-    localCurrency: string;
-    currencyCode: string;
-    paymentTips: string;
-  };
-  needToKnow?: {
-    visaSummary: string;
-    safetyLevel: string;
-    keyRequirement?: string;
-  };
-}
+const handleContinue = async () => {
+  if (!plannerState.hotel?.id) {
+    toast.error('Please select a hotel and room first');
+    return;
+  }
+
+  // Save trip and navigate to itinerary generation (same as skip/manual flows)
+  const tripId = plannerState.tripId || await saveTrip();
+  if (tripId) {
+    navigate(`/trip/${tripId}?generate=true`);  // ✅ CORRECT ROUTE
+  } else {
+    toast.error('Could not save trip. Please try again.');
+  }
+};
 ```
 
-### 3. Frontend: Enhance ItineraryTeaser Component
+## Why This Fix Works
 
-Add a new "Trip Snapshot" bar between the header and day cards.
+1. **Consistency**: All three hotel paths now navigate to the same destination (`/trip/{id}?generate=true`)
+2. **Matches Memory Context**: Aligns with the "unified-start-flow-v3" pattern where the planner flow leads directly to itinerary generation
+3. **Follows Stack Overflow Pattern**: Ensures the trip is saved and verified before redirecting
 
-**New UI Section:**
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  [💰 Budget]        [💳 Payment]         [📋 Need to Know]             │
-│   $85–$180/day       Yen (¥)             Visa-free 90 days              │
-│   moderate cost      Cards + cash        Low-risk                       │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+## Files to Modify
 
-**Component structure:**
-- Three equal columns on desktop, stacked on mobile
-- Subtle glass-morphism styling to match existing teaser aesthetic
-- Icons for visual hierarchy: DollarSign, CreditCard, Shield
-- Fallback gracefully if data not available (don't show section)
+| File | Change |
+|------|--------|
+| `src/pages/planner/PlannerHotelEnhanced.tsx` | Update `handleContinue` to navigate to `/trip/${tripId}?generate=true` |
 
-### 4. Fallback Strategy
-
-For destinations not in `destination_cost_index`:
-- Use `_default` row values with cost_multiplier of 1.0
-- Label as "Moderate" cost level
-
-For travel advisory failures:
-- Skip the needToKnow section entirely
-- Don't block the preview from showing
-
-## Files to Create/Modify
-
-| File | Action | Changes |
-|------|--------|---------|
-| `supabase/functions/generate-quick-preview/index.ts` | Modify | Add budget lookup from `destination_cost_index`, add travel advisory lookup, extend response |
-| `src/components/home/DestinationEntry.tsx` | Modify | Extend `PreviewData` interface, pass new fields to teaser |
-| `src/components/home/ItineraryTeaser.tsx` | Modify | Add `TripSnapshotBar` section with budget, payment, need-to-know display |
-
-## UI Design Details
-
-**Trip Snapshot Bar Styling:**
-- Background: `bg-black/30 backdrop-blur-sm` (matches existing cards)
-- Border: `border border-white/20 rounded-xl`
-- Grid: `grid grid-cols-1 sm:grid-cols-3 gap-3 p-4`
-- Icons: Small (w-4 h-4), muted color, left of label
-- Labels: `text-xs text-white/60 uppercase tracking-wide`
-- Values: `text-sm text-white font-medium`
-- Subtitles: `text-xs text-white/50`
-
-**Budget Cost Level Mapping:**
-| Cost Multiplier | Label | Daily Range (base) |
-|-----------------|-------|--------------------|
-| < 0.6 | Budget | $40–$80 |
-| 0.6–0.9 | Moderate | $60–$120 |
-| 0.9–1.3 | Expensive | $100–$200 |
-| > 1.3 | Luxury | $150–$300+ |
-
-**Safety Level Display:**
-| Level | Display | Color |
-|-------|---------|-------|
-| low-risk | Low-risk | text-green-400 |
-| moderate | Moderate | text-yellow-400 |
-| elevated | Elevated | text-orange-400 |
-| high-risk | High-risk | text-red-400 |
-
-## Example Output (Tokyo)
-
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│  [💰 Budget]           [💳 Payment]         [📋 Need to Know]          │
-│   $95–$200 / day        Yen (¥)              Visa-free 90 days          │
-│   Expensive             Cards + cash ok      Low-risk                   │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## Performance Considerations
-
-- **Parallel fetching**: Budget lookup and travel advisory fetch happen in parallel with AI generation
-- **Caching**: Travel advisory responses are cached 12 hours (already implemented in enrichmentService)
-- **Graceful degradation**: If either lookup fails, the teaser still works — just without that section
-- **No blocking**: Preview generation completes even if enrichment fails
-
-## Summary
-
-This enhancement surfaces practical travel intelligence at the earliest touchpoint (homepage destination entry), demonstrating Voyance's value before any commitment. The information reinforces that we understand real travel concerns — not just activities, but costs, logistics, and requirements.
