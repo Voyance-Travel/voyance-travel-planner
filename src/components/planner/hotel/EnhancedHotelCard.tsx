@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DNAMatchBadgeCompact } from '@/components/hotels/DNAMatchBadge';
 
 interface RoomOption {
   id: string;
@@ -67,6 +68,9 @@ export interface EnhancedHotelOption {
   };
   isRecommended?: boolean;
   rationale?: string[];
+  // DNA match properties
+  dnaMatchScore?: number;
+  matchReasons?: string[];
 }
 
 interface EnhancedHotelCardProps {
@@ -79,6 +83,8 @@ interface EnhancedHotelCardProps {
   // Budget alert props (optional - only show if both are provided)
   budgetPerNight?: number;
   showBudgetWarnings?: boolean;
+  // DNA personalization
+  isPersonalized?: boolean;
 }
 
 const amenityIcons: Record<string, typeof Wifi> = {
@@ -118,6 +124,7 @@ export default function EnhancedHotelCard({
   nights,
   budgetPerNight,
   showBudgetWarnings = true,
+  isPersonalized = false,
 }: EnhancedHotelCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentHeroImageIndex, setCurrentHeroImageIndex] = useState(0);
@@ -193,14 +200,22 @@ export default function EnhancedHotelCard({
           isSelected ? 'border-primary shadow-lg ring-2 ring-primary/20' : 'border-border hover:border-primary/40 hover:shadow-md'
         )}
       >
-        {hotel.isRecommended && (
-          <div className="absolute top-4 left-4 z-20">
+        {/* DNA Match Badge or Top Pick Badge */}
+        <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2">
+          {hotel.dnaMatchScore !== undefined && isPersonalized && (
+            <DNAMatchBadgeCompact
+              matchScore={hotel.dnaMatchScore}
+              reasons={hotel.matchReasons || []}
+              isPersonalized={isPersonalized}
+            />
+          )}
+          {hotel.isRecommended && !hotel.dnaMatchScore && (
             <Badge className="bg-primary text-primary-foreground gap-1 shadow-lg">
               <Star className="h-3 w-3 fill-current" />
               Top Pick for You
             </Badge>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="flex flex-col lg:flex-row">
           {/* Hero Image */}

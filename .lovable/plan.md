@@ -1,6 +1,6 @@
+# ✅ IMPLEMENTED: Fix Hotel-to-DNA Mapper
 
-
-# Fix Hotel-to-DNA Mapper: Correct Signal Mapping for 8 Traits
+**Status: Complete**
 
 ## Summary
 The current hotel ranking maps signals to the wrong Travel DNA dimensions (socialScore uses review ratings, priceScore normalizes against result set, amenity stacking has no caps). This plan corrects the three critical mapping errors and expands coverage to all 8 DNA traits.

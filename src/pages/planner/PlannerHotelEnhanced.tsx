@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, ArrowRight, Sparkles } from 'lucide-react';
+import { Building2, ArrowRight, Sparkles, Dna } from 'lucide-react';
 import { toast } from 'sonner';
 
 import MainLayout from '@/components/layout/MainLayout';
@@ -23,6 +23,7 @@ import {
 } from '@/services/hotelAPI';
 
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
+import { useTravelDNAHotelRanking, type RankedHotel } from '@/hooks/useTravelDNAHotelRanking';
 
 // Enhanced components
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
@@ -69,7 +70,11 @@ function calculateNights(checkIn: string, checkOut: string): number {
   return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
-function toEnhancedHotel(hotel: HotelOption, nights: number): EnhancedHotelOption {
+function toEnhancedHotel(
+  hotel: HotelOption,
+  nights: number,
+  rankedHotel?: RankedHotel
+): EnhancedHotelOption {
   return {
     id: hotel.id,
     name: hotel.name,
@@ -124,8 +129,10 @@ function toEnhancedHotel(hotel: HotelOption, nights: number): EnhancedHotelOptio
       checkOut: '11:00 AM',
       cancellation: 'Free cancellation up to 24 hours before check-in',
     },
-    isRecommended: hotel.isRecommended,
-    rationale: hotel.rationale,
+    isRecommended: rankedHotel?.isRecommended ?? hotel.isRecommended,
+    rationale: rankedHotel?.matchReasons ?? hotel.rationale,
+    dnaMatchScore: rankedHotel?.dnaMatchScore,
+    matchReasons: rankedHotel?.matchReasons,
   };
 }
 
@@ -293,6 +300,23 @@ export default function PlannerHotelEnhanced() {
 
   const { data: hotels, isLoading, error } = useHotelSearch(hotelParams);
 
+  // Get DNA-ranked hotels
+  const {
+    rankedHotels: dnaRankedHotels,
+    isPersonalized,
+    isLoading: isDNALoading,
+    userBudgetTier,
+  } = useTravelDNAHotelRanking(hotels || []);
+
+  // Create a map for quick DNA lookup
+  const dnaRankingMap = useMemo(() => {
+    const map = new Map<string, RankedHotel>();
+    for (const hotel of dnaRankedHotels) {
+      map.set(hotel.id, hotel);
+    }
+    return map;
+  }, [dnaRankedHotels]);
+
   // Calculate actual price range from hotels to set dynamic filter bounds
   const priceStats = useMemo(() => {
     if (!hotels?.length) return { min: 0, max: 10000 };
@@ -337,6 +361,13 @@ export default function PlannerHotelEnhanced() {
     });
   }, [hotels, priceStats.min, priceStats.max]);
 
+  // Auto-select DNA sort when user has DNA and it's first load
+  useEffect(() => {
+    if (isPersonalized && !hasAppliedPreferences.current) {
+      setFilters((prev) => ({ ...prev, sortBy: 'dna' }));
+    }
+  }, [isPersonalized]);
+
   useEffect(() => {
     if (!isLoading) setShowInterlude(false);
   }, [isLoading]);
@@ -372,6 +403,12 @@ export default function PlannerHotelEnhanced() {
           return a.pricePerNight - b.pricePerNight;
         case 'rating':
           return b.rating - a.rating;
+        case 'dna': {
+          // Sort by DNA match score
+          const aScore = dnaRankingMap.get(a.id)?.dnaMatchScore ?? 0;
+          const bScore = dnaRankingMap.get(b.id)?.dnaMatchScore ?? 0;
+          return bScore - aScore;
+        }
         case 'recommended':
         default:
           if (a.isRecommended && !b.isRecommended) return -1;
@@ -381,11 +418,11 @@ export default function PlannerHotelEnhanced() {
     });
 
     return result;
-  }, [hotels, filters]);
+  }, [hotels, filters, dnaRankingMap]);
 
   const enhancedHotels = useMemo(
-    () => filteredHotels.map((h) => toEnhancedHotel(h, nights)),
-    [filteredHotels, nights]
+    () => filteredHotels.map((h) => toEnhancedHotel(h, nights, dnaRankingMap.get(h.id))),
+    [filteredHotels, nights, dnaRankingMap]
   );
 
   const handleSelectHotel = async (hotelId: string, roomId: string) => {
@@ -563,7 +600,13 @@ export default function PlannerHotelEnhanced() {
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
                 <div className="flex flex-wrap items-center gap-3 mb-2">
                   <h1 className="font-serif text-2xl sm:text-3xl font-bold text-foreground">Select Your Hotel</h1>
-                  {hasPersonalizedPreferences && (
+                  {isPersonalized && (
+                    <Badge variant="secondary" className="gap-1 bg-primary/10 text-primary border-primary/20">
+                      <Dna className="h-3 w-3" />
+                      Matched to your DNA
+                    </Badge>
+                  )}
+                  {!isPersonalized && hasPersonalizedPreferences && (
                     <Badge variant="secondary" className="gap-1 bg-accent/10 text-accent border-accent/20">
                       <Sparkles className="h-3 w-3" />
                       Personalized for you
@@ -580,7 +623,12 @@ export default function PlannerHotelEnhanced() {
                 </p>
               </motion.div>
 
-              <HotelFilters filters={filters} onFiltersChange={setFilters} priceRange={[priceStats.min, priceStats.max]} />
+              <HotelFilters 
+                filters={filters} 
+                onFiltersChange={setFilters} 
+                priceRange={[priceStats.min, priceStats.max]}
+                hasTravelDNA={isPersonalized}
+              />
 
               <div className="space-y-4">
                 <AnimatePresence mode="wait">
@@ -619,6 +667,7 @@ export default function PlannerHotelEnhanced() {
                           nights={nights}
                           budgetPerNight={hotelBudget && nights > 0 ? Math.round(hotelBudget / nights) : undefined}
                           showBudgetWarnings={budgetAlertsEnabled}
+                          isPersonalized={isPersonalized}
                         />
                       ))}
                     </motion.div>

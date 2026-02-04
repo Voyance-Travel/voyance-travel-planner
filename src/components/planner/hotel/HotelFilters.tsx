@@ -38,7 +38,7 @@ export interface HotelFiltersState {
   amenities: string[];
   propertyTypes: string[];
   guestRating: number;
-  sortBy: 'price' | 'rating' | 'distance' | 'recommended';
+  sortBy: 'price' | 'rating' | 'distance' | 'recommended' | 'dna';
   freeCancellation: boolean;
   breakfastIncluded: boolean;
 }
@@ -47,6 +47,7 @@ interface HotelFiltersProps {
   filters: HotelFiltersState;
   onFiltersChange: (filters: HotelFiltersState) => void;
   priceRange: [number, number];
+  hasTravelDNA?: boolean;
 }
 
 const amenityOptions = [
@@ -72,6 +73,7 @@ export default function HotelFilters({
   filters,
   onFiltersChange,
   priceRange,
+  hasTravelDNA = false,
 }: HotelFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -156,6 +158,13 @@ export default function HotelFilters({
           <SelectValue placeholder="Sort by" />
         </SelectTrigger>
         <SelectContent>
+          {hasTravelDNA && (
+            <SelectItem value="dna">
+              <span className="flex items-center gap-1.5">
+                🧬 Best for You
+              </span>
+            </SelectItem>
+          )}
           <SelectItem value="recommended">Recommended</SelectItem>
           <SelectItem value="price">Price: Low to High</SelectItem>
           <SelectItem value="rating">Guest Rating</SelectItem>
