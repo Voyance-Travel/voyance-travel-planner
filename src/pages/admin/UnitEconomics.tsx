@@ -29,6 +29,9 @@ import {
   TOTAL_FIXED_MONTHLY,
   CREDIT_ACTION_MAPPING,
   REVENUE_CONFIG,
+  AI_COSTS,
+  USER_LIFECYCLE_COSTS,
+  BLENDED_COST_PER_VISITOR,
   calculateUnitEconomics,
   projectCostsForVolume,
   formatUSD,
@@ -435,6 +438,82 @@ export default function UnitEconomics() {
             </CardContent>
           </Card>
         )}
+
+        {/* User Lifecycle Costs - NEW */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" />
+                User Lifecycle Costs
+              </CardTitle>
+              <span className="text-sm">
+                Blended: <span className="font-medium text-primary">{formatUSD(BLENDED_COST_PER_VISITOR)}</span>/visitor
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {Object.entries(USER_LIFECYCLE_COSTS).map(([key, data]) => {
+                const avgCost = (data.min + data.max) / 2;
+                const isHighCost = avgCost > 1;
+                
+                return (
+                  <div 
+                    key={key}
+                    className={cn(
+                      'p-4 rounded-lg border text-center',
+                      isHighCost ? 'border-chart-4/50 bg-chart-4/5' : 'border-border bg-muted/30'
+                    )}
+                  >
+                    <p className="text-xs text-muted-foreground capitalize mb-1">
+                      {key.replace(/([A-Z])/g, ' $1').trim()}
+                    </p>
+                    <p className={cn(
+                      'text-lg font-bold',
+                      isHighCost ? 'text-chart-4' : 'text-foreground'
+                    )}>
+                      {formatUSD(data.min)} - {formatUSD(data.max)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">{data.desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+              <strong className="text-foreground">Distribution:</strong> 60% bounce ($0.002 avg), 25% free users ($0.10 avg), 
+              10% single purchase ($0.78 avg), 4% repeat ($2.16 avg), 1% power ($7.25 avg)
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* AI Feature Costs - NEW */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              AI Feature Costs (Lovable AI Gateway)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(AI_COSTS.features).map(([key, feature]) => (
+                <div 
+                  key={key}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{feature.desc}</p>
+                    <p className="text-xs text-muted-foreground">{feature.model}</p>
+                  </div>
+                  <span className="text-sm font-mono font-medium ml-2 whitespace-nowrap">
+                    ${feature.min.toFixed(3)} - ${feature.max.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Fixed Costs Detail */}
         <Card>
