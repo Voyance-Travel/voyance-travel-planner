@@ -1,74 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// =============================================================================
-// SUPABASE CLIENT (for photo caching)
-// =============================================================================
-function getSupabaseAdmin() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
-  );
-}
-
-// =============================================================================
-// PHOTO CACHING HELPER - Avoid repeated Google Places API calls
-// =============================================================================
-async function getCachedPhotoUrl(
-  placeId: string,
-  photoName: string | undefined,
-  placeName: string,
-  destination: string,
-  apiKey: string
-): Promise<string | undefined> {
-  if (!photoName) return undefined;
-  
-  const supabase = getSupabaseAdmin();
-  const entityKey = `restaurant-${placeId}`.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 100);
-  
-  try {
-    // Check cache first
-    const { data: cached } = await supabase
-      .from('curated_images')
-      .select('image_url')
-      .eq('entity_type', 'restaurant')
-      .eq('entity_key', entityKey)
-      .single();
-    
-    if (cached?.image_url) {
-      return cached.image_url;
-    }
-  } catch { /* cache miss, continue */ }
-  
-  // Not cached - generate URL and cache it
-  const photoUrl = `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&key=${apiKey}`;
-  
-  // Cache for 90 days
-  const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-  try {
-    await supabase.from('curated_images').upsert({
-      entity_type: 'restaurant',
-      entity_key: entityKey,
-      destination: destination,
-      source: 'google_places',
-      image_url: photoUrl,
-      alt_text: `${placeName} - Restaurant`,
-      place_id: placeId,
-      photo_reference: photoName,
-      quality_score: 0.85,
-      updated_at: new Date().toISOString(),
-      expires_at: expiresAt,
-    }, { onConflict: 'entity_type,entity_key,destination' });
-  } catch { /* ignore cache errors */ }
-  
-  return photoUrl;
-}
 
 // =============================================================================
 // TYPES
@@ -250,14 +187,18 @@ async function fetchGooglePlaces(
         ['vegetarian', 'vegan', 'halal', 'kosher', 'gluten_free'].some(d => t.includes(d))
       );
 
-      // Get cached photo URL (or cache it if new)
-      const photoUrl = await getCachedPhotoUrl(
-        place.id as string,
-        photos?.[0]?.name,
-        displayName?.text || 'Restaurant',
-        destination,
-        apiKey
-      );
+      // Get cached photo URL from Supabase Storage (downloads once, serves forever)
+      let photoUrl: string | undefined;
+      if (photos?.[0]?.name) {
+        const googlePhotoUrl = `https://places.googleapis.com/v1/${photos[0].name}/media?maxHeightPx=400&key=${apiKey}`;
+        const cacheResult = await getCachedPhotoUrl(
+          'restaurant',
+          place.id as string,
+          googlePhotoUrl,
+          { destination, placeName: displayName?.text, placeId: place.id as string }
+        );
+        photoUrl = cacheResult.url;
+      }
 
       return {
         id: `google_${place.id}`,

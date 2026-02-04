@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -382,11 +383,19 @@ async function getGooglePlacesPhoto(
       console.log(`[Images] ✅ Best match (score ${best.score.toFixed(2)}):`, best.place.displayName?.text);
 
       const photoResource = best.place.photos[0].name;
-      const photoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
+      const googlePhotoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
+      
+      // Download to Supabase Storage to avoid repeated API calls
+      const cacheResult = await getCachedPhotoUrl(
+        'activity',
+        best.place.id,
+        googlePhotoUrl,
+        { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id }
+      );
 
       return {
         id: `google-${best.place.id}`,
-        url: photoUrl,
+        url: cacheResult.url,
         alt: `${best.place.displayName?.text || venueName} - Photo`,
         type: "activity",
         source: "google_places",
