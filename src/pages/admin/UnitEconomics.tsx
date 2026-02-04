@@ -47,7 +47,34 @@ const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_T
 
 const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
 
-// Free tier thresholds
+// =============================================================================
+// FREE USER CREDIT ECONOMICS
+// Free users get 150 credits/month (expires after 2 months)
+// Max bonus credits: ~100 (referral) + ~100 (share trip) = 250 total possible
+// =============================================================================
+const FREE_USER_ECONOMICS = {
+  monthlyCredits: 150,          // Base monthly grant
+  maxBonusCredits: 100,         // Referral + share bonuses (requires engagement)
+  maxFirstMonthCredits: 250,    // 150 base + 100 referral bonus max
+  creditExpiry: "2 months",
+  
+  // What can 150 credits buy?
+  // Option A: 1 day unlock (150 credits) = $0.065 cost
+  // Option B: Smaller actions only = ~$0.05 cost
+  //   - 10 swaps (50 credits) = $0.125
+  //   - 2 regenerates (30 credits) = $0.10
+  //   - 15 AI messages (30 credits) = $0.19
+  //   - 4 restaurants (40 credits) = $0.10
+  // Reality: Most free users will unlock 1 day (the main value prop)
+  
+  baseCostToUs: 0.065,          // 1 day unlock = $0.065
+  withBonusCostToUs: 0.10,      // 1 day + 100 credits of extras = ~$0.10
+  
+  // Conservative: assume 70% just unlock 1 day, 30% get bonus + extras
+  blendedCostToUs: 0.065 * 0.7 + 0.10 * 0.3, // = ~$0.0755
+};
+
+// Free tier thresholds (API quotas)
 const FREE_TIERS = {
   googleTextSearch: { free: 5000, price: 0.032, callsPerTrip: 18 },
   googleDetails: { free: 5000, price: 0.020, callsPerTrip: 28 },
@@ -173,8 +200,8 @@ const SCALE_COLUMNS = [
   { key: "trips", label: "Total Trips", tooltip: "Total monthly trip volume (paid + free users combined)." },
   { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
   { key: "free", label: "Free", tooltip: "Number of free users who cost you money but pay nothing. Formula: Total × (100% - Conversion %)." },
-  { key: "freeCost", label: "Free Var $", tooltip: "Variable cost of serving free users (API calls only: ~$0.42/user). Does NOT include fixed cost allocation. This is the incremental cost of each non-paying user." },
-  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable (~$0.42) + Fixed ($29.08)/volume. Applies to both paid AND free users." },
+  { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of free users. Free users get ${FREE_USER_ECONOMICS.monthlyCredits} credits/mo → 1 day max unlock = ~$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}/user (NOT full trip cost).` },
+  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable + Fixed ($29.08)/volume. Applies to both paid AND free users." },
   { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
   { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES FIXED COSTS. Formula: (All Trips × Variable Cost) + $29.08 fixed. This is your total monthly infrastructure spend." },
   { key: "netProfit", label: "Net Profit", tooltip: "Revenue minus ALL costs (variable + fixed). Formula: Revenue - Total Cost. This is what hits your bank account." },
@@ -870,22 +897,22 @@ export default function UnitEconomics() {
                 const fixedPer = 29.08 / vol;
                 const loaded = variable + fixedPer;
                 
-                // Free user economics - free users generate a trip but don't pay
-                // They cost the FULL variable rate (full trip generation)
+                // Free user economics - CREDIT-CONSTRAINED
+                // Free users get 150 credits/month → can only unlock 1 day MAX
+                // This costs us ~$0.065-$0.08, NOT $0.42 (which assumes 7-day trip)
                 const paidUsers = Math.round(vol * (conversionRate / 100));
                 const freeUsers = vol - paidUsers;
-                const freeUserCost = 0.42; // Full trip generation cost for free users
+                const freeUserCost = FREE_USER_ECONOMICS.blendedCostToUs; // ~$0.076
                 const freeCost = freeUsers * freeUserCost;
                 
-                // Paid users cost LESS because tier usage varies:
-                // - Top-Up users ($5) can only do swaps/AI (cost ~$0.16)
-                // - Single users ($12) unlock 1 day + extras (cost ~$0.22)
-                // - Explorer users ($55) unlock 7 days (cost ~$0.72)
-                // Use blended cost based on revenue mix
+                // Paid users cost based on their tier's usage pattern:
+                // - Top-Up ($5, 50 credits): can't unlock days, only swaps/AI (~$0.16)
+                // - Single ($12, 200 credits): 1 day + extras (~$0.22)
+                // - Explorer ($55, 1200 credits): 7 days + extras (~$0.72)
                 const paidUserCost = blendedCostPerUser; // From tier mix calculation
                 const paidCost = paidUsers * paidUserCost;
                 
-                // Total variable cost = free users at full rate + paid users at blended rate
+                // Total variable cost = free users (credit-limited) + paid users (tier-based)
                 const totalVariableCost = freeCost + paidCost;
                 
                 // Revenue from paying users
@@ -1131,19 +1158,22 @@ export default function UnitEconomics() {
                     </tr>
                   );
                 })}
-                {/* Free user row */}
+                {/* Free user row - now with correct credit-constrained cost */}
                 <tr style={{ background: "rgba(248, 113, 113, 0.08)" }}>
                   <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 8, height: 8, borderRadius: 2, background: "#EF4444" }} />
                       <span style={{ color: "#F87171", fontWeight: 500 }}>Free User</span>
+                      <span style={{ fontSize: 9, color: "#64748B", background: "rgba(15, 23, 42, 0.5)", padding: "2px 6px", borderRadius: 4 }}>
+                        {FREE_USER_ECONOMICS.monthlyCredits}/mo
+                      </span>
                     </div>
                   </td>
                   <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     $0
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    150
+                    {FREE_USER_ECONOMICS.monthlyCredits}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     1
@@ -1155,7 +1185,40 @@ export default function UnitEconomics() {
                     0
                   </td>
                   <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    $0.42
+                    ${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    -100%
+                  </td>
+                </tr>
+                {/* Free user WITH bonus row */}
+                <tr style={{ background: "rgba(248, 113, 113, 0.04)" }}>
+                  <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 2, background: "#FB923C" }} />
+                      <span style={{ color: "#FB923C", fontWeight: 500 }}>Free + Bonus</span>
+                      <span style={{ fontSize: 9, color: "#64748B", background: "rgba(15, 23, 42, 0.5)", padding: "2px 6px", borderRadius: 4 }}>
+                        referral/share
+                      </span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    $0
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    {FREE_USER_ECONOMICS.maxFirstMonthCredits}
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    1
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    ~15
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    1
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    ${FREE_USER_ECONOMICS.withBonusCostToUs.toFixed(2)}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     -100%
@@ -1185,13 +1248,21 @@ export default function UnitEconomics() {
             </div>
           </div>
 
-          {/* Key Insight */}
-          <div style={{ padding: 12, background: "rgba(248, 113, 113, 0.1)", border: "1px solid rgba(248, 113, 113, 0.3)", borderRadius: 8 }}>
-            <p style={{ fontSize: 11, color: "#F87171", margin: 0, lineHeight: 1.6 }}>
-              <strong>🔒 $5 Top-Up = Lowest Cost:</strong> Top-Up users can't unlock days, so they only consume swaps/AI messages = <strong>$0.16 cost vs $5 revenue (97% margin)</strong>. 
-              But Adventurer users unlock 16 days = <strong>$1.35 cost vs $89 revenue (98% margin)</strong>. 
-              Revenue mix affects both AOV AND cost structure.
-            </p>
+          {/* Key Insights - Split into Paid & Free */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ padding: 12, background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 8 }}>
+              <p style={{ fontSize: 11, color: "#34D399", margin: 0, lineHeight: 1.6 }}>
+                <strong>💰 Paid User Economics:</strong> $5 Top-Up can't unlock days (only swaps/AI) = <strong>$0.16 cost (97% margin)</strong>. 
+                Adventurer unlocks 16 days = <strong>$1.35 cost vs $89 (98% margin)</strong>. All tiers profitable.
+              </p>
+            </div>
+            <div style={{ padding: 12, background: "rgba(248, 113, 113, 0.1)", border: "1px solid rgba(248, 113, 113, 0.3)", borderRadius: 8 }}>
+              <p style={{ fontSize: 11, color: "#F87171", margin: 0, lineHeight: 1.6 }}>
+                <strong>🆓 Free User Economics:</strong> {FREE_USER_ECONOMICS.monthlyCredits} credits/mo = 1 day max = <strong>${FREE_USER_ECONOMICS.baseCostToUs.toFixed(3)} cost</strong>. 
+                With referral bonus ({FREE_USER_ECONOMICS.maxFirstMonthCredits} credits): ~${FREE_USER_ECONOMICS.withBonusCostToUs.toFixed(2)} cost. 
+                <strong>NOT $0.42</strong> (that assumes 7-day trip).
+              </p>
+            </div>
           </div>
         </div>
 
