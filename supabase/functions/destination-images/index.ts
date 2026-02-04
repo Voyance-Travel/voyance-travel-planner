@@ -960,6 +960,118 @@ function generateFallbackGradient(destination: string): DestinationImage {
 }
 
 // =============================================================================
+// IMAGE QUALITY SCORING (Lovable AI Vision)
+// =============================================================================
+
+interface QualityScoreResult {
+  score: number;
+  pass: boolean;
+  issues: string[];
+  confidence: number;
+}
+
+/**
+ * Score image quality using Lovable AI vision model.
+ * Returns score 0-1, with images scoring below 0.6 considered low quality.
+ */
+async function scoreImageQuality(
+  imageUrl: string,
+  context: {
+    destination?: string;
+    venueName?: string;
+    category?: string;
+    expectedType?: 'destination' | 'activity' | 'hotel' | 'restaurant';
+  },
+  lovableApiKey: string
+): Promise<QualityScoreResult> {
+  const QUALITY_THRESHOLD = 0.6;
+  
+  try {
+    // Build context for the prompt
+    const contextParts: string[] = [];
+    if (context.destination) contextParts.push(`destination: ${context.destination}`);
+    if (context.venueName) contextParts.push(`venue: ${context.venueName}`);
+    if (context.category) contextParts.push(`category: ${context.category}`);
+    const contextStr = contextParts.length > 0 ? contextParts.join(", ") : "travel photo";
+
+    console.log("[Quality] Scoring image:", imageUrl.slice(0, 60), "context:", contextStr);
+
+    const prompt = `Analyze this travel image for quality. Context: ${contextStr}.
+Score 0-100 based on: relevance to context (40%), image quality (30%), appropriateness (20%), aesthetics (10%).
+REJECT (0-30) if: prominent faces, screenshots, watermarks, unrelated content, very low quality.
+PASS (60-100) if: clearly shows destination/venue, high quality, travel-appropriate.
+Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <0-100>}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite", // Fast model for quick scoring
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: imageUrl } }
+          ]
+        }],
+        max_tokens: 150,
+        temperature: 0.1,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.log("[Quality] API error:", response.status);
+      // Fail open - assume image is acceptable
+      return { score: 0.7, pass: true, issues: ["api_error"], confidence: 0 };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    
+    // Parse JSON response
+    const cleanContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    let parsed: { score: number; issues: string[]; confidence: number };
+    
+    try {
+      parsed = JSON.parse(cleanContent);
+    } catch {
+      // Try regex extraction
+      const scoreMatch = content.match(/"score"\s*:\s*(\d+)/);
+      const score = scoreMatch ? parseInt(scoreMatch[1], 10) : 70;
+      parsed = { score, issues: [], confidence: 50 };
+    }
+
+    const normalizedScore = Math.max(0, Math.min(1, parsed.score / 100));
+    
+    console.log(`[Quality] Score: ${normalizedScore.toFixed(2)}, Pass: ${normalizedScore >= QUALITY_THRESHOLD}, Issues: ${parsed.issues?.join(", ") || "none"}`);
+
+    return {
+      score: normalizedScore,
+      pass: normalizedScore >= QUALITY_THRESHOLD,
+      issues: parsed.issues || [],
+      confidence: Math.max(0, Math.min(1, (parsed.confidence || 70) / 100)),
+    };
+  } catch (e: any) {
+    if (e.name === "AbortError") {
+      console.log("[Quality] Timeout scoring image");
+    } else {
+      console.error("[Quality] Error:", e);
+    }
+    // Fail open
+    return { score: 0.7, pass: true, issues: ["timeout"], confidence: 0 };
+  }
+}
+
+// =============================================================================
 // MAIN TIERED FETCH FUNCTION
 // =============================================================================
 async function fetchImageTiered(
@@ -1020,9 +1132,10 @@ async function fetchImageTiered(
     }
   }
 
-  // If we have real photo candidates, optionally rank with AI and cache
+  // If we have real photo candidates, validate quality and cache
   if (candidates.length > 0) {
     let bestImage = candidates[0];
+    let qualityScore = 0.8; // Default assumed quality
     
     // If multiple candidates and AI available, rank them
     if (candidates.length > 1 && lovableApiKey) {
@@ -1032,8 +1145,57 @@ async function fetchImageTiered(
       }
     }
 
-    // Cache the result (use original venueName for cache key)
-    await cacheImage(supabase, entityType, venueName, destination, bestImage, 0.9);
+    // NEW: Quality scoring with Lovable AI Vision
+    // Only score if we have the API key and the image is from an external source
+    if (lovableApiKey && bestImage.source !== 'curated') {
+      const qualityResult = await scoreImageQuality(
+        bestImage.url,
+        {
+          destination,
+          venueName: cleanName,
+          category: effectiveCategory,
+          expectedType: entityType === 'destination' ? 'destination' : 'activity',
+        },
+        lovableApiKey
+      );
+
+      qualityScore = qualityResult.score;
+
+      // If image fails quality check, try next candidate or fallback
+      if (!qualityResult.pass) {
+        console.log(`[Images] Image failed quality check (${qualityResult.score.toFixed(2)}): ${bestImage.url.slice(0, 60)}`);
+        console.log(`[Images] Issues: ${qualityResult.issues.join(", ")}`);
+        
+        // Try other candidates if available
+        for (let i = 1; i < candidates.length; i++) {
+          const altResult = await scoreImageQuality(
+            candidates[i].url,
+            {
+              destination,
+              venueName: cleanName,
+              category: effectiveCategory,
+            },
+            lovableApiKey
+          );
+          
+          if (altResult.pass) {
+            bestImage = candidates[i];
+            qualityScore = altResult.score;
+            console.log(`[Images] Using alternative candidate with score ${qualityScore.toFixed(2)}`);
+            break;
+          }
+        }
+        
+        // If all candidates fail, use category fallback
+        if (qualityScore < 0.6) {
+          console.log(`[Images] All candidates failed quality check, using category fallback`);
+          return getCategoryFallbackImage(effectiveCategory, venueName);
+        }
+      }
+    }
+
+    // Cache the result with quality score
+    await cacheImage(supabase, entityType, venueName, destination, bestImage, qualityScore);
     
     return bestImage;
   }
