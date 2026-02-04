@@ -205,9 +205,9 @@ export default function SampleArchetype() {
             ))}
           </div>
           
-          {/* Fade edges for scroll indication */}
-          <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-background to-transparent pointer-events-none" />
-          <div className="absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none" />
+          {/* Fade edges for scroll indication - z-index lower than button */}
+          <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-background to-transparent pointer-events-none z-0" />
+          <div className="absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-0" />
         </motion.div>
 
         {/* See all link - More prominent */}
@@ -219,8 +219,8 @@ export default function SampleArchetype() {
           className="text-center mb-10"
         >
           <Link 
-            to={ROUTES.EXPLORE}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium text-sm hover:bg-primary/10 hover:border-primary/50 transition-all"
+            to={ROUTES.ARCHETYPES}
+            className="relative z-10 inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium text-sm hover:bg-primary/10 hover:border-primary/50 transition-all"
           >
             See all 27 archetypes
             <ArrowRight className="w-4 h-4" />
