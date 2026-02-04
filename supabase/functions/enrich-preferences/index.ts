@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -292,6 +293,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('enrich_preferences', 'google/gemini-3-flash-preview');
+
   try {
     const { preferences, destination, userId } = await req.json();
 
@@ -301,6 +304,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    if (userId) costTracker.setUserId(userId);
 
     console.log(`Enriching preferences for user ${userId || 'anonymous'}, destination: ${destination || 'unspecified'}`);
 
@@ -312,6 +317,10 @@ serve(async (req) => {
       hasAccessibility: !!enriched.accessibility_context,
       instructionCount: enriched.special_instructions?.length || 0
     });
+
+    // Track AI usage (estimate tokens since we don't have response object here)
+    costTracker.recordTokens(500, 800);
+    await costTracker.save();
 
     return new Response(
       JSON.stringify({ 

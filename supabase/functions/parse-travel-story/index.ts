@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -167,6 +168,11 @@ Refine your analysis based on this additional information.`
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
+
+    // Track AI usage
+    const costTracker = trackCost('parse_travel_story', 'google/gemini-2.5-flash');
+    costTracker.recordAiUsage(data);
+    await costTracker.save();
 
     if (!content) {
       throw new Error("No response from AI");

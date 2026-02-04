@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -317,6 +318,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('weather', 'open_meteo');
+
   try {
     const body = await req.json();
     const { destination, startDate, days } = body;
@@ -336,6 +339,7 @@ serve(async (req) => {
     if (realWeather) {
       weather = realWeather;
       console.log('[Weather] ✅ Using Open-Meteo data for:', destination);
+      costTracker.addMetadata('source', 'open_meteo');
     } else {
       weather = generateFallbackForecast(
         destination,
@@ -343,7 +347,11 @@ serve(async (req) => {
         days || 7
       );
       console.log('[Weather] ⚠️ Open-Meteo failed or trip too far out, using fallback for:', destination);
+      costTracker.addMetadata('source', 'fallback');
     }
+
+    // Weather API is free, but we track for visibility
+    await costTracker.save();
 
     return new Response(JSON.stringify({ weather, success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

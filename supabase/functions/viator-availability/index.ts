@@ -6,6 +6,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +54,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('viator_availability', 'viator');
+
   try {
     log("Function started");
 
@@ -99,6 +102,10 @@ serve(async (req) => {
     });
 
     const data = await response.json();
+
+    // Track Viator API call
+    costTracker.addMetadata('productCode', productCode);
+    await costTracker.save();
 
     if (!response.ok) {
       log("Viator API error", { status: response.status, data });

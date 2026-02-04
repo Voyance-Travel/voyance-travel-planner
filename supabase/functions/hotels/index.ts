@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -980,9 +981,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('hotels_search', 'amadeus');
+
   try {
     const body = await req.json();
     console.log('[Hotels] Request:', body.action || 'search');
+    if (body.tripId) costTracker.setTripId(body.tripId);
 
     // Hotel booking action
     if (body.action === 'book') {
@@ -1018,6 +1022,9 @@ serve(async (req) => {
 
     // Search hotels by name (for autocomplete)
     if (body.action === 'searchByName') {
+      costTracker.recordGooglePlaces(1);
+      await costTracker.save();
+      
       const results = await searchHotelsByName(body.query, body.destination);
       return new Response(JSON.stringify({
         success: true,
@@ -1029,14 +1036,20 @@ serve(async (req) => {
 
     // Enrich hotel details
     if (body.action === 'enrich') {
+      costTracker.recordGooglePlaces(1);
+      await costTracker.save();
+      
       const result = await enrichHotelByName(body.hotelName, body.destination);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Default: search
+    // Default: search - track Amadeus API calls (up to 6 batches)
     const hotels = await searchHotels(body);
+    const batchCount = Math.min(6, Math.ceil(hotels.length / 50));
+    costTracker.recordAmadeus(batchCount);
+    await costTracker.save();
     
     return new Response(JSON.stringify({
       success: true,

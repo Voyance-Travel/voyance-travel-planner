@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1260,11 +1261,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('destination_images', 'google_places');
+
   try {
     // Allow both authenticated and anonymous requests for destination images
     // This is safe because we're only serving publicly-available images
     const authResult = await validateAuth(req);
     const userId = authResult?.userId || 'anonymous';
+    if (authResult?.userId) costTracker.setUserId(authResult.userId);
     console.log(`[Images] Request from: ${userId}`);
 
     // Parse params from both query string and body
@@ -1381,6 +1385,13 @@ serve(async (req) => {
 
     // Update type if specified
     const finalImage = { ...image, type: imageType as any };
+
+    // Track Google Places and Photos calls
+    if (finalImage.source === 'google_places') {
+      costTracker.recordGooglePlaces(1);
+      costTracker.recordGooglePhotos(1);
+    }
+    await costTracker.save();
 
     return new Response(
       JSON.stringify({

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -319,6 +320,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const costTracker = trackCost('transfer_pricing', 'google_routes');
+
   try {
     const request: TransferPricingRequest = await req.json();
     const { origin, destination, city, country, airportCode, travelers = 2, date, time, transferType } = request;
@@ -347,6 +350,7 @@ serve(async (req) => {
     // Step 1: Get Google Maps data for distance/duration
     if (GOOGLE_MAPS_API_KEY) {
       googleMapsData = await getGoogleMapsData(origin, destination, GOOGLE_MAPS_API_KEY, date);
+      costTracker.recordGoogleRoutes(3); // driving, transit, walking
       console.log('[Transfer-Pricing] Google Maps data:', googleMapsData);
     }
 
@@ -542,6 +546,9 @@ serve(async (req) => {
     };
 
     console.log('[Transfer-Pricing] Returning', options.length, 'options, source:', source);
+
+    // Save cost tracking
+    await costTracker.save();
 
     return new Response(
       JSON.stringify(response),
