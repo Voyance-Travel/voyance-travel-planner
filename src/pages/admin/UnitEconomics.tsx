@@ -420,18 +420,30 @@ export default function UnitEconomics() {
     const contributionMargin = ((revenue - variablePerTrip) / revenue) * 100;
 
     // BLENDED ECONOMICS: Factor in conversion rate and revenue mix
-    // Total trips * cost = total cost
-    // Paying trips * blended AOV = total revenue
-    const payingTrips = volume * (conversionRate / 100);
+    // Use DIFFERENT variable costs for free vs paid users (matches scale table)
+    const payingTrips = Math.round(volume * (conversionRate / 100));
+    const freeTrips = volume - payingTrips;
+    
+    // Free users cost $0.10 (Full Preview, No Details model)
+    const freeUserCost = FREE_USER_ECONOMICS.blendedCostToUs;
+    const freeVariableCost = freeTrips * freeUserCost;
+    
+    // Paid users cost based on their tier mix (blendedCostPerUser)
+    const paidVariableCost = payingTrips * blendedCostPerUser;
+    
+    // Total cost = free variable + paid variable + fixed
+    const totalVariableCostBlended = freeVariableCost + paidVariableCost;
+    const totalCost = totalVariableCostBlended + fixedTotal;
+    
+    // Revenue from paying users only
     const totalRevenue = payingTrips * blendedAOV;
-    const totalCost = variableTotal + fixedTotal;
     
     const blendedProfit = totalRevenue - totalCost;
     const blendedMargin = totalRevenue > 0 ? (blendedProfit / totalRevenue) * 100 : -100;
     
     // Revenue per trip (blended across all trips, not just paying)
     const revenuePerTrip = totalRevenue / volume;
-    const realMarginPerTrip = revenuePerTrip - fullyLoaded;
+    const realMarginPerTrip = revenuePerTrip - (totalCost / volume);
 
     const googleShare = variablePerTrip > 0 ? (googlePerTrip / variablePerTrip) * 100 : 0;
 
