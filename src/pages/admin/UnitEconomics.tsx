@@ -1,17 +1,19 @@
 /**
- * Admin Unit Economics Dashboard - Verified Production Data
- * Built from actual billing data: Google Cloud, Lovable, Perplexity, Amadeus
+ * Admin Unit Economics Dashboard - Dynamic Production Data
+ * Fetches real costs from trip_cost_tracking table
+ * Falls back to static estimates when no tracking data available
  * Last Updated: February 4, 2026
  */
 
 import { useState, useMemo } from "react";
+import { useRealCostMetrics } from "@/hooks/useRealCostMetrics";
 
 // =============================================================================
-// VERIFIED PRODUCTION DATA (Feb 4, 2026)
+// FALLBACK STATIC DATA (used when no tracking data available)
 // Source: Google Cloud Console, Lovable Cloud, Perplexity API, Amadeus Docs
 // =============================================================================
 
-const VERIFIED_DATA = {
+const FALLBACK_DATA = {
   trips: 61,
   period: "Jan 25 – Feb 4, 2026",
   services: {
@@ -36,14 +38,6 @@ const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_T
 
 const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
 
-// AI Model breakdown (7-day production data)
-const AI_MODELS = [
-  { model: "gemini-3-flash-preview", calls: 125, usage: "Primary generation" },
-  { model: "gemini-2.5-flash-image", calls: 92, usage: "Image-related tasks" },
-  { model: "gemini-2.5-flash-lite", calls: 75, usage: "Lightweight tasks" },
-  { model: "gemini-2.5-flash", calls: 11, usage: "Fallback" },
-];
-
 // Free tier thresholds
 const FREE_TIERS = {
   googleTextSearch: { free: 5000, price: 0.032, callsPerTrip: 18 },
@@ -53,6 +47,14 @@ const FREE_TIERS = {
   lovableAI: { free: 1.00, perTrip: 0.0644 }, // ~15 trips/mo
   amadeus: { free: 2000, callsPerTrip: 5 }, // 400 trips/mo
 };
+
+// AI Model breakdown (fallback static data)
+const FALLBACK_AI_MODELS = [
+  { model: "gemini-3-flash-preview", calls: 125, usage: "Primary generation" },
+  { model: "gemini-2.5-flash-image", calls: 92, usage: "Image-related tasks" },
+  { model: "gemini-2.5-flash-lite", calls: 75, usage: "Lightweight tasks" },
+  { model: "gemini-2.5-flash", calls: 11, usage: "Fallback" },
+];
 
 type Scenario = 'A' | 'B' | 'C' | 'D';
 
@@ -67,6 +69,60 @@ export default function UnitEconomics() {
   const [volume, setVolume] = useState(61);
   const [tier, setTier] = useState("explorer");
   const [scenario, setScenario] = useState<Scenario>('A');
+  
+  // Fetch real data from trip_cost_tracking table
+  const { data: realMetrics, isLoading: metricsLoading } = useRealCostMetrics();
+  
+  // Use real data when available, otherwise fallback
+  const hasRealData = !!realMetrics && realMetrics.totalTrips > 0;
+  
+  const VERIFIED_DATA = useMemo(() => {
+    if (!hasRealData) return FALLBACK_DATA;
+    
+    return {
+      trips: realMetrics.totalTrips,
+      period: `${realMetrics.periodStart} – ${realMetrics.periodEnd}`,
+      services: {
+        google: { 
+          total: realMetrics.google.totalCost, 
+          perTrip: realMetrics.google.perTrip, 
+          calls: realMetrics.google.totalCalls, 
+          callsPerTrip: realMetrics.google.totalCalls / realMetrics.totalTrips, 
+          label: "Google Places", 
+          color: "#4285F4" 
+        },
+        lovableAI: { 
+          total: realMetrics.ai.totalCost, 
+          perTrip: realMetrics.ai.perTrip, 
+          perCall: realMetrics.ai.callCount > 0 ? realMetrics.ai.totalCost / realMetrics.ai.callCount : 0.013, 
+          calls: realMetrics.ai.callCount, 
+          callsPerTrip: realMetrics.ai.callCount / realMetrics.totalTrips, 
+          label: "Lovable AI (Gemini)", 
+          color: "#A855F7" 
+        },
+        perplexity: { 
+          total: realMetrics.perplexity.totalCost, 
+          perTrip: realMetrics.perplexity.perTrip, 
+          perCall: 0.005, 
+          calls: realMetrics.perplexity.totalCalls, 
+          callsPerTrip: realMetrics.perplexity.totalCalls / realMetrics.totalTrips, 
+          label: "Perplexity (Sonar)", 
+          color: "#06B6D4" 
+        },
+        amadeus: { 
+          total: realMetrics.amadeus.totalCost, 
+          perTrip: realMetrics.amadeus.perTrip, 
+          perCall: 0.024, 
+          calls: realMetrics.amadeus.totalCalls, 
+          callsPerTrip: realMetrics.amadeus.totalCalls / realMetrics.totalTrips, 
+          label: "Amadeus Hotels", 
+          color: "#F59E0B" 
+        },
+      },
+      fixed: FALLBACK_DATA.fixed,
+      revenue: FALLBACK_DATA.revenue,
+    };
+  }, [hasRealData, realMetrics]);
 
   const revenue = VERIFIED_DATA.revenue[tier];
   const scenarioConfig = SCENARIOS[scenario];
@@ -146,24 +202,24 @@ export default function UnitEconomics() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 20 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#34D399" }} />
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: hasRealData ? "#34D399" : "#FBBF24" }} />
                 <span style={{ fontSize: 13, color: "#94A3B8", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                  Voyance · Verified Unit Economics
+                  Voyance · {hasRealData ? "Live Tracked Data" : "Fallback Estimates"}
                 </span>
               </div>
               <h1 style={{ fontSize: 28, fontWeight: 700, margin: "4px 0 0", letterSpacing: "-0.02em" }}>
                 Cost Per Trip Analysis
               </h1>
               <p style={{ fontSize: 14, color: "#64748B", marginTop: 6 }}>
-                Built from production billing data · {VERIFIED_DATA.trips} trips · {VERIFIED_DATA.period}
+                {hasRealData ? "Real-time from trip_cost_tracking table" : "Using static fallback data"} · {VERIFIED_DATA.trips} trips · {VERIFIED_DATA.period}
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 12, color: "#34D399", fontWeight: 600, marginBottom: 4 }}>
-                All Sources Verified
+              <div style={{ fontSize: 12, color: hasRealData ? "#34D399" : "#FBBF24", fontWeight: 600, marginBottom: 4 }}>
+                {hasRealData ? "✓ Live Data" : "⚠ Using Estimates"}
               </div>
               <div style={{ fontSize: 11, color: "#64748B" }}>
-                Google Cloud · Lovable · Perplexity · Amadeus
+                {metricsLoading ? "Loading..." : hasRealData ? `${Object.keys(realMetrics.actionBreakdown || {}).length} action types tracked` : "No tracking data yet"}
               </div>
             </div>
           </div>
@@ -664,11 +720,18 @@ export default function UnitEconomics() {
           marginBottom: 32,
         }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            AI Models in Production · NOT GPT-5, NOT Claude
+            AI Models in Production {hasRealData ? "· Real Tracked Data" : "· Fallback Estimates"}
           </h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-            {AI_MODELS.map((m, i) => (
+            {(hasRealData && realMetrics?.modelBreakdown 
+              ? Object.entries(realMetrics.modelBreakdown).map(([model, data]) => ({
+                  model,
+                  calls: data.count,
+                  usage: `${(data.inputTokens / 1000).toFixed(0)}K in / ${(data.outputTokens / 1000).toFixed(0)}K out`
+                }))
+              : FALLBACK_AI_MODELS
+            ).map((m, i) => (
               <div key={i} style={{
                 background: "rgba(15, 23, 42, 0.5)",
                 borderRadius: 8,
