@@ -96,14 +96,18 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 //   Post-optimization: ~$0.10-$0.17 per free user
 // =============================================================================
 // =============================================================================
-// FREE USER ECONOMICS - OPTIMIZED MODEL (AI-only preview is now live)
+// FREE USER ECONOMICS - "FULL PREVIEW, NO DETAILS" MODEL
 // 
-// Post-optimization: Free users get STATIC TEMPLATE (zero cost) or AI preview
-//   - Static templates: $0.00 (Tokyo, Paris, Rome, etc.)
-//   - AI fallback: ~$0.02-$0.03 (uncommon destinations)
-//   - Blended: ~$0.01 (80% have templates)
+// Free users see COMPLETE itinerary with REAL venue names, times, and reasoning
+// BUT gated details: addresses, hours, photos, tips, booking links
 //
-// Blended free user cost: ~$0.03-$0.05 (mostly static templates)
+// Cost breakdown:
+//   - AI generation (gemini-3-flash): ~$0.04
+//   - Light venue validation (1-3 Google searches): ~$0.05-0.08
+//   - DNA lookup: ~$0.01
+//   Total: ~$0.10-0.14 per preview
+//
+// Psychology: User sees exactly what they get, but can't ACT on it
 // =============================================================================
 const FREE_USER_ECONOMICS = {
   // Credit grants
@@ -112,17 +116,16 @@ const FREE_USER_ECONOMICS = {
   maxFirstMonthCredits: 250,
   creditExpiry: "2 months",
   
-  // Cost model (STATIC TEMPLATES FIRST - AI fallback)
+  // Cost model (FULL PREVIEW with gated details)
   costs: {
     lightBrowse: 0.02,          // Explore + quiz, no trip gen
-    staticTemplate: 0.00,       // Pre-written templates ($0)
-    aiPreview: 0.025,           // AI-only trip structure (fallback)
-    fullFunnel: 0.05,           // Quiz + explore + template preview
+    fullPreview: 0.12,          // Full itinerary with real venues
+    dnaQuiz: 0.02,              // DNA calculation
   },
   
-  // Blended cost: 80% static templates ($0) + 20% AI fallback ($0.025)
-  // Plus 50% do DNA quiz ($0.02) = ~$0.035 blended
-  blendedCostToUs: 0.035,
+  // Blended cost: 70% generate full preview ($0.12) + 30% light browse ($0.02)
+  // = 0.084 + 0.006 = ~$0.09
+  blendedCostToUs: 0.09,
 };
 
 // Helper function: Calculate variable cost for N days
