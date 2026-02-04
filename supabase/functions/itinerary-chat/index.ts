@@ -12,6 +12,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { fetchTravelerDNA, buildPersonaManuscript } from "../_shared/traveler-dna.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -224,6 +225,8 @@ interface ItineraryContext {
 }
 
 serve(async (req) => {
+  const costTracker = trackCost('itinerary_chat', 'google/gemini-3-flash-preview');
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -393,6 +396,13 @@ ${itineraryDescription}`;
 
     // Non-streaming: parse and potentially save preferences
     const data = await response.json();
+    
+    // Track cost
+    costTracker.setTripId(itineraryContext.tripId);
+    if (userId) costTracker.setUserId(userId);
+    costTracker.recordAiUsage(data, 'google/gemini-3-flash-preview');
+    await costTracker.save();
+    
     const choice = data.choices?.[0];
     
     // Check for tool calls

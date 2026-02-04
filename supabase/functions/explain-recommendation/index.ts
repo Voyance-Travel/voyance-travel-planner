@@ -7,6 +7,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,6 +40,8 @@ interface ExplainRequest {
 }
 
 serve(async (req) => {
+  const costTracker = trackCost('explain_recommendation', 'google/gemini-2.5-flash');
+  
   // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -169,6 +172,10 @@ Keep it under 100 words.`;
     const aiData = await aiResponse.json();
     const explanation = aiData.choices?.[0]?.message?.content?.trim() || 
       `This ${activity.category || 'activity'} fits your travel style as a ${archetypeName}.`;
+
+    // Track cost
+    costTracker.recordAiUsage(aiData, 'google/gemini-2.5-flash');
+    await costTracker.save();
 
     return new Response(
       JSON.stringify({ explanation }),

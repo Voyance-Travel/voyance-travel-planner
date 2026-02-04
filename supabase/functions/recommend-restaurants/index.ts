@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -726,6 +727,8 @@ function deduplicateRestaurants(restaurants: Restaurant[]): Restaurant[] {
 // =============================================================================
 
 serve(async (req) => {
+  const costTracker = trackCost('recommend_restaurants', 'google/places-api');
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -807,6 +810,12 @@ serve(async (req) => {
       .slice(0, maxResults);
 
     console.log(`[recommend-restaurants] Returning top ${scoredRestaurants.length} recommendations`);
+
+    // Track cost - estimate Google Places calls based on restaurants found
+    const googleCallCount = GOOGLE_MAPS_API_KEY ? Math.ceil(allRestaurants.filter(r => r.source === 'google').length / 20) : 0;
+    costTracker.recordGooglePlaces(googleCallCount);
+    if (userId) costTracker.setUserId(userId);
+    await costTracker.save();
 
     return new Response(
       JSON.stringify({

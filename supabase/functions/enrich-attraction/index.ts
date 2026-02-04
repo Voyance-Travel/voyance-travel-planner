@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,10 +9,12 @@ const corsHeaders = {
 interface AttractionEnrichmentRequest {
   attractionName: string;
   destination: string;
-  travelDate?: string; // ISO date string
+  travelDate?: string;
 }
 
 serve(async (req) => {
+  const costTracker = trackCost('enrich_attraction', 'perplexity/sonar');
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -93,10 +96,14 @@ ONLY return valid JSON. No markdown, no explanation.`
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     
+    // Track cost
+    costTracker.recordPerplexity(1);
+    costTracker.recordAiUsage(data, 'perplexity/sonar');
+    await costTracker.save();
+    
     console.log('Perplexity response:', content);
 
     try {
-      // Try to parse JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const enrichmentData = JSON.parse(jsonMatch[0]);
