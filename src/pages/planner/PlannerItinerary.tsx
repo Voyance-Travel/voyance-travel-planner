@@ -36,7 +36,7 @@ export default function PlannerItinerary() {
           setTripId(savedTripId);
         } else {
           toast.error('Please complete trip details first');
-          navigate('/planner');
+          navigate('/start');
         }
         setIsLoading(false);
       };

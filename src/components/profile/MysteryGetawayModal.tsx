@@ -196,7 +196,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
     }));
     
     onOpenChange(false);
-    navigate('/planner');
+    navigate('/start');
     toast.success(`Let's plan your trip to ${selected.city}!`);
   };
 

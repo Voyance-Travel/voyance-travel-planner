@@ -33,7 +33,7 @@ export default function HowItWorks() {
 
   // Navigate to the trip planner
   const handleStartPlanning = () => {
-    navigate("/planner");
+    navigate("/start");
   };
 
   return (
