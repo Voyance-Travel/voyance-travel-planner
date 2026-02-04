@@ -368,6 +368,58 @@ export default function Pricing() {
         </div>
       </section>
 
+      {/* All Features Included */}
+      <section className="py-12 sm:py-16 bg-muted/30">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
+              Everything included with credits
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+              No hidden tiers. No feature gates. Every credit unlocks the full Voyance experience.
+            </p>
+          </motion.div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { icon: '👥', label: 'Group Trip Blending', desc: 'Combine travel preferences across multiple travelers into one balanced itinerary' },
+              { icon: '🔗', label: 'Share & Collaborate', desc: 'Invite friends to view or edit trips together in real-time' },
+              { icon: '💸', label: 'Split Costs', desc: 'Track who owes what, assign payments, and settle up easily' },
+              { icon: '📊', label: 'Budget Tracking', desc: 'Set trip budgets, see spending by category, get alerts before you overspend' },
+              { icon: '🌤️', label: 'Weather Forecasts', desc: 'See daily weather for your destination dates built into your itinerary' },
+              { icon: '🍜', label: 'Restaurant Search', desc: 'AI-powered restaurant recommendations with what to order and what to skip' },
+              { icon: '➕', label: 'Add Your Own', desc: 'Insert custom activities, notes, or reservations into any day' },
+              { icon: '🔄', label: 'Swap Alternatives', desc: 'Don\'t like a pick? Swap it instantly with curated alternatives' },
+              { icon: '🗺️', label: 'Route Optimization', desc: 'Activities ordered to minimize backtracking and maximize your time' },
+              { icon: '🤖', label: 'AI Trip Companion', desc: 'Ask questions, get suggestions, and refine your trip with AI chat' },
+              { icon: '📄', label: 'PDF Export', desc: 'Download your full itinerary as a polished, printable PDF' },
+              { icon: '🔒', label: 'Lock Activities', desc: 'Pin must-do activities so regenerations keep them in place' },
+            ].map((feature, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.03 }}
+                className="bg-card border border-border rounded-xl p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{feature.icon}</span>
+                  <h3 className="font-medium text-foreground text-sm">{feature.label}</h3>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {feature.desc}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* What's In One Day */}
       <section className="py-12 sm:py-16">
