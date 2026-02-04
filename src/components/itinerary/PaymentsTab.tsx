@@ -46,6 +46,8 @@ interface PaymentsTabProps {
     pricePerNight?: number;
   } | null;
   travelers: number;
+  /** Budget limit in cents from BudgetTab - shows spending limit */
+  budgetLimitCents?: number;
 }
 
 interface PayableItem {
@@ -63,7 +65,8 @@ export function PaymentsTab({
   days, 
   flightSelection, 
   hotelSelection,
-  travelers 
+  travelers,
+  budgetLimitCents 
 }: PaymentsTabProps) {
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
@@ -168,24 +171,22 @@ export function PaymentsTab({
       });
     });
 
-    // Activities from itinerary
+    // Activities from itinerary - include ALL activities with costs (not just bookingRequired)
     days.forEach(day => {
       day.activities.forEach(activity => {
-        if (activity.bookingRequired) {
-          const cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
-          if (cost > 0) {
-            const activityPayment = payments.find(p => p.item_type === 'activity' && p.item_id === activity.id);
-            items.push({
-              id: activity.id,
-              type: 'activity',
-              name: activity.title,
-              amountCents: Math.round(cost * 100),
-              dayNumber: day.dayNumber,
-              payment: activityPayment,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              assignedMemberId: (activityPayment as any)?.assigned_member_id,
-            });
-          }
+        const cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
+        if (cost > 0) {
+          const activityPayment = payments.find(p => p.item_type === 'activity' && p.item_id === activity.id);
+          items.push({
+            id: activity.id,
+            type: 'activity',
+            name: activity.title,
+            amountCents: Math.round(cost * 100),
+            dayNumber: day.dayNumber,
+            payment: activityPayment,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            assignedMemberId: (activityPayment as any)?.assigned_member_id,
+          });
         }
       });
     });
@@ -528,18 +529,45 @@ export function PaymentsTab({
       <div className="bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold">Trip Budget</h3>
+            <h3 className="text-lg font-semibold">Trip Expenses</h3>
             <p className="text-sm text-muted-foreground">
-              {Math.round(progressPercent)}% of trip paid
+              {budgetLimitCents && budgetLimitCents > 0 
+                ? `${Math.round((estimatedTotal / budgetLimitCents) * 100)}% of budget`
+                : `${Math.round(progressPercent)}% paid`
+              }
             </p>
           </div>
           <div className="text-right">
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
-            <p className="text-xs text-muted-foreground">Total estimated</p>
+            <p className="text-xs text-muted-foreground">
+              {budgetLimitCents && budgetLimitCents > 0 
+                ? `of ${formatCurrency(budgetLimitCents)} budget`
+                : 'Total estimated'
+              }
+            </p>
           </div>
         </div>
         
-        <Progress value={progressPercent} className="h-2 mb-4" />
+        {/* Show budget progress if budget is set */}
+        {budgetLimitCents && budgetLimitCents > 0 ? (
+          <>
+            <Progress 
+              value={Math.min((estimatedTotal / budgetLimitCents) * 100, 100)} 
+              className={cn(
+                "h-2 mb-4",
+                estimatedTotal > budgetLimitCents && "[&>div]:bg-destructive"
+              )}
+            />
+            {estimatedTotal > budgetLimitCents && (
+              <div className="flex items-center gap-2 mb-4 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4" />
+                Over budget by {formatCurrency(estimatedTotal - budgetLimitCents)}
+              </div>
+            )}
+          </>
+        ) : (
+          <Progress value={progressPercent} className="h-2 mb-4" />
+        )}
         
         <div className="grid grid-cols-2 gap-4">
           <div className="flex items-center gap-2">
