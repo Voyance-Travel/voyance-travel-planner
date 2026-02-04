@@ -94,40 +94,34 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 //   Pre-optimization: ~$0.30-$0.50 per free user
 //   Post-optimization: ~$0.10-$0.17 per free user
 // =============================================================================
+// =============================================================================
+// FREE USER ECONOMICS - OPTIMIZED MODEL (AI-only preview is now live)
+// 
+// Post-optimization: Free users get AI-only "Trip Preview"
+//   - Shows day structure, themes, neighborhoods
+//   - Does NOT trigger Google Places (no real venue names)  
+//   - Does NOT trigger Amadeus (no hotel search)
+//   - Cost: ~$0.02-$0.03 per preview
+//
+// Blended free user cost: ~$0.08 (70% light browse + 30% full preview)
+// =============================================================================
 const FREE_USER_ECONOMICS = {
   // Credit grants
-  monthlyCredits: 150,          // Base monthly grant
-  maxBonusCredits: 100,         // Referral bonus (requires engagement)
-  maxFirstMonthCredits: 250,    // 150 base + 100 referral bonus max
+  monthlyCredits: 150,
+  maxBonusCredits: 100,
+  maxFirstMonthCredits: 250,
   creditExpiry: "2 months",
   
-  // CURRENT STATE costs (pre-optimization)
-  currentState: {
-    fullFunnel: 0.40,           // Homepage preview + quiz + Day 1 gen + photos
-    lightBrowse: 0.15,          // Just explore + quiz, no trip gen
-  },
-  
-  // OPTIMIZED STATE costs (target)
-  optimizedState: {
+  // Cost model (OPTIMIZED - AI-only preview is live)
+  costs: {
+    lightBrowse: 0.05,          // Explore + quiz, no trip gen
     fullFunnel: 0.15,           // Preview (AI-only) + quiz + explore
-    lightBrowse: 0.05,          // Minimal API calls
-    tripPreview: 0.025,         // AI-only trip structure (no Google/Amadeus)
+    tripPreview: 0.025,         // AI-only trip structure
   },
   
-  // What we use in calculations - OPTIMIZED is now the go-forward model
-  isOptimized: true, // AI-only preview is now live (generate-trip-preview endpoint)
-  
-  // Calculated blended cost
-  get blendedCostToUs() {
-    if (this.isOptimized) {
-      // Post-optimization: most users just preview (cheap)
-      // 70% light browse ($0.05) + 30% full funnel ($0.15)
-      return 0.70 * 0.05 + 0.30 * 0.15;
-    }
-    // Pre-optimization: full Day 1 generation is expensive
-    // 40% light browse ($0.15) + 60% full funnel ($0.40)
-    return 0.40 * 0.15 + 0.60 * 0.40;
-  },
+  // Blended cost calculation: 70% light browse ($0.05) + 30% full funnel ($0.15)
+  // = 0.035 + 0.045 = $0.08
+  blendedCostToUs: 0.08,
 };
 
 // Helper function: Calculate variable cost for N days
@@ -921,9 +915,9 @@ export default function UnitEconomics() {
               <span style={{ color: "#34D399", fontWeight: 600, marginLeft: 6 }}>${blendedAOV.toFixed(2)}</span>
             </div>
             <div style={{ fontSize: 11 }}>
-              <span style={{ color: "#64748B" }}>Free user cost/trip:</span>
-              <span style={{ color: "#F87171", fontWeight: 600, marginLeft: 6 }}>~$0.42</span>
-              <span style={{ color: "#475569", marginLeft: 4 }}>(variable only, no revenue)</span>
+              <span style={{ color: "#64748B" }}>Free user cost:</span>
+              <span style={{ color: "#34D399", fontWeight: 600, marginLeft: 6 }}>~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}</span>
+              <span style={{ color: "#475569", marginLeft: 4 }}>(optimized AI-only preview)</span>
             </div>
           </div>
 
@@ -1084,11 +1078,10 @@ export default function UnitEconomics() {
           
           <div style={{ marginTop: 16, padding: 12, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8 }}>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              <strong style={{ color: "#F59E0B" }}>⚠️ Tier-Aware Costing:</strong> Costs now vary by tier! 
-              <strong style={{ color: "#94A3B8" }}> Free users</strong> cost ~$0.42 (full trip generation). 
-              <strong style={{ color: "#38BDF8" }}> Top-Up users</strong> cost only ~$0.16 (no day unlocks). 
-              <strong style={{ color: "#34D399" }}> Explorer users</strong> cost ~$0.72 (7 days). 
-              Blended paid user cost at <strong style={{ color: "#A78BFA" }}> {REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(2)}</strong>.
+              <strong style={{ color: "#34D399" }}>✓ Optimized Free Tier Active:</strong> Free users get AI-only preview at ~$0.08 blended cost. 
+              <strong style={{ color: "#38BDF8" }}> Top-Up users</strong> cost only ~$0.10 (no day unlocks). 
+              <strong style={{ color: "#34D399" }}> Explorer users</strong> cost ~$1.13 (8 days across 2 trips). 
+              Blended paid user cost at <strong style={{ color: "#A78BFA" }}>{REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(2)}</strong>.
             </p>
           </div>
         </div>
@@ -1314,11 +1307,9 @@ export default function UnitEconomics() {
                 Adventurer unlocks 16 days = <strong>$1.35 cost vs $89 (98% margin)</strong>. All tiers profitable.
               </p>
             </div>
-            <div style={{ padding: 12, background: "rgba(248, 113, 113, 0.1)", border: "1px solid rgba(248, 113, 113, 0.3)", borderRadius: 8 }}>
-              <p style={{ fontSize: 11, color: "#F87171", margin: 0, lineHeight: 1.6 }}>
-                <strong>🆓 Free User Economics ({FREE_USER_ECONOMICS.isOptimized ? 'Optimized' : 'Current'}):</strong> {FREE_USER_ECONOMICS.isOptimized 
-                  ? `AI-only preview costs ~$${FREE_USER_ECONOMICS.optimizedState.tripPreview.toFixed(3)}.`
-                  : `Full Day 1 gen costs ~$${FREE_USER_ECONOMICS.currentState.fullFunnel.toFixed(2)}.`} 
+            <div style={{ padding: 12, background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 8 }}>
+              <p style={{ fontSize: 11, color: "#34D399", margin: 0, lineHeight: 1.6 }}>
+                <strong>🆓 Free User Economics (Optimized):</strong> AI-only preview costs ~$0.025. 
                 {FREE_USER_ECONOMICS.monthlyCredits} credits/mo. 
                 <strong>Blended: ~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}/free user</strong>.
               </p>
