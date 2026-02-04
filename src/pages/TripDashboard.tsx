@@ -229,10 +229,10 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="group relative bg-card rounded-2xl overflow-hidden border border-border shadow-soft hover:shadow-elevated transition-all duration-500"
+      className="group relative bg-card rounded-xl sm:rounded-2xl overflow-hidden border border-border shadow-soft hover:shadow-elevated transition-all duration-500"
     >
-      {/* Image Section */}
-      <div className="relative h-52 overflow-hidden cursor-pointer" onClick={handleCardClick}>
+      {/* Image Section - mobile optimized height */}
+      <div className="relative h-40 sm:h-52 overflow-hidden cursor-pointer" onClick={handleCardClick}>
         <img 
           src={imageUrl} 
           alt={trip.destination} 
@@ -243,72 +243,72 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
         
         {/* Status Badge */}
-        <Badge className={`absolute top-4 right-4 ${status.color} gap-1.5 backdrop-blur-sm`}>
+        <Badge className={`absolute top-3 right-3 sm:top-4 sm:right-4 ${status.color} gap-1 sm:gap-1.5 backdrop-blur-sm text-[10px] sm:text-xs`}>
           <StatusIcon className="h-3 w-3" />
-          {status.label}
+          <span className="hidden sm:inline">{status.label}</span>
         </Badge>
         
         {/* Destination Name */}
-        <div className="absolute bottom-4 left-4 right-4">
-          <h3 className="font-serif text-2xl font-semibold text-white drop-shadow-lg mb-1">
+        <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4">
+          <h3 className="font-serif text-xl sm:text-2xl font-semibold text-white drop-shadow-lg mb-0.5 sm:mb-1 line-clamp-1">
             {trip.destination}
           </h3>
           {trip.name && trip.name !== trip.destination && (
-            <p className="text-white/80 text-sm truncate">{trip.name}</p>
+            <p className="text-white/80 text-xs sm:text-sm truncate">{trip.name}</p>
           )}
         </div>
       </div>
 
-      {/* Content Section */}
-      <div className="p-5 space-y-4">
-        {/* Trip Details */}
-        <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <Calendar className="h-4 w-4 text-primary/70" />
-            <span>{formatDateRange(trip.startDate, trip.endDate)}</span>
+      {/* Content Section - mobile optimized */}
+      <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
+        {/* Trip Details - scrollable on mobile */}
+        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-1.5 sm:gap-y-2 text-xs sm:text-sm text-muted-foreground">
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary/70 shrink-0" />
+            <span className="truncate">{formatDateRange(trip.startDate, trip.endDate)}</span>
           </div>
           {travelersCount > 0 && (
-            <div className="flex items-center gap-1.5">
-              <Users className="h-4 w-4 text-primary/70" />
-              <span>{travelersCount} traveler{travelersCount > 1 ? 's' : ''}</span>
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary/70 shrink-0" />
+              <span>{travelersCount}</span>
             </div>
           )}
           {trip.departureCity && (
-            <div className="flex items-center gap-1.5">
-              <MapPin className="h-4 w-4 text-primary/70" />
-              <span>From {getDisplayCity(trip.departureCity)}</span>
+            <div className="flex items-center gap-1 sm:gap-1.5 hidden sm:flex">
+              <MapPin className="h-4 w-4 text-primary/70 shrink-0" />
+              <span className="truncate">From {getDisplayCity(trip.departureCity)}</span>
             </div>
           )}
         </div>
 
-        {/* Booking Status Indicators */}
-        <div className="flex gap-2 flex-wrap">
+        {/* Booking Status - horizontal scroll on mobile */}
+        <div className="flex gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto pb-1 scrollbar-hide">
           {hasFlight && (
-            <Badge variant="secondary" className="gap-1 text-xs">
-              <Plane className="h-3 w-3" /> Flight Booked
+            <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs shrink-0">
+              <Plane className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> <span className="hidden sm:inline">Flight</span>
             </Badge>
           )}
           {hasHotel && (
-            <Badge variant="secondary" className="gap-1 text-xs">
-              <Hotel className="h-3 w-3" /> Hotel Booked
+            <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs shrink-0">
+              <Hotel className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> <span className="hidden sm:inline">Hotel</span>
             </Badge>
           )}
           {hasItinerary && (
-            <Badge variant="secondary" className="gap-1 text-xs bg-primary/10 text-primary border-primary/20">
-              <Sparkles className="h-3 w-3" /> Itinerary Ready
+            <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs bg-primary/10 text-primary border-primary/20 shrink-0">
+              <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Ready
             </Badge>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2 pt-2">
+        {/* Actions - mobile optimized touch targets */}
+        <div className="flex gap-2 pt-1 sm:pt-2">
           {hasItinerary ? (
             <Button 
               onClick={handleCardClick} 
               variant="default" 
-              className="flex-1 gap-2"
+              className="flex-1 gap-1.5 sm:gap-2 h-10 sm:h-11 text-xs sm:text-sm"
             >
-              <Eye className="h-4 w-4" />
+              <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               View Itinerary
             </Button>
           ) : (
@@ -316,18 +316,19 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
               <Button 
                 onClick={handleCardClick} 
                 variant="default" 
-                className="flex-1 gap-2"
+                className="flex-1 gap-1.5 sm:gap-2 h-10 sm:h-11 text-xs sm:text-sm"
               >
-                <Edit3 className="h-4 w-4" />
-                Continue Planning
+                <Edit3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Continue
               </Button>
               <Button 
                 onClick={() => navigate(`/trip/${trip.id}/itinerary`)} 
                 variant="outline" 
                 size="icon"
                 title="Generate Itinerary"
+                className="h-10 w-10 sm:h-11 sm:w-11"
               >
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </>
           )}
@@ -350,19 +351,19 @@ function EmptyState({ tab }: { tab: TabValue }) {
     <motion.div 
       initial={{ opacity: 0, y: 20 }} 
       animate={{ opacity: 1, y: 0 }}
-      className="py-12"
+      className="py-8 sm:py-12"
     >
-      <div className="max-w-2xl mx-auto text-center mb-12">
+      <div className="max-w-2xl mx-auto text-center mb-8 sm:mb-12 px-4">
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.1 }}
-          className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-6 mx-auto"
+          className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-4 sm:mb-6 mx-auto"
         >
-          <Compass className="h-12 w-12 text-primary" />
+          <Compass className="h-8 w-8 sm:h-12 sm:w-12 text-primary" />
         </motion.div>
         
-        <h2 className="font-serif text-3xl font-bold mb-4">
+        <h2 className="font-serif text-2xl sm:text-3xl font-bold mb-3 sm:mb-4">
           {tab === 'all' 
             ? "Your Next Adventure Awaits" 
             : tab === 'active'
@@ -372,32 +373,32 @@ function EmptyState({ tab }: { tab: TabValue }) {
             : "No Past Adventures"}
         </h2>
         
-        <p className="text-muted-foreground text-lg mb-8 max-w-md mx-auto">
+        <p className="text-muted-foreground text-base sm:text-lg mb-6 sm:mb-8 max-w-md mx-auto">
           {tab === 'all' 
-            ? "Start planning your dream vacation with personalized itineraries crafted just for you."
+            ? "Start planning your dream vacation with personalized itineraries."
             : tab === 'active'
-            ? "You're not on a trip at the moment. Plan your next adventure!"
+            ? "You're not on a trip at the moment."
             : tab === 'upcoming'
-            ? "All your planned trips will appear here. Start planning your next getaway!"
-            : "Completed adventures will be stored here as cherished memories."}
+            ? "All your planned trips will appear here."
+            : "Completed adventures will be stored here."}
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
           <Button 
             onClick={() => navigate('/start')} 
             size="lg" 
-            className="gap-2 text-lg px-8"
+            className="gap-2 text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-auto"
           >
-            <Sparkles className="h-5 w-5" />
+            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
             Plan a Trip
           </Button>
           <Button 
             onClick={() => navigate('/explore')} 
             variant="outline" 
             size="lg" 
-            className="gap-2"
+            className="gap-2 h-12 sm:h-auto"
           >
-            <Globe className="h-5 w-5" />
+            <Globe className="h-4 w-4 sm:h-5 sm:w-5" />
             Explore Destinations
           </Button>
         </div>

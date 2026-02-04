@@ -106,13 +106,13 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   ];
 
   return (
-    <div className="flex items-center justify-center gap-2 mb-8">
+    <div className="flex items-center justify-center gap-2 mb-6 sm:mb-8">
       {steps.map((s, idx) => (
         <div key={s.step} className="flex items-center">
           <div className="flex flex-col items-center">
             <div
               className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all',
+                'w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium transition-all',
                 currentStep === s.step
                   ? 'bg-primary text-primary-foreground'
                   : currentStep > s.step
@@ -120,11 +120,11 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
                     : 'bg-muted text-muted-foreground'
               )}
             >
-              {currentStep > s.step ? <Check className="w-4 h-4" /> : s.step}
+              {currentStep > s.step ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : s.step}
             </div>
             <span
               className={cn(
-                'text-xs mt-1 font-medium',
+                'text-[10px] sm:text-xs mt-1 font-medium whitespace-nowrap',
                 currentStep === s.step ? 'text-primary' : 'text-muted-foreground'
               )}
             >
@@ -134,7 +134,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
           {idx < steps.length - 1 && (
             <div
               className={cn(
-                'w-12 h-0.5 mx-2 mt-[-16px]',
+                'w-8 sm:w-12 h-0.5 mx-1.5 sm:mx-2 mt-[-16px]',
                 currentStep > s.step ? 'bg-primary' : 'bg-muted'
               )}
             />
@@ -276,21 +276,21 @@ function TripDetailsStep({
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
+      className="space-y-5 sm:space-y-6"
     >
-      <div className="text-center mb-8">
-        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
+      <div className="text-center mb-4 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-serif font-semibold text-foreground mb-1 sm:mb-2">
           Where are you going?
         </h2>
-        <p className="text-muted-foreground">
-          Tell us about your trip and we'll tailor the experience
+        <p className="text-sm sm:text-base text-muted-foreground">
+          Tell us about your trip
         </p>
       </div>
 
-      <div className="space-y-5 max-w-md mx-auto">
+      <div className="space-y-4 sm:space-y-5 max-w-md mx-auto px-1">
         {/* Destination */}
-        <div className="space-y-2">
-          <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+        <div className="space-y-1.5 sm:space-y-2">
+          <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Destination
           </label>
           <DestinationAutocomplete
@@ -300,10 +300,10 @@ function TripDetailsStep({
           />
         </div>
 
-        {/* Dates */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+        {/* Dates - mobile optimized */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
               Arriving
             </label>
             <Popover>
@@ -311,11 +311,11 @@ function TripDetailsStep({
                 <Button
                   variant="outline"
                   className={cn(
-                    'w-full h-12 justify-between text-left font-normal',
+                    'w-full h-11 sm:h-12 justify-between text-left font-normal text-sm',
                     !startDate && 'text-muted-foreground'
                   )}
                 >
-                  {startDate ? format(startDate, 'MMM d, yyyy') : 'Select date'}
+                  {startDate ? format(startDate, 'MMM d') : 'Select'}
                   <CalendarIcon className="h-4 w-4 opacity-50" />
                 </Button>
               </PopoverTrigger>
@@ -334,8 +334,8 @@ function TripDetailsStep({
             </Popover>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
               Leaving
             </label>
             <Popover>
@@ -343,11 +343,11 @@ function TripDetailsStep({
                 <Button
                   variant="outline"
                   className={cn(
-                    'w-full h-12 justify-between text-left font-normal',
+                    'w-full h-11 sm:h-12 justify-between text-left font-normal text-sm',
                     !endDate && 'text-muted-foreground'
                   )}
                 >
-                  {endDate ? format(endDate, 'MMM d, yyyy') : 'Select date'}
+                  {endDate ? format(endDate, 'MMM d') : 'Select'}
                   <CalendarIcon className="h-4 w-4 opacity-50" />
                 </Button>
               </PopoverTrigger>
@@ -367,9 +367,9 @@ function TripDetailsStep({
           </div>
         </div>
 
-        {/* Travelers */}
-        <div className="space-y-2">
-          <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+        {/* Travelers - mobile optimized touch targets */}
+        <div className="space-y-1.5 sm:space-y-2">
+          <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Travelers
           </label>
           <div className="flex items-center gap-2">
@@ -386,7 +386,7 @@ function TripDetailsStep({
                   }
                 }}
                 className={cn(
-                  'w-12 h-12 rounded-lg border-2 transition-all text-sm font-medium',
+                  'w-11 h-11 sm:w-12 sm:h-12 rounded-lg border-2 transition-all text-sm font-medium min-w-[44px]',
                   travelers === num
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
@@ -398,26 +398,26 @@ function TripDetailsStep({
             <button
               type="button"
               onClick={() => setTravelers(Math.min(10, travelers + 1))}
-              className="w-12 h-12 rounded-lg border-2 border-border text-muted-foreground hover:border-primary/50 hover:text-foreground transition-all text-sm"
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg border-2 border-border text-muted-foreground hover:border-primary/50 hover:text-foreground transition-all text-sm min-w-[44px]"
             >
               {travelers > 4 ? travelers : '5+'}
             </button>
           </div>
         </div>
 
-        {/* Trip Type */}
-        <div className="space-y-3">
-          <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+        {/* Trip Type - mobile optimized */}
+        <div className="space-y-2 sm:space-y-3">
+          <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Trip Type
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {tripOccasions.slice(0, 6).map((occasion) => (
               <button
                 key={occasion.id}
                 type="button"
                 onClick={() => setTripType(occasion.id)}
                 className={cn(
-                  'px-3 py-1.5 rounded-full border transition-all text-sm',
+                  'px-3 py-2 sm:py-1.5 rounded-full border transition-all text-xs sm:text-sm min-h-[40px] sm:min-h-0',
                   tripType === occasion.id
                     ? 'bg-primary/10 border-primary text-primary font-medium'
                     : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
