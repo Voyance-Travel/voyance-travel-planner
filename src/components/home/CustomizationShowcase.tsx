@@ -7,29 +7,32 @@ const FEATURES = [
     title: 'Find Alternatives in Seconds',
     description: 'Search, filter, see 6 options, swap, done. Your itinerary updates instantly.',
     icon: Search,
-    // Placeholder for real product GIF - replace with actual screen recording
-    gifPlaceholder: 'swap-activity-demo.gif',
+    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
+    imageAlt: 'Activity swap interface showing alternative options',
   },
   {
     id: 'budget',
     title: 'Budget Updates Instantly',
     description: 'Swap an activity and watch your trip budget recalculate in real-time.',
     icon: DollarSign,
-    gifPlaceholder: 'budget-update-demo.gif',
+    image: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&q=80',
+    imageAlt: 'Budget tracking dashboard with real-time updates',
   },
   {
     id: 'ai-chat',
     title: 'Chat With AI to Customize',
     description: 'Tell the Trip Assistant what you want in plain English. It modifies your itinerary for you.',
     icon: MessageSquare,
-    gifPlaceholder: 'ai-chat-demo.gif',
+    image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80',
+    imageAlt: 'AI chat interface for trip customization',
   },
   {
     id: 'book',
     title: 'Reserve & Book Directly',
     description: 'One-click links to Viator, Google Maps, and restaurant sites. Book where you prefer.',
     icon: ExternalLink,
-    gifPlaceholder: 'booking-links-demo.gif',
+    image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&q=80',
+    imageAlt: 'Booking interface with direct reservation links',
   },
 ];
 
@@ -44,25 +47,19 @@ function FeatureCard({ feature, index }: { feature: typeof FEATURES[0]; index: n
       transition={{ delay: index * 0.1, duration: 0.5 }}
       className="group"
     >
-      {/* GIF/Video placeholder - replace with real screen recordings */}
+      {/* Feature Image */}
       <div className="aspect-[4/3] bg-muted rounded-xl mb-4 overflow-hidden border border-border/50 relative">
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 to-accent/5">
-          <div className="text-center p-4">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-              <Icon className="w-6 h-6 text-primary" />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Screen recording: {feature.gifPlaceholder}
-            </p>
+        <img 
+          src={feature.image} 
+          alt={feature.imageAlt}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+        <div className="absolute bottom-3 left-3">
+          <div className="w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center">
+            <Icon className="w-4 h-4 text-primary" />
           </div>
         </div>
-        {/* When you have real GIFs, replace the above with:
-        <img 
-          src={`/demos/${feature.gifPlaceholder}`} 
-          alt={feature.title}
-          className="w-full h-full object-cover"
-        />
-        */}
       </div>
       
       {/* Content */}
