@@ -4,7 +4,7 @@ import {
   User, Bell, Shield, Link2,
   ChevronRight, Mail, Smartphone, 
   LogOut, Trash2, Loader2, KeyRound,
-  Briefcase, Users, ExternalLink
+  Briefcase, Users, ExternalLink, BarChart3
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
@@ -78,6 +78,9 @@ export default function Settings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   
+  // Admin role check
+  const [isAdmin, setIsAdmin] = useState(false);
+  
   // Linked accounts (only Google now - removed Apple)
   const linkedAccounts = [
     { provider: 'google', email: user?.email, connected: !!user?.email },
@@ -92,24 +95,35 @@ export default function Settings() {
       }
       
       try {
-        const { data, error } = await supabase
-          .from('user_preferences')
-          .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, budget_alerts, phone_number, travel_agent_mode, agent_business_name')
-          .eq('user_id', user.id)
-          .maybeSingle();
+        // Load preferences and admin role in parallel
+        const [prefsResult, rolesResult] = await Promise.all([
+          supabase
+            .from('user_preferences')
+            .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, budget_alerts, phone_number, travel_agent_mode, agent_business_name')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .eq('role', 'admin')
+        ]);
         
-        if (error) {
-          console.error('Error loading preferences:', error);
-        } else if (data) {
-          setEmailNotifications(data.email_notifications ?? true);
-          setPushNotifications(data.push_notifications ?? false);
-          setMarketingEmails(data.marketing_emails ?? false);
-          setTripReminders(data.trip_reminders ?? true);
-          setPriceAlerts(data.price_alerts ?? true);
-          setBudgetAlerts(data.budget_alerts ?? true);
-          setPhoneNumber(data.phone_number ?? '');
-          setTravelAgentMode(data.travel_agent_mode ?? false);
-          setAgentBusinessName(data.agent_business_name ?? '');
+        // Set admin status
+        setIsAdmin((rolesResult.data?.length ?? 0) > 0);
+        
+        if (prefsResult.error) {
+          console.error('Error loading preferences:', prefsResult.error);
+        } else if (prefsResult.data) {
+          setEmailNotifications(prefsResult.data.email_notifications ?? true);
+          setPushNotifications(prefsResult.data.push_notifications ?? false);
+          setMarketingEmails(prefsResult.data.marketing_emails ?? false);
+          setTripReminders(prefsResult.data.trip_reminders ?? true);
+          setPriceAlerts(prefsResult.data.price_alerts ?? true);
+          setBudgetAlerts(prefsResult.data.budget_alerts ?? true);
+          setPhoneNumber(prefsResult.data.phone_number ?? '');
+          setTravelAgentMode(prefsResult.data.travel_agent_mode ?? false);
+          setAgentBusinessName(prefsResult.data.agent_business_name ?? '');
         }
       } catch (err) {
         console.error('Failed to load preferences:', err);
@@ -609,6 +623,74 @@ export default function Settings() {
                 </CardContent>
               </Card>
             </motion.div>
+
+            {/* Admin Section - Only visible to admins */}
+            {isAdmin && (
+              <motion.div variants={itemVariants}>
+                <Card className="border-primary/20">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <BarChart3 className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Admin Tools</CardTitle>
+                        <CardDescription>Platform administration and analytics</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <button 
+                      onClick={() => navigate('/admin/margins')}
+                      className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <BarChart3 className="w-5 h-5 text-muted-foreground" />
+                        <div className="text-left">
+                          <div className="font-medium text-sm">Unit Economics</div>
+                          <div className="text-sm text-muted-foreground">
+                            Margins, costs, and revenue tracking
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    </button>
+                    
+                    <button 
+                      onClick={() => navigate('/admin/data-cleanup')}
+                      className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Trash2 className="w-5 h-5 text-muted-foreground" />
+                        <div className="text-left">
+                          <div className="font-medium text-sm">Data Cleanup</div>
+                          <div className="text-sm text-muted-foreground">
+                            Manage and clean platform data
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    </button>
+                    
+                    <button 
+                      onClick={() => navigate('/admin/image-curation')}
+                      className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Users className="w-5 h-5 text-muted-foreground" />
+                        <div className="text-left">
+                          <div className="font-medium text-sm">Image Curation</div>
+                          <div className="text-sm text-muted-foreground">
+                            Curate destination and activity images
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    </button>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
 
             {/* Danger Zone */}
             <motion.div variants={itemVariants}>
