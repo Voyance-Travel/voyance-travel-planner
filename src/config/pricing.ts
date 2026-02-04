@@ -77,8 +77,8 @@ export const STRIPE_PRODUCTS = {
   },
 } as const;
 
-// Free Tier - OPTIMIZED MODEL
-// Free users get AI-only previews (cheap) - real venues require credits
+// Free Tier - "FULL PREVIEW, NO DETAILS" MODEL
+// Free users see complete itinerary with real venues, but gated details
 export const FREE_TIER = {
   // Credit grants
   signupBonus: 150,              // 150 credits = 1 free day unlock
@@ -89,25 +89,30 @@ export const FREE_TIER = {
   
   // Free tier features (no credits required)
   freeFeatures: [
-    'AI-only trip preview (structure, themes, neighborhoods)',
-    'Travel DNA quiz',
-    'Explore destination cards',
-    'Day 1 structure preview',
+    'Complete itinerary with real venue names',
+    'Personalized timing and reasoning',
+    'Travel DNA quiz and archetype',
+    'Full day-by-day structure preview',
+    'DNA alignment explanations',
   ],
   
-  // What requires credits
+  // What requires credits (GATED)
   paidFeatures: [
-    'Real venue names, addresses, photos',
-    'Google Maps integration',
-    'Restaurant booking links',
-    'Hotel search & recommendations',
+    'Full addresses + Google Maps',
+    'Hours of operation',
+    'High-quality venue photos',
+    'Booking links & reservations',
+    'Insider tips for each stop',
+    'Offline PDF export',
+    'Optimized routing',
+    'Hotel recommendations',
     'Activity swaps & regeneration',
     'AI companion chat',
   ],
   
   // Cost model (internal use)
   internalCosts: {
-    previewCost: 0.025,          // AI-only preview
+    previewCost: 0.12,           // Full preview with real venues + validation
     fullDayCost: 0.263,          // $0.163 base + $0.10/day
     perDayIncrement: 0.100,      // Each additional day
     tripBaseCost: 0.163,         // Per-trip overhead (Perplexity + AI setup)
