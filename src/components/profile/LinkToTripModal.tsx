@@ -1,6 +1,6 @@
 /**
  * Link to Trip Modal - Editorial Redesign
- * Clean, sophisticated trip selection
+ * Clean, sophisticated trip selection with Travel DNA blend toggle
  */
 
 import { useState, useEffect } from 'react';
@@ -16,6 +16,8 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { 
   Plane, 
   Calendar, 
@@ -23,12 +25,14 @@ import {
   Check, 
   Loader2,
   Users,
-  Info
+  Info,
+  Dna
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAddTripCollaborator, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import { cn } from '@/lib/utils';
+import { fetchTravelDNA, calculateGuestCompatibility } from '@/utils/travelDNACompatibility';
 
 interface LinkToTripModalProps {
   open: boolean;
@@ -55,6 +59,9 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
   const [trips, setTrips] = useState<UserTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const [includePreferences, setIncludePreferences] = useState(true);
+  const [friendHasDNA, setFriendHasDNA] = useState<boolean | null>(null);
+  const [compatibilityScore, setCompatibilityScore] = useState<number | null>(null);
   
   const addCollaborator = useAddTripCollaborator();
   const { data: existingCollaborators } = useTripCollaborators(selectedTripId || undefined);
@@ -82,8 +89,25 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
     if (open) {
       fetchTrips();
       setSelectedTripId(null);
+      setIncludePreferences(true);
+      
+      // Check if friend has Travel DNA
+      async function checkFriendDNA() {
+        const dna = await fetchTravelDNA(friend.id);
+        setFriendHasDNA(!!dna?.trait_scores);
+        
+        // Calculate compatibility if friend has DNA
+        if (dna?.trait_scores) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const score = await calculateGuestCompatibility(user.id, friend.id);
+            setCompatibilityScore(score);
+          }
+        }
+      }
+      checkFriendDNA();
     }
-  }, [open]);
+  }, [open, friend.id]);
 
   const handleLink = async () => {
     if (!selectedTripId) return;
@@ -93,6 +117,7 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
         tripId: selectedTripId,
         userId: friend.id,
         permission: 'contributor',
+        includePreferences,
       });
       onOpenChange(false);
     } catch (error) {
@@ -117,18 +142,48 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
           </DialogDescription>
         </DialogHeader>
 
-        {/* Friend preview */}
-        <div className="flex items-center gap-3 py-3 border-b border-border">
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={friend.avatar_url || undefined} />
-            <AvatarFallback className="bg-muted text-muted-foreground">
-              {(friend.display_name || friend.handle || '?')[0].toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="text-sm font-medium text-foreground">{friend.display_name || friend.handle}</p>
-            {friend.handle && <p className="text-xs text-muted-foreground">@{friend.handle}</p>}
+        {/* Friend preview with compatibility */}
+        <div className="flex items-center justify-between py-3 border-b border-border">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={friend.avatar_url || undefined} />
+              <AvatarFallback className="bg-muted text-muted-foreground">
+                {(friend.display_name || friend.handle || '?')[0].toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-sm font-medium text-foreground">{friend.display_name || friend.handle}</p>
+              {friend.handle && <p className="text-xs text-muted-foreground">@{friend.handle}</p>}
+            </div>
           </div>
+          {compatibilityScore !== null && (
+            <Badge variant="secondary" className="text-xs gap-1">
+              <Dna className="h-3 w-3" />
+              {compatibilityScore}% match
+            </Badge>
+          )}
+        </div>
+
+        {/* Travel DNA blend toggle */}
+        <div className="flex items-center justify-between py-3 border-b border-border">
+          <div className="space-y-0.5">
+            <Label htmlFor="blend-toggle" className="text-sm font-medium flex items-center gap-2">
+              <Dna className="h-4 w-4 text-primary" />
+              Include Travel DNA
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {friendHasDNA === false 
+                ? `${friend.display_name || 'They'} hasn't completed the quiz yet`
+                : 'Blend their preferences when generating itinerary'
+              }
+            </p>
+          </div>
+          <Switch
+            id="blend-toggle"
+            checked={includePreferences}
+            onCheckedChange={setIncludePreferences}
+            disabled={friendHasDNA === false}
+          />
         </div>
 
         {/* Trip selection */}
