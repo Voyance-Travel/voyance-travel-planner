@@ -720,12 +720,12 @@ export default function PlannerFlightEnhanced() {
                 >
                   <Button 
                     onClick={handleContinue} 
-                    disabled={!canContinue} 
+                    disabled={!canContinue || plannerState.isLoading} 
                     size="lg"
                     className="w-full h-12"
                   >
-                    Continue to Hotels
-                    <ArrowRight className="h-4 w-4 ml-2" />
+                    {plannerState.isLoading ? 'Saving...' : 'Continue to Hotels'}
+                    {!plannerState.isLoading && <ArrowRight className="h-4 w-4 ml-2" />}
                   </Button>
                   
                   <button 

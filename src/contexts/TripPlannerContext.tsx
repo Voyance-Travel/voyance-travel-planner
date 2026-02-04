@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { useEntitlements } from '@/hooks/useEntitlements';
@@ -184,6 +184,11 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { plans } = useEntitlements();
   const [state, setState] = useState<TripPlannerState>(initialState);
+  
+  // CRITICAL: Synchronous ref guard to prevent race condition on saveTrip
+  // React state updates are async, so multiple rapid clicks can read tripId as null
+  // before the first INSERT completes. This ref blocks concurrent saves immediately.
+  const savingInProgressRef = useRef(false);
 
   // Calculate total price
   const calculateTotalPrice = useCallback(() => {
@@ -243,6 +248,14 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
   };
 
   const saveTrip = async (): Promise<string | null> => {
+    // CRITICAL: Prevent race condition with synchronous ref check
+    // This blocks concurrent calls immediately (before any async operation)
+    if (savingInProgressRef.current) {
+      console.warn('[TripPlanner] Save already in progress, returning existing tripId:', state.tripId);
+      return state.tripId;
+    }
+    savingInProgressRef.current = true;
+
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
@@ -317,16 +330,42 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
 
         if (error) throw error;
       } else {
-        // IMPORTANT: Do not send an "id" column on insert (backend generates it)
-        const { data, error } = await supabase
+        // CRITICAL: Double-check database for existing trip before INSERT
+        // This prevents duplicates if state.tripId hasn't been set yet
+        const { data: existingTrip } = await supabase
           .from('trips')
-          .insert([tripPayload as any])
           .select('id')
+          .eq('user_id', user.id)
+          .eq('destination', state.basics.destination || 'Unknown')
+          .eq('start_date', state.basics.startDate || new Date().toISOString().split('T')[0])
+          .eq('end_date', state.basics.endDate || new Date().toISOString().split('T')[0])
+          .order('created_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
 
-        if (error) throw error;
-        if (!data?.id) throw new Error('Failed to create trip');
-        tripId = data.id;
+        if (existingTrip?.id) {
+          console.log('[TripPlanner] Found existing trip, updating instead of creating:', existingTrip.id);
+          tripId = existingTrip.id;
+          // Update the existing trip instead of creating a new one
+          const { error } = await supabase
+            .from('trips')
+            .update(tripPayload as any)
+            .eq('id', tripId)
+            .eq('user_id', user.id);
+
+          if (error) throw error;
+        } else {
+          // IMPORTANT: Do not send an "id" column on insert (backend generates it)
+          const { data, error } = await supabase
+            .from('trips')
+            .insert([tripPayload as any])
+            .select('id')
+            .maybeSingle();
+
+          if (error) throw error;
+          if (!data?.id) throw new Error('Failed to create trip');
+          tripId = data.id;
+        }
       }
 
       // Save trip occasion as a trip_intent for AI personalization
@@ -394,6 +433,9 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         error: error instanceof Error ? error.message : 'Failed to save trip',
       }));
       return null;
+    } finally {
+      // CRITICAL: Always release the lock, even on error
+      savingInProgressRef.current = false;
     }
   };
 

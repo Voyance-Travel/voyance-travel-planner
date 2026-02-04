@@ -665,12 +665,12 @@ export default function PlannerHotelEnhanced() {
                 >
                   <Button 
                     onClick={handleContinue} 
-                    disabled={!plannerState.hotel?.id} 
+                    disabled={!plannerState.hotel?.id || plannerState.isLoading} 
                     size="lg"
                     className="w-full h-12"
                   >
-                    Continue to Trip Summary
-                    <ArrowRight className="h-4 w-4 ml-2" />
+                    {plannerState.isLoading ? 'Saving...' : 'Continue to Trip Summary'}
+                    {!plannerState.isLoading && <ArrowRight className="h-4 w-4 ml-2" />}
                   </Button>
                 </motion.div>
               </div>
