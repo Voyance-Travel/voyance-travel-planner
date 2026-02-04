@@ -1,14 +1,33 @@
-# Metered Credits System - Source of Truth
+# ⚠️ DEPRECATED - Metered Credits System (Cents-Based)
 
-> **Status**: Implementation in progress  
-> **Last Updated**: 2026-01-19  
-> **Owner**: Voyance Platform
+> **Status**: DEPRECATED - DO NOT USE  
+> **Deprecated**: 2026-02-04  
+> **Replaced By**: Credit-based system (see `src/config/pricing.ts`)
 
 ---
 
-## Overview
+## ⛔ DEPRECATION NOTICE
 
-The metered credit system allows users to pay-per-action for specific features without committing to a subscription. Users load credits into their wallet (min $5.00) and spend them on discrete actions.
+**This document describes an OLD, UNUSED system.** The cents-based `consume-credits` edge function and `user_credits` table have been removed.
+
+### Current System (Active)
+- **Config**: `src/config/pricing.ts` - CREDIT_COSTS  
+- **Edge Function**: `spend-credits` - uses CREDITS not cents
+- **Tables**: `credit_balances`, `credit_ledger`
+- **Hook**: `useCredits`, `useSpendCredits`
+
+### Key Difference
+| Old (Deprecated) | New (Active) |
+|------------------|--------------|
+| 399 cents = $3.99 | 150 credits = 1 day |
+| `user_credits.balance_cents` | `credit_balances.purchased_credits` |
+| `consume-credits` | `spend-credits` |
+
+---
+
+## ~~Overview~~ (Historical Reference Only)
+
+The OLD metered credit system used CENTS as currency. This has been replaced with CREDITS.
 
 ---
 

@@ -71,15 +71,28 @@
 
 ---
 
-## Credit/Pay-Per-Use Features
+## Credit-Based Features (Active System)
 
-| Feature | Status | Backend Flag | Edge Function | Notes |
-|---------|--------|--------------|---------------|-------|
-| Build 1 day ($3.99) | ✅ | `credit_features.build_day` | consume-credits | Ready |
-| Build full trip ($9.99) | ✅ | `credit_features.build_full_trip` | consume-credits | Ready |
-| Route optimization ($1.99) | ✅ | `credit_features.route_optimize` | consume-credits | Ready |
-| Group budget setup ($2.99) | ✅ | `credit_features.group_budget_setup` | consume-credits | Ready |
-| Credit top-up (min $5) | ⚠️ | N/A | add-credits | Checkout works, webhook fulfillment needed |
+> **Note**: The old cents-based `consume-credits` system has been deprecated.  
+> All credit operations now use `spend-credits` with CREDITS (not cents).
+
+| Action | Credits Cost | Est. Cost to Us | Edge Function | Notes |
+|--------|--------------|-----------------|---------------|-------|
+| Unlock 1 day | 150 | $0.03–$0.10 | spend-credits | Main revenue driver |
+| Swap activity | 5 | $0.005–$0.02 | spend-credits | Light AI call |
+| Regenerate day | 15 | $0.02–$0.08 | spend-credits | Medium AI call |
+| Restaurant rec | 10 | $0.01–$0.04 | spend-credits | AI + Places API |
+| AI message | 2 | $0.005–$0.02 | spend-credits | Chat interaction |
+
+### Credit Packs (Stripe Live)
+
+| Pack | Credits | Price | $/Credit | Can Unlock Days |
+|------|---------|-------|----------|-----------------|
+| Top-Up | 50 | $5 | $0.10 | 0 days |
+| Single | 200 | $12 | $0.06 | 1 day + extras |
+| Starter | 500 | $29 | $0.058 | 3 days |
+| Explorer | 1200 | $55 | $0.046 | 7 days |
+| Adventurer | 2500 | $89 | $0.036 | 14 days |
 
 ---
 

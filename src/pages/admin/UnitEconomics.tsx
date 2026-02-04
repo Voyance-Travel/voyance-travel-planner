@@ -893,7 +893,126 @@ export default function UnitEconomics() {
           </div>
         </div>
 
-        {/* Monthly Expense Projections */}
+        {/* Credit ↔ Cost Economics */}
+        <div style={{
+          background: "rgba(30, 41, 59, 0.5)",
+          borderRadius: 12,
+          padding: "28px",
+          border: "1px solid rgba(100, 116, 139, 0.2)",
+          marginBottom: 32,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", margin: 0 }}>
+              Credit ↔ Cost Economics
+            </h3>
+            <span style={{ fontSize: 10, color: "#64748B", background: "rgba(15, 23, 42, 0.5)", padding: "4px 8px", borderRadius: 4 }}>
+              What users pay vs. what it costs us
+            </span>
+          </div>
+
+          {/* Action Cost Table */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 16 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Action</th>
+                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Credits</th>
+                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>User Pays*</th>
+                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Our Cost</th>
+                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Gross Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { action: "Unlock 1 Day", credits: 150, costMin: 0.03, costMax: 0.10 },
+                { action: "Swap Activity", credits: 5, costMin: 0.005, costMax: 0.02 },
+                { action: "Regenerate Day", credits: 15, costMin: 0.02, costMax: 0.08 },
+                { action: "Restaurant Rec", credits: 10, costMin: 0.01, costMax: 0.04 },
+                { action: "AI Message", credits: 2, costMin: 0.005, costMax: 0.02 },
+              ].map((row, i) => {
+                // Calculate user payment based on Explorer tier ($55 / 1200 credits = $0.046/credit)
+                const pricePerCredit = 55 / 1200;
+                const userPays = row.credits * pricePerCredit;
+                const avgCost = (row.costMin + row.costMax) / 2;
+                const grossMargin = ((userPays - avgCost) / userPays) * 100;
+                
+                return (
+                  <tr key={i} style={{ background: i % 2 === 0 ? "rgba(15, 23, 42, 0.3)" : "transparent" }}>
+                    <td style={{ padding: "10px 12px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {row.action}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {row.credits}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: "#34D399", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      ${userPays.toFixed(2)}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      ${avgCost.toFixed(3)}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: grossMargin > 90 ? "#34D399" : grossMargin > 80 ? "#FBBF24" : "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {grossMargin.toFixed(0)}%
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
+            *User payment based on Explorer tier ($55 ÷ 1200 credits = $0.046/credit). Top-Up users pay more ($0.10/credit).
+          </p>
+
+          {/* Pack Analysis */}
+          <div style={{ marginBottom: 16 }}>
+            <h4 style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8", marginBottom: 12 }}>Credit Pack → Trip Capacity</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+              {[
+                { name: "Top-Up", price: 5, credits: 50, color: "#94A3B8" },
+                { name: "Single", price: 12, credits: 200, color: "#38BDF8" },
+                { name: "Starter", price: 29, credits: 500, color: "#A78BFA" },
+                { name: "Explorer", price: 55, credits: 1200, color: "#34D399" },
+                { name: "Adventurer", price: 89, credits: 2500, color: "#F59E0B" },
+              ].map((pack) => {
+                const daysCanUnlock = Math.floor(pack.credits / 150);
+                const leftover = pack.credits - (daysCanUnlock * 150);
+                const swapsWithLeftover = Math.floor(leftover / 5);
+                
+                return (
+                  <div key={pack.name} style={{ 
+                    padding: 12, 
+                    background: "rgba(15, 23, 42, 0.5)", 
+                    borderRadius: 8,
+                    borderLeft: `3px solid ${pack.color}`,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0" }}>{pack.name}</span>
+                      <span style={{ fontSize: 12, color: pack.color, fontWeight: 600 }}>${pack.price}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                      {pack.credits} credits
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>
+                      {daysCanUnlock === 0 ? (
+                        <span style={{ color: "#F87171" }}>❌ Can't unlock any days</span>
+                      ) : (
+                        <span style={{ color: "#34D399" }}>✓ {daysCanUnlock} day{daysCanUnlock > 1 ? "s" : ""} + {swapsWithLeftover} swaps</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Key Insight */}
+          <div style={{ padding: 12, background: "rgba(248, 113, 113, 0.1)", border: "1px solid rgba(248, 113, 113, 0.3)", borderRadius: 8 }}>
+            <p style={{ fontSize: 11, color: "#F87171", margin: 0, lineHeight: 1.6 }}>
+              <strong>🔒 $5 Top-Up Protection:</strong> At 50 credits vs 150 credits/day, the $5 pack <strong>cannot unlock any itinerary days</strong>. 
+              Users must purchase at least the $12 Single pack (200 credits) to unlock even 1 day. 
+              This prevents micro-paying for full trip generation.
+            </p>
+          </div>
+        </div>
+
         <div style={{
           background: "rgba(30, 41, 59, 0.5)",
           borderRadius: 12,
