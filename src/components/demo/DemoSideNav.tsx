@@ -100,14 +100,14 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 lg:hidden"
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] lg:hidden"
       >
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-card/95 backdrop-blur-md border shadow-lg rounded-full"
+          className="flex items-center gap-2 px-4 py-2.5 bg-background border border-border shadow-lg rounded-full"
         >
           <ActiveIcon className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">{SECTIONS[activeIndex]?.label}</span>
+          <span className="text-sm font-medium text-foreground">{SECTIONS[activeIndex]?.label}</span>
           <ChevronDown className={cn(
             "h-4 w-4 text-muted-foreground transition-transform",
             isExpanded && "rotate-180"
@@ -116,41 +116,51 @@ export function DemoSideNav({ showTour }: DemoSideNavProps) {
 
         <AnimatePresence>
           {isExpanded && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-card/95 backdrop-blur-md border shadow-xl rounded-2xl overflow-hidden"
-            >
-              {SECTIONS.map((section, idx) => {
-                const Icon = section.icon;
-                const isActive = activeSection === section.id;
-                const isPast = idx < activeIndex;
-                
-                return (
-                  <button
-                    key={section.id}
-                    onClick={() => scrollToSection(section.id)}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-4 py-3 transition-colors",
-                      isActive 
-                        ? "bg-primary/10 text-primary" 
-                        : isPast
-                        ? "text-muted-foreground"
-                        : "text-foreground hover:bg-muted/50"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                      isActive ? "bg-primary text-primary-foreground" : "bg-muted"
-                    )}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <span className="text-sm font-medium">{section.label}</span>
-                  </button>
-                );
-              })}
-            </motion.div>
+            <>
+              {/* Backdrop to close menu */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[59]"
+                onClick={() => setIsExpanded(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-background border border-border shadow-xl rounded-2xl overflow-hidden z-[61]"
+              >
+                {SECTIONS.map((section, idx) => {
+                  const Icon = section.icon;
+                  const isActive = activeSection === section.id;
+                  const isPast = idx < activeIndex;
+                  
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => scrollToSection(section.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3 transition-colors",
+                        isActive 
+                          ? "bg-primary/10 text-primary" 
+                          : isPast
+                          ? "text-muted-foreground"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                        isActive ? "bg-primary text-primary-foreground" : "bg-muted"
+                      )}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm font-medium">{section.label}</span>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </motion.div>
