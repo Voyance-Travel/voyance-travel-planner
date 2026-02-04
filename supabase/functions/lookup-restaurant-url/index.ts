@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,6 +7,7 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  const costTracker = trackCost('lookup_restaurant_url', 'perplexity/sonar');
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -72,6 +74,11 @@ RULES:
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
+    
+    // Track Perplexity API call
+    costTracker.recordPerplexity(1);
+    costTracker.recordAiUsage(data, 'perplexity/sonar');
+    await costTracker.save();
     
     console.log('[lookup-restaurant-url] Perplexity response:', content);
 
