@@ -1,302 +1,207 @@
 
-
-# Collaborative Trip Profile Blending UX
+# Add Budget, Payment & Need to Know to Itinerary Teaser
 
 ## Overview
 
-This plan adds user control and visibility to the Travel DNA profile blending system. Currently, when friends are linked to a trip, their preferences are automatically blended with the trip owner's profile (owner gets 1.5x weight). However, users have no control over this process and no visibility into how preferences were merged.
+Enhance the homepage itinerary preview (what users see after entering a destination) to include practical travel information upfront: daily budget estimates, payment/currency tips, and essential "need to know" details like visa requirements and safety level.
 
-## Current State
+This transforms the teaser from a pure itinerary preview into a more complete "trip at a glance" that demonstrates Voyance's depth of knowledge.
+
+## Current State vs. Proposed
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          CURRENT TEASER                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Your Tokyo Preview                                                     │
+│  Built as a "Slow Traveler"                                             │
+│                                                                         │
+│  [Day 1] Cultural Immersion...                                          │
+│  [Day 2] Local Discovery...                                             │
+│  [Day 3] Hidden Gems...                                                 │
+│                                                                         │
+│  + 4 more days                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+                              ▼
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          ENHANCED TEASER                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Your Tokyo Preview                                                     │
+│  Built as a "Slow Traveler"                                             │
+│                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ BUDGET      │ PAYMENT              │ NEED TO KNOW                 │  │
+│  │ $85–$180    │ Yen (¥)              │ Visa-free 90 days            │  │
+│  │ per day     │ Cards + cash both    │ Low-risk destination         │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│  [Day 1] Cultural Immersion...                                          │
+│  [Day 2] Local Discovery...                                             │
+│  [Day 3] Hidden Gems...                                                 │
+│                                                                         │
+│  + 4 more days                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Implementation Plan
+
+### 1. Backend: Enhance Quick Preview Edge Function
+
+Update `generate-quick-preview` to fetch and return practical travel data alongside the itinerary.
+
+**Data sources:**
+- **Budget**: Query `destination_cost_index` table for cost multipliers and base prices
+- **Payment/Need to Know**: Call the existing `lookup-travel-advisory` function inline (or fetch from Perplexity directly)
+
+**New response fields:**
+```typescript
+interface QuickPreviewResponse {
+  // Existing fields
+  destination: string;
+  days: QuickPreviewDay[];
+  totalDays: number;
+  archetypeUsed: string;
+  archetypeTagline: string;
+  
+  // New fields
+  budgetEstimate?: {
+    dailyLow: number;     // e.g., 85 (in USD)
+    dailyHigh: number;    // e.g., 180
+    currency: string;     // "USD"
+    costLevel: 'budget' | 'moderate' | 'expensive' | 'luxury';
+  };
+  paymentInfo?: {
+    localCurrency: string;      // "Yen (¥)"
+    currencyCode: string;       // "JPY"
+    paymentTips: string;        // "Cards + cash both common"
+  };
+  needToKnow?: {
+    visaSummary: string;        // "Visa-free 90 days"
+    safetyLevel: string;        // "low-risk"
+    keyRequirement?: string;    // "Passport valid 6+ months" (optional)
+  };
+}
+```
+
+**Implementation approach:**
+1. After AI generates itinerary, query `destination_cost_index` for budget data
+2. Call Perplexity for travel advisory (cached for 12 hours)
+3. Combine and return with preview response
+
+### 2. Frontend: Update Type Definitions
+
+Extend the `PreviewData` interface in `DestinationEntry.tsx`:
+
+```typescript
+interface PreviewData {
+  destination: string;
+  days: Day[];
+  totalDays: number;
+  archetypeUsed: string;
+  archetypeTagline: string;
+  // New
+  budgetEstimate?: {
+    dailyLow: number;
+    dailyHigh: number;
+    currency: string;
+    costLevel: string;
+  };
+  paymentInfo?: {
+    localCurrency: string;
+    currencyCode: string;
+    paymentTips: string;
+  };
+  needToKnow?: {
+    visaSummary: string;
+    safetyLevel: string;
+    keyRequirement?: string;
+  };
+}
+```
+
+### 3. Frontend: Enhance ItineraryTeaser Component
+
+Add a new "Trip Snapshot" bar between the header and day cards.
+
+**New UI Section:**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [💰 Budget]        [💳 Payment]         [📋 Need to Know]             │
+│   $85–$180/day       Yen (¥)             Visa-free 90 days              │
+│   moderate cost      Cards + cash        Low-risk                       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Component structure:**
+- Three equal columns on desktop, stacked on mobile
+- Subtle glass-morphism styling to match existing teaser aesthetic
+- Icons for visual hierarchy: DollarSign, CreditCard, Shield
+- Fallback gracefully if data not available (don't show section)
+
+### 4. Fallback Strategy
+
+For destinations not in `destination_cost_index`:
+- Use `_default` row values with cost_multiplier of 1.0
+- Label as "Moderate" cost level
+
+For travel advisory failures:
+- Skip the needToKnow section entirely
+- Don't block the preview from showing
+
+## Files to Create/Modify
+
+| File | Action | Changes |
+|------|--------|---------|
+| `supabase/functions/generate-quick-preview/index.ts` | Modify | Add budget lookup from `destination_cost_index`, add travel advisory lookup, extend response |
+| `src/components/home/DestinationEntry.tsx` | Modify | Extend `PreviewData` interface, pass new fields to teaser |
+| `src/components/home/ItineraryTeaser.tsx` | Modify | Add `TripSnapshotBar` section with budget, payment, need-to-know display |
+
+## UI Design Details
+
+**Trip Snapshot Bar Styling:**
+- Background: `bg-black/30 backdrop-blur-sm` (matches existing cards)
+- Border: `border border-white/20 rounded-xl`
+- Grid: `grid grid-cols-1 sm:grid-cols-3 gap-3 p-4`
+- Icons: Small (w-4 h-4), muted color, left of label
+- Labels: `text-xs text-white/60 uppercase tracking-wide`
+- Values: `text-sm text-white font-medium`
+- Subtitles: `text-xs text-white/50`
+
+**Budget Cost Level Mapping:**
+| Cost Multiplier | Label | Daily Range (base) |
+|-----------------|-------|--------------------|
+| < 0.6 | Budget | $40–$80 |
+| 0.6–0.9 | Moderate | $60–$120 |
+| 0.9–1.3 | Expensive | $100–$200 |
+| > 1.3 | Luxury | $150–$300+ |
+
+**Safety Level Display:**
+| Level | Display | Color |
+|-------|---------|-------|
+| low-risk | Low-risk | text-green-400 |
+| moderate | Moderate | text-yellow-400 |
+| elevated | Elevated | text-orange-400 |
+| high-risk | High-risk | text-red-400 |
+
+## Example Output (Tokyo)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                     CURRENT PROFILE BLENDING FLOW                       │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  Link Friend to Trip ──► Collaborator Added ──► Generation Triggered   │
-│                                                                         │
-│                    (Automatic blending, no user control)                │
-│                                                                         │
-│  Backend fetches all collaborator preferences automatically             │
-│  Owner gets 1.5x weight in blending algorithm                           │
-│  No UI feedback about what was blended                                  │
-│                                                                         │
+│  [💰 Budget]           [💳 Payment]         [📋 Need to Know]          │
+│   $95–$200 / day        Yen (¥)              Visa-free 90 days          │
+│   Expensive             Cards + cash ok      Low-risk                   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Proposed Solution: Four New Features
+## Performance Considerations
 
-### Feature 1: Blend Toggle in Link-to-Trip Flow
+- **Parallel fetching**: Budget lookup and travel advisory fetch happen in parallel with AI generation
+- **Caching**: Travel advisory responses are cached 12 hours (already implemented in enrichmentService)
+- **Graceful degradation**: If either lookup fails, the teaser still works — just without that section
+- **No blocking**: Preview generation completes even if enrichment fails
 
-Add an option when linking a friend to include or exclude their preferences from itinerary generation.
+## Summary
 
-**Where**: `LinkToTripModal.tsx` and `TripCollaboratorsPanel.tsx`
-
-**Database Change**: Add `include_preferences` boolean column to `trip_collaborators` table (default: true)
-
-**UI Addition**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Link to Trip                                                     [X]  │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  [Avatar] Sarah Chen                                              │  │
-│  │  @sarahchen                                                       │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ [Toggle ON]  Include Travel DNA in itinerary                    │   │
-│  │              Their preferences will blend with yours            │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  Select a trip:                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ [✓] Paris Adventure                                             │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│                                      [Cancel]  [Link]                   │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Feature 2: Blended Profiles Visibility Card
-
-Show which profiles were combined and highlight any compromises in the itinerary view.
-
-**Where**: New component `BlendedProfilesCard.tsx` displayed in `EditorialItinerary.tsx`
-
-**UI Addition**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Blended Travel DNA                                              [▼]   │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  [Avatar] You (organizer)     ●────────── 60% weight                    │
-│  Balanced Story Collector                                               │
-│                                                                         │
-│  [Avatar] Sarah Chen          ○───────── 40% weight                     │
-│  Luxury Curator                                                         │
-│                                                                         │
-│  ─────────────────────────────────────────────────────────────────────  │
-│                                                                         │
-│  Blended Result:                                                        │
-│  • Pace: Moderate (both aligned)                                        │
-│  • Budget: Mid-range → Upscale (compromised for Sarah)                  │
-│  • Dining: Balanced mix of local + fine dining                          │
-│  • Dietary: Vegetarian included (Sarah's requirement)                   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Feature 3: DNA Quiz Prompt for Guests
-
-When a friend without Travel DNA is added, show a gentle prompt encouraging them to complete the quiz.
-
-**Where**: `TripCollaboratorsPanel.tsx` and potentially a notification/email
-
-**UI Addition**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Trip Members                                                           │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  [Avatar] You                              [Crown] Owner                │
-│                                                                         │
-│  [Avatar] Sarah Chen                       [DNA Icon] Contributor       │
-│           87% compatible                                                │
-│                                                                         │
-│  [Avatar] Mike Johnson                     [!] Contributor              │
-│           ┌──────────────────────────────────────────────────────┐     │
-│           │ No Travel DNA yet                                     │     │
-│           │ Invite Mike to take the quiz so their preferences     │     │
-│           │ can be included in your itinerary.                    │     │
-│           │                                                       │     │
-│           │ [Send Quiz Invite]                                    │     │
-│           └──────────────────────────────────────────────────────┘     │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Feature 4: Group Compatibility Card
-
-Show overall group travel compatibility and highlight potential preference conflicts.
-
-**Where**: New component `GroupCompatibilityCard.tsx` in `TripCollaboratorsPanel.tsx`
-
-**UI Addition**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Group Compatibility                                                    │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│       ┌────────────────┐                                                │
-│       │                │                                                │
-│       │      78%       │  ← Overall group compatibility                 │
-│       │                │                                                │
-│       └────────────────┘                                                │
-│                                                                         │
-│  Aligned On:                                                            │
-│  ✓ Cultural Experiences    ✓ Food Adventures    ✓ Moderate Pace        │
-│                                                                         │
-│  May Need Compromise:                                                   │
-│  ⚡ Budget (Value vs Luxury)                                            │
-│  ⚡ Morning Schedule (Early Bird vs Late Riser)                          │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Technical Implementation
-
-### Database Changes
-
-**New column on `trip_collaborators` table:**
-
-```sql
-ALTER TABLE trip_collaborators 
-ADD COLUMN include_preferences BOOLEAN DEFAULT true;
-
-COMMENT ON COLUMN trip_collaborators.include_preferences IS 
-'Whether to include this collaborator preferences in itinerary generation blending';
-```
-
-### Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/components/itinerary/BlendedProfilesCard.tsx` | Shows blended DNA breakdown |
-| `src/components/itinerary/GroupCompatibilityCard.tsx` | Shows overall group compatibility |
-| `src/components/itinerary/DNAQuizPrompt.tsx` | Prompt for guests without DNA |
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/components/profile/LinkToTripModal.tsx` | Add blend toggle switch |
-| `src/components/itinerary/TripCollaboratorsPanel.tsx` | Add compatibility display, DNA quiz prompt, blend toggle per collaborator |
-| `src/services/tripCollaboratorsAPI.ts` | Add `include_preferences` to types and mutations |
-| `supabase/functions/generate-itinerary/index.ts` | Respect `include_preferences` flag when fetching collaborator preferences |
-| `src/components/itinerary/EditorialItinerary.tsx` | Add BlendedProfilesCard to sidebar |
-
----
-
-## Detailed Component Specifications
-
-### BlendedProfilesCard.tsx
-
-```typescript
-interface BlendedProfilesCardProps {
-  tripId: string;
-  ownerId: string;
-}
-
-// Displays:
-// - Owner's archetype and weight (60%)
-// - Each collaborator's archetype and weight (40% / n)
-// - Blended result summary:
-//   - Aligned traits (both users agree)
-//   - Compromised traits (averaged/adjusted)
-//   - Merged requirements (dietary, accessibility)
-```
-
-### GroupCompatibilityCard.tsx
-
-```typescript
-interface GroupCompatibilityCardProps {
-  tripId: string;
-  collaborators: TripCollaborator[];
-}
-
-// Calculates:
-// - Pairwise compatibility between all travelers
-// - Average overall compatibility score
-// - Identifies aligned traits (low variance across group)
-// - Identifies conflict traits (high variance across group)
-```
-
-### LinkToTripModal.tsx Changes
-
-Add a Switch component below the friend preview:
-
-```tsx
-<div className="flex items-center justify-between py-3 border-b">
-  <div className="space-y-0.5">
-    <Label htmlFor="blend-toggle" className="text-sm font-medium">
-      Include Travel DNA
-    </Label>
-    <p className="text-xs text-muted-foreground">
-      Blend their preferences when generating itinerary
-    </p>
-  </div>
-  <Switch
-    id="blend-toggle"
-    checked={includePreferences}
-    onCheckedChange={setIncludePreferences}
-  />
-</div>
-```
-
-### Backend Changes (generate-itinerary/index.ts)
-
-Update `getCollaboratorPreferences` to filter by `include_preferences`:
-
-```typescript
-// Line ~2277: Add filter for include_preferences
-const { data: collaborators, error: collabError } = await supabase
-  .from('trip_collaborators')
-  .select('user_id, include_preferences')
-  .eq('trip_id', tripId)
-  .eq('include_preferences', true); // Only include if flag is true
-```
-
----
-
-## User Experience Flow
-
-```text
-1. Link Friend to Trip
-   ├── See friend's compatibility score (if DNA exists)
-   ├── Toggle: "Include Travel DNA" (default: ON)
-   └── If friend has no DNA → Show "Complete Quiz" prompt
-
-2. View Trip Collaborators
-   ├── See each collaborator with compatibility %
-   ├── Toggle blend ON/OFF per collaborator
-   └── "No DNA" badge with quiz invite for incomplete profiles
-
-3. Generate Itinerary
-   ├── Backend filters collaborators by include_preferences
-   ├── Blends only opted-in profiles
-   └── Returns blend metadata with response
-
-4. View Itinerary
-   ├── Blended Profiles Card shows who was included
-   ├── Highlights compromises and alignments
-   └── Group Compatibility Card shows overall match
-```
-
----
-
-## Design Considerations
-
-Following the "Friend, Not Nuisance" philosophy:
-
-- Default blend to ON (invisible helper pattern)
-- Compatibility scores shown as celebration ("87% aligned!")
-- Conflicts framed as "May need compromise" not "Mismatch detected"
-- Quiz prompts are gentle invitations, not blocking gates
-- All toggles remember user preference per collaborator
-
----
-
-## Summary of Changes
-
-| Area | What's Added |
-|------|--------------|
-| **Database** | `include_preferences` column on `trip_collaborators` |
-| **LinkToTripModal** | Blend toggle switch |
-| **TripCollaboratorsPanel** | Compatibility scores, per-user blend toggle, DNA quiz prompt |
-| **EditorialItinerary** | BlendedProfilesCard in sidebar |
-| **Backend** | Filter by `include_preferences` in blending logic |
-| **New Components** | BlendedProfilesCard, GroupCompatibilityCard, DNAQuizPrompt |
-
+This enhancement surfaces practical travel intelligence at the earliest touchpoint (homepage destination entry), demonstrating Voyance's value before any commitment. The information reinforces that we understand real travel concerns — not just activities, but costs, logistics, and requirements.
