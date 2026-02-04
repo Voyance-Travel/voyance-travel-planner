@@ -5921,20 +5921,7 @@ serve(async (req) => {
           }
         }
         
-        // Check for credit balance sufficient for full trip
-        if (isFreeUser && userId) {
-          const { data: credits } = await supabase
-            .from('user_credits')
-            .select('balance_cents')
-            .eq('user_id', userId)
-            .single();
-          
-          // $9.99 = 999 cents for full trip
-          if (credits?.balance_cents && credits.balance_cents >= 999) {
-            isFreeUser = false;
-            console.log(`[generate-full] ✓ User has sufficient credits (${credits.balance_cents}c) - generating full itinerary`);
-          }
-        }
+        // NOTE: Credit balance check moved to after context preparation (needs totalDays)
       } catch (entitlementErr) {
         console.warn(`[generate-full] Entitlement check failed, defaulting to free tier:`, entitlementErr);
         // Continue with free tier generation
@@ -5961,10 +5948,51 @@ serve(async (req) => {
         );
       }
       
-      // Store original total days and limit for free users
+      // Store original total days
       originalTotalDays = context.totalDays;
+      
+      // =========================================================================
+      // CREDIT CHECK (after context prep - needs totalDays)
+      // Uses NEW credit_balances table (not deprecated user_credits)
+      // 150 credits = 1 day unlock. To generate N days, user needs N * 150 credits
+      // =========================================================================
+      if (isFreeUser && userId) {
+        try {
+          const { data: creditBalance } = await supabase
+            .from('credit_balances')
+            .select('purchased_credits, free_credits, free_credits_expires_at')
+            .eq('user_id', userId)
+            .maybeSingle();
+          
+          if (creditBalance) {
+            // Calculate effective credits (purchased + non-expired free)
+            let effectiveFreeCredits = creditBalance.free_credits || 0;
+            if (creditBalance.free_credits_expires_at) {
+              const expiresAt = new Date(creditBalance.free_credits_expires_at);
+              if (expiresAt < new Date()) {
+                effectiveFreeCredits = 0; // Free credits expired
+              }
+            }
+            const totalCredits = (creditBalance.purchased_credits || 0) + effectiveFreeCredits;
+            
+            // User can generate full trip if they have enough credits for all days
+            // Cost: 150 credits per day × totalDays
+            const requiredCredits = context.totalDays * 150;
+            if (totalCredits >= requiredCredits) {
+              isFreeUser = false;
+              console.log(`[generate-full] ✓ User has sufficient credits (${totalCredits} >= ${requiredCredits}) - generating full ${context.totalDays}-day itinerary`);
+            } else {
+              console.log(`[generate-full] ℹ️ User has ${totalCredits} credits, needs ${requiredCredits} for ${context.totalDays} days - limiting to Day 1`);
+            }
+          }
+        } catch (creditErr) {
+          console.warn(`[generate-full] Credit check failed:`, creditErr);
+        }
+      }
+      
+      // Limit free users to Day 1 only
       if (isFreeUser) {
-        context.totalDays = 1; // Only generate Day 1 for free users
+        context.totalDays = 1;
         console.log(`[generate-full] 🔒 FREE USER: Limiting generation to Day 1 only (original: ${originalTotalDays} days)`);
       }
 
