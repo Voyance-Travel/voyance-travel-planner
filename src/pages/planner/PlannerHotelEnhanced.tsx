@@ -153,7 +153,7 @@ export default function PlannerHotelEnhanced() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const hasAppliedPreferences = useRef(false);
 
-  // "Cute buffer" overlay — only on initial load for a given destination/dates
+  // "Cute buffer" overlay: only on initial load for a given destination/dates
   const [showInterlude, setShowInterlude] = useState(true);
 
   const createHold = useCreateHotelHold();

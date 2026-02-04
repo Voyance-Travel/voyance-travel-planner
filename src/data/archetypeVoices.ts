@@ -144,7 +144,7 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
   flexible_wanderer: {
     descriptionPrefix: {
       cultural: "Worth seeing, but follow your instincts if something else calls.",
-      dining: "A suggestion—but if you spot something better, go for it.",
+      dining: "A suggestion, but if you spot something better, go for it.",
       sightseeing: "Start here, but wander where the day takes you.",
       adventure: "See how you feel. There's always tomorrow.",
       nature: "The path is a guideline. Explore.",

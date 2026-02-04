@@ -274,7 +274,7 @@ export const destinations: Destination[] = [
     localTips: [
       'Negotiate prices at markets and with street vendors',
       'Getsemaní neighborhood has better food than the touristy Old Town',
-      'Stay hydrated—the Caribbean heat is intense',
+      'Stay hydrated. The Caribbean heat is intense',
       'Take a day trip to Playa Blanca or Rosario Islands for beaches',
     ],
   },

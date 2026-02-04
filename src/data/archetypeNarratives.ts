@@ -110,7 +110,7 @@ export const CATEGORY_DESCRIPTIONS = {
   },
   RESTORER: {
     name: 'Restorer',
-    description: 'Wellness-focused travelers seeking peace, rejuvenation, and balance. Travel is your reset button—a way to recharge and return refreshed.',
+    description: 'Wellness-focused travelers seeking peace, rejuvenation, and balance. Travel is your reset button: a way to recharge and return refreshed.',
     keyTraits: ['Relaxed pace', 'High comfort', 'Wellness-focused'],
   },
   CURATOR: {
@@ -818,7 +818,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Sabbatical Scholar',
     category: 'TRANSFORMER',
     hookLine: "Taking time off to find time on.",
-    coreDescription: "You've carved out extended time to travel with purpose. Language immersion, creative projects, or deep rest—your sabbatical is an investment in your next chapter.",
+    coreDescription: "You've carved out extended time to travel with purpose. Language immersion, creative projects, or deep rest: your sabbatical is an investment in your next chapter.",
     whatThisMeans: [
       "You've planned a significant career break",
       "Learning is central to your travels",

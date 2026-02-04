@@ -45,7 +45,7 @@ const tiers = [
         'Refresh an existing day with new recommendations',
         'Add a day to extend your current trip',
       ],
-      example: 'Turn your free Day 1 into a full weekend — add Day 2 for $12',
+      example: 'Turn your free Day 1 into a full weekend. Add Day 2 for $12',
     },
   },
   {
@@ -103,18 +103,18 @@ const tiers = [
 ];
 
 const whatsInADay = [
-  { icon: '📍', label: '4–5 curated activities', desc: 'Timed to avoid crowds, ordered for efficient routing' },
-  { icon: '🍽️', label: 'Restaurant picks with dish recs', desc: 'Not just where — what to order and what to skip' },
+  { icon: '📍', label: '4-5 curated activities', desc: 'Timed to avoid crowds, ordered for efficient routing' },
+  { icon: '🍽️', label: 'Restaurant picks with dish recs', desc: 'Not just where, but what to order and what to skip' },
   { icon: '💰', label: 'Three budget tiers', desc: 'Safe ($) · Stretch ($$) · Splurge ($$$) for every stop' },
   { icon: '🛡️', label: 'Trap Avoided warnings', desc: 'We flag overhyped spots and suggest better alternatives' },
   { icon: '🕐', label: 'Timing strategies', desc: 'Best arrival windows, crowd patterns, booking lead times' },
-  { icon: '🔗', label: 'Booking links included', desc: 'Direct links to reserve — no searching, no middlemen' },
+  { icon: '🔗', label: 'Booking links included', desc: 'Direct links to reserve. No searching, no middlemen' },
 ];
 
 const faqs = [
   {
     q: 'How many credits does a trip use?',
-    a: 'One day = 150 credits. A 3-day trip uses 450. A 5-day trip uses 750. A 7-day trip uses 1,050. Simple math — you always know what you\'re spending before you generate.',
+    a: 'One day = 150 credits. A 3-day trip uses 450. A 5-day trip uses 750. A 7-day trip uses 1,050. Simple math: you always know what you\'re spending before you generate.',
   },
   {
     q: 'Do credits expire?',
@@ -134,7 +134,7 @@ const faqs = [
   },
   {
     q: 'Can I regenerate a trip if I don\'t like it?',
-    a: 'Yes — a regeneration costs 150 credits (one day\'s worth). It rebuilds your trip with fresh recommendations based on adjusted preferences.',
+    a: 'Yes, a regeneration costs 150 credits (one day\'s worth). It rebuilds your trip with fresh recommendations based on adjusted preferences.',
   },
 ];
 
@@ -254,7 +254,7 @@ export default function Pricing() {
           >
             <div className="text-center sm:text-left">
               <p className="text-primary font-semibold text-sm mb-1">
-                Free — 150 credits / month
+                Free: 150 credits / month
               </p>
               <p className="text-muted-foreground text-sm">
                 That's 1 full day of any destination, every month. Same quality as paid.
@@ -363,7 +363,7 @@ export default function Pricing() {
             >
               {loadingPlan === 'topup' ? 'Loading...' : '$5 Boost'}
             </button>
-            {' '}— add a day to any trip or regenerate one you want refreshed.
+            : add a day to any trip or regenerate one you want refreshed.
           </motion.p>
         </div>
       </section>
@@ -474,7 +474,7 @@ export default function Pricing() {
               Real example
             </p>
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground">
-              Here's what 150 credits generated for Tokyo — Day 1:
+              Here's what 150 credits generated for Tokyo, Day 1:
             </h2>
           </motion.div>
 
@@ -492,7 +492,7 @@ export default function Pricing() {
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Your on-the-ground spending</p>
-                <p className="font-medium text-foreground">$33 — $560</p>
+                <p className="font-medium text-foreground">$33 - $560</p>
                 <p className="text-[10px] text-muted-foreground">Safe → Splurge at each stop</p>
               </div>
             </div>
@@ -539,7 +539,7 @@ export default function Pricing() {
               Not worth it? We'll make it right.
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-              If your itinerary doesn't meet expectations, contact us within 7 days for a full credit refund — no questions asked. We're building trust, one trip at a time.
+              If your itinerary doesn't meet expectations, contact us within 7 days for a full credit refund. No questions asked. We're building trust, one trip at a time.
             </p>
           </motion.div>
         </div>

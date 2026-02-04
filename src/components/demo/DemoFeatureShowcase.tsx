@@ -25,14 +25,14 @@ const FEATURES = [
     id: 'group',
     title: 'Travel Together',
     subtitle: 'Group trips made effortless',
-    description: 'Invite friends or family to collaborate. We blend everyone\'s preferences into one cohesive itinerary—no more endless group chats trying to plan.',
+    description: 'Invite friends or family to collaborate. We blend everyone\'s preferences into one cohesive itinerary. No more endless group chats trying to plan.',
     valuePoint: 'Turn conflicting tastes into a trip everyone loves.',
   },
   {
     id: 'generate',
     title: 'Curated in Seconds',
     subtitle: 'What takes hours, we do instantly',
-    description: 'Our system analyzes thousands of options—restaurants, activities, routes—and builds a day-by-day plan tailored to your preferences.',
+    description: 'Our system analyzes thousands of options (restaurants, activities, routes) and builds a day-by-day plan tailored to your preferences.',
     valuePoint: 'Save 8+ hours of research per trip.',
   },
   {
