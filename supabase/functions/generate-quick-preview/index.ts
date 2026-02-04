@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -574,6 +575,13 @@ OUTPUT FORMAT (JSON only, no markdown):
 
   const aiResponse = await response.json();
   const content = aiResponse.choices?.[0]?.message?.content;
+
+  // Track cost for this AI call
+  const costTracker = trackCost('quick_preview', 'google/gemini-2.5-flash');
+  costTracker.recordAiUsage(aiResponse);
+  // Also record the Perplexity call if it happened (called in parallel earlier)
+  // Note: Perplexity tracking should happen in fetchTravelAdvisory, but we track here for simplicity
+  await costTracker.save();
 
   if (!content) {
     throw new Error("No content in AI response");

@@ -4526,6 +4526,81 @@ export type Database = {
           },
         ]
       }
+      trip_cost_tracking: {
+        Row: {
+          action_type: string
+          amadeus_calls: number
+          created_at: string
+          duration_ms: number | null
+          estimated_cost_usd: number | null
+          google_geocoding_calls: number
+          google_photos_calls: number
+          google_places_calls: number
+          google_routes_calls: number
+          id: string
+          input_tokens: number
+          metadata: Json | null
+          model: string
+          output_tokens: number
+          perplexity_calls: number
+          trip_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          amadeus_calls?: number
+          created_at?: string
+          duration_ms?: number | null
+          estimated_cost_usd?: number | null
+          google_geocoding_calls?: number
+          google_photos_calls?: number
+          google_places_calls?: number
+          google_routes_calls?: number
+          id?: string
+          input_tokens?: number
+          metadata?: Json | null
+          model: string
+          output_tokens?: number
+          perplexity_calls?: number
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          amadeus_calls?: number
+          created_at?: string
+          duration_ms?: number | null
+          estimated_cost_usd?: number | null
+          google_geocoding_calls?: number
+          google_photos_calls?: number
+          google_places_calls?: number
+          google_routes_calls?: number
+          id?: string
+          input_tokens?: number
+          metadata?: Json | null
+          model?: string
+          output_tokens?: number
+          perplexity_calls?: number
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_cost_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_cost_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_day_summaries: {
         Row: {
           created_at: string
@@ -6482,6 +6557,27 @@ export type Database = {
           total_committed_cents: number | null
           travelers: number | null
           trip_id: string | null
+        }
+        Relationships: []
+      }
+      trip_cost_summary: {
+        Row: {
+          action_type: string | null
+          avg_amadeus: number | null
+          avg_cost_usd: number | null
+          avg_duration_ms: number | null
+          avg_google_geocoding: number | null
+          avg_google_photos: number | null
+          avg_google_places: number | null
+          avg_google_routes: number | null
+          avg_input_tokens: number | null
+          avg_output_tokens: number | null
+          avg_perplexity: number | null
+          first_call: string | null
+          last_call: string | null
+          model: string | null
+          total_calls: number | null
+          total_cost_usd: number | null
         }
         Relationships: []
       }

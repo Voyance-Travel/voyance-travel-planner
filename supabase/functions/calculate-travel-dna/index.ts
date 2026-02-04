@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1820,6 +1821,11 @@ async function generatePerfectTrip(
     
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
+    
+    // Track cost for this AI call
+    const costTracker = trackCost('travel_dna', 'google/gemini-3-flash-preview');
+    costTracker.recordAiUsage(data);
+    await costTracker.save();
     
     return content?.trim() || getFallbackPerfectTrip(archetype.id);
   } catch (error) {
