@@ -14,12 +14,34 @@ interface Day {
   description: string;
 }
 
+interface BudgetEstimate {
+  dailyLow: number;
+  dailyHigh: number;
+  currency: string;
+  costLevel: string;
+}
+
+interface PaymentInfo {
+  localCurrency: string;
+  currencyCode: string;
+  paymentTips: string;
+}
+
+interface NeedToKnow {
+  visaSummary: string;
+  safetyLevel: string;
+  keyRequirement?: string;
+}
+
 interface PreviewData {
   destination: string;
   days: Day[];
   totalDays: number;
   archetypeUsed: string;
   archetypeTagline: string;
+  budgetEstimate?: BudgetEstimate;
+  paymentInfo?: PaymentInfo;
+  needToKnow?: NeedToKnow;
 }
 
 export default function DestinationEntry() {
@@ -63,6 +85,9 @@ export default function DestinationEntry() {
         totalDays: data?.totalDays || 7,
         archetypeUsed: data?.archetypeUsed || "Slow Traveler",
         archetypeTagline: data?.archetypeTagline || "Fewer things, done well.",
+        budgetEstimate: data?.budgetEstimate,
+        paymentInfo: data?.paymentInfo,
+        needToKnow: data?.needToKnow,
       });
     } catch (err) {
       console.error('Preview error:', err);
@@ -108,6 +133,9 @@ export default function DestinationEntry() {
         totalDays={previewData.totalDays}
         archetypeUsed={previewData.archetypeUsed}
         archetypeTagline={previewData.archetypeTagline}
+        budgetEstimate={previewData.budgetEstimate}
+        paymentInfo={previewData.paymentInfo}
+        needToKnow={previewData.needToKnow}
         onTakeQuiz={handleTakeQuiz}
         onStartOver={handleStartOver}
       />

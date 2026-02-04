@@ -11,7 +11,9 @@ import {
   ArrowRight, 
   Play,
   RefreshCw,
-  ChevronRight
+  DollarSign,
+  CreditCard,
+  Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
@@ -23,14 +25,130 @@ interface Day {
   description: string;
 }
 
+interface BudgetEstimate {
+  dailyLow: number;
+  dailyHigh: number;
+  currency: string;
+  costLevel: string;
+}
+
+interface PaymentInfo {
+  localCurrency: string;
+  currencyCode: string;
+  paymentTips: string;
+}
+
+interface NeedToKnow {
+  visaSummary: string;
+  safetyLevel: string;
+  keyRequirement?: string;
+}
+
 interface ItineraryTeaserProps {
   destination: string;
   days: Day[];
   totalDays: number;
   archetypeUsed: string;
   archetypeTagline: string;
+  budgetEstimate?: BudgetEstimate;
+  paymentInfo?: PaymentInfo;
+  needToKnow?: NeedToKnow;
   onStartOver: () => void;
   onTakeQuiz: () => void;
+}
+
+function getSafetyColor(level: string): string {
+  const colors: Record<string, string> = {
+    'low-risk': 'text-green-400',
+    'moderate': 'text-yellow-400',
+    'elevated': 'text-orange-400',
+    'high-risk': 'text-red-400',
+  };
+  return colors[level] || 'text-white/70';
+}
+
+function formatCostLevel(level: string): string {
+  return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+function TripSnapshotBar({ 
+  budgetEstimate, 
+  paymentInfo, 
+  needToKnow 
+}: { 
+  budgetEstimate?: BudgetEstimate; 
+  paymentInfo?: PaymentInfo; 
+  needToKnow?: NeedToKnow;
+}) {
+  // Don't render if no data available
+  if (!budgetEstimate && !paymentInfo && !needToKnow) {
+    return null;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="bg-black/30 backdrop-blur-sm rounded-xl border border-white/20 p-4 mb-6"
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Budget */}
+        {budgetEstimate && (
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+              <DollarSign className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-white/60 uppercase tracking-wide mb-0.5">Budget</p>
+              <p className="text-sm text-white font-medium">
+                ${budgetEstimate.dailyLow}–${budgetEstimate.dailyHigh} / day
+              </p>
+              <p className="text-xs text-white/50">
+                {formatCostLevel(budgetEstimate.costLevel)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Payment */}
+        {paymentInfo && (
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+              <CreditCard className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-white/60 uppercase tracking-wide mb-0.5">Payment</p>
+              <p className="text-sm text-white font-medium">
+                {paymentInfo.localCurrency}
+              </p>
+              <p className="text-xs text-white/50 line-clamp-1">
+                {paymentInfo.paymentTips}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Need to Know */}
+        {needToKnow && (
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+              <Shield className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-white/60 uppercase tracking-wide mb-0.5">Need to Know</p>
+              <p className="text-sm text-white font-medium">
+                {needToKnow.visaSummary}
+              </p>
+              <p className={`text-xs ${getSafetyColor(needToKnow.safetyLevel)}`}>
+                {needToKnow.safetyLevel.charAt(0).toUpperCase() + needToKnow.safetyLevel.slice(1).replace('-', ' ')}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
 }
 
 export function ItineraryTeaser({ 
@@ -39,6 +157,9 @@ export function ItineraryTeaser({
   totalDays,
   archetypeUsed,
   archetypeTagline,
+  budgetEstimate,
+  paymentInfo,
+  needToKnow,
   onStartOver,
   onTakeQuiz,
 }: ItineraryTeaserProps) {
@@ -64,6 +185,13 @@ export function ItineraryTeaser({
           "{archetypeTagline}"
         </p>
       </motion.div>
+
+      {/* Trip Snapshot Bar */}
+      <TripSnapshotBar 
+        budgetEstimate={budgetEstimate}
+        paymentInfo={paymentInfo}
+        needToKnow={needToKnow}
+      />
 
       {/* 3-Day Preview Cards */}
       <motion.div

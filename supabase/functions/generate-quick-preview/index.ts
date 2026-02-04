@@ -28,6 +28,25 @@ interface QuickPreviewDay {
   description: string;
 }
 
+interface BudgetEstimate {
+  dailyLow: number;
+  dailyHigh: number;
+  currency: string;
+  costLevel: 'budget' | 'moderate' | 'expensive' | 'luxury';
+}
+
+interface PaymentInfo {
+  localCurrency: string;
+  currencyCode: string;
+  paymentTips: string;
+}
+
+interface NeedToKnow {
+  visaSummary: string;
+  safetyLevel: string;
+  keyRequirement?: string;
+}
+
 interface QuickPreviewResponse {
   destination: string;
   days: QuickPreviewDay[];
@@ -38,12 +57,28 @@ interface QuickPreviewResponse {
   dailyLimitReached?: boolean;
   usageToday?: number;
   dailyLimit?: number;
+  budgetEstimate?: BudgetEstimate;
+  paymentInfo?: PaymentInfo;
+  needToKnow?: NeedToKnow;
 }
 
 interface DestinationFallback {
   display_name: string;
   tagline: string;
   preview_days: QuickPreviewDay[];
+}
+
+interface CostIndexRow {
+  city: string;
+  country: string;
+  cost_multiplier: number;
+  currency_code: string;
+  currency_symbol: string;
+  tipping_culture: string;
+  base_meal_cost: number;
+  base_transport_cost: number;
+  base_activity_cost: number;
+  base_accommodation_cost: number;
 }
 
 function normalizeDestinationKey(destination: string): string {
@@ -65,6 +100,209 @@ function getClientIP(req: Request): string {
   if (xRealIP) return xRealIP;
   
   return 'unknown';
+}
+
+function getCostLevel(multiplier: number): 'budget' | 'moderate' | 'expensive' | 'luxury' {
+  if (multiplier < 0.6) return 'budget';
+  if (multiplier < 0.9) return 'moderate';
+  if (multiplier < 1.3) return 'expensive';
+  return 'luxury';
+}
+
+function calculateDailyBudget(costData: CostIndexRow): { low: number; high: number } {
+  const multiplier = costData.cost_multiplier;
+  
+  // Base daily budget ranges (in USD)
+  const baseLow = 60;
+  const baseHigh = 150;
+  
+  // Apply multiplier
+  const low = Math.round(baseLow * multiplier);
+  const high = Math.round(baseHigh * multiplier);
+  
+  return { low, high };
+}
+
+function formatCurrencyName(code: string, symbol: string): string {
+  const currencyNames: Record<string, string> = {
+    'JPY': 'Yen',
+    'EUR': 'Euro',
+    'GBP': 'Pound',
+    'THB': 'Baht',
+    'MXN': 'Peso',
+    'AUD': 'Dollar',
+    'CAD': 'Dollar',
+    'USD': 'Dollar',
+    'INR': 'Rupee',
+    'KRW': 'Won',
+    'CNY': 'Yuan',
+    'SGD': 'Dollar',
+    'HKD': 'Dollar',
+    'NZD': 'Dollar',
+    'CHF': 'Franc',
+    'SEK': 'Krona',
+    'NOK': 'Krone',
+    'DKK': 'Krone',
+    'CZK': 'Koruna',
+    'PLN': 'Zloty',
+    'HUF': 'Forint',
+    'TRY': 'Lira',
+    'ZAR': 'Rand',
+    'BRL': 'Real',
+    'ARS': 'Peso',
+    'COP': 'Peso',
+    'PEN': 'Sol',
+    'CLP': 'Peso',
+    'IDR': 'Rupiah',
+    'MYR': 'Ringgit',
+    'PHP': 'Peso',
+    'VND': 'Dong',
+    'TWD': 'Dollar',
+    'AED': 'Dirham',
+    'SAR': 'Riyal',
+    'ILS': 'Shekel',
+    'EGP': 'Pound',
+    'MAD': 'Dirham',
+  };
+  
+  const name = currencyNames[code] || 'currency';
+  return `${name} (${symbol})`;
+}
+
+function getPaymentTips(tippingCulture: string, costLevel: string): string {
+  const tips: Record<string, string> = {
+    'required': 'Tips expected (15-20%)',
+    'appreciated': 'Tips appreciated but not required',
+    'optional': 'Tipping optional',
+    'not_expected': 'Tipping not expected',
+    'included': 'Service usually included',
+  };
+  
+  const tippingTip = tips[tippingCulture] || 'Tipping varies';
+  
+  if (costLevel === 'luxury' || costLevel === 'expensive') {
+    return `Cards widely accepted. ${tippingTip}`;
+  }
+  return `Cards + cash both common. ${tippingTip}`;
+}
+
+async function fetchBudgetData(
+  supabaseAdmin: SupabaseClient,
+  destination: string
+): Promise<{ budgetEstimate?: BudgetEstimate; paymentInfo?: PaymentInfo }> {
+  try {
+    // Try to find destination in cost index
+    const destinationLower = destination.toLowerCase();
+    
+    // Try exact city match first
+    let { data: costData } = await supabaseAdmin
+      .from('destination_cost_index')
+      .select('*')
+      .ilike('city', `%${destinationLower}%`)
+      .limit(1)
+      .single();
+    
+    // If not found, use default
+    if (!costData) {
+      const { data: defaultData } = await supabaseAdmin
+        .from('destination_cost_index')
+        .select('*')
+        .eq('city', '_default')
+        .single();
+      
+      costData = defaultData;
+    }
+    
+    if (!costData) {
+      return {};
+    }
+
+    const row = costData as CostIndexRow;
+    const budget = calculateDailyBudget(row);
+    const costLevel = getCostLevel(row.cost_multiplier);
+    
+    return {
+      budgetEstimate: {
+        dailyLow: budget.low,
+        dailyHigh: budget.high,
+        currency: 'USD',
+        costLevel,
+      },
+      paymentInfo: {
+        localCurrency: formatCurrencyName(row.currency_code, row.currency_symbol),
+        currencyCode: row.currency_code,
+        paymentTips: getPaymentTips(row.tipping_culture, costLevel),
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching budget data:', error);
+    return {};
+  }
+}
+
+async function fetchTravelAdvisory(
+  destination: string
+): Promise<NeedToKnow | undefined> {
+  try {
+    const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+    if (!PERPLEXITY_API_KEY) {
+      console.log('PERPLEXITY_API_KEY not configured, skipping travel advisory');
+      return undefined;
+    }
+
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "sonar",
+        messages: [
+          {
+            role: "system",
+            content: `You provide ultra-brief travel entry requirements. Respond in JSON only:
+{
+  "visaSummary": "Visa-free X days" or "Visa required" or "eVisa available",
+  "safetyLevel": "low-risk" or "moderate" or "elevated" or "high-risk",
+  "keyRequirement": "optional short note like 'Passport valid 6+ months'" or null
+}
+Be concise. Assume US passport holder. JSON only, no markdown.`
+          },
+          {
+            role: "user",
+            content: `Entry requirements for ${destination} for US citizens in 2024/2025?`
+          }
+        ],
+        max_tokens: 150,
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Perplexity API error:', response.status);
+      return undefined;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    
+    if (!content) return undefined;
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return undefined;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    
+    return {
+      visaSummary: parsed.visaSummary || 'Check requirements',
+      safetyLevel: parsed.safetyLevel || 'moderate',
+      keyRequirement: parsed.keyRequirement || undefined,
+    };
+  } catch (error) {
+    console.error('Error fetching travel advisory:', error);
+    return undefined;
+  }
 }
 
 async function getStaticFallback(
@@ -228,24 +466,70 @@ serve(async (req: Request) => {
       });
     }
 
-    // Proceed with AI generation
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    // Fetch budget data and travel advisory in parallel with AI generation
+    const [budgetResult, advisoryResult, aiResult] = await Promise.all([
+      fetchBudgetData(supabaseAdmin, destination),
+      fetchTravelAdvisory(destination),
+      generateItineraryPreview(destination),
+    ]);
+
+    // Track usage for authenticated free users
+    if (userId && !hasCredits) {
+      const today = now.toISOString().split('T')[0];
+      
+      try {
+        await supabaseAdmin.rpc('increment_daily_usage', {
+          p_user_id: userId,
+          p_action_type: 'preview',
+          p_usage_date: today,
+        });
+      } catch (err) {
+        console.error("Failed to increment daily usage:", err);
+      }
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You are a travel expert creating quick trip previews. Generate a 3-day taste of what a trip could look like.
+    const result: QuickPreviewResponse = {
+      destination: destination,
+      days: aiResult.days || [],
+      totalDays: aiResult.totalDays || 7,
+      archetypeUsed: "Slow Traveler",
+      archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
+      budgetEstimate: budgetResult.budgetEstimate,
+      paymentInfo: budgetResult.paymentInfo,
+      needToKnow: advisoryResult,
+    };
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    console.error("generate-quick-preview error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
+
+async function generateItineraryPreview(destination: string): Promise<{ days: QuickPreviewDay[]; totalDays: number }> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY is not configured");
+  }
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `You are a travel expert creating quick trip previews. Generate a 3-day taste of what a trip could look like.
 
 CRITICAL RULES:
 1. Use the "Slow Traveler" style: unhurried, intentional, fewer activities done well
@@ -265,87 +549,51 @@ OUTPUT FORMAT (JSON only, no markdown):
   ],
   "totalDays": 7
 }`
-          },
-          {
-            role: "user",
-            content: `Create a quick 3-day preview for: ${destination}`
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
+        },
+        {
+          role: "user",
+          content: `Create a quick 3-day preview for: ${destination}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 500,
+    }),
+  });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Service temporarily unavailable." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error("Rate limit exceeded. Please try again in a moment.");
     }
-
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No content in AI response");
+    if (response.status === 402) {
+      throw new Error("Service temporarily unavailable.");
     }
-
-    let parsed;
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error("No JSON found in response");
-      }
-    } catch (parseError) {
-      console.error("Parse error:", parseError, "Content:", content);
-      throw new Error("Failed to parse AI response");
-    }
-
-    // Track usage for authenticated free users
-    if (userId && !hasCredits) {
-      const today = now.toISOString().split('T')[0];
-      
-      try {
-        await supabaseAdmin.rpc('increment_daily_usage', {
-          p_user_id: userId,
-          p_action_type: 'preview',
-          p_usage_date: today,
-        });
-      } catch (err) {
-        console.error("Failed to increment daily usage:", err);
-      }
-    }
-
-    const result: QuickPreviewResponse = {
-      destination: destination,
-      days: parsed.days || [],
-      totalDays: parsed.totalDays || 7,
-      archetypeUsed: "Slow Traveler",
-      archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
-    };
-
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
-  } catch (error) {
-    console.error("generate-quick-preview error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const errorText = await response.text();
+    console.error("AI gateway error:", response.status, errorText);
+    throw new Error(`AI gateway error: ${response.status}`);
   }
-});
+
+  const aiResponse = await response.json();
+  const content = aiResponse.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error("No content in AI response");
+  }
+
+  let parsed;
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      parsed = JSON.parse(jsonMatch[0]);
+    } else {
+      throw new Error("No JSON found in response");
+    }
+  } catch (parseError) {
+    console.error("Parse error:", parseError, "Content:", content);
+    throw new Error("Failed to parse AI response");
+  }
+
+  return {
+    days: parsed.days || [],
+    totalDays: parsed.totalDays || 7,
+  };
+}
