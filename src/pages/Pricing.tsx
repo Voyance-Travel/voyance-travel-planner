@@ -3,10 +3,10 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronDown, Sparkles, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Check, ChevronDown, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
-import { CREDIT_PACKS, TOPUP_PACK, formatCredits, CREDIT_COSTS } from '@/config/pricing';
+import { CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -38,10 +38,13 @@ const tiers = [
     price: 12,
     perDay: tierDayRates.single,
     translates: '1 full day of curated itinerary',
-    useCase: 'Perfect for adding an extra day to your free preview, or planning a focused day trip.',
+    useCase: 'Generate 1 full day of curated itinerary, or regenerate a day with fresh picks, or extend an existing trip by a day.',
     breakdown: {
-      days: '1 complete day',
-      leftover: '+ 50 credits banked for later',
+      options: [
+        'One complete day trip to any destination',
+        'Refresh an existing day with new recommendations',
+        'Add a day to extend your current trip',
+      ],
       example: 'Turn your free Day 1 into a full weekend — add Day 2 for $12',
     },
   },
@@ -53,11 +56,14 @@ const tiers = [
     perDay: tierDayRates.starter,
     featured: true,
     translates: '3 full days of curated itinerary',
-    useCase: 'Ideal for a long weekend trip or the core days of a longer vacation.',
+    useCase: 'Generate a complete long weekend trip, or add 3 days to an existing itinerary, or plan two separate day trips in different cities.',
     breakdown: {
-      days: '3 complete days',
-      leftover: '+ 50 credits banked for later',
-      example: 'A 3-day Paris weekend: Montmartre → Marais → Versailles, fully planned',
+      options: [
+        'A complete 3-day weekend getaway',
+        'Extend any trip by 3 full days',
+        'Two separate day trips to different cities',
+      ],
+      example: 'A 3-day Paris weekend: Montmartre → Marais → Versailles',
     },
   },
   {
@@ -67,10 +73,13 @@ const tiers = [
     price: 55,
     perDay: tierDayRates.explorer,
     translates: '8 full days of curated itinerary',
-    useCase: 'One complete 5-day trip plus 3 bonus days for a second destination or extension.',
+    useCase: 'Generate a full 5-day trip plus a second getaway, or plan an 8-day extended trip, or split across any combination of destinations.',
     breakdown: {
-      days: '8 complete days',
-      leftover: 'No leftover — exact fit',
+      options: [
+        'One 5-day trip + one 3-day trip',
+        'A complete 8-day extended vacation',
+        'Mix and match across any destinations',
+      ],
       example: '5 days in Tokyo + 3 days in Kyoto, both fully curated',
     },
   },
@@ -81,22 +90,16 @@ const tiers = [
     price: 89,
     perDay: tierDayRates.adventurer,
     translates: '16 full days of curated itinerary',
-    useCase: 'Three complete trips with days to spare. Best value for couples or frequent travelers.',
+    useCase: 'Generate up to three complete vacations, or one epic multi-week trip, or mix and match across the whole year.',
     breakdown: {
-      days: '16 complete days',
-      leftover: '+ 100 credits banked',
+      options: [
+        'Three complete 5-day vacations',
+        'One epic 16-day adventure',
+        'Mix and match all year long',
+      ],
       example: 'Tokyo (5) + Barcelona (5) + Iceland (5) + 1 bonus day anywhere',
     },
   },
-];
-
-const creditBreakdown = [
-  { item: 'One curated day', credits: CREDIT_COSTS.UNLOCK_DAY, note: '4–5 timed activities, restaurants, logistics' },
-  { item: 'One 3-day weekend trip', credits: CREDIT_COSTS.UNLOCK_DAY * 3, note: 'Complete short getaway' },
-  { item: 'One 5-day trip', credits: CREDIT_COSTS.UNLOCK_DAY * 5, note: 'Full vacation itinerary' },
-  { item: 'One 7-day trip', credits: CREDIT_COSTS.UNLOCK_DAY * 7, note: 'Extended exploration' },
-  { item: 'Trip regeneration', credits: CREDIT_COSTS.UNLOCK_DAY, note: 'Start fresh with new preferences' },
-  { item: 'Add-a-day extension', credits: CREDIT_COSTS.UNLOCK_DAY, note: 'Extend any existing trip' },
 ];
 
 const whatsInADay = [
@@ -233,7 +236,7 @@ export default function Pricing() {
             transition={{ delay: 0.1 }}
             className="text-muted-foreground text-base sm:text-lg max-w-lg mx-auto"
           >
-            1 day of curated itinerary = {CREDIT_COSTS.UNLOCK_DAY} credits.
+            1 day of curated itinerary = 150 credits.
             <br className="hidden sm:block" />
             <span className="sm:inline block mt-1 sm:mt-0"> Buy once, use anytime. Credits never expire.</span>
           </motion.p>
@@ -311,16 +314,14 @@ export default function Pricing() {
                   </div>
 
                   {/* Breakdown - always visible */}
-                  <div className="space-y-2 text-xs text-muted-foreground pb-4 border-b border-border mb-4">
-                    <p className="flex items-start gap-2">
-                      <span>📅</span>
-                      <span>{tier.breakdown.days} of personalized itinerary</span>
-                    </p>
-                    <p className="flex items-start gap-2">
-                      <span>🏦</span>
-                      <span>{tier.breakdown.leftover}</span>
-                    </p>
-                    <p className="flex items-start gap-2">
+                  <div className="space-y-1.5 text-xs text-muted-foreground pb-4 border-b border-border mb-4">
+                    {tier.breakdown.options.map((option, i) => (
+                      <p key={i} className="flex items-start gap-2">
+                        <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                        <span>{option}</span>
+                      </p>
+                    ))}
+                    <p className="flex items-start gap-2 pt-1">
                       <span>💡</span>
                       <span className="italic">{tier.breakdown.example}</span>
                     </p>
@@ -354,65 +355,19 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="text-center text-sm text-muted-foreground mt-8"
           >
-            Need just one extra day?{' '}
+            Need one more day?{' '}
             <button 
               onClick={() => openCheckout('topup')}
               disabled={loadingPlan === 'topup'}
               className="text-primary font-medium hover:underline disabled:opacity-50"
             >
-              {loadingPlan === 'topup' ? 'Loading...' : '$5 Boost — 50 credits'}
+              {loadingPlan === 'topup' ? 'Loading...' : '$5 Boost'}
             </button>
-            {' '}— for quick swaps and AI features.
+            {' '}— add a day to any trip or regenerate one you want refreshed.
           </motion.p>
         </div>
       </section>
 
-      {/* Credit Price List */}
-      <section className="py-12 sm:py-16 bg-muted/30">
-        <div className="max-w-3xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-8"
-          >
-            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              What credits get you
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              A clear price list so you always know what you're spending.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-card rounded-2xl border border-border overflow-hidden"
-          >
-            {/* Header */}
-            <div className="grid grid-cols-2 text-xs font-medium text-muted-foreground bg-muted/50 px-4 py-3 border-b border-border">
-              <span>What you're generating</span>
-              <span className="text-right">Credits used</span>
-            </div>
-
-            {/* Rows */}
-            {creditBreakdown.map((row, i) => (
-              <div key={i} className="grid grid-cols-2 px-4 py-3 border-b border-border last:border-0 text-sm">
-                <div>
-                  <p className="font-medium text-foreground">{row.item}</p>
-                  <p className="text-xs text-muted-foreground">{row.note}</p>
-                </div>
-                <div className="flex items-center justify-end gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  <span className="font-medium text-foreground">{row.credits}</span>
-                </div>
-              </div>
-            ))}
-          </motion.div>
-
-        </div>
-      </section>
 
       {/* What's In One Day */}
       <section className="py-12 sm:py-16">
@@ -427,7 +382,7 @@ export default function Pricing() {
               Every day includes
             </h2>
             <p className="text-sm text-muted-foreground">
-              This is what {CREDIT_COSTS.UNLOCK_DAY} credits (one day) actually produces.
+              This is what one day of itinerary actually produces.
             </p>
           </motion.div>
 
