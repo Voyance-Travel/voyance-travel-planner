@@ -217,13 +217,9 @@ export default function DestinationDetail() {
   }
 
   const handleStartTrip = () => {
-    // Pass city name for better UX - the Start page can work with city names directly
+    // Navigate to the unified start flow with destination pre-filled
     const destinationParam = encodeURIComponent(destination.city);
-    if (isAuthenticated) {
-      navigate(`/planner?destination=${destinationParam}`);
-    } else {
-      navigate('/signin', { state: { from: `/planner?destination=${destinationParam}` } });
-    }
+    navigate(`/start?destination=${destinationParam}`);
   };
 
   // Get unique categories from activities
