@@ -16,12 +16,12 @@ export const CREDIT_COSTS = {
   REAL_TIME_MODE: 0,        // Free
 } as const;
 
-// Credit Packs - Stripe Products
+// Credit Packs - Stripe Products (Live)
 export const STRIPE_PRODUCTS = {
   // Top-Up (convenience pack)
   CREDITS_50: {
-    productId: 'prod_TuLUpxk0w1BUys',
-    priceId: 'price_1SwWnkFYxIg9jcJUk8440bf7',
+    productId: 'prod_TuvbjIwD6ZfPHT',
+    priceId: 'price_1Sx5kmJytioXyqq9F6ix9sFQ',
     name: 'Top-Up',
     credits: 50,
     price: 5,
@@ -30,8 +30,8 @@ export const STRIPE_PRODUCTS = {
   },
   // Credit Packs
   CREDITS_200: {
-    productId: 'prod_TuL4pcyakcLNzu',
-    priceId: 'price_1SwWOnFYxIg9jcJU81hyigDW',
+    productId: 'prod_TuvcrwliHJ0mph',
+    priceId: 'price_1Sx5knJytioXyqq900832qhf',
     name: 'Single',
     credits: 200,
     price: 12,
@@ -39,8 +39,8 @@ export const STRIPE_PRODUCTS = {
     mode: 'payment' as const,
   },
   CREDITS_500: {
-    productId: 'prod_TuL48Mks27hy4a',
-    priceId: 'price_1SwWOoFYxIg9jcJUauGZTqar',
+    productId: 'prod_Tuvc6zstLq6b4V',
+    priceId: 'price_1Sx5koJytioXyqq9nkJeDte1',
     name: 'Starter',
     credits: 500,
     price: 29,
@@ -48,8 +48,8 @@ export const STRIPE_PRODUCTS = {
     mode: 'payment' as const,
   },
   CREDITS_1200: {
-    productId: 'prod_TuL4qskvbZ5ueo',
-    priceId: 'price_1SwWOpFYxIg9jcJUP0YaWuz1',
+    productId: 'prod_TuvcsvTpTtqGqO',
+    priceId: 'price_1Sx5kpJytioXyqq9XMadRNV2',
     name: 'Explorer',
     credits: 1200,
     price: 55,
@@ -58,8 +58,8 @@ export const STRIPE_PRODUCTS = {
     mode: 'payment' as const,
   },
   CREDITS_2500: {
-    productId: 'prod_TuL5EXmVj7x98W',
-    priceId: 'price_1SwWOqFYxIg9jcJU0STDFvxw',
+    productId: 'prod_TuvcYuWNk7Tayn',
+    priceId: 'price_1Sx5kqJytioXyqq9Jpejl02u',
     name: 'Adventurer',
     credits: 2500,
     price: 89,
