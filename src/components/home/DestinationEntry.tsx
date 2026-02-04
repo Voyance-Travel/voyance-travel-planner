@@ -143,27 +143,27 @@ export default function DestinationEntry() {
   }
 
   return (
-    <div className="w-full text-center">
-      {/* Value proposition headline */}
+    <div className="w-full text-center px-2">
+      {/* Value proposition headline - mobile-optimized */}
       <motion.h1 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-4xl md:text-5xl lg:text-6xl font-serif font-normal mb-4 text-white"
+        className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-serif font-normal mb-3 sm:mb-4 text-white leading-tight"
         style={{ textShadow: '0 2px 20px rgba(0,0,0,0.8), 0 4px 40px rgba(0,0,0,0.6)' }}
       >
-        You don't need more travel ideas.
-        <br />
-        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}>You need a trip.</span>
+        <span className="block sm:inline">You don't need more travel ideas.</span>
+        <br className="hidden sm:block" />
+        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}> You need a trip.</span>
       </motion.h1>
       
       <motion.p
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="text-lg md:text-xl text-white/90 mb-10"
+        className="text-base sm:text-lg md:text-xl text-white/90 mb-6 sm:mb-10 px-2"
         style={{ textShadow: '0 1px 10px rgba(0,0,0,0.7), 0 2px 20px rgba(0,0,0,0.5)' }}
       >
-        Tell us how you travel. We'll build every day: timed, budgeted, and editable.
+        Tell us how you travel. We'll build every day.
       </motion.p>
 
       <motion.div
@@ -178,7 +178,7 @@ export default function DestinationEntry() {
           onChange={(e) => setDestination(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Where do you want to go..."
-          className="w-full text-xl text-center py-4 border-0 border-b-2 border-white/40 bg-transparent text-white placeholder:text-white/50 focus:outline-none focus:border-white transition-colors"
+          className="w-full text-lg sm:text-xl text-center py-3 sm:py-4 border-0 border-b-2 border-white/40 bg-transparent text-white placeholder:text-white/50 focus:outline-none focus:border-white transition-colors"
           autoFocus
           disabled={isGenerating}
         />
@@ -210,12 +210,13 @@ export default function DestinationEntry() {
       )}
 
       {/* Popular destinations as shortcuts */}
+      {/* Popular destinations - improved mobile touch targets */}
       {!destination && !isGenerating && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="mt-10 flex flex-wrap justify-center gap-2"
+          className="mt-6 sm:mt-10 flex flex-wrap justify-center gap-2 px-2"
         >
           {POPULAR_DESTINATIONS.map((city) => (
             <Button
@@ -226,7 +227,7 @@ export default function DestinationEntry() {
                 setDestination(city);
                 handleSubmit(city);
               }}
-              className="rounded-full bg-white/20 text-white border-white/30 hover:bg-white/30 backdrop-blur-sm"
+              className="rounded-full bg-white/20 text-white border-white/30 hover:bg-white/30 backdrop-blur-sm min-h-[44px] px-4"
             >
               {city}
             </Button>

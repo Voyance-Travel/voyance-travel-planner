@@ -109,36 +109,36 @@ function ArchetypeCard({ archetype }: { archetype: typeof FEATURED_ARCHETYPES[0]
   const Icon = archetype.icon;
   
   return (
-    <div className="flex-shrink-0 w-64 sm:w-72 bg-card border border-border rounded-xl overflow-hidden hover:border-primary/30 hover:shadow-lg transition-all duration-300 group">
+    <div className="flex-shrink-0 w-[280px] sm:w-64 md:w-72 bg-card border border-border rounded-xl overflow-hidden hover:border-primary/30 hover:shadow-lg transition-all duration-300 group">
       {/* Header */}
-      <div className="p-5 pb-4 border-b border-border/50">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center group-hover:from-primary/30 group-hover:to-accent/30 transition-colors">
-            <Icon className="w-5 h-5 text-primary" />
+      <div className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/50">
+        <div className="flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center group-hover:from-primary/30 group-hover:to-accent/30 transition-colors">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] tracking-wider uppercase text-muted-foreground font-medium">
+            <span className="text-[9px] sm:text-[10px] tracking-wider uppercase text-muted-foreground font-medium">
               {archetype.category}
             </span>
-            <h3 className="text-base font-semibold text-foreground leading-tight">
+            <h3 className="text-sm sm:text-base font-semibold text-foreground leading-tight">
               {archetype.name}
             </h3>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground italic line-clamp-2">
+        <p className="text-xs sm:text-sm text-muted-foreground italic line-clamp-2">
           "{archetype.tagline}"
         </p>
       </div>
       
       {/* Trait bars */}
-      <div className="p-4 space-y-3">
+      <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
         {archetype.traits.map((trait) => (
           <div key={trait.name}>
-            <div className="flex justify-between text-xs mb-1">
+            <div className="flex justify-between text-[10px] sm:text-xs mb-1">
               <span className="text-muted-foreground">{trait.name}</span>
               <span className="text-foreground font-medium">{trait.value}%</span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-1 sm:h-1.5 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-500"
                 style={{ width: `${trait.value}%` }}
@@ -155,32 +155,32 @@ export default function SampleArchetype() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   return (
-    <section id="sample-archetype" className="py-14 sm:py-20 md:py-24 bg-background relative overflow-hidden">
+    <section id="sample-archetype" className="py-10 sm:py-14 md:py-20 lg:py-24 bg-background relative overflow-hidden">
       {/* Subtle background pattern */}
       <div className="absolute inset-0 opacity-[0.015]">
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)', backgroundSize: '48px 48px' }} />
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-8 md:px-16">
-        {/* Section Header */}
+        {/* Section Header - mobile-optimized */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-10 sm:mb-12"
+          className="text-center mb-6 sm:mb-10 md:mb-12"
         >
-          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4">
-            <div className="w-6 sm:w-8 h-px bg-primary" />
-            <span className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-muted-foreground font-sans">
+          <div className="flex items-center justify-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+            <div className="w-4 sm:w-8 h-px bg-primary" />
+            <span className="text-[9px] sm:text-xs tracking-[0.2em] sm:tracking-[0.25em] uppercase text-muted-foreground font-sans">
               Travel DNA
             </span>
-            <div className="w-6 sm:w-8 h-px bg-primary" />
+            <div className="w-4 sm:w-8 h-px bg-primary" />
           </div>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground mb-3 sm:mb-4">
+          <h2 className="text-xl sm:text-2xl md:text-4xl lg:text-5xl font-serif font-normal text-foreground mb-2 sm:mb-4 px-2">
             What Kind of Traveler Are You?
           </h2>
-          <p className="text-sm sm:text-base text-muted-foreground max-w-lg mx-auto font-sans">
-            Explore our 27 unique archetypes. See which one resonates with you.
+          <p className="text-xs sm:text-base text-muted-foreground max-w-lg mx-auto font-sans px-4">
+            Explore our 27 unique archetypes. See which one resonates.
           </p>
         </motion.div>
 
@@ -227,38 +227,38 @@ export default function SampleArchetype() {
           </Link>
         </motion.div>
 
-        {/* Primary Quiz CTA */}
+        {/* Primary Quiz CTA - mobile-optimized */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.3 }}
-          className="bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 border border-primary/20 rounded-2xl p-6 sm:p-8 md:p-10 text-center"
+          className="bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 border border-primary/20 rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-10 text-center"
         >
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <span className="text-xs sm:text-sm font-medium text-primary uppercase tracking-wider">
+          <div className="flex items-center justify-center gap-2 mb-2 sm:mb-3">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+            <span className="text-[10px] sm:text-sm font-medium text-primary uppercase tracking-wider">
               Discover Yours
             </span>
           </div>
           
-          <h3 className="text-xl sm:text-2xl md:text-3xl font-serif text-foreground mb-3">
+          <h3 className="text-lg sm:text-xl md:text-3xl font-serif text-foreground mb-2 sm:mb-3">
             Not sure which one you are?
           </h3>
           
-          <p className="text-muted-foreground mb-6 max-w-md mx-auto text-sm sm:text-base">
-            Self-selection doesn't work for 27 archetypes. Take the quiz and let us match you perfectly.
+          <p className="text-muted-foreground mb-4 sm:mb-6 max-w-md mx-auto text-xs sm:text-base px-2">
+            Take the quiz and let us match you perfectly.
           </p>
           
-          <Button asChild size="lg" className="font-sans text-base px-8">
+          <Button asChild size="lg" className="font-sans text-sm sm:text-base px-6 sm:px-8 min-h-[48px]">
             <Link to={ROUTES.QUIZ}>
               Take the 5-Minute Quiz
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
           
-          <p className="text-xs text-muted-foreground mt-4">
-            21 questions. No account required. Your Travel DNA awaits.
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-3 sm:mt-4">
+            21 questions. No account required.
           </p>
         </motion.div>
       </div>
