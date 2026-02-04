@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Sparkles, Ticket, Loader2, Plus } from 'lucide-react';
-import { CREDIT_PACKS, TOPUP_PACK, formatCredits, CREDIT_COSTS } from '@/config/pricing';
+import { CREDIT_PACKS, BOOST_PACK, formatCredits, CREDIT_COSTS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -50,8 +50,8 @@ export function UpgradePrompt({
   const actionCost = actionInfo?.cost ?? creditsNeeded;
   const actionLabel = actionInfo?.label ?? featureName;
   
-  // Show top-up if action cost is affordable with 50 credits (not for unlock_day)
-  const canUseTopup = actionCost <= 50 && context !== 'unlock_day';
+  // Show boost if action cost is affordable with 80 credits (not for unlock_day)
+  const canUseBoost = actionCost <= 80 && context !== 'unlock_day';
 
   const getContextMessage = () => {
     if (context === 'route') {
@@ -118,27 +118,27 @@ export function UpgradePrompt({
             </div>
           ) : (
             <div className="space-y-4 pt-2">
-              {/* Top-Up Option (primary for small actions) */}
-              {canUseTopup && (
+              {/* Boost Option (primary for small actions) */}
+              {canUseBoost && (
                 <Button 
                   size="lg" 
                   className="w-full text-base"
-                  onClick={() => handleBuyPack(TOPUP_PACK)}
-                  disabled={loadingPack === 'topup'}
+                  onClick={() => handleBuyPack(BOOST_PACK)}
+                  disabled={loadingPack === 'boost'}
                 >
-                  {loadingPack === 'topup' ? (
+                  {loadingPack === 'boost' ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
                       <Plus className="mr-2 h-4 w-4" />
-                      +50 credits · $5
+                      +80 credits · $8
                     </>
                   )}
                 </Button>
               )}
 
-              {/* For unlock_day or when top-up doesn't apply, show recommended pack */}
-              {!canUseTopup && (
+              {/* For unlock_day or when boost doesn't apply, show recommended pack */}
+              {!canUseBoost && (
                 <div className="rounded-lg border-2 border-primary p-4 bg-primary/5">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -169,7 +169,7 @@ export function UpgradePrompt({
               )}
 
               {/* "Or get more" section */}
-              {canUseTopup && (
+              {canUseBoost && (
                 <div className="text-center space-y-2">
                   <p className="text-xs text-muted-foreground">Or get more:</p>
                   <div className="flex items-center justify-center gap-3 text-xs">
@@ -192,8 +192,8 @@ export function UpgradePrompt({
                 </div>
               )}
 
-              {/* Smaller option when top-up doesn't apply */}
-              {!canUseTopup && recommended.id !== 'single' && (
+              {/* Smaller option when boost doesn't apply */}
+              {!canUseBoost && recommended.id !== 'single' && (
                 <div className="rounded-lg border border-border p-3 hover:border-primary/50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

@@ -56,16 +56,17 @@ const FALLBACK_DATA = {
     domain: 4.08,
     email: 0.00, // Zoho free tier
   },
-  revenue: { topup: 5, single: 12, starter: 29, explorer: 55, adventurer: 89 } as Record<string, number>,
+  revenue: { boost: 8, single: 12, starter: 29, explorer: 55, adventurer: 89 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
 // Now includes per-tier COSTS to calculate true blended margin
+// NOTE: Boost ($8) replaces Top-Up ($5) - less cannibalization risk
 const REVENUE_MIX_PRESETS = {
-  pessimistic: { topup: 50, single: 25, starter: 15, explorer: 8, adventurer: 2, label: "Pessimistic", description: "50% buy $5 top-ups (low cost, low revenue)" },
-  conservative: { topup: 30, single: 30, starter: 25, explorer: 12, adventurer: 3, label: "Conservative", description: "30% top-ups, spread across tiers" },
-  balanced: { topup: 15, single: 25, starter: 30, explorer: 22, adventurer: 8, label: "Balanced", description: "Most buy Starter/Explorer (higher cost, higher revenue)" },
-  optimistic: { topup: 5, single: 15, starter: 25, explorer: 35, adventurer: 20, label: "Optimistic", description: "Heavy Explorer/Adventurer (highest cost, highest revenue)" },
+  pessimistic: { boost: 40, single: 30, starter: 18, explorer: 10, adventurer: 2, label: "Pessimistic", description: "40% buy $8 boosts (reduced from 50% top-ups)" },
+  conservative: { boost: 25, single: 30, starter: 28, explorer: 14, adventurer: 3, label: "Conservative", description: "25% boosts, spread across tiers" },
+  balanced: { boost: 12, single: 25, starter: 32, explorer: 23, adventurer: 8, label: "Balanced", description: "Most buy Starter/Explorer (higher cost, higher revenue)" },
+  optimistic: { boost: 5, single: 15, starter: 25, explorer: 35, adventurer: 20, label: "Optimistic", description: "Heavy Explorer/Adventurer (highest cost, highest revenue)" },
 };
 
 // Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
@@ -97,13 +98,12 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 // =============================================================================
 // FREE USER ECONOMICS - OPTIMIZED MODEL (AI-only preview is now live)
 // 
-// Post-optimization: Free users get AI-only "Trip Preview"
-//   - Shows day structure, themes, neighborhoods
-//   - Does NOT trigger Google Places (no real venue names)  
-//   - Does NOT trigger Amadeus (no hotel search)
-//   - Cost: ~$0.02-$0.03 per preview
+// Post-optimization: Free users get STATIC TEMPLATE (zero cost) or AI preview
+//   - Static templates: $0.00 (Tokyo, Paris, Rome, etc.)
+//   - AI fallback: ~$0.02-$0.03 (uncommon destinations)
+//   - Blended: ~$0.01 (80% have templates)
 //
-// Blended free user cost: ~$0.08 (70% light browse + 30% full preview)
+// Blended free user cost: ~$0.03-$0.05 (mostly static templates)
 // =============================================================================
 const FREE_USER_ECONOMICS = {
   // Credit grants
@@ -112,16 +112,17 @@ const FREE_USER_ECONOMICS = {
   maxFirstMonthCredits: 250,
   creditExpiry: "2 months",
   
-  // Cost model (OPTIMIZED - AI-only preview is live)
+  // Cost model (STATIC TEMPLATES FIRST - AI fallback)
   costs: {
-    lightBrowse: 0.05,          // Explore + quiz, no trip gen
-    fullFunnel: 0.15,           // Preview (AI-only) + quiz + explore
-    tripPreview: 0.025,         // AI-only trip structure
+    lightBrowse: 0.02,          // Explore + quiz, no trip gen
+    staticTemplate: 0.00,       // Pre-written templates ($0)
+    aiPreview: 0.025,           // AI-only trip structure (fallback)
+    fullFunnel: 0.05,           // Quiz + explore + template preview
   },
   
-  // Blended cost calculation: 70% light browse ($0.05) + 30% full funnel ($0.15)
-  // = 0.035 + 0.045 = $0.08
-  blendedCostToUs: 0.08,
+  // Blended cost: 80% static templates ($0) + 20% AI fallback ($0.025)
+  // Plus 50% do DNA quiz ($0.02) = ~$0.035 blended
+  blendedCostToUs: 0.035,
 };
 
 // Helper function: Calculate variable cost for N days
@@ -171,19 +172,20 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 
 // Credit pack tiers with USAGE-BASED COST MODELING
 // Uses the decomposed cost model: $0.163 base + $0.10/day
+// NOTE: Boost ($8/80 credits) replaces Top-Up ($5/50 credits)
 const CREDIT_TIERS = [
   { 
-    key: "topup", 
-    label: "Top-Up", 
-    price: 5, 
-    credits: 50, 
+    key: "boost", 
+    label: "Boost", 
+    price: 8, 
+    credits: 80, 
     color: "#94A3B8", 
-    description: "Quick refill for small actions",
-    // Top-Up users CAN'T unlock days (need 150 credits), so they only do swaps/AI messages
-    typicalUsage: { daysUnlocked: 0, swaps: 8, regenerates: 0, restaurants: 0, aiMessages: 5 },
+    description: "Quick boost for swaps & extras",
+    // Boost users CAN'T unlock days (need 150 credits), so only swaps/AI messages
+    typicalUsage: { daysUnlocked: 0, swaps: 12, regenerates: 1, restaurants: 0, aiMessages: 8 },
     // Cost: No trip base (no day unlock), just light AI calls
-    estimatedCostToUs: 0.10,   // Reduced: only light actions
-    notes: "Cannot unlock days - 50 credits insufficient",
+    estimatedCostToUs: 0.12,   // Slightly more than old top-up (more credits)
+    notes: "Cannot unlock days - 80 credits insufficient",
   },
   { 
     key: "single", 
@@ -291,7 +293,7 @@ export default function UnitEconomics() {
   const { blendedAOV, blendedCostPerUser } = useMemo(() => {
     const tiers = FALLBACK_DATA.revenue;
     const aov = (
-      (mixConfig.topup / 100) * tiers.topup +
+      (mixConfig.boost / 100) * tiers.boost +
       (mixConfig.single / 100) * tiers.single +
       (mixConfig.starter / 100) * tiers.starter +
       (mixConfig.explorer / 100) * tiers.explorer +
@@ -305,7 +307,7 @@ export default function UnitEconomics() {
     }, {} as Record<string, number>);
     
     const cost = (
-      (mixConfig.topup / 100) * (tierCosts.topup || 0.16) +
+      (mixConfig.boost / 100) * (tierCosts.boost || 0.12) +
       (mixConfig.single / 100) * (tierCosts.single || 0.22) +
       (mixConfig.starter / 100) * (tierCosts.starter || 0.38) +
       (mixConfig.explorer / 100) * (tierCosts.explorer || 0.72) +

@@ -18,14 +18,14 @@ export const CREDIT_COSTS = {
 
 // Credit Packs - Stripe Products (Live)
 export const STRIPE_PRODUCTS = {
-  // Top-Up (convenience pack)
-  CREDITS_50: {
-    productId: 'prod_TuvbjIwD6ZfPHT',
-    priceId: 'price_1Sx5kmJytioXyqq9F6ix9sFQ',
-    name: 'Top-Up',
-    credits: 50,
-    price: 5,
-    description: 'Quick top-up for swaps & AI',
+  // Boost (convenience pack - upsell for existing customers)
+  CREDITS_80: {
+    productId: 'prod_Tv51mga9j5N42W',
+    priceId: 'price_1SxErQJytioXyqq9Zcryt1Oc',
+    name: 'Boost',
+    credits: 80,
+    price: 8,
+    description: 'Quick boost for swaps & extras',
     mode: 'payment' as const,
   },
   // Credit Packs
@@ -114,12 +114,15 @@ export const FREE_TIER = {
   },
 } as const;
 
-// Top-Up Pack (for insufficient credits prompts)
-export const TOPUP_PACK = {
-  id: 'topup' as const,
-  ...STRIPE_PRODUCTS.CREDITS_50,
-  perCredit: (5 / 50).toFixed(3), // $0.10
+// Boost Pack (for insufficient credits prompts - upsell only)
+export const BOOST_PACK = {
+  id: 'boost' as const,
+  ...STRIPE_PRODUCTS.CREDITS_80,
+  perCredit: (8 / 80).toFixed(3), // $0.10
 } as const;
+
+// Legacy alias for backwards compatibility
+export const TOPUP_PACK = BOOST_PACK;
 
 // Credit Pack Definitions for Display (main packs, excludes top-up)
 export const CREDIT_PACKS = [
@@ -149,10 +152,10 @@ export const CREDIT_PACKS = [
   },
 ] as const;
 
-// All packs with top-up at the end (for display)
+// All packs with boost at the end (for display)
 export const ALL_CREDIT_PACKS = [
   ...CREDIT_PACKS,
-  TOPUP_PACK,
+  BOOST_PACK,
 ] as const;
 
 // Trip cost examples (for pricing page)
