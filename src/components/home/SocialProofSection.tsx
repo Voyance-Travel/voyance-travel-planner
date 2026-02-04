@@ -42,9 +42,9 @@ const INTELLIGENCE_LAYERS = [
 
 // Real metrics from actual database
 const REAL_METRICS = {
-  tripsBuilt: 22,           // Trips with itineraries generated
-  archetypesAvailable: 27,  // Our complete archetype system
-  destinations: 19,         // Unique destinations with trips
+  tripsBuilt: 61,            // Total trips created
+  archetypesAvailable: 27,   // Our complete archetype system
+  destinations: 2246,        // Destinations in our database
 };
 
 function TestimonialCard({ testimonial }: { testimonial: typeof BETA_TESTIMONIALS[0] }) {
@@ -154,7 +154,7 @@ export default function SocialProofSection() {
         >
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.tripsBuilt}+
+              {REAL_METRICS.tripsBuilt}
             </p>
             <p className="text-sm text-muted-foreground">Trips Built</p>
           </div>
@@ -166,7 +166,7 @@ export default function SocialProofSection() {
           </div>
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.destinations}+
+              {REAL_METRICS.destinations.toLocaleString()}
             </p>
             <p className="text-sm text-muted-foreground">Destinations</p>
           </div>
