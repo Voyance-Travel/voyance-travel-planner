@@ -7,6 +7,70 @@ const corsHeaders = {
 };
 
 // =============================================================================
+// SUPABASE CLIENT (for photo caching)
+// =============================================================================
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
+}
+
+// =============================================================================
+// PHOTO CACHING HELPER - Avoid repeated Google Places API calls
+// =============================================================================
+async function getCachedPhotoUrl(
+  placeId: string,
+  photoName: string | undefined,
+  placeName: string,
+  destination: string,
+  apiKey: string
+): Promise<string | undefined> {
+  if (!photoName) return undefined;
+  
+  const supabase = getSupabaseAdmin();
+  const entityKey = `restaurant-${placeId}`.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 100);
+  
+  try {
+    // Check cache first
+    const { data: cached } = await supabase
+      .from('curated_images')
+      .select('image_url')
+      .eq('entity_type', 'restaurant')
+      .eq('entity_key', entityKey)
+      .single();
+    
+    if (cached?.image_url) {
+      return cached.image_url;
+    }
+  } catch { /* cache miss, continue */ }
+  
+  // Not cached - generate URL and cache it
+  const photoUrl = `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&key=${apiKey}`;
+  
+  // Cache for 90 days
+  const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    await supabase.from('curated_images').upsert({
+      entity_type: 'restaurant',
+      entity_key: entityKey,
+      destination: destination,
+      source: 'google_places',
+      image_url: photoUrl,
+      alt_text: `${placeName} - Restaurant`,
+      place_id: placeId,
+      photo_reference: photoName,
+      quality_score: 0.85,
+      updated_at: new Date().toISOString(),
+      expires_at: expiresAt,
+    }, { onConflict: 'entity_type,entity_key,destination' });
+  } catch { /* ignore cache errors */ }
+  
+  return photoUrl;
+}
+
+// =============================================================================
 // TYPES
 // =============================================================================
 
@@ -167,7 +231,8 @@ async function fetchGooglePlaces(
 
     console.log(`[Google Places] Found ${uniquePlaces.length} unique restaurants from ${searchQueries.length} queries`);
 
-    return uniquePlaces.map((place: Record<string, unknown>): Restaurant => {
+    // Process restaurants with async photo caching
+    const restaurants = await Promise.all(uniquePlaces.map(async (place: Record<string, unknown>): Promise<Restaurant> => {
       const displayName = place.displayName as { text: string } | undefined;
       const location = place.location as { latitude: number; longitude: number } | undefined;
       const photos = place.photos as Array<{ name: string }> | undefined;
@@ -185,6 +250,15 @@ async function fetchGooglePlaces(
         ['vegetarian', 'vegan', 'halal', 'kosher', 'gluten_free'].some(d => t.includes(d))
       );
 
+      // Get cached photo URL (or cache it if new)
+      const photoUrl = await getCachedPhotoUrl(
+        place.id as string,
+        photos?.[0]?.name,
+        displayName?.text || 'Restaurant',
+        destination,
+        apiKey
+      );
+
       return {
         id: `google_${place.id}`,
         name: displayName?.text || 'Unknown',
@@ -194,9 +268,7 @@ async function fetchGooglePlaces(
         priceLevel: parsePriceLevel(place.priceLevel as string),
         address: (place.formattedAddress as string) || '',
         coordinates: location ? { lat: location.latitude, lng: location.longitude } : undefined,
-        photoUrl: photos?.[0]?.name
-          ? `https://places.googleapis.com/v1/${photos[0].name}/media?maxHeightPx=400&key=${apiKey}`
-          : undefined,
+        photoUrl,
         website: place.websiteUri as string | undefined,
         phone: place.nationalPhoneNumber as string | undefined,
         openNow: openingHours?.openNow,
@@ -206,7 +278,9 @@ async function fetchGooglePlaces(
         dietaryOptions,
         reviewSnippets: reviews.slice(0, 3).map((r) => r.text?.text || '').filter(Boolean),
       };
-    });
+    }));
+    
+    return restaurants;
   } catch (error) {
     console.error('[Google Places] Fetch error:', error);
     return [];
