@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -610,50 +611,20 @@ async function enrichHotelByName(
       return { success: false, message: 'Hotel not found' };
     }
 
-    // Cache photos in curated_images to avoid repeated Google API calls
+    // Download photos to Supabase Storage to avoid repeated Google API calls
     const photos: string[] = [];
     if (place.photos?.length > 0) {
-      const supabase = getSupabaseAdmin();
-      const entityKey = `hotel-${place.id || hotelName}`.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 100);
-      
       for (let i = 0; i < Math.min(place.photos.length, 5); i++) {
         const photo = place.photos[i];
-        const photoKey = `${entityKey}-${i}`;
+        const googlePhotoUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_MAPS_API_KEY}`;
         
-        // Check cache first
-        const { data: cached } = await supabase
-          .from('curated_images')
-          .select('image_url')
-          .eq('entity_type', 'hotel')
-          .eq('entity_key', photoKey)
-          .single();
-        
-        if (cached?.image_url) {
-          photos.push(cached.image_url);
-          continue;
-        }
-        
-        // Not cached - generate URL and cache it
-        const photoUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_MAPS_API_KEY}`;
-        photos.push(photoUrl);
-        
-        // Cache for 90 days (Google Places photos are stable)
-        const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-        try {
-          await supabase.from('curated_images').upsert({
-            entity_type: 'hotel',
-            entity_key: photoKey,
-            destination: destination,
-            source: 'google_places',
-            image_url: photoUrl,
-            alt_text: `${place.displayName?.text || hotelName} - Photo ${i + 1}`,
-            place_id: place.id,
-            photo_reference: photo.name,
-            quality_score: 0.85,
-            updated_at: new Date().toISOString(),
-            expires_at: expiresAt,
-          }, { onConflict: 'entity_type,entity_key,destination' });
-        } catch { /* ignore cache errors */ }
+        const cacheResult = await getCachedPhotoUrl(
+          'hotel',
+          `${place.id}-${i}`,
+          googlePhotoUrl,
+          { destination, placeName: place.displayName?.text || hotelName, placeId: place.id }
+        );
+        photos.push(cacheResult.url);
       }
       console.log(`[Hotels] Cached ${photos.length} photos for: ${hotelName}`);
     }
