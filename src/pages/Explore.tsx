@@ -158,13 +158,9 @@ export default function Explore() {
       trackDestinationInterest(destination.city, destination.country, 'card_click');
     });
     
-    // For featured destinations, use slug-based routing
-    // For database destinations, use ID-based routing
-    if (destination.source === 'featured') {
-      navigate(buildRoute.destination(destination.id));
-    } else {
-      navigate(buildRoute.destination(destination.city.toLowerCase().replace(/\s+/g, '-')));
-    }
+    // Navigate directly to the Build My Itinerary flow with destination pre-filled
+    const destinationParam = encodeURIComponent(destination.city);
+    navigate(`/start?destination=${destinationParam}`);
   };
 
   return (
