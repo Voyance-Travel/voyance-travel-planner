@@ -299,11 +299,10 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
   );
 }
 
-// Quiz Option Card
+// Quiz Option Card - Compact version for faster pace
 function QuizOptionCard({ 
   value, 
   label, 
-  description, 
   isSelected, 
   onSelect,
   index,
@@ -311,7 +310,7 @@ function QuizOptionCard({
 }: { 
   value: string;
   label: string;
-  description: string;
+  description?: string;
   isSelected: boolean;
   onSelect: (value: string) => void;
   index: number;
@@ -321,112 +320,86 @@ function QuizOptionCard({
     <motion.button
       type="button"
       onClick={() => onSelect(value)}
-      initial={{ opacity: 0, y: 15 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.08, duration: 0.4, ease: "easeOut" }}
-      whileHover={{ scale: 1.02, y: -2 }}
+      transition={{ delay: index * 0.03, duration: 0.2 }}
       whileTap={{ scale: 0.98 }}
       className={cn(
-        'relative p-5 rounded-xl border-2 text-left transition-all w-full group overflow-hidden',
+        'relative px-4 py-3 rounded-lg border text-left transition-all w-full group',
         isSelected
-          ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
-          : 'border-border bg-card hover:border-primary/40 hover:shadow-md'
+          ? 'border-primary bg-primary/10'
+          : 'border-border bg-card hover:border-primary/50'
       )}
     >
-      {/* Subtle gradient overlay on selection */}
-      {isSelected && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none"
-        />
-      )}
-      
-      {/* Selection indicator with animation */}
-      <div className="absolute top-4 right-4">
-        <motion.div 
-          animate={isSelected ? { scale: [1, 1.2, 1] } : {}}
-          transition={{ duration: 0.3 }}
-          className={cn(
-            'w-6 h-6 flex items-center justify-center transition-all',
-            isMultiSelect ? 'rounded-md' : 'rounded-full',
-            isSelected 
-              ? 'bg-primary shadow-md shadow-primary/30' 
-              : 'border-2 border-border group-hover:border-primary/40'
-          )}
-        >
-          {isSelected && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 400, damping: 20 }}
-            >
-              <Check className="w-4 h-4 text-primary-foreground" />
-            </motion.div>
-          )}
-        </motion.div>
-      </div>
-      
-      <div className="pr-10 relative z-10">
+      <div className="flex items-center gap-3">
+        {/* Compact selection indicator */}
         <div className={cn(
-          'font-semibold mb-1 transition-colors',
-          isSelected ? 'text-primary' : 'text-foreground group-hover:text-primary/80'
+          'w-5 h-5 flex items-center justify-center shrink-0 transition-all',
+          isMultiSelect ? 'rounded' : 'rounded-full',
+          isSelected 
+            ? 'bg-primary' 
+            : 'border-2 border-muted-foreground/30'
+        )}>
+          {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+        </div>
+        
+        <span className={cn(
+          'text-sm font-medium transition-colors',
+          isSelected ? 'text-primary' : 'text-foreground'
         )}>
           {label}
-        </div>
-        <div className="text-sm text-muted-foreground leading-relaxed">
-          {description}
-        </div>
+        </span>
       </div>
     </motion.button>
   );
 }
 
-// Progress bar component
-function QuizProgressBar({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
-  const progress = ((currentStep + 1) / totalSteps) * 100;
+// Sticky progress bar with percentage
+function QuizProgressBar({ currentStep, totalSteps, questionIndex, questionsInStep }: { 
+  currentStep: number; 
+  totalSteps: number;
+  questionIndex?: number;
+  questionsInStep?: number;
+}) {
+  // Calculate overall progress including question within step
+  const baseProgress = (currentStep / totalSteps) * 100;
+  const stepProgress = questionsInStep && questionIndex !== undefined 
+    ? ((questionIndex + 1) / questionsInStep) * (100 / totalSteps)
+    : 0;
+  const progress = Math.min(baseProgress + stepProgress, 100);
   
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      {/* Step indicators */}
-      <div className="hidden md:flex justify-between mb-3 px-1">
-        {stepCategories.map((s, idx) => (
-          <div key={idx} className="flex flex-col items-center">
-            <div className={cn(
-              'w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium mb-1 transition-all',
-              idx === currentStep 
-                ? 'bg-primary text-primary-foreground' 
-                : idx < currentStep 
-                  ? 'bg-primary/20 text-primary' 
-                  : 'bg-muted text-muted-foreground'
-            )}>
-              {idx < currentStep ? <Check className="w-3.5 h-3.5" /> : idx + 1}
-            </div>
-            <span className={cn(
-              'text-[10px] font-medium transition-colors text-center',
-              idx === currentStep ? 'text-primary' : 'text-muted-foreground/60'
-            )}>
-              {s.label}
-            </span>
-          </div>
-        ))}
-      </div>
-      
-      {/* Progress bar */}
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-        <motion.div 
-          className="h-full bg-primary rounded-full"
-          initial={{ width: 0 }}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-        />
-      </div>
-      
-      {/* Mobile step indicator */}
-      <div className="md:hidden text-center mt-3">
-        <span className="text-sm text-muted-foreground">
-          Step {currentStep + 1} of {totalSteps} · {stepCategories[currentStep]?.label}
+    <div className="w-full">
+      {/* Compact progress indicator */}
+      <div className="flex items-center gap-3 mb-2">
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <motion.div 
+            className="h-full bg-primary rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.2 }}
+          />
+        </div>
+        <span className="text-xs font-medium text-muted-foreground tabular-nums min-w-[3rem] text-right">
+          {Math.round(progress)}%
         </span>
+      </div>
+      
+      {/* Step dots - minimal */}
+      <div className="flex items-center justify-center gap-1.5">
+        {[...Array(totalSteps)].map((_, idx) => (
+          <div 
+            key={idx}
+            className={cn(
+              'h-1.5 rounded-full transition-all duration-200',
+              idx === currentStep 
+                ? 'bg-primary w-6' 
+                : idx < currentStep 
+                  ? 'bg-primary/50 w-1.5' 
+                  : 'bg-muted w-1.5'
+            )}
+          />
+        ))}
       </div>
     </div>
   );
@@ -632,96 +605,87 @@ export default function Quiz() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex-1 flex flex-col pt-28 pb-8"
+              className="flex-1 flex flex-col pt-20 pb-4"
             >
-              {/* Progress */}
-              <div className="px-4 mb-8">
-                <QuizProgressBar currentStep={currentStep} totalSteps={totalSteps} />
+              {/* Sticky Progress */}
+              <div className="sticky top-16 z-20 bg-background/95 backdrop-blur-sm px-4 py-3 border-b border-border/50">
+                <div className="max-w-xl mx-auto">
+                  <QuizProgressBar 
+                    currentStep={currentStep} 
+                    totalSteps={totalSteps}
+                    questionIndex={0}
+                    questionsInStep={stepQuestions.length}
+                  />
+                </div>
               </div>
               
-              {/* Questions */}
-              <div className="quiz-scroll-container flex-1 flex items-start justify-center px-4 overflow-y-auto">
+              {/* Questions - Compact layout */}
+              <div className="quiz-scroll-container flex-1 px-4 py-4">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
-                    initial={{ opacity: 0, x: 30 }}
+                    initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -30 }}
-                    transition={{ duration: 0.4, ease: "easeOut" }}
-                    className="max-w-2xl w-full space-y-10"
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2 }}
+                    className="max-w-xl mx-auto space-y-6"
                   >
                     {stepQuestions.map((question, qIdx) => (
-                      <div key={question.id} className={qIdx > 0 ? 'pt-8 border-t border-border' : ''}>
-                        {/* Question header with subtle animation */}
-                        <motion.div 
-                          className="text-center mb-8"
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.1 }}
-                        >
-                          <motion.div 
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider mb-4"
-                            whileHover={{ scale: 1.05 }}
-                          >
-                            <motion.span
-                              animate={{ rotate: [0, 5, 0, -5, 0] }}
-                              transition={{ duration: 4, repeat: Infinity }}
-                            >
-                              {question.icon}
-                            </motion.span>
-                            {question.category}
-                          </motion.div>
+                      <div key={question.id} className={qIdx > 0 ? 'pt-4 border-t border-border/50' : ''}>
+                        {/* Compact question header */}
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 text-xs text-primary font-medium uppercase tracking-wide mb-2">
+                            {question.icon}
+                            <span>{question.category}</span>
+                            {question.optional && <span className="text-muted-foreground font-normal">(optional)</span>}
+                          </div>
                           
-                          <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-3">
+                          <h2 className="text-lg md:text-xl font-semibold text-foreground leading-snug">
                             {question.title}
-                          </h1>
+                          </h2>
                           
-                          <p className="text-muted-foreground leading-relaxed">
-                            {question.subtitle}
-                            {question.optional && <span className="text-xs ml-2 opacity-60">(optional)</span>}
-                          </p>
-                        </motion.div>
+                          {question.multiSelect && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Select all that apply
+                            </p>
+                          )}
+                        </div>
                         
-                        {/* Options */}
-                        <div className={cn(
-                          'grid gap-3',
-                          question.options.length > 4 ? 'md:grid-cols-2' : ''
-                        )}>
+                        {/* Compact options grid */}
+                        <div className="grid gap-2">
                           {question.options.map((option, index) => (
                             <QuizOptionCard
                               key={option.value}
                               value={option.value}
                               label={option.label}
-                              description={option.description}
                               isSelected={isSelected(question.id, option.value)}
                               onSelect={(val) => handleSelect(question.id, val, !!question.multiSelect)}
                               index={index}
                               isMultiSelect={question.multiSelect}
                             />
-                            ))}
-                          </div>
-                          
-                          {/* Conversation feedback after selection */}
-                          <QuizFeedbackV3
-                            questionId={question.id}
-                            answerValue={
-                              Array.isArray(answers[question.id])
-                                ? (answers[question.id] as string[])[0]
-                                : (answers[question.id] as string) || null
-                            }
-                            show={!!answers[question.id]}
-                          />
+                          ))}
+                        </div>
+                        
+                        {/* Inline feedback - minimal */}
+                        {answers[question.id] && !question.multiSelect && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className="mt-2 overflow-hidden"
+                          >
+                            <QuizFeedbackV3
+                              questionId={question.id}
+                              answerValue={answers[question.id] as string}
+                              show={true}
+                            />
+                          </motion.div>
+                        )}
                         {/* Text input for allergies/custom input */}
                         {question.hasTextInput && question.textInputId && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.3 }}
-                            className="mt-6 pt-6 border-t border-border"
-                          >
+                          <div className="mt-3">
                             <label 
                               htmlFor={question.textInputId}
-                              className="block text-sm font-medium text-foreground mb-2"
+                              className="block text-xs font-medium text-foreground mb-1"
                             >
                               {question.textInputLabel}
                             </label>
@@ -731,9 +695,9 @@ export default function Quiz() {
                               onChange={(e) => handleSelect(question.textInputId!, e.target.value, false)}
                               placeholder={question.textInputPlaceholder}
                               rows={2}
-                              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all resize-none"
                             />
-                          </motion.div>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -741,48 +705,38 @@ export default function Quiz() {
                 </AnimatePresence>
               </div>
               
-              {/* Navigation */}
-              <div className="max-w-2xl mx-auto w-full px-4 mt-8 pt-6 border-t border-border">
-                <div className="flex justify-between items-center">
+              {/* Compact Navigation */}
+              <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-border/50 px-4 py-3">
+                <div className="max-w-xl mx-auto flex justify-between items-center">
                   <Button
                     variant="ghost"
+                    size="sm"
                     onClick={handleBack}
                     disabled={currentStep === 0}
-                    className="gap-2 h-11"
+                    className="gap-1.5 h-9"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     Back
                   </Button>
                   
-                  <div className="hidden sm:flex items-center gap-1.5">
-                    {[...Array(totalSteps)].map((_, idx) => (
-                      <div 
-                        key={idx}
-                        className={cn(
-                          'w-1.5 h-1.5 rounded-full transition-all',
-                          idx === currentStep 
-                            ? 'bg-primary w-4' 
-                            : idx < currentStep 
-                              ? 'bg-primary/40' 
-                              : 'bg-muted'
-                        )}
-                      />
-                    ))}
-                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {currentStep + 1} of {totalSteps}
+                  </span>
                   
                   <Button
+                    size="sm"
                     onClick={handleNext}
                     disabled={!canProceed() || isSubmitting}
-                    className="gap-2 h-11 px-6"
+                    className="gap-1.5 h-9 px-4"
                   >
                     {isSubmitting ? (
                       <>
-                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
+                        <span className="animate-spin rounded-full h-3 w-3 border-2 border-primary-foreground border-t-transparent" />
                         Saving...
                       </>
                     ) : (
                       <>
-                        {currentStep === totalSteps - 1 ? 'Complete' : 'Continue'}
+                        {currentStep === totalSteps - 1 ? 'Complete' : 'Next'}
                         <ArrowRight className="h-4 w-4" />
                       </>
                     )}

@@ -4,7 +4,7 @@
  * Uses feedback strings from quiz-questions-v3.json config
  */
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import quizConfig from '@/config/quiz-questions-v3.json';
 
 interface QuizFeedbackV3Props {
@@ -34,19 +34,13 @@ export default function QuizFeedbackV3({ questionId, answerValue, show }: QuizFe
   if (!feedback) return null;
   
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={`${questionId}-${answerValue}`}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -4 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className="mt-4 text-center"
-      >
-        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
-          {feedback}
-        </span>
-      </motion.div>
-    </AnimatePresence>
+    <motion.span
+      key={`${questionId}-${answerValue}`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="inline-block text-xs text-primary/80 font-medium mt-1"
+    >
+      {feedback}
+    </motion.span>
   );
 }
