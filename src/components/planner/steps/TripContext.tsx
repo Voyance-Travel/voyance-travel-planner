@@ -38,6 +38,7 @@ interface TripContextProps {
   onContinue: () => void;
   onSkipToItinerary?: () => void;
   onBack: () => void;
+  isSubmitting?: boolean;
 }
 
 const budgetOptions = [
@@ -255,6 +256,7 @@ export default function TripContext({
   onContinue,
   onSkipToItinerary,
   onBack,
+  isSubmitting,
 }: TripContextProps) {
   const handleCompanionChange = (index: number, updates: Partial<Companion>) => {
     const newCompanions = [...companions];
@@ -307,9 +309,10 @@ export default function TripContext({
         <Button
           variant="ghost"
           onClick={onContinue}
+          disabled={isSubmitting}
           className="text-slate-500 hover:text-primary gap-2"
         >
-          Skip this step
+          {isSubmitting ? 'Saving...' : 'Skip this step'}
           <SkipForward className="w-4 h-4" />
         </Button>
       </motion.div>
@@ -572,14 +575,17 @@ export default function TripContext({
             {onSkipToItinerary && (
               <button
                 onClick={onSkipToItinerary}
-                className="w-full p-4 rounded-xl border border-dashed border-slate-300 hover:border-primary/50 hover:bg-primary/5 transition-all group text-left"
+                disabled={isSubmitting}
+                className="w-full p-4 rounded-xl border border-dashed border-slate-300 hover:border-primary/50 hover:bg-primary/5 transition-all group text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-slate-300 disabled:hover:bg-transparent"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500/20 to-violet-500/10 flex items-center justify-center group-hover:from-violet-500/30 group-hover:to-violet-500/20 transition-colors">
                     <SkipForward className="w-5 h-5 text-violet-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-slate-900 group-hover:text-primary transition-colors">Just Build My Itinerary</p>
+                    <p className="font-medium text-slate-900 group-hover:text-primary transition-colors">
+                      {isSubmitting ? 'Saving...' : 'Just Build My Itinerary'}
+                    </p>
                     <p className="text-xs text-slate-500">Skip flights & hotels, add them later</p>
                   </div>
                 </div>
@@ -596,14 +602,15 @@ export default function TripContext({
         transition={{ delay: 0.6 }}
         className="flex justify-between mt-8 pt-6 border-t border-slate-200"
       >
-        <Button variant="outline" onClick={onBack} className="h-12 px-6">
+        <Button variant="outline" onClick={onBack} disabled={isSubmitting} className="h-12 px-6">
           Back
         </Button>
         <Button
           onClick={onContinue}
+          disabled={isSubmitting}
           className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white gap-2"
         >
-          Continue to Flights
+          {isSubmitting ? 'Saving...' : 'Continue to Flights'}
           <ArrowRight className="w-4 h-4" />
         </Button>
       </motion.div>

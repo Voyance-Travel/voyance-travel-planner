@@ -24,6 +24,7 @@ interface HotelSelectionProps {
   onSelectHotel: (id: string, hotel: Hotel) => void;
   onContinue: () => void;
   onBack: () => void;
+  isSubmitting?: boolean;
 }
 
 // Mock hotel data
@@ -175,6 +176,7 @@ export default function HotelSelection({
   onSelectHotel,
   onContinue,
   onBack,
+  isSubmitting,
 }: HotelSelectionProps) {
   // Calculate nights
   const startDate = new Date(formData.startDate);
@@ -211,15 +213,15 @@ export default function HotelSelection({
 
       {/* Navigation */}
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack} className="h-12 px-6">
+        <Button variant="outline" onClick={onBack} disabled={isSubmitting} className="h-12 px-6">
           Back
         </Button>
         <Button
           onClick={onContinue}
-          disabled={!selectedHotel}
+          disabled={!selectedHotel || isSubmitting}
           className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white"
         >
-          Continue to Itinerary
+          {isSubmitting ? 'Saving...' : 'Continue to Itinerary'}
         </Button>
       </div>
     </motion.div>
