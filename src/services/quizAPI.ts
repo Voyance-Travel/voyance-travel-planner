@@ -102,15 +102,6 @@ async function getAuthHeader(): Promise<Record<string, string>> {
     };
   }
   
-  // Fall back to stored token
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-  
   return { 'Content-Type': 'application/json' };
 }
 

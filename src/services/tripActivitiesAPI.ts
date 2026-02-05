@@ -102,10 +102,11 @@ export interface AlternativesResponse {
 // ============================================================================
 
 async function getAuthHeader(): Promise<Record<string, string>> {
-  const token = localStorage.getItem('voyance_access_token');
-  if (token) {
+  const { supabase } = await import('@/integrations/supabase/client');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
     return {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
     };
   }
