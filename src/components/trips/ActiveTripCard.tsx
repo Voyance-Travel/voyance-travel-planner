@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate, Link } from 'react-router-dom';
+ import { Link, useNavigate } from 'react-router-dom';
 import { 
   Plane, 
   Calendar, 
@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
+ import { openMapLocation } from '@/utils/mapNavigation';
 
 interface ActiveTripCardProps {
   trip: {
@@ -61,8 +62,8 @@ function getTimeOfDayGreeting() {
 }
 
 export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
-  const navigate = useNavigate();
-  
+   const navigate = useNavigate();
+
   // Use smart hero image hook with API fallback for uncurated destinations
   const seededHero = trip.metadata?.hero_image;
   const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
@@ -93,6 +94,11 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
 
   const TimeIcon = getTimeOfDayIcon();
   const greeting = getTimeOfDayGreeting();
+
+   // Open destination in native maps app
+   const handleOpenMap = () => {
+     openMapLocation({ name: trip.destination }, 'auto');
+   };
 
   return (
     <motion.div
@@ -169,16 +175,18 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
         {/* Quick Actions Grid */}
         <div className="grid grid-cols-2 gap-3">
           <Button 
-            onClick={() => navigate(`/itinerary/${trip.id}`)}
+             asChild
             variant="default"
             className="h-auto py-4 flex-col gap-2"
           >
-            <Calendar className="h-5 w-5" />
-            <span className="text-sm font-medium">Today's Plan</span>
+             <Link to={`/itinerary/${trip.id}`}>
+               <Calendar className="h-5 w-5" />
+               <span className="text-sm font-medium">Today's Plan</span>
+             </Link>
           </Button>
           
           <Button 
-            onClick={() => navigate(`/trip/${trip.id}/map`)}
+             onClick={handleOpenMap}
             variant="outline"
             className="h-auto py-4 flex-col gap-2 border-border/60"
           >
