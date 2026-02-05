@@ -171,7 +171,7 @@ export const TRIP_COST_EXAMPLES = {
     regenerates: 1,
     restaurants: 1,
     aiMessages: 5,
-    total: 3 * 150 + 4 * 5 + 1 * 15 + 1 * 10 + 5 * 2, // ~505
+    total: 3 * 150 + 4 * 5 + 1 * 15 + 1 * 10 + 5 * 10, // ~545
   },
   fiveDay: {
     days: 5,
@@ -179,7 +179,7 @@ export const TRIP_COST_EXAMPLES = {
     regenerates: 2,
     restaurants: 2,
     aiMessages: 10,
-    total: 5 * 150 + 6 * 5 + 2 * 15 + 2 * 10 + 10 * 2, // ~850
+    total: 5 * 150 + 6 * 5 + 2 * 15 + 2 * 10 + 10 * 10, // ~930
   },
   sevenDay: {
     days: 7,
@@ -187,7 +187,7 @@ export const TRIP_COST_EXAMPLES = {
     regenerates: 3,
     restaurants: 3,
     aiMessages: 15,
-    total: 7 * 150 + 8 * 5 + 3 * 15 + 3 * 10 + 15 * 2, // ~1195
+    total: 7 * 150 + 8 * 5 + 3 * 15 + 3 * 10 + 15 * 10, // ~1315
   },
 } as const;
 
