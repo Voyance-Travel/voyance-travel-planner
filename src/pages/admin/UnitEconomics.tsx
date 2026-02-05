@@ -1559,6 +1559,137 @@ export default function UnitEconomics() {
           </p>
         </div>
 
+         {/* Cost by User Action Category */}
+         <div style={{
+           background: "rgba(30, 41, 59, 0.5)",
+           borderRadius: 12,
+           padding: "28px",
+           border: "1px solid rgba(100, 116, 139, 0.2)",
+           marginBottom: 32,
+         }}>
+           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", margin: 0 }}>
+               Cost by User Action {hasRealData ? "· Real Tracked Data" : "· No Data Yet"}
+             </h3>
+             <span style={{ 
+               fontSize: 10, 
+               color: hasRealData ? "#34D399" : "#64748B", 
+               background: "rgba(15, 23, 42, 0.5)", 
+               padding: "4px 8px", 
+               borderRadius: 4 
+             }}>
+               {hasRealData && realMetrics?.categoryBreakdown 
+                 ? `${Object.keys(realMetrics.categoryBreakdown).length} categories tracked` 
+                 : "Awaiting instrumentation data"}
+             </span>
+           </div>
+ 
+           {hasRealData && realMetrics?.categoryBreakdown && Object.keys(realMetrics.categoryBreakdown).length > 0 ? (
+             <>
+               {/* Category Cards Grid */}
+               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
+                 {Object.entries(realMetrics.categoryBreakdown)
+                   .sort((a, b) => b[1].cost - a[1].cost)
+                   .map(([category, data], i) => {
+                     const CATEGORY_COLORS: Record<string, string> = {
+                       home_browse: "#38BDF8",
+                       quiz: "#A855F7",
+                       explore: "#34D399",
+                       itinerary_gen: "#F59E0B",
+                       itinerary_edit: "#EC4899",
+                       booking_search: "#06B6D4",
+                       recommendations: "#84CC16",
+                       enrichment: "#F97316",
+                       other: "#64748B",
+                     };
+                     const color = CATEGORY_COLORS[category] || "#64748B";
+                     const totalCost = Object.values(realMetrics.categoryBreakdown).reduce((sum, d) => sum + d.cost, 0);
+                     const pct = totalCost > 0 ? (data.cost / totalCost) * 100 : 0;
+                     
+                     return (
+                       <div key={category} style={{
+                         background: "rgba(15, 23, 42, 0.5)",
+                         borderRadius: 8,
+                         padding: 14,
+                         borderLeft: `3px solid ${color}`,
+                       }}>
+                         <p style={{ fontSize: 11, fontWeight: 600, color: "#E2E8F0", marginBottom: 4 }}>
+                           {data.label}
+                         </p>
+                         <p style={{ fontSize: 20, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>
+                           ${data.cost.toFixed(3)}
+                         </p>
+                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748B", marginTop: 4 }}>
+                           <span>{data.count} calls</span>
+                           <span>{pct.toFixed(1)}%</span>
+                         </div>
+                       </div>
+                     );
+                   })}
+               </div>
+ 
+               {/* Cost Distribution Bar */}
+               <div style={{ marginBottom: 16 }}>
+                 <p style={{ fontSize: 11, color: "#64748B", marginBottom: 8 }}>Cost Distribution</p>
+                 <div style={{ display: "flex", height: 24, borderRadius: 6, overflow: "hidden", background: "rgba(15, 23, 42, 0.5)" }}>
+                   {Object.entries(realMetrics.categoryBreakdown)
+                     .sort((a, b) => b[1].cost - a[1].cost)
+                     .map(([category, data]) => {
+                       const CATEGORY_COLORS: Record<string, string> = {
+                         home_browse: "#38BDF8",
+                         quiz: "#A855F7",
+                         explore: "#34D399",
+                         itinerary_gen: "#F59E0B",
+                         itinerary_edit: "#EC4899",
+                         booking_search: "#06B6D4",
+                         recommendations: "#84CC16",
+                         enrichment: "#F97316",
+                         other: "#64748B",
+                       };
+                       const color = CATEGORY_COLORS[category] || "#64748B";
+                       const totalCost = Object.values(realMetrics.categoryBreakdown).reduce((sum, d) => sum + d.cost, 0);
+                       const pct = totalCost > 0 ? (data.cost / totalCost) * 100 : 0;
+                       if (pct < 1) return null;
+                       
+                       return (
+                         <div
+                           key={category}
+                           style={{
+                             width: `${pct}%`,
+                             background: color,
+                             display: "flex",
+                             alignItems: "center",
+                             justifyContent: "center",
+                             transition: "width 0.3s ease",
+                           }}
+                           title={`${data.label}: ${pct.toFixed(1)}% ($${data.cost.toFixed(3)})`}
+                         >
+                           {pct >= 12 && (
+                             <span style={{ fontSize: 9, fontWeight: 600, color: "#FFF", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>
+                               {pct.toFixed(0)}%
+                             </span>
+                           )}
+                         </div>
+                       );
+                     })}
+                 </div>
+               </div>
+ 
+               <p style={{ fontSize: 10, color: "#64748B" }}>
+                 Categories map user-facing actions to backend costs. Helps identify which features are most expensive to serve.
+               </p>
+             </>
+           ) : (
+             <div style={{ textAlign: "center", padding: "40px 20px", color: "#64748B" }}>
+               <p style={{ fontSize: 13, marginBottom: 8 }}>📊 No category data yet</p>
+               <p style={{ fontSize: 11 }}>
+                 Edge functions will log cost_category as users interact with the app.
+                 Categories: Home/Browse, Quiz, Explore, Itinerary Gen, Itinerary Edit, Booking Search, Recommendations, Enrichment
+               </p>
+             </div>
+           )}
+         </div>
+ 
         {/* Key Findings */}
         <div style={{
           background: "rgba(30, 41, 59, 0.5)",

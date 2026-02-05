@@ -4578,6 +4578,7 @@ export type Database = {
         Row: {
           action_type: string
           amadeus_calls: number
+          cost_category: Database["public"]["Enums"]["cost_category"] | null
           created_at: string
           duration_ms: number | null
           estimated_cost_usd: number | null
@@ -4597,6 +4598,7 @@ export type Database = {
         Insert: {
           action_type: string
           amadeus_calls?: number
+          cost_category?: Database["public"]["Enums"]["cost_category"] | null
           created_at?: string
           duration_ms?: number | null
           estimated_cost_usd?: number | null
@@ -4616,6 +4618,7 @@ export type Database = {
         Update: {
           action_type?: string
           amadeus_calls?: number
+          cost_category?: Database["public"]["Enums"]["cost_category"] | null
           created_at?: string
           duration_ms?: number | null
           estimated_cost_usd?: number | null
@@ -6906,6 +6909,16 @@ export type Database = {
         | "direct"
         | "manual"
       communication_type: "email" | "sms" | "call" | "note" | "approval"
+      cost_category:
+        | "home_browse"
+        | "quiz"
+        | "explore"
+        | "itinerary_gen"
+        | "itinerary_edit"
+        | "booking_search"
+        | "recommendations"
+        | "enrichment"
+        | "other"
       document_type:
         | "passport"
         | "visa"
@@ -7168,6 +7181,17 @@ export const Constants = {
         "manual",
       ],
       communication_type: ["email", "sms", "call", "note", "approval"],
+      cost_category: [
+        "home_browse",
+        "quiz",
+        "explore",
+        "itinerary_gen",
+        "itinerary_edit",
+        "booking_search",
+        "recommendations",
+        "enrichment",
+        "other",
+      ],
       document_type: [
         "passport",
         "visa",

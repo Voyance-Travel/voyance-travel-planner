@@ -7,6 +7,91 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
+ // =============================================================================
+ // COST CATEGORIES - Maps to user-facing actions
+ // =============================================================================
+ 
+ export type CostCategory = 
+   | 'home_browse'      // Home page, destination browsing, image loading
+   | 'quiz'             // Travel DNA quiz analysis
+   | 'explore'          // Destination exploration, intelligence lookups
+   | 'itinerary_gen'    // Full/preview itinerary generation
+   | 'itinerary_edit'   // Activity swaps, day regeneration, AI chat
+   | 'booking_search'   // Hotel/flight searches, Amadeus calls
+   | 'recommendations'  // Restaurant recs, nearby suggestions
+   | 'enrichment'       // Activity enrichment, photo fetching
+   | 'other';           // Uncategorized/system operations
+ 
+ // Maps action_type to cost_category for automatic categorization
+ const ACTION_TO_CATEGORY: Record<string, CostCategory> = {
+   // Home/Browse
+   'destination_images': 'home_browse',
+   'home_destinations': 'home_browse',
+   
+   // Quiz
+   'travel_dna': 'quiz',
+   'calculate_dna': 'quiz',
+   'calculate-travel-dna': 'quiz',
+   
+   // Explore
+   'destination_intelligence': 'explore',
+   'get-destination-intelligence': 'explore',
+   'lookup-destination-insights': 'explore',
+   'lookup_travel_advisory': 'explore',
+   'lookup-travel-advisory': 'explore',
+   'local_events': 'explore',
+   'lookup-local-events': 'explore',
+   'parse_travel_story': 'explore',
+   'parse-travel-story': 'explore',
+   
+   // Itinerary Generation
+   'generate_itinerary': 'itinerary_gen',
+   'generate-itinerary': 'itinerary_gen',
+   'generate_preview': 'itinerary_gen',
+   'generate-quick-preview': 'itinerary_gen',
+   'generate-full-preview': 'itinerary_gen',
+   'generate-trip-preview': 'itinerary_gen',
+   'quick_preview': 'itinerary_gen',
+   'full_preview': 'itinerary_gen',
+   'trip_preview': 'itinerary_gen',
+   
+   // Itinerary Editing
+   'swap_activity': 'itinerary_edit',
+   'get-activity-alternatives': 'itinerary_edit',
+   'regenerate_day': 'itinerary_edit',
+   'itinerary_chat': 'itinerary_edit',
+   'itinerary-chat': 'itinerary_edit',
+   'optimize-itinerary': 'itinerary_edit',
+   'analyze_itinerary': 'itinerary_edit',
+   'analyze-itinerary': 'itinerary_edit',
+   
+   // Booking Search
+   'hotels_search': 'booking_search',
+   'hotels': 'booking_search',
+   'flights': 'booking_search',
+   'flight_search': 'booking_search',
+   'amadeus_hotels': 'booking_search',
+   'amadeus_flights': 'booking_search',
+   
+   // Recommendations
+   'recommend_restaurants': 'recommendations',
+   'recommend-restaurants': 'recommendations',
+   'nearby_suggestions': 'recommendations',
+   'nearby-suggestions': 'recommendations',
+   
+   // Enrichment
+   'enrich_itinerary': 'enrichment',
+   'enrich-itinerary': 'enrichment',
+   'fetch_reviews': 'enrichment',
+   'fetch-reviews': 'enrichment',
+   'lookup_activity_url': 'enrichment',
+   'lookup-activity-url': 'enrichment',
+ };
+ 
+ function getCategoryForAction(actionType: string): CostCategory {
+   return ACTION_TO_CATEGORY[actionType] || 'other';
+ }
+ 
 // =============================================================================
 // PRICING DATA - Lovable AI Gateway (VERIFIED Feb 4, 2026)
 // 
@@ -124,6 +209,7 @@ export interface CostTrackingEntry {
   trip_id?: string;
   user_id?: string;
   action_type: string;
+   cost_category?: CostCategory;
   model: string;
   input_tokens: number;
   output_tokens: number;
@@ -146,6 +232,7 @@ export class CostTracker {
   private supabase: SupabaseClient;
   private startTime: number;
   private entry: CostTrackingEntry;
+   private category: CostCategory;
   
   constructor(actionType: string, model: string = 'google/gemini-3-flash-preview') {
     this.supabase = createClient(
@@ -155,8 +242,10 @@ export class CostTracker {
     );
     
     this.startTime = Date.now();
+     this.category = getCategoryForAction(actionType);
     this.entry = {
       action_type: actionType,
+       cost_category: this.category,
       model,
       input_tokens: 0,
       output_tokens: 0,
@@ -169,6 +258,15 @@ export class CostTracker {
     };
   }
   
+   /**
+    * Override the auto-detected category
+    */
+   setCategory(category: CostCategory) {
+     this.category = category;
+     this.entry.cost_category = category;
+     return this;
+   }
+   
   setTripId(tripId: string) {
     this.entry.trip_id = tripId;
     return this;
