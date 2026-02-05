@@ -277,7 +277,8 @@ const SCALE_COLUMNS = [
   { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
   { key: "free", label: "Free", tooltip: "Number of free users who generate Full Preview (real venues, gated details). Formula: Total × (100% - Conversion %)." },
   { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of free users under 'Full Preview, No Details' model. Each preview costs ~$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)} (AI + light venue validation).` },
-  { key: "loaded", label: "Cost/Trip", tooltip: "This column shows the *blended* all-in cost per trip (Total Cost ÷ Trips). It matches the Total Cost / Net Profit math, and accounts for free vs paid mix + fixed overhead." },
+  { key: "cogs", label: "COGS/Trip", tooltip: "Cost Of Goods Sold per itinerary if every user triggered full generation (Google + AI + Perplexity + Amadeus + fixed overhead). Worst-case capacity planning." },
+  { key: "blended", label: "Blended/Trip", tooltip: "All-in cost per trip = Total Cost ÷ Trips. Reflects actual mix of free previews ($0.10), tier-based paid costs, and fixed overhead. Matches Net Profit math." },
   { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
   { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES FIXED COSTS. Formula: (All Trips × Variable Cost) + $29.08 fixed. This is your total monthly infrastructure spend." },
   { key: "netProfit", label: "Net Profit", tooltip: "Revenue minus ALL costs (variable + fixed). Formula: Revenue - Total Cost. This is what hits your bank account." },
@@ -1217,11 +1218,24 @@ export default function UnitEconomics() {
                     }}>
                       -${freeCost.toFixed(0)}
                     </td>
+                    {/* COGS/Trip = worst-case full itinerary generation */}
                     <td style={{ 
                       padding: "10px 12px", 
-                      color: "#94A3B8", 
+                      color: "#64748B", 
                       textAlign: "right",
                       fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
+                    }}>
+                      ${loaded.toFixed(2)}
+                    </td>
+                    {/* Blended/Trip = what matches Net Profit math */}
+                    <td style={{ 
+                      padding: "10px 12px", 
+                      color: "#E2E8F0", 
+                      textAlign: "right",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontWeight: 600,
                       borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
                     }}>
                       ${blendedCostPerTrip.toFixed(2)}
