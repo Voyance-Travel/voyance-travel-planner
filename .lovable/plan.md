@@ -51,10 +51,12 @@ All critical and medium priority issues from the system audit have been resolved
 
 ## Remaining Linter Warnings (Intentional)
 
-The database linter shows 4 warnings for `USING (true)` policies, but these are intentional:
-- `rate_limits` - Public access required for rate limiting to work for anonymous users
-- `search_cache` - Service role access only
-- `customer_reviews` - INSERT requires authentication (WITH CHECK (true) is safe since only authenticated role can access)
+The database linter shows 3 warnings for `USING (true)` policies, but these are intentional:
+- `rate_limits` - Service role access for edge function rate limiting (supports anonymous users)
+- `search_cache` - Service role access for edge function caching
+- `trip_cost_tracking` - Service role INSERT for tracking trip generation costs
+
+These are all service role policies that only activate when using SUPABASE_SERVICE_ROLE_KEY (never exposed to clients).
 
 ---
 
