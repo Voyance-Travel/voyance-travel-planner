@@ -17,5 +17,7 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Prevent duplicate React instances from @lovable.dev/cloud-auth-js
+    dedupe: ["react", "react-dom", "react/jsx-runtime"],
   },
 }));
