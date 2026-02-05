@@ -1,78 +1,139 @@
 
-# System Audit Report - Voyance Travel Planner
+# Code Quality & Bug Fix Plan
 
-## Executive Summary
+## Summary of Issues Found
 
-All critical and medium priority issues from the system audit have been resolved. The codebase is now clean of legacy authentication patterns, deprecated backend references, and unused code.
-
----
-
-## ✅ All Issues Fixed
-
-### High Priority (Completed)
-1. **Edge Functions Auth Pattern** - Fixed 7 functions with correct auth header pattern (including golden-persona-tests)
-2. **Legacy Token Fallbacks** - Removed from all 8 active service files
-3. **Railway Backend References** - Removed deprecated URL fallback from 7 active files
-
-### Medium Priority (Completed)
-4. **_legacy Folder Cleanup** - Deleted all 19 unused legacy API files (no imports found)
-5. **customer_reviews RLS Policy** - Now requires authentication for INSERT, removed duplicate policy
-6. **Quiz Race Condition** - Fixed with `user?.id` guard
-7. **Duplicate Route** - Removed from App.tsx
-
-### Low Priority (Completed)
-8. **localStorage Cleanup** - Added cleanup of legacy keys on logout
-9. **AuthContext Stale Token Detection** - Properly detects and handles stale JWTs
+After a thorough code review, I've identified **6 major categories** of issues that are causing QA breaks and instability:
 
 ---
 
-## Files Deleted (Legacy Cleanup)
-- `src/services/_legacy/README.md`
-- `src/services/_legacy/activityAlternativesAPI.ts`
-- `src/services/_legacy/bdqAPI.ts`
-- `src/services/_legacy/budgetAPI.ts`
-- `src/services/_legacy/connectionRiskAPI.ts`
-- `src/services/_legacy/contentAPI.ts`
-- `src/services/_legacy/destinationScoringAPI.ts`
-- `src/services/_legacy/destinationsCanonicalAPI.ts`
-- `src/services/_legacy/dreamBuilderAPI.ts`
-- `src/services/_legacy/emotionalTaggingAPI.ts`
-- `src/services/_legacy/emotionalTagsAPI.ts`
-- `src/services/_legacy/itineraryPreviewAPI.ts`
-- `src/services/_legacy/mealPlanningAPI.ts`
-- `src/services/_legacy/mealPlansAPI.ts`
-- `src/services/_legacy/previewAPI.ts`
-- `src/services/_legacy/quizExtendedAPI.ts`
-- `src/services/_legacy/quizSectionsAPI.ts`
-- `src/services/_legacy/timelineBlocksAPI.ts`
-- `src/services/_legacy/tripsEnhancedAPI.ts`
+## 1. Unhandled Async Errors (HIGH PRIORITY)
+
+**Problem**: Many async handlers lack proper try/catch blocks, causing unhandled promise rejections that crash the app.
+
+**Evidence**: Found 205+ catch blocks, but many are incomplete or missing error handling in critical paths.
+
+**Fix**:
+- Add global unhandled rejection handler in `App.tsx`
+- Audit all async handlers in pages (22 files have catch blocks, many more are missing them)
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│  App.tsx                                                │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  useEffect(() => {                               │  │
+│  │    const handler = (e: PromiseRejectionEvent) => │  │
+│  │      console.error(e.reason);                    │  │
+│  │      toast.error("An error occurred");           │  │
+│  │      e.preventDefault(); // Prevent crash        │  │
+│  │    };                                            │  │
+│  │    window.addEventListener("unhandledrejection", │  │
+│  │                            handler);             │  │
+│  │    return () => window.removeEventListener(...); │  │
+│  │  }, []);                                         │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Security Status
+## 2. Type Safety Issues (HIGH PRIORITY)
 
-### RLS Policies Verified ✅
-All 30+ tables with sensitive data have proper RLS policies enforcing ownership checks:
-- Agency tables: `agent_id = auth.uid()` 
-- User tables: `user_id = auth.uid()`
-- Trip tables: Trip owner or authorized collaborator checks
+**Problem**: 525+ instances of `as any`, `@ts-ignore`, and unsafe type casts that hide runtime errors.
 
-### Remaining Linter Warnings (Intentional)
+**Key Files Affected**:
+- `src/pages/TripDetail.tsx` - 15+ unsafe casts
+- `src/services/bookingStateMachine.ts` - 6+ unsafe casts
+- `src/components/agent/ProfitDashboard.tsx` - 4+ unsafe casts
+- `src/contexts/AuthContext.tsx` - 2+ unsafe casts
 
-The database linter shows 3 warnings for `USING (true)` policies, but these are intentional:
-- `rate_limits` - Service role access for edge function rate limiting (supports anonymous users)
-- `search_cache` - Service role access for edge function caching
-- `trip_cost_tracking` - Service role INSERT for tracking trip generation costs
-
-These are all service role policies that only activate when using SUPABASE_SERVICE_ROLE_KEY (never exposed to clients).
+**Fix**:
+- Replace `as any` with proper type guards
+- Add null checks before property access
+- Use optional chaining consistently
 
 ---
 
-## What's Working Well
+## 3. Null/Undefined Access Patterns (MEDIUM PRIORITY)
 
-1. ✅ **AuthContext** - Core auth flow with stale token detection and legacy cleanup
-2. ✅ **Quiz System** - Sessions and responses populating correctly
-3. ✅ **Edge Functions** - All critical functions have correct auth pattern
-4. ✅ **RLS Security** - 77+ tables have proper RLS policies
-5. ✅ **Profile auto-creation** - `handle_new_user()` trigger works correctly
-6. ✅ **Clean Codebase** - No legacy code, no deprecated references
+**Problem**: 509+ patterns of potential null/undefined access that can cause "Cannot read properties of undefined" errors.
+
+**Common Patterns**:
+```typescript
+// DANGEROUS - crashes if trip is null
+const cleanDestination = trip?.destination
+  ?.replace(/\s*\(.*?\)\s*/g, '')
+  .trim() || 'your destination';
+
+// SAFER
+const cleanDestination = trip?.destination 
+  ? trip.destination.replace(/\s*\(.*?\)\s*/g, '').trim() 
+  : 'your destination';
+```
+
+**Files Most Affected**:
+- `src/pages/TripDetail.tsx` - Complex nested object access
+- `src/pages/ActiveTrip.tsx` - Itinerary data parsing
+- `src/pages/DestinationDetail.tsx` - Dynamic field access
+
+---
+
+## 4. Database Deletion Cascade Issues (FIXED)
+
+**Status**: Already addressed in previous messages by updating edge functions to manually cascade deletions.
+
+---
+
+## 5. Edge Function Import Stability (FIXED)
+
+**Status**: Already migrated all 56 edge functions from `esm.sh` to stable `npm:` specifiers.
+
+---
+
+## 6. RLS Policy Warnings (LOW PRIORITY)
+
+**Problem**: 3 overly permissive RLS policies detected that use `USING (true)` for write operations.
+
+**Risk**: Security vulnerability if not intentional for public tables.
+
+**Fix**: Review and tighten RLS policies on affected tables.
+
+---
+
+## Proposed Fix Order
+
+| Priority | Category | Estimated Files | Impact |
+|----------|----------|-----------------|--------|
+| 1 | Global error handler | 1 file (App.tsx) | Prevents all white-screen crashes |
+| 2 | Critical type guards | 5-10 key files | Prevents runtime type errors |
+| 3 | Null safety audit | 10-15 pages | Prevents "undefined" crashes |
+| 4 | RLS policy review | Database migration | Security hardening |
+
+---
+
+## Technical Implementation
+
+### Phase 1: Global Error Recovery (App.tsx)
+Add unhandled promise rejection handler and improve ErrorBoundary integration.
+
+### Phase 2: Type Safety Fixes
+Priority files to fix:
+1. `TripDetail.tsx` - Core trip viewing page
+2. `ActiveTrip.tsx` - Live trip tracking
+3. `AuthContext.tsx` - Authentication flow
+4. `bookingStateMachine.ts` - Booking state transitions
+
+### Phase 3: Defensive Null Checks
+Add explicit null guards in:
+- Itinerary data parsing
+- Hotel/flight selection handling
+- User preferences access
+
+---
+
+## Notes for Implementation
+
+- All async event handlers need `try/catch` with user-friendly error messages
+- Replace `(data as any)` with proper TypeScript interfaces
+- Use `data?.field ?? fallback` pattern consistently
+- Add input validation before API calls
