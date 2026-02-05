@@ -60,17 +60,17 @@ const FALLBACK_DATA = {
     // Hidden fixed: your own testing, API testing, dev overhead
     devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
-  revenue: { boost: 8, single: 12, starter: 29, explorer: 55, adventurer: 89 } as Record<string, number>,
+  revenue: { boost: 8.99, single: 15.99, weekend: 29.99, explorer: 59.99, adventurer: 99.99 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
 // Now includes per-tier COSTS to calculate true blended margin
-// NOTE: Boost ($8) replaces Top-Up ($5) - less cannibalization risk
+// NOTE: Boost ($8.99) replaces Top-Up ($5) - less cannibalization risk
 const REVENUE_MIX_PRESETS = {
-  pessimistic: { boost: 40, single: 30, starter: 18, explorer: 10, adventurer: 2, label: "Pessimistic", description: "40% buy $8 boosts (reduced from 50% top-ups)" },
-  conservative: { boost: 25, single: 30, starter: 28, explorer: 14, adventurer: 3, label: "Conservative", description: "25% boosts, spread across tiers" },
-  balanced: { boost: 12, single: 25, starter: 32, explorer: 23, adventurer: 8, label: "Balanced", description: "Most buy Starter/Explorer (higher cost, higher revenue)" },
-  optimistic: { boost: 5, single: 15, starter: 25, explorer: 35, adventurer: 20, label: "Optimistic", description: "Heavy Explorer/Adventurer (highest cost, highest revenue)" },
+  pessimistic: { boost: 40, single: 30, weekend: 18, explorer: 10, adventurer: 2, label: "Pessimistic", description: "40% buy $8.99 boosts" },
+  conservative: { boost: 25, single: 30, weekend: 28, explorer: 14, adventurer: 3, label: "Conservative", description: "25% boosts, spread across tiers" },
+  balanced: { boost: 12, single: 25, weekend: 32, explorer: 23, adventurer: 8, label: "Balanced", description: "Most buy Weekend/Explorer" },
+  optimistic: { boost: 5, single: 15, weekend: 25, explorer: 35, adventurer: 20, label: "Optimistic", description: "Heavy Explorer/Adventurer" },
 };
 
 // Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
@@ -197,42 +197,44 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 
 // Credit pack tiers with USAGE-BASED COST MODELING
 // Uses the decomposed cost model: $0.163 base + $0.10/day
-// NOTE: Boost ($8/80 credits) replaces Top-Up ($5/50 credits)
+// NOTE: Boost ($8.99/80 credits) replaces Top-Up ($5/50 credits)
+// Updated pricing: Boost $8.99, Single $15.99, Weekend $29.99, Explorer $59.99, Adventurer $99.99
+// Credit costs: Swap 10, Regenerate 20, Restaurant 15, AI Message 10
 const CREDIT_TIERS = [
   { 
     key: "boost", 
     label: "Boost", 
-    price: 8, 
+    price: 8.99, 
     credits: 80, 
     color: "#94A3B8", 
     description: "Quick boost for swaps & extras",
-    // Boost users CAN'T unlock days (need 150 credits), so only swaps/AI messages
-    typicalUsage: { daysUnlocked: 0, swaps: 12, regenerates: 1, restaurants: 0, aiMessages: 8 },
-    // Cost: No trip base (no day unlock), just light AI calls
-    estimatedCostToUs: 0.12,   // Slightly more than old top-up (more credits)
+    // Boost users CAN'T unlock days (need 150 credits), so only swaps (10 cr) /AI messages (10 cr)
+    typicalUsage: { daysUnlocked: 0, swaps: 5, regenerates: 1, restaurants: 0, aiMessages: 3 },
+    // Cost: No trip base, just light AI calls
+    estimatedCostToUs: 0.10,
     notes: "Cannot unlock days - 80 credits insufficient",
   },
   { 
     key: "single", 
     label: "Single/Starter", 
-    price: 12, 
+    price: 15.99, 
     credits: 200, 
     color: "#38BDF8", 
     description: "One complete day",
-    // 1 day = 150 credits (new trip), leaving 50 for extras
-    typicalUsage: { daysUnlocked: 1, swaps: 6, regenerates: 1, restaurants: 1, aiMessages: 5 },
+    // 1 day = 150 credits, leaving 50 for extras (swap 10, regen 20)
+    typicalUsage: { daysUnlocked: 1, swaps: 3, regenerates: 1, restaurants: 0, aiMessages: 2 },
     // Cost: $0.163 base + 1 × $0.100/day = $0.263
     estimatedCostToUs: 0.263,
     notes: "1 new trip with 1 day",
   },
   { 
-    key: "starter", 
+    key: "weekend", 
     label: "Weekend", 
-    price: 29, 
+    price: 29.99, 
     credits: 500, 
     description: "3-day trip",
-    // 3 days = 450 credits, leaving 50 for extras
-    typicalUsage: { daysUnlocked: 3, swaps: 6, regenerates: 1, restaurants: 2, aiMessages: 8 },
+    // 3 days = 450 credits, leaving 50 for extras (swap 10, regen 20)
+    typicalUsage: { daysUnlocked: 3, swaps: 3, regenerates: 1, restaurants: 0, aiMessages: 2 },
     // Cost: $0.163 base + 3 × $0.100/day = $0.463
     estimatedCostToUs: 0.463,
     notes: "1 new trip with 3 days",
@@ -240,12 +242,12 @@ const CREDIT_TIERS = [
   { 
     key: "explorer", 
     label: "Explorer", 
-    price: 55, 
+    price: 59.99, 
     credits: 1200, 
     color: "#34D399", 
     description: "Multi-day adventures",
-    // 8 days across potentially 2 trips (5+3)
-    typicalUsage: { daysUnlocked: 8, swaps: 12, regenerates: 3, restaurants: 4, aiMessages: 15 },
+    // 8 days across potentially 2 trips (5+3), swap 10, regen 20, rest 15
+    typicalUsage: { daysUnlocked: 8, swaps: 6, regenerates: 2, restaurants: 2, aiMessages: 8 },
     // Cost: 2 × $0.163 base + 8 × $0.100/day = $1.126
     estimatedCostToUs: 1.126,
     notes: "May generate 2 trips (5+3 days)",
@@ -253,12 +255,12 @@ const CREDIT_TIERS = [
   { 
     key: "adventurer", 
     label: "Adventurer", 
-    price: 89, 
+    price: 99.99, 
     credits: 2500, 
     color: "#F59E0B", 
     description: "Frequent travelers",
-    // 16 days across multiple trips (5+5+5+1 pattern)
-    typicalUsage: { daysUnlocked: 16, swaps: 16, regenerates: 4, restaurants: 6, aiMessages: 20 },
+    // 16 days across multiple trips (5+5+5+1), swap 10, regen 20, rest 15
+    typicalUsage: { daysUnlocked: 16, swaps: 10, regenerates: 3, restaurants: 3, aiMessages: 12 },
     // Cost: 4 × $0.163 base + 16 × $0.100/day = $2.252
     estimatedCostToUs: 2.252,
     notes: "May generate 4 trips (5+5+5+1)",
@@ -324,7 +326,7 @@ export default function UnitEconomics() {
     const aov = (
       (mixConfig.boost / 100) * tiers.boost +
       (mixConfig.single / 100) * tiers.single +
-      (mixConfig.starter / 100) * tiers.starter +
+      (mixConfig.weekend / 100) * tiers.weekend +
       (mixConfig.explorer / 100) * tiers.explorer +
       (mixConfig.adventurer / 100) * tiers.adventurer
     );
@@ -361,7 +363,7 @@ export default function UnitEconomics() {
     const cost = (
       (mixConfig.boost / 100) * (scenarioTierCosts.boost ?? 0.12) +
       (mixConfig.single / 100) * (scenarioTierCosts.single ?? 0.22) +
-      (mixConfig.starter / 100) * (scenarioTierCosts.starter ?? 0.38) +
+      (mixConfig.weekend / 100) * (scenarioTierCosts.weekend ?? 0.38) +
       (mixConfig.explorer / 100) * (scenarioTierCosts.explorer ?? 0.72) +
       (mixConfig.adventurer / 100) * (scenarioTierCosts.adventurer ?? 1.35)
     );
