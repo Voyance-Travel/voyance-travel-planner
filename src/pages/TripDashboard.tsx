@@ -307,10 +307,10 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
          <AlertDialog>
            <AlertDialogTrigger asChild>
              <button
-               className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/80"
+               className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10 w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-destructive/80 active:bg-destructive/80"
                title="Delete trip"
              >
-               <Trash2 className="h-4 w-4 text-white" />
+               <Trash2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-white" />
              </button>
            </AlertDialogTrigger>
            <AlertDialogContent>
