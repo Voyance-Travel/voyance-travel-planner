@@ -258,7 +258,7 @@ export default function SampleArchetype() {
           </Button>
           
           <p className="text-[10px] sm:text-xs text-muted-foreground mt-3 sm:mt-4">
-            21 questions. No account required.
+            One-time only. No account required.
           </p>
         </motion.div>
       </div>
