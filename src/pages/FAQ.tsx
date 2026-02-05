@@ -25,7 +25,7 @@ const faqCategories = [
       },
       {
         q: 'Is Voyance free to use?',
-        a: 'Voyance offers a free tier that includes access to our Travel DNA quiz and destination exploration. Premium features like full itinerary generation, booking assistance, and trip management are available with a subscription.',
+         a: 'Yes! Voyance offers a generous free tier. You can take the Travel DNA quiz, explore destinations, and generate trip previews with personalized activity recommendations. You can also use our manual builder tools (budget tracking, bookings manager, notes) completely free. Credits are only needed to unlock enriched details like photos, hours, addresses, and booking links.',
       },
       {
         q: 'What destinations does Voyance support?',
@@ -87,7 +87,7 @@ const faqCategories = [
       },
       {
         q: 'Can I customize my generated itinerary?',
-        a: 'Absolutely! Every generated itinerary is fully customizable. You can swap activities, change restaurants, adjust timing, and add your own discoveries.',
+         a: 'Absolutely! Every generated itinerary is fully customizable. You can swap activities, change restaurants, adjust timing, and add your own discoveries. Free users can also choose "I\'ll build it myself" to use the itinerary shell with all manual tools—perfect for travelers who want to plan everything themselves.',
       },
       {
         q: 'Can I share my trip with friends or family?',

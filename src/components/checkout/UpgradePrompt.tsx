@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Sparkles, Ticket, Loader2, Plus } from 'lucide-react';
+ import { ArrowRight, Sparkles, Ticket, Loader2, Plus, Pencil } from 'lucide-react';
 import { CREDIT_PACKS, BOOST_PACK, formatCredits, CREDIT_COSTS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from './EmbeddedCheckoutModal';
 import { ROUTES } from '@/config/routes';
 import { useCredits } from '@/hooks/useCredits';
+ import { useManualBuilderStore } from '@/stores/manual-builder-store';
+ import { toast as sonnerToast } from 'sonner';
 
 interface UpgradePromptProps {
   isOpen: boolean;
@@ -16,6 +18,8 @@ interface UpgradePromptProps {
   featureName?: string;
   context?: 'regenerate' | 'route' | 'budget' | 'general' | 'credits' | 'swap' | 'unlock_day' | 'restaurant' | 'ai_message';
   creditsNeeded?: number;
+   tripId?: string;
+   showManualOption?: boolean;
 }
 
 // Action labels for display
@@ -33,6 +37,8 @@ export function UpgradePrompt({
   featureName = 'this feature',
   context = 'general',
   creditsNeeded = 0,
+   tripId,
+   showManualOption = false,
 }: UpgradePromptProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -44,11 +50,20 @@ export function UpgradePrompt({
     credits: number;
     name: string;
   } | null>(null);
+   const { enableManualBuilder } = useManualBuilderStore();
 
   const currentBalance = creditBalance?.totalCredits ?? 0;
   const actionInfo = context && ACTION_LABELS[context];
   const actionCost = actionInfo?.cost ?? creditsNeeded;
   const actionLabel = actionInfo?.label ?? featureName;
+   
+   const handleManualBuild = () => {
+     if (tripId) {
+       enableManualBuilder(tripId);
+       sonnerToast.success('Manual builder mode enabled! You can now edit freely.');
+     }
+     onClose();
+   };
   
   // Show boost if action cost is affordable with 80 credits (not for unlock_day)
   const canUseBoost = actionCost <= 80 && context !== 'unlock_day';
@@ -225,6 +240,19 @@ export function UpgradePrompt({
                   View all credit packs →
                 </button>
               </p>
+               
+               {/* Manual builder option for unlock_day or when explicitly requested */}
+               {(showManualOption || context === 'unlock_day') && tripId && (
+                 <div className="pt-3 mt-2 border-t border-border">
+                   <button
+                     onClick={handleManualBuild}
+                     className="flex items-center justify-center gap-2 w-full text-xs text-muted-foreground hover:text-foreground py-2 transition-colors"
+                   >
+                     <Pencil className="h-3 w-3" />
+                     I'll build it myself
+                   </button>
+                 </div>
+               )}
             </div>
           )}
         </DialogContent>

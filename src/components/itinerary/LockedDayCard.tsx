@@ -10,9 +10,11 @@
  */
 
 import { motion } from 'framer-motion';
-import { Lock, Sparkles, Clock, MapPinOff, Target, Coins } from 'lucide-react';
+ import { Lock, Sparkles, Clock, MapPinOff, Target, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+ import { useManualBuilderStore } from '@/stores/manual-builder-store';
+ import { toast } from 'sonner';
 
 interface LockedDayCardProps {
   dayNumber: number;
@@ -28,6 +30,8 @@ interface LockedDayCardProps {
   onUnlock: () => void;
   creditsNeeded: number;
   className?: string;
+   tripId?: string;
+   onManualBuild?: () => void;
 }
 
 export function LockedDayCard({
@@ -39,12 +43,24 @@ export function LockedDayCard({
   onUnlock,
   creditsNeeded,
   className,
+   tripId,
+   onManualBuild,
 }: LockedDayCardProps) {
+   const { enableManualBuilder } = useManualBuilderStore();
+   
   const totalBadges = 
     intelligenceBadges.finds + 
     intelligenceBadges.timingHacks + 
     intelligenceBadges.trapsAvoided + 
     intelligenceBadges.tips;
+ 
+   const handleManualBuild = () => {
+     if (tripId) {
+       enableManualBuilder(tripId);
+       toast.success('Manual builder mode enabled! Edit freely.');
+     }
+     onManualBuild?.();
+   };
 
   return (
     <motion.div
@@ -143,6 +159,17 @@ export function LockedDayCard({
           Unlock Day {dayNumber}
           <span className="text-xs opacity-80">({creditsNeeded} credits)</span>
         </Button>
+         
+         {/* Manual builder escape hatch */}
+         {tripId && (
+           <button
+             onClick={handleManualBuild}
+             className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-3 transition-colors w-full"
+           >
+             <Pencil className="h-3 w-3" />
+             I'll build it myself
+           </button>
+         )}
       </div>
 
       {/* Decorative lock overlay */}

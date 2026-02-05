@@ -1,20 +1,25 @@
-import { Lock, Sparkles } from 'lucide-react';
+ import { Lock, Sparkles, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
+ import { useManualBuilderStore } from '@/stores/manual-builder-store';
+ import { toast } from 'sonner';
 
 interface DayLockOverlayProps {
   dayNumber: number;
   totalDays: number;
   onUnlock?: () => void;
+   tripId?: string;
+   onManualBuild?: () => void;
 }
 
 /**
  * Overlay shown on locked days for free users.
  * Shows a teaser of what's in the day with a call to unlock.
  */
-export function DayLockOverlay({ dayNumber, totalDays, onUnlock }: DayLockOverlayProps) {
+ export function DayLockOverlay({ dayNumber, totalDays, onUnlock, tripId, onManualBuild }: DayLockOverlayProps) {
   const navigate = useNavigate();
+   const { enableManualBuilder } = useManualBuilderStore();
 
   const handleUnlock = () => {
     if (onUnlock) {
@@ -24,6 +29,14 @@ export function DayLockOverlay({ dayNumber, totalDays, onUnlock }: DayLockOverla
     }
   };
 
+   const handleManualBuild = () => {
+     if (tripId) {
+       enableManualBuilder(tripId);
+       toast.success('Manual builder mode enabled! You can now edit freely.');
+     }
+     onManualBuild?.();
+   };
+ 
   return (
     <div className="relative">
       {/* Blurred content placeholder */}
@@ -55,9 +68,15 @@ export function DayLockOverlay({ dayNumber, totalDays, onUnlock }: DayLockOverla
               Unlock Full Itinerary
             </Button>
             
-            <p className="text-xs text-muted-foreground mt-3">
-              Starting at $24.99 for Trip Pass
-            </p>
+             {tripId && (
+               <button
+                 onClick={handleManualBuild}
+                 className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-4 transition-colors mx-auto"
+               >
+                 <Pencil className="h-3 w-3" />
+                 I'll build it myself
+               </button>
+             )}
           </div>
         </div>
       </div>
