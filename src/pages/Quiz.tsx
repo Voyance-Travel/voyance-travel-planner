@@ -206,7 +206,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
               whileHover={{ scale: 1.05 }}
             >
               <Star className="w-4 h-4 text-primary" />
-              <span>One-time only</span>
+              <span>We remember forever</span>
             </motion.div>
           </div>
 

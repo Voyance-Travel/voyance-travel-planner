@@ -208,7 +208,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
         </div>
         <div className="flex items-center gap-1.5">
           <Star className="w-4 h-4 text-primary" />
-          <span>One-time only</span>
+          <span>We remember forever</span>
         </div>
       </div>
       
