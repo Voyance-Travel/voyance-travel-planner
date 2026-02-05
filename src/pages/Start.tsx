@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, ChevronUp, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine
+  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star
 } from 'lucide-react';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
@@ -18,9 +18,12 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -559,6 +562,10 @@ function FlightHotelStep({
   setHotelChoice,
   manualHotel,
   setManualHotel,
+  isFirstTimeVisitor,
+  setIsFirstTimeVisitor,
+  mustDoActivities,
+  setMustDoActivities,
   onSubmit,
   onBack,
   isSubmitting,
@@ -577,6 +584,10 @@ function FlightHotelStep({
   setHotelChoice: (c: 'skip' | 'own' | 'search') => void;
   manualHotel: ManualHotelEntry;
   setManualHotel: (h: ManualHotelEntry) => void;
+  isFirstTimeVisitor: boolean;
+  setIsFirstTimeVisitor: (v: boolean) => void;
+  mustDoActivities: string;
+  setMustDoActivities: (v: string) => void;
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
@@ -930,6 +941,58 @@ function FlightHotelStep({
             </div>
           )}
         </div>
+
+        {/* Personalization Section */}
+        <div className="space-y-4 pt-4 border-t border-border">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+              Personalize Your Trip
+              <span className="text-muted-foreground/60 ml-1">(optional)</span>
+            </label>
+          </div>
+
+          {/* First-Time Visitor Toggle */}
+          <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
+            <Checkbox
+              id="firstTimeVisitor"
+              checked={isFirstTimeVisitor}
+              onCheckedChange={(checked) => setIsFirstTimeVisitor(checked === true)}
+              className="mt-0.5"
+            />
+            <div className="flex-1">
+              <label 
+                htmlFor="firstTimeVisitor" 
+                className="flex items-center gap-2 text-sm font-medium cursor-pointer"
+              >
+                <Globe className="w-4 h-4 text-muted-foreground" />
+                First time visiting {destination}?
+              </label>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isFirstTimeVisitor 
+                  ? "We'll include iconic landmarks and must-see attractions" 
+                  : "We'll focus on hidden gems and local favorites"}
+              </p>
+            </div>
+          </div>
+
+          {/* Must-Do Activities */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <Star className="w-4 h-4 text-muted-foreground" />
+              Must-Do Activities
+            </label>
+            <Textarea
+              value={mustDoActivities}
+              onChange={(e) => setMustDoActivities(e.target.value)}
+              placeholder={`e.g., Visit the Colosseum, Eat authentic pasta, See the sunset from a rooftop...`}
+              className="min-h-[80px] resize-none"
+            />
+            <p className="text-xs text-muted-foreground">
+              Tell us what you absolutely can't miss. We'll make sure it's in your itinerary.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Navigation */}
@@ -1117,6 +1180,10 @@ export default function Start() {
     checkOutTime: '11:00',
   });
 
+  // Personalization state
+  const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
+  const [mustDoActivities, setMustDoActivities] = useState('');
+
   // Update flight dates when trip dates change
   useEffect(() => {
     if (startDate && !outboundFlight.departureDate) {
@@ -1144,28 +1211,81 @@ export default function Start() {
     setIsSubmitting(true);
 
     try {
-      // Save basics to context
-      setBasics({
-        destination: destinationSelection.cityName,
-        startDate: format(startDate, 'yyyy-MM-dd'),
-        endDate: format(endDate, 'yyyy-MM-dd'),
-        travelers,
-        budgetAmount,
-      });
-
       // Check if user needs to authenticate
       if (!user) {
+        // Save basics to context for later
+        setBasics({
+          destination: destinationSelection.cityName,
+          startDate: format(startDate, 'yyyy-MM-dd'),
+          endDate: format(endDate, 'yyyy-MM-dd'),
+          travelers,
+          budgetAmount,
+        });
         // Store trip data and redirect to sign up
         navigate(ROUTES.SIGNUP + '?redirect=' + ROUTES.PLANNER.ITINERARY);
         return;
       }
 
-      // Navigate to itinerary generation
-      navigate(ROUTES.PLANNER.ITINERARY);
+      // Build flight selection data
+      const flightSelection = outboundFlight.arrivalTime ? {
+        departure: {
+          airline: outboundFlight.airline,
+          flightNumber: outboundFlight.flightNumber,
+          departure: { airport: outboundFlight.departureAirport, time: outboundFlight.departureTime },
+          arrival: { airport: outboundFlight.arrivalAirport, time: outboundFlight.arrivalTime },
+          departureDate: outboundFlight.departureDate,
+        },
+        return: showReturnFlight && returnFlight.departureTime ? {
+          airline: returnFlight.airline,
+          flightNumber: returnFlight.flightNumber,
+          departure: { airport: returnFlight.departureAirport, time: returnFlight.departureTime },
+          arrival: { airport: returnFlight.arrivalAirport, time: returnFlight.arrivalTime },
+          departureDate: returnFlight.departureDate,
+        } : null,
+      } : null;
+
+      // Build hotel selection data
+      const hotelSelection = hotelChoice === 'own' && manualHotel.name ? [{
+        name: manualHotel.name,
+        address: manualHotel.address,
+        neighborhood: manualHotel.neighborhood,
+        checkInTime: manualHotel.checkInTime,
+        checkOutTime: manualHotel.checkOutTime,
+        source: 'manual',
+      }] : null;
+
+      // Save trip directly to database
+      const { data: trip, error } = await supabase
+        .from('trips')
+        .insert({
+          user_id: user.id,
+          name: `Trip to ${destinationSelection.cityName}`,
+          destination: destinationSelection.cityName,
+          start_date: format(startDate, 'yyyy-MM-dd'),
+          end_date: format(endDate, 'yyyy-MM-dd'),
+          travelers,
+          trip_type: tripType,
+          budget_tier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : 'moderate',
+          flight_selection: flightSelection,
+          hotel_selection: hotelSelection,
+          status: 'draft',
+          metadata: {
+            isFirstTimeVisitor,
+            mustDoActivities: mustDoActivities || null,
+            celebrationDay: celebrationDay || null,
+            lastUpdated: new Date().toISOString(),
+          },
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      // Navigate directly to trip page with generate flag
+      navigate(`/trip/${trip.id}?generate=true`);
     } catch (err) {
       console.error('Error starting trip:', err);
       toast.error('Something went wrong. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -1228,6 +1348,10 @@ export default function Start() {
                     setHotelChoice={setHotelChoice}
                     manualHotel={manualHotel}
                     setManualHotel={setManualHotel}
+                    isFirstTimeVisitor={isFirstTimeVisitor}
+                    setIsFirstTimeVisitor={setIsFirstTimeVisitor}
+                    mustDoActivities={mustDoActivities}
+                    setMustDoActivities={setMustDoActivities}
                     onSubmit={handleSubmit}
                     onBack={() => setCurrentStep(1)}
                     isSubmitting={isSubmitting}
