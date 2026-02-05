@@ -429,8 +429,14 @@ export default function UnitEconomics() {
     const freeUserCost = FREE_USER_ECONOMICS.blendedCostToUs;
     const freeVariableCost = freeTrips * freeUserCost;
     
-    // Paid users cost based on their tier mix (blendedCostPerUser)
-    const paidVariableCost = payingTrips * blendedCostPerUser;
+    // Paid users cost = tier-based usage cost + scenario-adjusted variable cost
+    // blendedCostPerUser is the BASE usage pattern cost, but we need to add
+    // the scenario-specific API costs (caching savings, Amadeus state)
+    // 
+    // The tier costs already include a base estimate, but the scenario changes
+    // Google cost (caching) and Amadeus cost (on/off, free tier)
+    // We use variablePerTrip as the scenario-aware cost per paid trip
+    const paidVariableCost = payingTrips * variablePerTrip;
     
     // Total cost = free variable + paid variable + fixed
     const totalVariableCostBlended = freeVariableCost + paidVariableCost;
@@ -468,7 +474,7 @@ export default function UnitEconomics() {
       revenuePerTrip,
       realMarginPerTrip,
     };
-  }, [volume, tier, scenario, scenarioConfig, revenue, conversionRate, blendedAOV]);
+  }, [volume, tier, scenario, scenarioConfig, revenue, conversionRate, blendedAOV, blendedCostPerUser]);
 
   const verifiedMargins = useMemo(() => {
     return Object.entries(VERIFIED_DATA.revenue).map(([key, rev]) => {
@@ -944,7 +950,7 @@ export default function UnitEconomics() {
         }}>
           <div style={{ marginBottom: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 8 }}>
-              Economics At Scale · Including Free User Costs · Scenario D
+              Economics At Scale · Including Free User Costs · Scenario {scenario}
             </h3>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
               Shows <strong style={{ color: "#F87171" }}>real profitability</strong> accounting for free users who cost money but pay nothing.
@@ -1399,11 +1405,10 @@ export default function UnitEconomics() {
         }}>
           <div style={{ marginBottom: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 8 }}>
-              Monthly Expense Projections · Scenario D
+              Monthly Expense Projections · Scenario {scenario}
             </h3>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.5 }}>
-              <strong style={{ color: "#A855F7" }}>Scenario D</strong> = Best-case operational state: Photo caching active (-33% Google costs), 
-              Amadeus hotel search live. Shows total monthly $ spend at each volume level, assuming every trip uses all services.
+              <strong style={{ color: "#A855F7" }}>Scenario {scenario}</strong>: {scenarioConfig.fullDescription}
             </p>
           </div>
 
@@ -1428,11 +1433,22 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {[50, 100, 250, 500, 1000].map((vol) => {
-                const google = 0.3385 * vol;
+                // Use scenario-aware Google cost
+                const googleBase = VERIFIED_DATA.services.google.perTrip;
+                const googlePerTrip = scenarioConfig.caching ? googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO) : googleBase;
+                const google = googlePerTrip * vol;
                 const lovableFixed = 25.00;
-                const lovableAI = 0.0644 * vol;
-                const perplexity = 0.018 * vol;
-                const amadeus = vol > AMADEUS_FREE_TRIPS ? (vol - AMADEUS_FREE_TRIPS) * 0.12 : 0;
+                const lovableAI = VERIFIED_DATA.services.lovableAI.perTrip * vol;
+                const perplexity = VERIFIED_DATA.services.perplexity.perTrip * vol;
+                // Amadeus: depends on scenario
+                let amadeus = 0;
+                if (scenarioConfig.amadeus) {
+                  if (scenarioConfig.amadeusWithinFree || vol <= AMADEUS_FREE_TRIPS) {
+                    amadeus = 0;
+                  } else {
+                    amadeus = (vol - AMADEUS_FREE_TRIPS) * (AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL);
+                  }
+                }
                 const domain = 4.08;
                 const total = google + lovableFixed + lovableAI + perplexity + amadeus + domain;
 
