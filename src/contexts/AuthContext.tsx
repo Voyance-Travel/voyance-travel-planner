@@ -262,6 +262,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!initialSession && isMounted) {
         setIsLoading(false);
       }
+      
+      // Validate the session by checking if the user actually exists
+      // This handles stale tokens pointing to deleted/non-existent users
+      if (initialSession?.user) {
+        const { error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.warn('[Auth] Stale session detected, signing out:', userError.message);
+          await supabase.auth.signOut();
+          if (isMounted) {
+            setSession(null);
+            setUser(null);
+            setIsLoading(false);
+          }
+        }
+      }
     }).catch((error) => {
       console.error('[Auth] Error getting session:', error);
       if (isMounted) {
