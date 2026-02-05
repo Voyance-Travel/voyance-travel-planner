@@ -119,61 +119,91 @@ export default function OnboardConversation() {
 
     setIsSaving(true);
 
-    try {
-      // Map traits to the format expected by the database
-      const traitScores = {
-        planning: analysis.traits.planning === 'structured' ? 7 : analysis.traits.planning === 'flexible' ? 0 : -5,
-        social: analysis.traits.social === 'social' ? 7 : analysis.traits.social === 'small-group' ? 2 : -5,
-        comfort: analysis.traits.comfort === 'luxury' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -4,
-        pace: analysis.traits.pace === 'active' ? 7 : analysis.traits.pace === 'balanced' ? 2 : -4,
-        authenticity: analysis.traits.authenticity === 'local-immersion' ? 8 : analysis.traits.authenticity === 'balanced' ? 3 : -2,
-        adventure: analysis.traits.adventure === 'thrill-seeking' ? 8 : analysis.traits.adventure === 'moderate' ? 3 : -3,
-        budget: analysis.traits.comfort === 'budget' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -5,
-        transformation: 3, // Default middle value
-      };
+      try {
+        // Map traits to the format expected by the database
+        const traitScores = {
+          planning: analysis.traits.planning === 'structured' ? 7 : analysis.traits.planning === 'flexible' ? 0 : -5,
+          social: analysis.traits.social === 'social' ? 7 : analysis.traits.social === 'small-group' ? 2 : -5,
+          comfort: analysis.traits.comfort === 'luxury' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -4,
+          pace: analysis.traits.pace === 'active' ? 7 : analysis.traits.pace === 'balanced' ? 2 : -4,
+          authenticity:
+            analysis.traits.authenticity === 'local-immersion'
+              ? 8
+              : analysis.traits.authenticity === 'balanced'
+                ? 3
+                : -2,
+          adventure:
+            analysis.traits.adventure === 'thrill-seeking'
+              ? 8
+              : analysis.traits.adventure === 'moderate'
+                ? 3
+                : -3,
+          budget: analysis.traits.comfort === 'budget' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -5,
+          transformation: 3, // Default middle value
+        };
 
-      // Save to travel_dna_profiles
-      const { error: dnaError } = await supabase
-        .from('travel_dna_profiles')
-        .upsert({
-          user_id: user.id,
-          primary_archetype_id: analysis.primaryArchetype.id,
-          primary_archetype_name: analysis.primaryArchetype.name,
-          secondary_archetype_id: analysis.secondaryArchetype?.id || null,
-          secondary_archetype_name: analysis.secondaryArchetype?.name || null,
-          archetype_category: analysis.primaryArchetype.category,
-          trait_scores: traitScores,
-          confidence_score: analysis.confidence,
-          source: 'conversation',
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        const nowIso = new Date().toISOString();
 
-      if (dnaError) throw dnaError;
+        // Save to travel_dna_profiles (schema-safe columns only)
+        const { error: dnaError } = await supabase
+          .from('travel_dna_profiles')
+          .upsert(
+            [
+              {
+                user_id: user.id,
+                primary_archetype_name: analysis.primaryArchetype.name,
+                secondary_archetype_name: analysis.secondaryArchetype?.name ?? null,
+                dna_confidence_score: Math.round(analysis.confidence),
+                trait_scores: traitScores,
+                calculated_at: nowIso,
+                updated_at: nowIso,
+              },
+            ],
+            { onConflict: 'user_id' }
+          );
 
-      // Update profiles to mark quiz as completed
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ 
-          quiz_completed: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+        if (dnaError) throw dnaError;
 
-      if (profileError) throw profileError;
+        // Ensure profile row exists + mark as completed (prevents silent "0 rows updated")
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert(
+            [
+              {
+                id: user.id,
+                quiz_completed: true,
+                updated_at: nowIso,
+              },
+            ],
+            { onConflict: 'id' }
+          );
 
-      // Map traits to user_preferences format
-      const { error: prefError } = await supabase
-        .from('user_preferences')
-        .upsert({
-          user_id: user.id,
-          travel_pace: analysis.traits.pace,
-          travel_companions: [analysis.traits.social === 'solo' ? 'solo' : analysis.traits.social === 'social' ? 'friends' : 'partner'],
-          planning_preference: analysis.traits.planning,
-          budget_tier: analysis.traits.comfort,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        if (profileError) throw profileError;
 
-      if (prefError) throw prefError;
+        // Map traits to user_preferences format
+        const { error: prefError } = await supabase
+          .from('user_preferences')
+          .upsert(
+            [
+              {
+                user_id: user.id,
+                travel_pace: analysis.traits.pace,
+                travel_companions: [
+                  analysis.traits.social === 'solo'
+                    ? 'solo'
+                    : analysis.traits.social === 'social'
+                      ? 'friends'
+                      : 'partner',
+                ],
+                planning_preference: analysis.traits.planning,
+                budget_tier: analysis.traits.comfort,
+                updated_at: nowIso,
+              },
+            ],
+            { onConflict: 'user_id' }
+          );
+
+        if (prefError) throw prefError;
 
       toast.success('Your Travel DNA has been saved!');
       navigate(ROUTES.PROFILE.VIEW);
