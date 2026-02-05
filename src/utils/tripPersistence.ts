@@ -7,6 +7,7 @@
 const STORAGE_KEYS = {
   CURRENT_TRIP: 'voyance_current_trip',
   TRIP_HISTORY: 'voyance_trip_history',
+  TRIP_DRAFTS: 'voyance_trip_drafts',
   HOME_AIRPORT: 'voyance_home_airport',
   USER_PREFERENCES: 'voyance_user_preferences',
   PRICE_LOCK_EXPIRES: 'voyance_price_lock_expires',
@@ -90,6 +91,84 @@ export function clearCurrentTrip(): void {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_TRIP);
   } catch (error) {
     console.error('Failed to clear current trip', error);
+  }
+}
+
+/**
+ * Get all saved trip drafts
+ */
+export function getTripDrafts(): TripDraft[] {
+  return safeGetItem<TripDraft[]>(STORAGE_KEYS.TRIP_DRAFTS, []);
+}
+
+/**
+ * Save a trip draft to the drafts list
+ */
+export function saveTripDraft(draft: TripDraft): boolean {
+  const drafts = getTripDrafts();
+  const draftWithMeta = {
+    ...draft,
+    id: draft.id || `draft-${Date.now()}`,
+    lastUpdated: new Date().toISOString(),
+  };
+  
+  // Update existing or add new
+  const existingIndex = drafts.findIndex(d => d.id === draftWithMeta.id);
+  if (existingIndex >= 0) {
+    drafts[existingIndex] = draftWithMeta;
+  } else {
+    drafts.unshift(draftWithMeta); // Add to beginning
+  }
+  
+  return safeSetItem(STORAGE_KEYS.TRIP_DRAFTS, drafts);
+}
+
+/**
+ * Delete a specific trip draft by ID
+ */
+export function deleteTripDraft(draftId: string): boolean {
+  try {
+    const drafts = getTripDrafts();
+    const filtered = drafts.filter(d => d.id !== draftId);
+    return safeSetItem(STORAGE_KEYS.TRIP_DRAFTS, filtered);
+  } catch (error) {
+    console.error('Failed to delete trip draft', error);
+    return false;
+  }
+}
+
+/**
+ * Delete old drafts older than specified days (default 30 days)
+ */
+export function deleteOldDrafts(olderThanDays = 30): { deleted: number; remaining: number } {
+  try {
+    const drafts = getTripDrafts();
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+    
+    const remaining = drafts.filter(draft => {
+      if (!draft.lastUpdated) return true; // Keep drafts without dates
+      return new Date(draft.lastUpdated) > cutoffDate;
+    });
+    
+    const deleted = drafts.length - remaining.length;
+    safeSetItem(STORAGE_KEYS.TRIP_DRAFTS, remaining);
+    
+    return { deleted, remaining: remaining.length };
+  } catch (error) {
+    console.error('Failed to delete old drafts', error);
+    return { deleted: 0, remaining: 0 };
+  }
+}
+
+/**
+ * Clear all trip drafts
+ */
+export function clearAllDrafts(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.TRIP_DRAFTS);
+  } catch (error) {
+    console.error('Failed to clear drafts', error);
   }
 }
 
