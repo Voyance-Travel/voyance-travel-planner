@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMutation } from '@tanstack/react-query';
 
 // Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 // ============================================================================
 // Types
