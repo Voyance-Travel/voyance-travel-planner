@@ -1,14 +1,77 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.90.1'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
+
+/**
+ * Tables with user_id column that need to be cleared before deleting auth user.
+ * Ordered to handle any potential dependencies (children before parents).
+ */
+const USER_DATA_TABLES = [
+  // Trip-related (delete first as they may reference other user data)
+  'trip_photos',
+  'trip_notes',
+  'trip_learnings',
+  'trip_go_back_list',
+  'trip_feedback_responses',
+  'trip_departure_summaries',
+  'trip_day_summaries',
+  'trip_rental_cars',
+  'trip_notifications',
+  'trip_payments',
+  'trip_collaborators',
+  'trip_members',
+  'trip_activities',
+  'trip_hotels',
+  'trip_flights',
+  'trips',
+  'trip_intents',
+  'trip_cost_tracking',
+  
+  // Activity & feedback
+  'activity_feedback',
+  'itinerary_customization_requests',
+  'itinerary_templates',
+  
+  // User data
+  'achievement_unlocks',
+  'consent_records',
+  'credit_balances',
+  'credit_ledger',
+  'credit_transactions',
+  'customer_reviews',
+  'daily_usage',
+  'day_balances',
+  'day_ledger',
+  'feedback_prompt_log',
+  'image_votes',
+  'quiz_responses',
+  'quiz_sessions',
+  'rate_limits',
+  'saved_items',
+  'travel_dna_history',
+  'travel_dna_profiles',
+  'user_credit_bonuses',
+  'user_credits',
+  'user_enrichment',
+  'user_entitlement_overrides',
+  'user_preference_insights',
+  'user_preferences',
+  'user_usage',
+  'voyance_events',
+  
+  // Core user tables (delete last)
+  'user_roles',
+  'user_id_mappings',
+  'profiles',
+]
 
 /**
  * Self-service account deletion endpoint
  * Allows authenticated users to delete their own account
- * Uses service role to delete from auth.users which cascades all related data
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -53,24 +116,47 @@ Deno.serve(async (req) => {
     console.log(`[delete-my-account] User requesting account deletion: ${userEmail} (${userId})`)
 
     // ==========================================================================
-    // DELETE USER: Use service role to delete from auth.users
-    // This cascades to all related tables via ON DELETE CASCADE
+    // DELETE USER DATA: Manually delete from all tables since no CASCADE
     // ==========================================================================
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
     // Log the deletion attempt first
-    await supabase.rpc('insert_audit_log', {
-      p_action: 'account_deletion_requested',
-      p_user_id: userId,
-      p_actor: userEmail || userId,
-      p_action_type: 'user',
-      p_metadata: { email: userEmail, initiated_at: new Date().toISOString() }
-    })
+    try {
+      await supabase.rpc('insert_audit_log', {
+        p_action: 'account_deletion_requested',
+        p_user_id: userId,
+        p_actor: userEmail || userId,
+        p_action_type: 'user',
+        p_metadata: { email: userEmail, initiated_at: new Date().toISOString() }
+      })
+    } catch (auditErr) {
+      console.warn('[delete-my-account] Failed to log audit:', auditErr)
+    }
 
-    // Delete the auth user - this cascades to profiles, user_preferences, 
-    // user_roles, trips, etc. via ON DELETE CASCADE foreign keys
+    // Delete from all user data tables
+    console.log(`[delete-my-account] Deleting data from ${USER_DATA_TABLES.length} tables...`)
+    
+    for (const table of USER_DATA_TABLES) {
+      try {
+        const { error: tableError } = await supabase
+          .from(table)
+          .delete()
+          .eq('user_id', userId)
+        
+        if (tableError) {
+          console.warn(`[delete-my-account] Warning deleting from ${table}: ${tableError.message}`)
+        }
+      } catch (tableErr) {
+        console.warn(`[delete-my-account] Could not delete from ${table}: ${tableErr}`)
+      }
+    }
+    
+    // Also delete where id = user_id (for profiles table)
+    await supabase.from('profiles').delete().eq('id', userId)
+
+    // Delete the auth user
     const { error: deleteError } = await supabase.auth.admin.deleteUser(userId)
     
     if (deleteError) {
