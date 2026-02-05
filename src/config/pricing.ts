@@ -24,7 +24,7 @@ export const STRIPE_PRODUCTS = {
     priceId: 'price_1SxErQJytioXyqq9Zcryt1Oc',
     name: 'Boost',
     credits: 80,
-    price: 8,
+    price: 8.99,
     description: 'Quick boost for swaps & extras',
     mode: 'payment' as const,
   },
@@ -34,16 +34,16 @@ export const STRIPE_PRODUCTS = {
     priceId: 'price_1Sx5knJytioXyqq900832qhf',
     name: 'Single',
     credits: 200,
-    price: 12,
+    price: 15.99,
     description: '1 day + plenty of extras',
     mode: 'payment' as const,
   },
   CREDITS_500: {
     productId: 'prod_Tuvc6zstLq6b4V',
     priceId: 'price_1Sx5koJytioXyqq9nkJeDte1',
-    name: 'Starter',
+    name: 'Weekend',
     credits: 500,
-    price: 29,
+    price: 29.99,
     description: '3-day trip',
     mode: 'payment' as const,
   },
@@ -52,7 +52,7 @@ export const STRIPE_PRODUCTS = {
     priceId: 'price_1Sx5kpJytioXyqq9XMadRNV2',
     name: 'Explorer',
     credits: 1200,
-    price: 55,
+    price: 59.99,
     description: '7-day trip',
     featured: true,
     mode: 'payment' as const,
@@ -62,7 +62,7 @@ export const STRIPE_PRODUCTS = {
     priceId: 'price_1Sx5kqJytioXyqq9Jpejl02u',
     name: 'Adventurer',
     credits: 2500,
-    price: 89,
+    price: 99.99,
     description: '14-day trip',
     mode: 'payment' as const,
   },
@@ -123,7 +123,7 @@ export const FREE_TIER = {
 export const BOOST_PACK = {
   id: 'boost' as const,
   ...STRIPE_PRODUCTS.CREDITS_80,
-  perCredit: (8 / 80).toFixed(3), // $0.10
+  perCredit: (8.99 / 80).toFixed(3), // ~$0.11
 } as const;
 
 // Legacy alias for backwards compatibility
@@ -134,25 +134,25 @@ export const CREDIT_PACKS = [
   {
     id: 'single' as const,
     ...STRIPE_PRODUCTS.CREDITS_200,
-    perCredit: (12 / 200).toFixed(3), // ~$0.06
+    perCredit: (15.99 / 200).toFixed(3), // ~$0.08
     featured: false,
   },
   {
-    id: 'starter' as const,
+    id: 'weekend' as const,
     ...STRIPE_PRODUCTS.CREDITS_500,
-    perCredit: (29 / 500).toFixed(3), // ~$0.058
+    perCredit: (29.99 / 500).toFixed(3), // ~$0.06
     featured: false,
   },
   {
     id: 'explorer' as const,
     ...STRIPE_PRODUCTS.CREDITS_1200,
-    perCredit: (55 / 1200).toFixed(3), // ~$0.046
+    perCredit: (59.99 / 1200).toFixed(3), // ~$0.05
     featured: true,
   },
   {
     id: 'adventurer' as const,
     ...STRIPE_PRODUCTS.CREDITS_2500,
-    perCredit: (89 / 2500).toFixed(3), // ~$0.036
+    perCredit: (99.99 / 2500).toFixed(3), // ~$0.04
     featured: false,
   },
 ] as const;
