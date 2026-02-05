@@ -1,240 +1,151 @@
 
 
-# Full System Audit - Voyance Travel Planner
+# System Audit Report - Voyance Travel Planner
 
 ## Executive Summary
 
-After comprehensive codebase analysis, I've identified **19 potential issues** across authentication, edge functions, legacy code, database, and security. These range from critical (stale token handling) to low priority (legacy code cleanup).
+After comprehensive analysis, I've identified **12 remaining issues** in the codebase. The previous fixes resolved many critical problems (edge functions auth patterns, AuthContext stale token detection, duplicate routes, Quiz race condition). However, there are still legacy token fallbacks and deprecated backend references that need cleanup.
 
 ---
 
-## Critical Issues (High Priority)
+## ✅ Previously Fixed (Verified Working)
 
-### 1. Edge Functions Missing Auth Header Pattern
+1. **Edge Functions Auth Pattern** - Fixed in 6 critical functions: `itinerary-chat`, `get-activity-alternatives`, `hotels`, `verify-payment`, `explain-recommendation`, `aggregate-personalization-stats`
+2. **AuthContext Stale Token Detection** - Lines 266-279 properly detect stale JWTs and force sign out
+3. **Quiz Race Condition** - Fixed with `user?.id` guard (line 443)
+4. **Duplicate Route** - Removed (only one `/trips/:tripId/confirmation` now)
+5. **Quiz Session Population** - Now working: 14 quiz sessions, 322 quiz responses in database
+6. **Legacy `@/lib/auth` Removed** - No more imports found
 
-**Problem**: Multiple edge functions create the Supabase client WITHOUT passing the Authorization header, causing `getUser(token)` to fail silently or return unauthorized.
+---
 
-**Affected Functions** (need the auth header fix):
-- `itinerary-chat/index.ts` (lines 243-246)
-- `get-activity-alternatives/index.ts` (lines 61-64)
-- `hotels/index.ts` (lines 1002-1005)
-- `golden-persona-tests/index.ts`
-- `explain-recommendation/index.ts`
-- `aggregate-personalization-stats/index.ts`
-- `verify-payment/index.ts`
+## High Priority Issues (Still Need Fixing)
 
-**Fix Pattern**:
+### 1. Legacy Token Fallbacks in 20 Service Files
+
+**Problem**: Many service files still fall back to `localStorage.getItem('voyance_access_token')` when Supabase session is unavailable. This causes 403 errors with stale tokens.
+
+**Affected Files** (still containing legacy fallback):
+| File | Line |
+|------|------|
+| `friendsAPI.ts` | 71 |
+| `flightAPI.ts` | 149 |
+| `quizAPI.ts` | 106 |
+| `bundlesAPI.ts` | 122 |
+| `tripActivitiesAPI.ts` | 105 |
+| `mapsAPI.ts` | 53 |
+| `preferencesV1API.ts` | 129 |
+| `activityCatalogAPI.ts` | 76 |
+| Plus 12 more in `_legacy/` folder |
+
+**Fix**: Remove the localStorage fallback block from each `getAuthHeader()` function - only use Supabase session tokens.
+
+---
+
+### 2. Deprecated Railway Backend References (27 files)
+
+**Problem**: Many services still reference `https://voyance-backend.railway.app` as fallback URL. If `VITE_BACKEND_URL` env var is not set, these API calls would fail.
+
+**Files affected**: 27 files including:
+- `friendsAPI.ts`
+- `tripActivitiesAPI.ts`
+- `bundlesAPI.ts`
+- `mapsAPI.ts`
+- `exploreAPI.ts`
+- All 13 files in `_legacy/` folder
+- Plus others
+
+**Fix**: Either:
+1. Ensure `VITE_BACKEND_URL` is set in environment, OR
+2. Replace Railway fallback with empty string to force use of Supabase edge functions
+
+---
+
+### 3. golden-persona-tests Auth Pattern
+
+**Problem**: The `golden-persona-tests` edge function uses service role key but calls `getUser(token)` without passing the auth header to the client:
+
 ```typescript
-// BEFORE (broken)
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL") ?? "",
-  Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-);
+// Line 454 - Creates client with SERVICE_ROLE_KEY (no auth header)
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// AFTER (correct)
-const authHeader = req.headers.get("Authorization");
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL") ?? "",
-  Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-  { global: { headers: { Authorization: authHeader || '' } } }
-);
+// Line 460 - Calls getUser with token but client wasn't configured to use it
+const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 ```
 
----
+**Impact**: Low - this is an admin-only function and technically works because service role can read all users, but it's inconsistent with other edge functions.
 
-### 2. Stale Token Problem - Auth Logs Show Persistent 403s
-
-**Problem**: Users have stale JWTs in localStorage pointing to deleted/non-existent users. The AuthContext fix (lines 266-279) handles this on initialization, but several services still fallback to legacy localStorage tokens.
-
-**Evidence** from auth logs:
-```
-"403: User from sub claim in JWT does not exist"
-path: /user, /logout
-```
-
-**Root Cause**: Legacy services reading `voyance_token` or `voyance_access_token` from localStorage, which are stale tokens from a previous auth system.
-
----
-
-### 3. Legacy Token Fallbacks in Services (29 files affected)
-
-**Problem**: Multiple API services have this pattern that uses stale tokens:
-
-```typescript
-async function getAuthHeader() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` };
-  }
-  // DANGEROUS: Falls back to stale legacy token!
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-}
-```
-
-**Affected Files** (partial list):
-- `tripBudgetCompanionsAPI.ts`
-- `bookingAPI.ts`
-- `tripSaveResumeAPI.ts`
-- `featureFlagsAPI.ts`
-- `connectionsAssessmentAPI.ts`
-- `saveTripAPI.ts`
-- `venuesAPI.ts`
-- `savedTripsAPI.ts`
-- `tripContextAPI.ts`
-- Plus ~20 more in `src/services/`
-
-**Fix**: Remove all `localStorage.getItem('voyance_token')` and `localStorage.getItem('voyance_access_token')` fallbacks - only use Supabase session tokens.
+**Fix**: Either:
+1. Create a separate auth client with the auth header (recommended pattern), OR
+2. Leave as-is since service role key works for admin functions
 
 ---
 
 ## Medium Priority Issues
 
-### 4. Quiz Session/Response Tables Not Populating
+### 4. _legacy Folder Still in Use
 
-**Problem**: Per the audit doc, `quiz_sessions` and `quiz_responses` tables have 0 rows despite 13 active users.
+**Problem**: The `src/services/_legacy/` folder contains 18 API files that:
+- All reference the deprecated Railway backend
+- All have legacy token fallbacks
+- May or may not be actively imported
 
-**Analysis**: 
-- RLS policies are correct (checked: INSERT with `auth.uid() = user_id`)
-- Code in `src/utils/quizMapping.ts` calls `saveQuizResponse()` and `createQuizSession()` correctly
-- The `Quiz.tsx` component properly awaits these functions
-
-**Likely Cause**: The quiz session creation happens AFTER `hasStarted` is set, but before `user` is loaded, causing a race condition where `user` is null when `createQuizSession` runs.
-
-**Fix**: Add a guard to ensure user is authenticated before creating quiz session:
-```typescript
-useEffect(() => {
-  const initSession = async () => {
-    if (user?.id && !sessionId && hasStarted) {  // Add user?.id check
-      // ...
-    }
-  };
-  initSession();
-}, [user?.id, sessionId, hasStarted]);  // Use user?.id not user
-```
+**Recommendation**: Audit imports to determine which files are still used. Files not imported anywhere should be deleted.
 
 ---
 
-### 5. RLS Policies with `USING (true)` - Security Warnings
+### 5. RLS Policies with `USING (true)` (3 tables)
 
-**Problem**: Database linter found 3 tables with overly permissive INSERT/UPDATE policies.
-
-**Tables affected**:
+**Problem**: Database linter flagged 3 tables with overly permissive policies:
 - `customer_reviews` - INSERT with `WITH CHECK (true)` (allows anyone to submit)
-- `rate_limits` - ALL with `USING (true)` for public role
-- `search_cache` - ALL with `USING (true)` for service_role (this is intentional)
+- `rate_limits` - ALL with `USING (true)` for public role (intentional per memory)
+- `search_cache` - ALL with `USING (true)` for service_role (intentional)
 
-**Recommendation**: Review `customer_reviews` table - should require authentication or captcha for spam prevention.
-
----
-
-### 6. get-entitlements Uses Admin Client for Auth
-
-**Problem**: In `supabase/functions/get-entitlements/index.ts`, the function uses `supabaseAdmin.auth.getUser(token)` instead of a properly configured auth client.
-
-**Current code (line 95)**:
-```typescript
-const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-```
-
-**Issue**: While this works because service role can read all users, it's inconsistent with the pattern used elsewhere and may cause issues if the token is invalid.
-
-**Fix**: Create a separate auth client with the auth header like `generate-itinerary` does.
+**Recommendation**: Review `customer_reviews` table - should require authentication to prevent spam.
 
 ---
 
 ## Low Priority Issues
 
-### 7. Deprecated Backend References
+### 6. Missing localStorage Cleanup on Auth
 
-**Problem**: `quizAPI.ts` still references `https://voyance-backend.railway.app` (line 15), a legacy Railway backend that may no longer exist.
-
-```typescript
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
-```
-
-**Impact**: If `VITE_BACKEND_URL` is not set, quiz API calls would fail.
-
----
-
-### 8. localStorage Keys Cleanup Needed
-
-**Problem**: Multiple stale localStorage keys are scattered throughout the codebase:
+**Problem**: Legacy localStorage keys remain after sign out:
 - `voyance_token`
 - `voyance_access_token`
-- `voyance_demo_trips` (migrated on login, but needs cleanup)
-- `voyance_local_trips`
 - `voyance_anonymous_session`
 - `voyance_quiz_*` keys
 
-**Recommendation**: Create a cleanup function that runs after successful auth to remove legacy keys.
+**Recommendation**: Add cleanup function in `logout()` to remove legacy keys.
 
 ---
 
-### 9. Duplicate Route Definition
+## Summary Table
 
-**Problem**: In `App.tsx`, line 198-199:
-```tsx
-<Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
-<Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
-```
-
-This is harmless but indicates copy-paste error.
-
----
-
-### 10. Missing config.toml Entry
-
-All 79 edge functions now have `verify_jwt = false` entries, so this is resolved.
+| Category | Issues | Severity | Effort |
+|----------|--------|----------|--------|
+| Legacy token fallbacks | 20 files | High | 1 hour |
+| Railway backend refs | 27 files | Medium | 30 min |
+| golden-persona-tests auth | 1 function | Low | 15 min |
+| _legacy folder cleanup | 18 files | Medium | 45 min |
+| RLS policy review | 1 table | Medium | 15 min |
+| localStorage cleanup | 1 function | Low | 10 min |
 
 ---
 
-## Technical Details: What Was Already Fixed
+## Recommended Fix Priority
 
-The previous conversation fixed:
-1. ✅ `grant-monthly-credits` - Added to config.toml and fixed auth pattern
-2. ✅ `spend-credits` - Fixed auth header pattern
-3. ✅ `grant-bonus-credits` - Fixed auth header pattern
-4. ✅ `viator-book` - Fixed auth header pattern
-5. ✅ `book-activity` - Fixed auth header pattern
-6. ✅ `stripe-connect-onboard` - Fixed auth header pattern
-7. ✅ `stripe-connect-payouts` - Fixed auth header pattern
-8. ✅ All 79 edge functions added to `config.toml`
-9. ✅ Stale JWT detection in AuthContext (lines 266-279)
-10. ✅ SocialLoginButtons migrated to Lovable OAuth
-11. ✅ Legacy `@/lib/auth` removed
+1. **Immediate**: Remove legacy token fallbacks from the 8 active service files (non-legacy)
+2. **High**: Update or remove Railway backend URL references
+3. **Medium**: Audit and clean up `_legacy/` folder
+4. **Low**: Add localStorage cleanup, review customer_reviews RLS
 
 ---
 
 ## What's Working Well
 
-1. **AuthContext** - Core auth flow is solid with proper session handling
-2. **RLS Security** - 77+ tables have RLS enabled with proper policies
-3. **generate-itinerary** - Correctly implements auth pattern with separate auth client
-4. **delete-my-account** - Proper security with auth header pattern
-5. **Profile auto-creation** - `handle_new_user()` trigger works correctly
-6. **Credit system** - `spend-credits` and `grant-monthly-credits` now work
-
----
-
-## Recommended Fix Order
-
-1. **Immediate**: Fix remaining edge functions with broken auth pattern (7 functions)
-2. **High**: Remove legacy token fallbacks from 29 service files
-3. **Medium**: Fix quiz session race condition
-4. **Low**: Clean up legacy localStorage keys
-5. **Low**: Remove duplicate route, update Railway backend reference
-
----
-
-## Summary of Changes Needed
-
-| Category | Files Affected | Estimated Effort |
-|----------|---------------|------------------|
-| Edge function auth fixes | 7 functions | 30 minutes |
-| Legacy token cleanup | 29 service files | 1 hour |
-| Quiz race condition | 1 file | 15 minutes |
-| Misc cleanup | 3 files | 15 minutes |
+1. ✅ **AuthContext** - Core auth flow with stale token detection
+2. ✅ **Quiz System** - Sessions and responses now populating (14/322 records)
+3. ✅ **Edge Functions** - Critical functions have correct auth pattern
+4. ✅ **RLS Security** - 77+ tables have proper RLS policies
+5. ✅ **Profile auto-creation** - `handle_new_user()` trigger works correctly
 
