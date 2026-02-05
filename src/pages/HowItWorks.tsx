@@ -228,7 +228,7 @@ export default function HowItWorks() {
                   <p className="text-xs text-muted-foreground">min saved daily</p>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-xl">
-                  <p className="text-2xl font-bold text-primary">190+</p>
+                  <p className="text-2xl font-bold text-primary">2,200+</p>
                   <p className="text-xs text-muted-foreground">destinations</p>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-xl">
