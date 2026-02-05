@@ -12,6 +12,7 @@ import { PageTransition } from '@/components/layout/PageTransition';
 import { useJourneyStore } from '@/stores/journey-store';
 import { MonthlyCreditsChecker } from '@/components/common/MonthlyCreditsChecker';
 import { WelcomeBonusManager } from '@/components/common/WelcomeBonusManager';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -239,6 +240,7 @@ function AnimatedRoutes() {
           <Route path="/agent/trips/:tripId" element={<TripWorkspace />} />
           <Route path="/agent/trips/:tripId/edit" element={<TripForm />} />
           <Route path="/agent/tasks" element={<AgentTasks />} />
+          <Route path="/agent/library" element={<Navigate to="/agent" replace />} />
           <Route path="/agent/settings" element={<AgentSettings />} />
           <Route path="/agent/documents" element={<AgentDocuments />} />
           <Route path="/agent/payouts" element={<AgentPayouts />} />
@@ -266,7 +268,9 @@ const App = () => (
               <JourneyTracker />
               <MonthlyCreditsChecker />
               <WelcomeBonusManager />
-              <AnimatedRoutes />
+              <ErrorBoundary>
+                <AnimatedRoutes />
+              </ErrorBoundary>
             </BrowserRouter>
           </TooltipProvider>
         </QuizProvider>
