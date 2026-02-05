@@ -83,7 +83,7 @@ export default function FinalCTA() {
 
             {/* Trust text */}
             <p className="mt-6 text-xs text-muted-foreground/70 font-sans">
-              No credit card required · See your first day free
+              No credit card required · Free credits every month
             </p>
 
           </motion.div>

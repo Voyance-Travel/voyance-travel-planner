@@ -48,7 +48,7 @@ export default function FreeTierSection() {
           </h2>
           
           <p className="text-muted-foreground font-light max-w-lg mx-auto">
-            Every month, get enough credits to unlock your first day free. 
+            Every month, get free credits to preview and customize trips. 
             No credit card required. No commitment.
           </p>
 

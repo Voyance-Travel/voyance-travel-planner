@@ -112,7 +112,7 @@ export function IntelligenceTeaser({
 
         {/* Free tier callout - moderate visibility */}
         <p className="text-sm text-white/60">
-          No credit card required. Your first day is free, every month.
+          No credit card required. Free monthly credits to get started.
         </p>
 
         <button
