@@ -561,7 +561,7 @@ export default function UnitEconomics() {
             action: 'Cache destination images in Supabase Storage instead of fetching on every page load. Pre-warm cache for top 50 destinations.',
             category: 'home_browse',
           });
-        } else if (homePct > 30) {
+       } else if (homePct > 20) {
           list.push({
             type: 'warning',
             title: 'Homepage costs elevated',
@@ -569,6 +569,22 @@ export default function UnitEconomics() {
             impact: `-$${homeBrowse.cost.toFixed(2)}/period`,
             action: 'Implement lazy loading and cache destination hero images.',
             category: 'home_browse',
+          });
+        }
+      }
+      
+      // Check for enrichment costs (destination_images for itinerary photos)
+      const enrichment = realMetrics.categoryBreakdown['enrichment'];
+      if (enrichment && totalCost > 0) {
+        const enrichPct = (enrichment.cost / totalCost) * 100;
+        if (enrichPct > 50) {
+          list.push({
+            type: 'warning',
+            title: 'Photo enrichment is high cost driver',
+            description: `Enrichment (activity/destination photos) is ${enrichPct.toFixed(0)}% of spend ($${enrichment.cost.toFixed(2)}). This includes Google Places photos for itinerary cards.`,
+            impact: `-$${enrichment.cost.toFixed(2)}/period`,
+            action: 'Photos are cached per-venue but may be fetching repeatedly. Check if photo-storage.ts is active and caching to Supabase Storage.',
+            category: 'enrichment',
           });
         }
       }

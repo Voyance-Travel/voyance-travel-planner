@@ -24,8 +24,8 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
  
  // Maps action_type to cost_category for automatic categorization
  const ACTION_TO_CATEGORY: Record<string, CostCategory> = {
-   // Home/Browse
-   'destination_images': 'home_browse',
+   // Enrichment - destination photos for itinerary cards/heroes
+   'destination_images': 'enrichment',
    'home_destinations': 'home_browse',
    
    // Quiz
@@ -82,10 +82,13 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
    // Enrichment
    'enrich_itinerary': 'enrichment',
    'enrich-itinerary': 'enrichment',
+   'activity_images': 'enrichment',
    'fetch_reviews': 'enrichment',
    'fetch-reviews': 'enrichment',
    'lookup_activity_url': 'enrichment',
    'lookup-activity-url': 'enrichment',
+   'lookup_restaurant_url': 'enrichment',
+   'lookup-restaurant-url': 'enrichment',
  };
  
  function getCategoryForAction(actionType: string): CostCategory {
