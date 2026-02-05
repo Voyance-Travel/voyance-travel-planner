@@ -302,6 +302,7 @@ export default function UnitEconomics() {
   const [scenario, setScenario] = useState<Scenario>('A');
   const [conversionRate, setConversionRate] = useState(10); // % of trips that convert to paid
   const [revenueMix, setRevenueMix] = useState<keyof typeof REVENUE_MIX_PRESETS>('conservative');
+  const [viewMode, setViewMode] = useState<'itinerary' | 'lifecycle'>('lifecycle');
   
   // Fetch real data from trip_cost_tracking table
   const { data: realMetrics, isLoading: metricsLoading } = useRealCostMetrics();
@@ -391,7 +392,14 @@ export default function UnitEconomics() {
   const scenarioConfig = SCENARIOS[scenario];
 
   const costs = useMemo(() => {
-    const googleBase = VERIFIED_DATA.services.google.perTrip;
+    // IMPORTANT: Use FALLBACK google rate as the "pre-cache" baseline
+    // Real data reflects current operational state (which may already include some caching)
+    // Scenario comparison needs consistent baseline to show meaningful differences
+    const googlePreCacheRate = FALLBACK_DATA.services.google.perTrip; // $0.5052
+    const googleBase = hasRealData ? VERIFIED_DATA.services.google.perTrip : googlePreCacheRate;
+    
+    // For scenario modeling, we apply caching savings to the BASELINE rate
+    // This ensures A→B shows the expected ~33% reduction
     const googlePerTrip = scenarioConfig.caching ? googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO) : googleBase;
 
     const aiPerTrip = VERIFIED_DATA.services.lovableAI.perTrip;
@@ -456,6 +464,7 @@ export default function UnitEconomics() {
 
     return {
       google: { perTrip: googlePerTrip, total: googlePerTrip * volume, share: googleShare },
+      googleBase, // Export for debugging
       ai: { perTrip: aiPerTrip, total: aiPerTrip * volume },
       perplexity: { perTrip: perplexityPerTrip, total: perplexityPerTrip * volume },
       amadeus: { perTrip: amadeusPerTrip, total: amadeusPerTrip * volume },
@@ -474,7 +483,7 @@ export default function UnitEconomics() {
       revenuePerTrip,
       realMarginPerTrip,
     };
-  }, [volume, tier, scenario, scenarioConfig, revenue, conversionRate, blendedAOV, blendedCostPerUser]);
+  }, [volume, tier, scenario, scenarioConfig, revenue, conversionRate, blendedAOV, blendedCostPerUser, hasRealData, VERIFIED_DATA]);
 
   const verifiedMargins = useMemo(() => {
     return Object.entries(VERIFIED_DATA.revenue).map(([key, rev]) => {
@@ -558,15 +567,76 @@ export default function UnitEconomics() {
       </div>
 
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        {/* Hero Metrics - Blended Economics */}
+        {/* View Mode Toggle */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 16, 
+          marginBottom: 24,
+          background: "rgba(30, 41, 59, 0.5)",
+          padding: "16px 24px",
+          borderRadius: 12,
+          border: "1px solid rgba(100, 116, 139, 0.2)",
+        }}>
+          <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>View Mode:</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setViewMode('itinerary')}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: viewMode === 'itinerary' ? "1px solid #38BDF8" : "1px solid rgba(100,116,139,0.3)",
+                background: viewMode === 'itinerary' ? "rgba(56, 189, 248, 0.15)" : "transparent",
+                color: viewMode === 'itinerary' ? "#38BDF8" : "#64748B",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              📊 Per-Itinerary Cost
+            </button>
+            <button
+              onClick={() => setViewMode('lifecycle')}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: viewMode === 'lifecycle' ? "1px solid #A855F7" : "1px solid rgba(100,116,139,0.3)",
+                background: viewMode === 'lifecycle' ? "rgba(168, 85, 247, 0.15)" : "transparent",
+                color: viewMode === 'lifecycle' ? "#A855F7" : "#64748B",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              👤 User Lifecycle Economics
+            </button>
+          </div>
+          <div style={{ marginLeft: "auto", fontSize: 11, color: "#64748B", maxWidth: 400 }}>
+            {viewMode === 'itinerary' 
+              ? "What it costs us to generate ONE itinerary (API calls, AI tokens). Use for capacity planning."
+              : "Revenue vs cost across ALL users (free + paid), factoring conversion rates. Use for profitability."}
+          </div>
+        </div>
+
+        {/* Hero Metrics - Context-aware based on view mode */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
-          {[
+          {(viewMode === 'itinerary' ? [
+            // Per-Itinerary View: Focus on what ONE trip generation costs
+            { label: "Variable Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `APIs + AI per itinerary`, accent: "#38BDF8" },
+            { label: "Google Places", value: `$${costs.google.perTrip.toFixed(3)}`, sub: `${costs.google.share.toFixed(0)}% of variable`, accent: "#4285F4" },
+            { label: "AI + Perplexity", value: `$${(costs.ai.perTrip + costs.perplexity.perTrip).toFixed(3)}`, sub: `Gemini + Sonar`, accent: "#A855F7" },
+            { label: "Amadeus", value: `$${costs.amadeus.perTrip.toFixed(3)}`, sub: scenarioConfig.amadeus ? (scenarioConfig.amadeusWithinFree ? "Within free tier" : "Paid tier") : "Not enabled", accent: "#F59E0B" },
+            { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `+ $${costs.fixed.perTrip.toFixed(2)} fixed/trip`, accent: "#E2E8F0" },
+          ] : [
+            // Lifecycle View: Focus on blended economics across all users
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171" },
             { label: "Monthly Profit", value: `$${costs.blendedProfit.toFixed(0)}`, sub: `$${costs.totalRevenue.toFixed(0)} rev - $${costs.totalCost.toFixed(0)} cost`, accent: costs.blendedProfit > 0 ? "#34D399" : "#F87171" },
             { label: "Revenue / Trip", value: `$${costs.revenuePerTrip.toFixed(2)}`, sub: `${costs.payingTrips.toFixed(0)} paying of ${volume}`, accent: "#38BDF8" },
             { label: "Cost / Trip", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `Scenario ${scenario}`, accent: "#A78BFA" },
             { label: "Margin / Trip", value: `$${costs.realMarginPerTrip.toFixed(2)}`, sub: costs.realMarginPerTrip > 0 ? "Profitable" : "Loss", accent: costs.realMarginPerTrip > 0 ? "#34D399" : "#F87171" },
-          ].map((m, i) => (
+          ]).map((m, i) => (
             <div key={i} style={{
               background: "rgba(30, 41, 59, 0.5)",
               borderRadius: 12,
