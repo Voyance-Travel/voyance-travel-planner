@@ -694,11 +694,45 @@ export default function UnitEconomics() {
   }, [hasRealData, realMetrics, scenarioConfig, costs, volume, conversionRate]);
 
   const verifiedMargins = useMemo(() => {
-    return Object.entries(VERIFIED_DATA.revenue).map(([key, rev]) => {
-      const cost = costs.fullyLoaded;
-      return { tier: key, revenue: rev, cost, margin: ((rev - cost) / rev * 100), profit: rev - cost };
+    // Calculate scenario-aware cost for each tier
+    const scenarioCfg = SCENARIOS[scenario];
+    const googleMultiplier = scenarioCfg.caching ? (1 - PHOTO_CACHE_SAVINGS_RATIO) : 1;
+    const scenarioAmadeusPerTrip = scenarioCfg.amadeus
+      ? ((scenarioCfg.amadeusWithinFree || volume <= AMADEUS_FREE_TRIPS) ? 0 : (AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL))
+      : 0;
+    
+    // Base costs from cost model (used for delta calculation)
+    const baselineTripBase = COST_MODEL.tripBase.total;
+    const baselinePerDay = COST_MODEL.perDay.total;
+    const scenarioTripBase = COST_MODEL.tripBase.perplexity + COST_MODEL.tripBase.aiSetup + scenarioAmadeusPerTrip;
+    const scenarioPerDay =
+      (COST_MODEL.perDay.googleRestaurants + COST_MODEL.perDay.googleActivities + COST_MODEL.perDay.googlePhotos) * googleMultiplier +
+      COST_MODEL.perDay.aiContent;
+    
+    return CREDIT_TIERS.map((tierData) => {
+      const rev = tierData.price;
+      const days = tierData.typicalUsage.daysUnlocked;
+      const trips = days > 0 ? Math.ceil(days / 5) : 0;
+      
+      // Calculate scenario-adjusted cost
+      const baselineModeled = (trips * baselineTripBase) + (days * baselinePerDay);
+      const extras = tierData.estimatedCostToUs - baselineModeled;
+      const scenarioModeled = (trips * scenarioTripBase) + (days * scenarioPerDay);
+      const tierCost = Math.max(0, scenarioModeled + extras);
+      
+      // Add fixed cost allocation per tier based on volume
+      const fixedPerTrip = costs.fixed.perTrip;
+      const fullyLoadedTierCost = tierCost + fixedPerTrip;
+      
+      return { 
+        tier: tierData.key, 
+        revenue: rev, 
+        cost: fullyLoadedTierCost, 
+        margin: ((rev - fullyLoadedTierCost) / rev * 100), 
+        profit: rev - fullyLoadedTierCost 
+      };
     });
-  }, [costs.fullyLoaded, VERIFIED_DATA.revenue]);
+  }, [scenario, volume, costs.fixed.perTrip]);
 
   // Scale points matching the reference doc
   const scalePoints = [10, 50, 100, 250, 400, 500, 750, 1000];
