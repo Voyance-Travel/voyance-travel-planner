@@ -1002,10 +1002,20 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {scalePoints.map((vol) => {
-                const goog = VERIFIED_DATA.services.google.perTrip * (1 - PHOTO_CACHE_SAVINGS_RATIO);
+                // Apply scenario-specific cost calculations (same logic as costs useMemo)
+                const googleBase = VERIFIED_DATA.services.google.perTrip;
+                const goog = scenarioConfig.caching ? googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO) : googleBase;
                 const ai = VERIFIED_DATA.services.lovableAI.perTrip;
                 const perp = VERIFIED_DATA.services.perplexity.perTrip;
-                const amad = vol > AMADEUS_FREE_TRIPS ? AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL : 0;
+                // Amadeus: depends on scenario + volume
+                let amad = 0;
+                if (scenarioConfig.amadeus) {
+                  if (scenarioConfig.amadeusWithinFree || vol <= AMADEUS_FREE_TRIPS) {
+                    amad = 0;
+                  } else {
+                    amad = AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL;
+                  }
+                }
                 const variable = goog + ai + perp + amad;
                 const fixedPer = 29.08 / vol;
                 const loaded = variable + fixedPer;
