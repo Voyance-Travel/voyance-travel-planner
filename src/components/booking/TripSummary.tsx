@@ -112,7 +112,8 @@ export default function TripSummary({
     if (path.includes("/planner")) {
       if (!selectedFlight) return;
       if (!selectedHotel) return;
-      navigate("/planner/itinerary");
+      // Route through the /start flow which will save and redirect
+      navigate("/start");
     } else {
       navigate("/start");
     }

@@ -298,10 +298,10 @@ export default function PlannerHotel() {
       return;
     }
     
-    // Save selection and navigate to itinerary
+    // Save selection and navigate back to start flow
     const params = new URLSearchParams(searchParams);
     params.set('hotelId', selectedHotelId);
-    navigate(`/planner/itinerary?${params.toString()}`);
+    navigate(`/start?${params.toString()}`);
   };
 
   const filteredHotels = useMemo(() => {
