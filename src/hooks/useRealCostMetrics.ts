@@ -12,6 +12,10 @@ export interface RealCostMetrics {
   totalCost: number;
   costPerTrip: number;
   
+  // User & interaction counts
+  uniqueUsers: number;
+  totalInteractions: number;
+  
   // Per-service breakdown
   google: {
     totalCalls: number;
@@ -117,6 +121,11 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
     totalTrips = Math.max(1, Math.ceil(entries.length / 8)); // Rough estimate: 8 entries per trip
   }
 
+  // Count unique users and total interactions
+  const uniqueUserIds = new Set(entries.filter(e => e.user_id).map(e => e.user_id));
+  const uniqueUsers = uniqueUserIds.size;
+  const totalInteractions = entries.length;
+
   // Aggregate metrics
   let totalCost = 0;
   let googlePlacesCalls = 0;
@@ -214,6 +223,8 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
     totalTrips,
     totalCost,
     costPerTrip: totalCost / totalTrips,
+    uniqueUsers,
+    totalInteractions,
 
     google: {
       totalCalls: googleTotalCalls,
