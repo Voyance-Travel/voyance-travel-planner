@@ -133,10 +133,11 @@ serve(async (req) => {
         .from('credit_ledger')
         .insert({
           user_id: user.id,
-          amount: actualGranted,
-          credit_type: 'free',
-          action: 'monthly_grant',
-          description: `Monthly free credits - ${actualGranted} credits (expires ${expiresAt.toLocaleDateString()})`,
+          transaction_type: 'credit',
+          credits_delta: actualGranted,
+          is_free_credit: true,
+          action_type: 'monthly_grant',
+          notes: `Monthly free credits - ${actualGranted} credits`,
         });
     }
 

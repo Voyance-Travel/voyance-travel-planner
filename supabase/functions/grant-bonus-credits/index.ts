@@ -227,10 +227,11 @@ serve(async (req) => {
       .from('credit_ledger')
       .insert({
         user_id: user.id,
-        amount: config.credits,
-        credit_type: 'free',
-        action: `bonus_${bonusType}`,
-        description: config.description,
+        transaction_type: 'credit',
+        credits_delta: config.credits,
+        is_free_credit: true,
+        action_type: `bonus_${bonusType}`,
+        notes: config.description,
       });
 
     console.log(`[grant-bonus-credits] Granted ${config.credits} credits to ${user.id} for ${bonusType}`);
