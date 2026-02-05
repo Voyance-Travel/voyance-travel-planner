@@ -1619,9 +1619,9 @@ export default function UnitEconomics() {
             <tbody>
               {[
                 { action: "Unlock 1 Day", credits: 150, costMin: 0.03, costMax: 0.10 },
-                { action: "Swap Activity", credits: 5, costMin: 0.005, costMax: 0.02 },
-                { action: "Regenerate Day", credits: 15, costMin: 0.02, costMax: 0.08 },
-                { action: "Restaurant Rec", credits: 10, costMin: 0.01, costMax: 0.04 },
+                { action: "Swap Activity", credits: 10, costMin: 0.005, costMax: 0.02 },
+                { action: "Regenerate Day", credits: 20, costMin: 0.02, costMax: 0.08 },
+                { action: "Restaurant Rec", credits: 15, costMin: 0.01, costMax: 0.04 },
                 { action: "AI Message", credits: 10, costMin: 0.005, costMax: 0.02 },
               ].map((row, i) => {
                 // Calculate user payment based on Explorer tier ($55 / 1200 credits = $0.046/credit)
