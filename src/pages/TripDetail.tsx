@@ -634,31 +634,43 @@ export default function TripDetail() {
   }, [tripId]);
 
   const handleActivityComplete = async (activityId: string) => {
-    // Update activity status in database
-    await supabase
-      .from('trip_activities')
-      .update({ 
-        metadata: { 
-          ...(activities.find(a => a.id === activityId)?.metadata as Record<string, unknown> || {}),
-          completed: true,
-          completedAt: new Date().toISOString()
-        }
-      })
-      .eq('id', activityId);
+    try {
+      // Update activity status in database
+      const existingActivity = activities.find(a => a.id === activityId);
+      const existingMeta = (existingActivity?.metadata as Record<string, unknown>) || {};
+      await supabase
+        .from('trip_activities')
+        .update({ 
+          metadata: { 
+            ...existingMeta,
+            completed: true,
+            completedAt: new Date().toISOString()
+          }
+        })
+        .eq('id', activityId);
+    } catch (err) {
+      console.error('[TripDetail] Error completing activity:', err);
+    }
   };
 
   const handleActivitySkip = async (activityId: string) => {
-    // Update activity status in database
-    await supabase
-      .from('trip_activities')
-      .update({ 
-        metadata: { 
-          ...(activities.find(a => a.id === activityId)?.metadata as Record<string, unknown> || {}),
-          skipped: true,
-          skippedAt: new Date().toISOString()
-        }
-      })
-      .eq('id', activityId);
+    try {
+      // Update activity status in database
+      const existingActivity = activities.find(a => a.id === activityId);
+      const existingMeta = (existingActivity?.metadata as Record<string, unknown>) || {};
+      await supabase
+        .from('trip_activities')
+        .update({ 
+          metadata: { 
+            ...existingMeta,
+            skipped: true,
+            skippedAt: new Date().toISOString()
+          }
+        })
+        .eq('id', activityId);
+    } catch (err) {
+      console.error('[TripDetail] Error skipping activity:', err);
+    }
   };
 
   if (loading) {

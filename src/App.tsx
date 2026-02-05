@@ -13,6 +13,7 @@ import { useJourneyStore } from '@/stores/journey-store';
 import { MonthlyCreditsChecker } from '@/components/common/MonthlyCreditsChecker';
 import { WelcomeBonusManager } from '@/components/common/WelcomeBonusManager';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
+import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -260,6 +261,7 @@ const App = () => (
         <QuizProvider>
           <TooltipProvider>
             <ImagePreloaderInit />
+            <GlobalErrorHandler />
             <Toaster />
             <Sonner />
             <BrowserRouter>
