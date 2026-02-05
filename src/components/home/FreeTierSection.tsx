@@ -56,7 +56,7 @@ export default function FreeTierSection() {
           <div className="flex flex-wrap justify-center gap-4 text-sm text-muted-foreground pt-4">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary" />
-              <span>150 credits/month</span>
+              <span>Free trip previews</span>
             </div>
             <div className="flex items-center gap-2">
               <Palette className="h-4 w-4 text-primary" />

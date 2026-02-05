@@ -114,7 +114,7 @@ const whatsInADay = [
 const faqs = [
   {
     q: 'How many credits does a trip use?',
-    a: 'One day = 150 credits. A 3-day trip uses 450. A 5-day trip uses 750. A 7-day trip uses 1,050. Simple math: you always know what you\'re spending before you generate.',
+    a: '150 credits generates your trip preview with personalized recommendations. From there, you can unlock full details (photos, hours, booking links) for each day. Simple math: you always know what you\'re spending.',
   },
   {
     q: 'Do credits expire?',
@@ -130,11 +130,11 @@ const faqs = [
   },
   {
     q: 'What\'s the difference between free and paid days?',
-    a: 'Nothing. Same quality, same detail, same three budget tiers. Free gets you 1 day per month so you can see exactly what you\'re buying before you spend anything.',
+    a: 'Free credits let you see your personalized trip preview. Paid credits unlock the full details: photos, addresses, hours, and booking links for each activity.',
   },
   {
     q: 'Can I regenerate a trip if I don\'t like it?',
-    a: 'Yes, a regeneration costs 150 credits (one day\'s worth). It rebuilds your trip with fresh recommendations based on adjusted preferences.',
+    a: 'Yes, regeneration costs credits to rebuild your trip with fresh recommendations based on adjusted preferences.',
   },
 ];
 
@@ -206,7 +206,7 @@ export default function Pricing() {
     <MainLayout>
       <Head 
         title="Pricing | Voyance" 
-        description="Credits that translate to trips. 1 day of curated itinerary = 150 credits. Buy once, use anytime." 
+        description="Preview any trip free. Use credits to unlock full details with photos, hours, and booking links. Buy once, use anytime." 
         canonical="https://travelwithvoyance.com/pricing"
       />
       
@@ -236,9 +236,9 @@ export default function Pricing() {
             transition={{ delay: 0.1 }}
             className="text-muted-foreground text-base sm:text-lg max-w-lg mx-auto"
           >
-            1 day of curated itinerary = 150 credits.
+            See your personalized trip preview free. Unlock full details when you're ready.
             <br className="hidden sm:block" />
-            <span className="sm:inline block mt-1 sm:mt-0"> Buy once, use anytime. Credits never expire.</span>
+            <span className="sm:inline block mt-1 sm:mt-0">Buy once, use anytime. Credits never expire.</span>
           </motion.p>
         </div>
       </section>
@@ -257,7 +257,7 @@ export default function Pricing() {
                 Free: 150 credits / month
               </p>
               <p className="text-muted-foreground text-sm">
-                That's 1 full day of any destination, every month. Same quality as paid.
+                Get your personalized trip preview every month. Unlock details when ready.
               </p>
             </div>
             <Button asChild variant="outline" size="sm" className="shrink-0 border-primary/30 text-primary hover:bg-primary/5">
@@ -474,7 +474,7 @@ export default function Pricing() {
               Real example
             </p>
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground">
-              Here's what 150 credits generated for Tokyo, Day 1:
+              Here's what your Tokyo preview looks like:
             </h2>
           </motion.div>
 
@@ -487,7 +487,7 @@ export default function Pricing() {
             {/* Day header */}
             <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
               <div>
-                <p className="text-xs text-muted-foreground">Day 1 · 150 credits</p>
+                <p className="text-xs text-muted-foreground">Day 1 · Preview</p>
                 <p className="font-medium text-foreground">Cultural Immersion</p>
               </div>
               <div className="text-right">
@@ -518,7 +518,7 @@ export default function Pricing() {
             {/* Footer */}
             <div className="p-4 bg-muted/30 border-t border-border">
               <p className="text-xs text-muted-foreground text-center">
-                This is 1 day · 150 credits · A 5-day trip generates five days like this.
+                Preview your full trip free. Unlock details with credits when ready.
               </p>
             </div>
           </motion.div>

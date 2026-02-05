@@ -81,7 +81,7 @@ export function DemoCTA() {
             <div className="inline-flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm">
               <div className="text-center">
                 <p className="font-medium text-foreground">Free</p>
-                <p className="text-xs text-muted-foreground">150 credits to start</p>
+                <p className="text-xs text-muted-foreground">Preview any trip free</p>
               </div>
               <div className="hidden sm:block w-px h-8 bg-border" />
               <div className="text-center">
