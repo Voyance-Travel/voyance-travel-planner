@@ -190,14 +190,11 @@ export function QuizCompletion({ onContinue }: QuizCompletionProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <h1 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-4">
-            You're all set!
+          <h1 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-3">
+            Got it. We won't forget.
           </h1>
-          <p className="text-lg text-muted-foreground mb-2">
-            We've created your Travel DNA profile.
-          </p>
-          <p className="text-muted-foreground mb-4">
-            View your unique travel personality and start planning your perfect trip.
+          <p className="text-lg text-muted-foreground mb-6">
+            Your Travel DNA is saved. Every trip starts here now.
           </p>
           
           {/* Bonus earned notification */}
@@ -235,6 +232,17 @@ export function QuizCompletion({ onContinue }: QuizCompletionProps) {
           >
             Explore Destinations First
           </Button>
+          
+          {/* Retake link */}
+          <p className="text-xs text-muted-foreground/70 mt-4">
+            Preferences change.{' '}
+            <button 
+              onClick={() => window.location.href = '/quiz?retake=true'}
+              className="underline hover:text-muted-foreground transition-colors"
+            >
+              Retake anytime →
+            </button>
+          </p>
         </motion.div>
       </motion.div>
     </div>
