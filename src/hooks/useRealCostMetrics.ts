@@ -59,7 +59,7 @@ export interface RealCostMetrics {
    itinerary_edit: 'Itinerary Editing',
    booking_search: 'Booking Search',
    recommendations: 'Recommendations',
-   enrichment: 'Enrichment',
+   enrichment: 'Photo Enrichment',
    other: 'Other',
  };
 
