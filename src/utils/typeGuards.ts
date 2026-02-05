@@ -73,3 +73,14 @@ export const isValidItineraryDay = (obj: unknown): obj is ItineraryDay => {
     Array.isArray(data.items)
   );
 };
+
+/**
+ * Type guard for valid itinerary data structure (from database JSONB)
+ */
+export const isValidItineraryData = (
+  obj: unknown
+): obj is { days: unknown[] } => {
+  if (!obj || typeof obj !== 'object' || obj === null) return false;
+  const data = obj as Record<string, unknown>;
+  return Array.isArray(data.days);
+};

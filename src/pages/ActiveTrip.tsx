@@ -29,6 +29,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { parseActiveTripDays } from '@/utils/itineraryParser';
 import type { Tables } from '@/integrations/supabase/types';
 import type { ActivityContext } from '@/types/feedback';
 
@@ -120,38 +121,11 @@ export default function ActiveTrip() {
     loadTrip();
   }, [tripId]);
 
-  // Parse itinerary data
+  // Parse itinerary data using centralized safe parser
   const itinerary = useMemo((): ItineraryDay[] => {
     if (!trip?.itinerary_data) return [];
-    const data = trip.itinerary_data as Record<string, unknown>;
-    const rawDays = data?.days as unknown[];
-    if (!Array.isArray(rawDays)) return [];
-    
-    return rawDays.map((d: any, idx: number) => ({
-      dayNumber: d.dayNumber || idx + 1,
-      date: d.date || '',
-      theme: d.theme,
-      description: d.description,
-      activities: (d.activities || []).map((a: any) => ({
-        id: a.id || `activity-${idx}-${Math.random()}`,
-        name: a.name || a.title || 'Unnamed Activity',
-        description: a.description,
-        type: a.type,
-        category: a.category,
-        startTime: a.startTime || a.start_time,
-        endTime: a.endTime || a.end_time,
-        duration: a.duration,
-        location: a.location,
-        imageUrl: a.imageUrl || a.image_url,
-        tips: a.tips,
-        confirmationNumber: a.confirmationNumber || a.confirmation_number,
-        voucherUrl: a.voucherUrl || a.voucher_url,
-        bookingRequired: a.bookingRequired || a.booking_required,
-        reservationTime: a.reservationTime || a.reservation_time,
-      })),
-      weather: d.weather,
-    }));
-  }, [trip?.itinerary_data]);
+    return parseActiveTripDays(trip.itinerary_data, trip.start_date);
+  }, [trip?.itinerary_data, trip?.start_date]);
 
   // Calculate trip context
   const tripContext = useMemo(() => {

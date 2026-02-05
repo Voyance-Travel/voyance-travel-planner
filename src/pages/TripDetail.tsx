@@ -26,6 +26,7 @@ import { getDestinationByCity, type Destination } from '@/services/supabase/dest
 import { initiateBooking } from '@/services/tripPaymentsAPI';
 import { toast } from 'sonner';
 import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelValidation';
+import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -864,50 +865,8 @@ export default function TripDetail() {
           ) : (
             /* Editorial Itinerary - Same design as SampleItinerary with editing */
             (() => {
-              const metadata = trip.itinerary_data as Record<string, unknown> | null;
-              const rawDays = (metadata?.days as unknown[]) || [];
-              
-              const editorDays: EditorialDay[] = rawDays.map((day: unknown, idx: number) => {
-                const d = day as Record<string, unknown>;
-                const activities = (d.activities as unknown[]) || [];
-                return {
-                  dayNumber: (d.dayNumber as number) || idx + 1,
-                  date: (d.date as string) || calculateDayDate(trip.start_date, idx),
-                  title: (d.title as string) || (d.theme as string) || undefined,
-                  theme: d.theme as string | undefined,
-                  description: d.description as string | undefined,
-                  estimatedWalkingTime: d.estimatedWalkingTime as string | undefined,
-                  estimatedDistance: d.estimatedDistance as string | undefined,
-                  weather: d.weather as { condition?: string; high?: number; low?: number } | undefined,
-                  activities: activities.map((act: unknown, actIdx: number) => {
-                    const a = act as Record<string, unknown>;
-                    const loc = a.location as Record<string, unknown> | string | undefined;
-                    return {
-                      id: (a.id as string) || `act-${idx}-${actIdx}`,
-                      title: (a.title as string) || (a.name as string) || 'Activity',
-                      description: (a.description as string) || undefined,
-                      category: (a.category as string) || 'activity',
-                      startTime: (a.startTime as string) || (a.start_time as string) || undefined,
-                      endTime: (a.endTime as string) || (a.end_time as string) || undefined,
-                      time: a.time as string | undefined,
-                      duration: a.duration as string | undefined,
-                      durationMinutes: a.durationMinutes as number | undefined,
-                      location: typeof loc === 'object' && loc !== null 
-                        ? { name: loc.name as string, address: loc.address as string }
-                        : { name: String(loc || '') },
-                      cost: a.cost as { amount: number; currency: string } | undefined,
-                      bookingRequired: (a.bookingRequired as boolean) || false,
-                      tags: (a.tags as string[]) || [],
-                      transportation: a.transportation as { method: string; duration: string; estimatedCost?: { amount: number; currency: string }; instructions?: string } | undefined,
-                      isLocked: (a.isLocked as boolean) || false,
-                      rating: a.rating as { value: number; totalReviews: number } | number | undefined,
-                      website: a.website as string | undefined,
-                      tips: a.tips as string | undefined,
-                      photos: a.photos as Array<{ url: string } | string> | undefined,
-                    };
-                  }),
-                };
-              });
+              // Use centralized safe parser for editorial days
+              const editorDays: EditorialDay[] = parseEditorialDays(trip.itinerary_data, trip.start_date) as EditorialDay[];
 
               // Normalize flight_selection: TripPlannerContext saves with 'departure' key, 
               // but EditorialItinerary expects 'outbound' key
@@ -1056,35 +1015,7 @@ export default function TripDetail() {
           startDate={trip.start_date}
           endDate={trip.end_date}
           isLocalTrip={trip.user_id === 'local'}
-          days={(() => {
-            const metadata = trip.itinerary_data as Record<string, unknown> | null;
-            const rawDays = (metadata?.days as unknown[]) || [];
-            return rawDays.map((day: unknown, idx: number) => {
-              const d = day as Record<string, unknown>;
-              const activities = (d.activities as unknown[]) || [];
-              return {
-                dayNumber: (d.dayNumber as number) || idx + 1,
-                date: (d.date as string) || '',
-                theme: d.theme as string | undefined,
-                description: d.description as string | undefined,
-                activities: activities.map((act: unknown, actIdx: number) => {
-                  const a = act as Record<string, unknown>;
-                  return {
-                    id: (a.id as string) || `act-${idx}-${actIdx}`,
-                    title: (a.title as string) || (a.name as string) || 'Activity',
-                    name: (a.name as string) || (a.title as string),
-                    category: a.category as string | undefined,
-                    startTime: (a.startTime as string) || (a.time as string) || '',
-                    time: (a.time as string) || (a.startTime as string) || '',
-                    cost: a.cost as { amount?: number } | undefined,
-                    isLocked: (a.isLocked as boolean) || false,
-                    description: a.description as string | undefined,
-                    location: a.location as { name?: string; address?: string } | undefined,
-                  };
-                }),
-              };
-            });
-          })()}
+          days={parseAssistantDays(trip.itinerary_data, trip.start_date)}
           onItineraryUpdate={(updatedDays) => {
             // Refresh trip data to reflect changes - serialize for Json compatibility
             setTrip(prev => prev ? {
