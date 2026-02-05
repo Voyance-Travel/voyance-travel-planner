@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost, CostTracker } from "../_shared/cost-tracker.ts";
 
 // =============================================================================
@@ -5884,7 +5884,7 @@ serve(async (req) => {
           const userEmail = userData?.user?.email;
           
           if (userEmail) {
-            const Stripe = (await import("https://esm.sh/stripe@18.5.0")).default;
+            const Stripe = (await import("npm:stripe@18.5.0")).default;
             const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
             const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
             
