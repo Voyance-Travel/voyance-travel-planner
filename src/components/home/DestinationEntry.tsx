@@ -243,7 +243,7 @@ export default function DestinationEntry() {
           transition={{ delay: 0.6 }}
           className="mt-8 text-sm text-white/60"
         >
-          No credit card required. Your first day is free, every month.
+          No credit card required. Free monthly credits to get started.
         </motion.p>
       )}
     </div>

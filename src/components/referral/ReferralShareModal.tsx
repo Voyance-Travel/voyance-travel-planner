@@ -150,7 +150,7 @@ export function ReferralShareModal({
         ? `I just planned an amazing trip to ${destination} using Voyance. It creates personalized itineraries based on how you actually travel.\n\n`
         : `I found this amazing app called Voyance that creates personalized travel itineraries. It asks how you like to travel and builds trips just for you.\n\n`
       ) +
-      `Use my referral link to sign up and you'll get 150 bonus credits (enough for your first day free!):\n${referralLink}\n\n` +
+      `Use my referral link to sign up and you'll get 150 bonus credits to get started:\n${referralLink}\n\n` +
       `Let me know what you think!`
     );
     

@@ -104,7 +104,7 @@ export function TripShareModal({
   const shareWhatsApp = async () => {
     const link = await getOrCreateShareLink();
     const text = encodeURIComponent(
-      `Check out my trip to ${destination}! Plan your own and get 150 bonus credits to unlock your first day free: ${link}`
+      `Check out my trip to ${destination}! Plan your own and get 150 bonus credits to get started: ${link}`
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
@@ -127,7 +127,7 @@ export function TripShareModal({
       `Hey!\n\n` +
       `I just planned an amazing trip to ${destination} and thought you'd love to see it.\n\n` +
       `Check it out: ${link}\n\n` +
-      `When you sign up with Voyance, you'll get 150 bonus credits to unlock your first day free!\n\n` +
+      `When you sign up with Voyance, you'll get 150 bonus credits to get started!\n\n` +
       `Let me know what you think!`
     );
     
@@ -157,7 +157,7 @@ export function TripShareModal({
                 Friends get 150 bonus credits
               </p>
               <p className="text-xs text-muted-foreground">
-                They can unlock their first day free!
+                They get 150 credits to start!
               </p>
             </div>
             <Badge className="bg-primary/20 text-primary border-0 text-xs">
