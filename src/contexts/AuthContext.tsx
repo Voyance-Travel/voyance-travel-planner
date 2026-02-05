@@ -356,6 +356,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error('Logout error:', error);
     }
+    
+    // Clean up legacy localStorage keys to prevent stale token issues
+    const legacyKeys = [
+      'voyance_token',
+      'voyance_access_token',
+      'voyance_anonymous_session',
+      'voyance_demo_trips',
+      'voyance_local_trips',
+    ];
+    legacyKeys.forEach(key => localStorage.removeItem(key));
+    
+    // Clean up quiz-related keys
+    Object.keys(localStorage)
+      .filter(key => key.startsWith('voyance_quiz_'))
+      .forEach(key => localStorage.removeItem(key));
+    
     setSession(null);
     setUser(null);
   };
