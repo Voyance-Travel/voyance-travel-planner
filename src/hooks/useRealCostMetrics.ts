@@ -45,7 +45,23 @@ export interface RealCostMetrics {
   
   // Model usage
   modelBreakdown: Record<string, { count: number; inputTokens: number; outputTokens: number }>;
+   
+   // Category breakdown (user-facing actions)
+   categoryBreakdown: Record<string, { count: number; cost: number; label: string }>;
 }
+
+ // Cost category labels for display
+ const CATEGORY_LABELS: Record<string, string> = {
+   home_browse: 'Home / Browse',
+   quiz: 'Travel DNA Quiz',
+   explore: 'Explore',
+   itinerary_gen: 'Itinerary Generation',
+   itinerary_edit: 'Itinerary Editing',
+   booking_search: 'Booking Search',
+   recommendations: 'Recommendations',
+   enrichment: 'Enrichment',
+   other: 'Other',
+ };
 
 // Google API pricing (per call)
 const GOOGLE_PRICING = {
@@ -136,6 +152,22 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
     modelBreakdown[model].inputTokens += entry.input_tokens || 0;
     modelBreakdown[model].outputTokens += entry.output_tokens || 0;
   }
+   
+   // Category breakdown
+   const categoryBreakdown: Record<string, { count: number; cost: number; label: string }> = {};
+   for (const entry of entries) {
+     const category = (entry as any).cost_category || 'other';
+     const cost = entry.estimated_cost_usd || 0;
+     if (!categoryBreakdown[category]) {
+       categoryBreakdown[category] = { 
+         count: 0, 
+         cost: 0, 
+         label: CATEGORY_LABELS[category] || category 
+       };
+     }
+     categoryBreakdown[category].count++;
+     categoryBreakdown[category].cost += cost;
+   }
 
   // Calculate Google costs
   const googleTotalCost = 
@@ -192,6 +224,7 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
     periodEnd,
     actionBreakdown,
     modelBreakdown,
+     categoryBreakdown,
   };
 }
 
