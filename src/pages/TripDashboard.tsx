@@ -20,7 +20,8 @@ import {
   ChevronDown,
   ChevronRight,
   FolderOpen,
-  Zap
+   Zap,
+   Trash2
 } from 'lucide-react';
 import ActiveTripCard from '@/components/trips/ActiveTripCard';
 
@@ -38,6 +39,18 @@ import { useDraftLimitCheck } from '@/hooks/useDraftLimitCheck';
 import { supabase } from '@/integrations/supabase/client';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
 import { getDestinationImage } from '@/utils/destinationImages';
+ import { toast } from 'sonner';
+ import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+   AlertDialogTrigger,
+ } from '@/components/ui/alert-dialog';
 
 // Extract base destination name (e.g., "Rome (FCO)" -> "Rome", "Paris, France" -> "Paris")
 function getBaseDestination(destination: string): string {
@@ -141,6 +154,7 @@ interface Trip {
   hotelSelection: any;
   metadata: Record<string, any> | null;
   hasItineraryData: boolean;
+   isPaid?: boolean;
 }
 
 // Simplified status mapping - no more "draft" display, all future trips are "upcoming"
@@ -191,11 +205,44 @@ function formatDateRange(startDate: string | null, endDate: string | null): stri
   return `${formatDate(startDate)} – ${formatDate(endDate)} (${diffDays} days)`;
 }
 
-function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
+// Helper to check if a trip can be deleted
+function canDeleteTrip(trip: Trip): { canDelete: boolean; reason?: string } {
+   const now = new Date();
+   
+   // Check if trip has already happened
+   if (trip.endDate && new Date(trip.endDate) < now) {
+     return { canDelete: false, reason: 'Past trips cannot be deleted' };
+   }
+   
+   // Check if trip has a paid reservation
+   if (trip.isPaid) {
+     return { canDelete: false, reason: 'Trips with paid reservations cannot be deleted' };
+   }
+   
+   // Check hotel selection for paid bookings (Amadeus source indicates paid)
+   if (trip.hotelSelection) {
+     const hotels = Array.isArray(trip.hotelSelection) ? trip.hotelSelection : [trip.hotelSelection];
+     const hasPaidHotel = hotels.some((h: any) => 
+       h?.source === 'amadeus' || 
+       h?.isPaid === true || 
+       h?.bookingConfirmation ||
+       h?.confirmationNumber
+     );
+     if (hasPaidHotel) {
+       return { canDelete: false, reason: 'Trips with paid hotel bookings cannot be deleted' };
+     }
+   }
+   
+   return { canDelete: true };
+}
+
+function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; onDelete?: (tripId: string) => void }) {
   const navigate = useNavigate();
   const displayStatus = mapToDisplayStatus(trip.status, trip.startDate, trip.endDate);
   const status = statusConfig[displayStatus];
   const StatusIcon = status.icon;
+   const deleteCheck = canDeleteTrip(trip);
+   const [isDeleting, setIsDeleting] = useState(false);
   
   // Use smart hero image hook with API fallback for uncurated destinations
   const seededHero = (trip.metadata && typeof trip.metadata === 'object')
@@ -224,6 +271,30 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
     }
   };
 
+   const handleDelete = async () => {
+     if (!deleteCheck.canDelete) {
+       toast.error(deleteCheck.reason);
+       return;
+     }
+     
+     setIsDeleting(true);
+     try {
+       const { error } = await supabase
+         .from('trips')
+         .delete()
+         .eq('id', trip.id);
+       
+       if (error) throw error;
+       toast.success('Trip deleted');
+       onDelete?.(trip.id);
+     } catch (err: any) {
+       console.error('Failed to delete trip:', err);
+       toast.error('Failed to delete trip');
+     } finally {
+       setIsDeleting(false);
+     }
+   };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -231,6 +302,43 @@ function TripCard({ trip, index = 0 }: { trip: Trip; index?: number }) {
       transition={{ duration: 0.5, delay: index * 0.1 }}
       className="group relative bg-card rounded-xl sm:rounded-2xl overflow-hidden border border-border shadow-soft hover:shadow-elevated transition-all duration-500"
     >
+       {/* Delete button - only show if deletable */}
+       {deleteCheck.canDelete && (
+         <AlertDialog>
+           <AlertDialogTrigger asChild>
+             <button
+               className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/80"
+               title="Delete trip"
+             >
+               <Trash2 className="h-4 w-4 text-white" />
+             </button>
+           </AlertDialogTrigger>
+           <AlertDialogContent>
+             <AlertDialogHeader>
+               <AlertDialogTitle>Delete this trip?</AlertDialogTitle>
+               <AlertDialogDescription>
+                 This will permanently delete your trip to {trip.destination}. This action cannot be undone.
+               </AlertDialogDescription>
+             </AlertDialogHeader>
+             <AlertDialogFooter>
+               <AlertDialogCancel>Cancel</AlertDialogCancel>
+               <AlertDialogAction
+                 onClick={handleDelete}
+                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                 disabled={isDeleting}
+               >
+                 {isDeleting ? (
+                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                 ) : (
+                   <Trash2 className="h-4 w-4 mr-2" />
+                 )}
+                 Delete
+               </AlertDialogAction>
+             </AlertDialogFooter>
+           </AlertDialogContent>
+         </AlertDialog>
+       )}
+
       {/* Image Section - mobile optimized height */}
       <div className="relative h-40 sm:h-52 overflow-hidden cursor-pointer" onClick={handleCardClick}>
         <img 
@@ -497,6 +605,7 @@ export default function TripDashboard() {
           hotelSelection: row.hotel_selection,
           metadata: row.metadata as Record<string, any> | null,
           hasItineraryData: !!row.itinerary_data,
+           isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
         }));
 
         setTrips(mappedTrips);
@@ -510,6 +619,11 @@ export default function TripDashboard() {
 
     loadTrips();
   }, [isAuthenticated, user?.id]);
+
+   // Handle trip deletion - remove from local state
+   const handleTripDelete = useCallback((tripId: string) => {
+     setTrips(prev => prev.filter(t => t.id !== tripId));
+   }, []);
 
   // Simplified filtering - drafts are now included in "upcoming"
   const filterTrips = (tab: TabValue): Trip[] => {
@@ -796,7 +910,7 @@ export default function TripDashboard() {
                                 <CollapsibleContent>
                                   <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {group.trips.map((trip, i) => (
-                                      <TripCard key={trip.id} trip={trip} index={i} />
+                                       <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} />
                                     ))}
                                   </div>
                                 </CollapsibleContent>
@@ -811,7 +925,7 @@ export default function TripDashboard() {
                               transition={{ delay: groupIndex * 0.05 }}
                               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                             >
-                              <TripCard trip={group.trips[0]} index={0} />
+                               <TripCard trip={group.trips[0]} index={0} onDelete={handleTripDelete} />
                             </motion.div>
                           )
                         ))
@@ -819,7 +933,7 @@ export default function TripDashboard() {
                         // Flat view when no duplicates
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {filteredTrips.map((trip, i) => (
-                            <TripCard key={trip.id} trip={trip} index={i} />
+                             <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} />
                           ))}
                         </div>
                       )}
