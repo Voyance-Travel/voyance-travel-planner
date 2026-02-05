@@ -76,7 +76,9 @@ export function HotelAutocomplete({
     }, 300);
   };
 
-  const handleSelect = (hotel: HotelSearchByNameResult) => {
+   const handleSelect = (hotel: HotelSearchByNameResult, e: React.MouseEvent) => {
+     e.preventDefault();
+     e.stopPropagation();
     setInputValue(hotel.name);
     setIsOpen(false);
     setResults([]);
@@ -108,7 +110,7 @@ export function HotelAutocomplete({
             <button
               key={hotel.placeId}
               type="button"
-              onClick={() => handleSelect(hotel)}
+               onClick={(e) => handleSelect(hotel, e)}
               className="w-full px-3 py-2.5 text-left hover:bg-accent transition-colors flex items-start gap-3 border-b border-border/50 last:border-0"
             >
               <Hotel className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
