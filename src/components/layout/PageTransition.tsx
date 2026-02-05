@@ -3,7 +3,7 @@
  * Wraps route content to provide enter/exit animations
  */
 
-import { ReactNode } from 'react';
+import { ReactNode, forwardRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface PageTransitionProps {
@@ -27,11 +27,16 @@ const variants = {
   },
 };
 
-export function PageTransition({
-  children,
-  variant = 'fade', // Changed default to 'fade' for better performance
-  duration = 0.2, // Reduced duration for snappier feel
-}: PageTransitionProps) {
+// NOTE: AnimatePresence attaches a ref to its direct children.
+// Exporting PageTransition as a forwardRef component prevents React "function components cannot be given refs" warnings.
+export const PageTransition = forwardRef<HTMLDivElement, PageTransitionProps>(function PageTransition(
+  {
+    children,
+    variant = 'fade', // Changed default to 'fade' for better performance
+    duration = 0.2, // Reduced duration for snappier feel
+  }: PageTransitionProps,
+  ref
+) {
   const motionVariant = variants[variant];
 
   // Check for reduced motion preference
@@ -40,23 +45,24 @@ export function PageTransition({
     : false;
 
   if (prefersReducedMotion) {
-    return <>{children}</>;
+    return <div ref={ref}>{children}</div>;
   }
 
   return (
     <motion.div
+      ref={ref}
       initial={motionVariant.initial}
       animate={motionVariant.animate}
       exit={motionVariant.exit}
-      transition={{ 
-        duration, 
+      transition={{
+        duration,
         ease: 'easeOut',
       }}
     >
       {children}
     </motion.div>
   );
-}
+});
 
 // Provider component for wrapping the entire routes section
 export function PageTransitionProvider({ children }: { children: ReactNode }) {
