@@ -27,6 +27,8 @@ export interface TripDraft {
   budgetTier?: 'budget' | 'moderate' | 'luxury';
   notes?: string;
   lastUpdated?: string;
+  status?: 'draft' | 'planned' | 'booked' | 'paid' | 'completed' | 'cancelled';
+  isPaid?: boolean;
 }
 
 /**
@@ -139,6 +141,7 @@ export function deleteTripDraft(draftId: string): boolean {
 
 /**
  * Delete old drafts older than specified days (default 30 days)
+ * Preserves paid and completed trips
  */
 export function deleteOldDrafts(olderThanDays = 30): { deleted: number; remaining: number } {
   try {
@@ -147,7 +150,16 @@ export function deleteOldDrafts(olderThanDays = 30): { deleted: number; remainin
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
     
     const remaining = drafts.filter(draft => {
-      if (!draft.lastUpdated) return true; // Keep drafts without dates
+      // Always preserve paid or completed trips
+      if (draft.isPaid) return true;
+      if (draft.status === 'paid' || draft.status === 'completed' || draft.status === 'booked') {
+        return true;
+      }
+      
+      // Keep drafts without dates
+      if (!draft.lastUpdated) return true;
+      
+      // Only delete old drafts/planned trips
       return new Date(draft.lastUpdated) > cutoffDate;
     });
     
