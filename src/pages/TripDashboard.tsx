@@ -51,6 +51,13 @@ import { getDestinationImage } from '@/utils/destinationImages';
    AlertDialogTitle,
    AlertDialogTrigger,
  } from '@/components/ui/alert-dialog';
+ import {
+   Tooltip,
+   TooltipContent,
+   TooltipProvider,
+   TooltipTrigger,
+ } from '@/components/ui/tooltip';
+ import { Lock } from 'lucide-react';
 
 // Extract base destination name (e.g., "Rome (FCO)" -> "Rome", "Paris, France" -> "Paris")
 function getBaseDestination(destination: string): string {
@@ -303,7 +310,7 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
       className="group relative bg-card rounded-xl sm:rounded-2xl overflow-hidden border border-border shadow-soft hover:shadow-elevated transition-all duration-500"
     >
        {/* Delete button - only show if deletable */}
-       {deleteCheck.canDelete && (
+        {deleteCheck.canDelete ? (
          <AlertDialog>
            <AlertDialogTrigger asChild>
              <button
@@ -337,7 +344,23 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
              </AlertDialogFooter>
            </AlertDialogContent>
          </AlertDialog>
-       )}
+        ) : (
+          <TooltipProvider>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <button
+                  className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10 w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-not-allowed"
+                  disabled
+                >
+                  <Lock className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-white/70" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-[200px]">
+                <p className="text-xs">{deleteCheck.reason}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
       {/* Image Section - mobile optimized height */}
       <div className="relative h-40 sm:h-52 overflow-hidden cursor-pointer" onClick={handleCardClick}>
