@@ -6,6 +6,7 @@
  */
 
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useRealCostMetrics } from "@/hooks/useRealCostMetrics";
 
 // =============================================================================
@@ -488,6 +489,31 @@ export default function UnitEconomics() {
       padding: "32px 24px",
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+      {/* Back Navigation */}
+      <div style={{ maxWidth: 1400, margin: "0 auto 16px" }}>
+        <Link 
+          to="/profile/settings" 
+          style={{ 
+            display: "inline-flex", 
+            alignItems: "center", 
+            gap: 8, 
+            color: "#94A3B8", 
+            textDecoration: "none",
+            fontSize: 14,
+            padding: "8px 12px",
+            borderRadius: 8,
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = "rgba(100, 116, 139, 0.2)"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          Back to Settings
+        </Link>
+      </div>
 
       {/* Header */}
       <div style={{ maxWidth: 1400, margin: "0 auto 40px" }}>
