@@ -277,7 +277,7 @@ const SCALE_COLUMNS = [
   { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
   { key: "free", label: "Free", tooltip: "Number of free users who generate Full Preview (real venues, gated details). Formula: Total × (100% - Conversion %)." },
   { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of free users under 'Full Preview, No Details' model. Each preview costs ~$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)} (AI + light venue validation).` },
-  { key: "loaded", label: "Cost/Trip", tooltip: "Fully-loaded cost per trip = Variable + Fixed ($29.08)/volume. Applies to both paid AND free users." },
+  { key: "loaded", label: "Cost/Trip", tooltip: "This column shows the *blended* all-in cost per trip (Total Cost ÷ Trips). It matches the Total Cost / Net Profit math, and accounts for free vs paid mix + fixed overhead." },
   { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
   { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES FIXED COSTS. Formula: (All Trips × Variable Cost) + $29.08 fixed. This is your total monthly infrastructure spend." },
   { key: "netProfit", label: "Net Profit", tooltip: "Revenue minus ALL costs (variable + fixed). Formula: Revenue - Total Cost. This is what hits your bank account." },
@@ -314,6 +314,8 @@ export default function UnitEconomics() {
   const mixConfig = REVENUE_MIX_PRESETS[revenueMix];
   
   const { blendedAOV, blendedCostPerUser } = useMemo(() => {
+    const scenarioCfg = SCENARIOS[scenario];
+
     const tiers = FALLBACK_DATA.revenue;
     const aov = (
       (mixConfig.boost / 100) * tiers.boost +
@@ -322,23 +324,46 @@ export default function UnitEconomics() {
       (mixConfig.explorer / 100) * tiers.explorer +
       (mixConfig.adventurer / 100) * tiers.adventurer
     );
-    
-    // Calculate blended cost based on tier mix (each tier has different usage = different costs)
-    const tierCosts = CREDIT_TIERS.reduce((acc, tier) => {
-      acc[tier.key] = tier.estimatedCostToUs;
+
+    // Scenario-aware tier costs
+    // We preserve each tier's "extras" (swaps, chat, etc.) by treating the existing
+    // estimatedCostToUs as the baseline, then swapping in scenario-adjusted base/per-day costs.
+    const baselineTripBase = COST_MODEL.tripBase.total; // includes Amadeus in the baseline model
+    const baselinePerDay = COST_MODEL.perDay.total;
+
+    const googleMultiplier = scenarioCfg.caching ? (1 - PHOTO_CACHE_SAVINGS_RATIO) : 1;
+    const scenarioAmadeusPerTrip = scenarioCfg.amadeus
+      ? ((scenarioCfg.amadeusWithinFree || volume <= AMADEUS_FREE_TRIPS) ? 0 : (AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL))
+      : 0;
+    const scenarioTripBase = COST_MODEL.tripBase.perplexity + COST_MODEL.tripBase.aiSetup + scenarioAmadeusPerTrip;
+    const scenarioPerDay =
+      (COST_MODEL.perDay.googleRestaurants + COST_MODEL.perDay.googleActivities + COST_MODEL.perDay.googlePhotos) * googleMultiplier +
+      COST_MODEL.perDay.aiContent;
+
+    const scenarioTierCosts = CREDIT_TIERS.reduce((acc, tier) => {
+      const days = tier.typicalUsage.daysUnlocked;
+      const trips = days > 0 ? Math.ceil(days / 5) : 0;
+
+      const baselineModeled = (trips * baselineTripBase) + (days * baselinePerDay);
+      const extras = tier.estimatedCostToUs - baselineModeled;
+
+      const scenarioModeled = (trips * scenarioTripBase) + (days * scenarioPerDay);
+      const scenarioCost = Math.max(0, scenarioModeled + extras);
+
+      acc[tier.key] = scenarioCost;
       return acc;
     }, {} as Record<string, number>);
-    
+
     const cost = (
-      (mixConfig.boost / 100) * (tierCosts.boost || 0.12) +
-      (mixConfig.single / 100) * (tierCosts.single || 0.22) +
-      (mixConfig.starter / 100) * (tierCosts.starter || 0.38) +
-      (mixConfig.explorer / 100) * (tierCosts.explorer || 0.72) +
-      (mixConfig.adventurer / 100) * (tierCosts.adventurer || 1.35)
+      (mixConfig.boost / 100) * (scenarioTierCosts.boost ?? 0.12) +
+      (mixConfig.single / 100) * (scenarioTierCosts.single ?? 0.22) +
+      (mixConfig.starter / 100) * (scenarioTierCosts.starter ?? 0.38) +
+      (mixConfig.explorer / 100) * (scenarioTierCosts.explorer ?? 0.72) +
+      (mixConfig.adventurer / 100) * (scenarioTierCosts.adventurer ?? 1.35)
     );
     
     return { blendedAOV: aov, blendedCostPerUser: cost };
-  }, [revenueMix, mixConfig]);
+  }, [revenueMix, mixConfig, scenario, volume]);
   
   const VERIFIED_DATA = useMemo(() => {
     // CRITICAL: Real-time tracking data often has incomplete trip_id attribution
@@ -456,7 +481,10 @@ export default function UnitEconomics() {
     // The tier costs already include a base estimate, but the scenario changes
     // Google cost (caching) and Amadeus cost (on/off, free tier)
     // We use variablePerTrip as the scenario-aware cost per paid trip
-    const paidVariableCost = payingTrips * variablePerTrip;
+    // IMPORTANT: For lifecycle economics we treat "paid users" as purchases,
+    // and use the tier-mix cost model (blendedCostPerUser) rather than per-itinerary COGS.
+    // This keeps blended profit/margin consistent with the scale table.
+    const paidVariableCost = payingTrips * blendedCostPerUser;
     
     // Total cost = free variable + paid variable + fixed
     const totalVariableCostBlended = freeVariableCost + paidVariableCost;
@@ -472,6 +500,9 @@ export default function UnitEconomics() {
     const revenuePerTrip = totalRevenue / volume;
     const realMarginPerTrip = revenuePerTrip - (totalCost / volume);
 
+    // Blended all-in cost per trip (matches scale table definition)
+    const blendedAllInCostPerTrip = totalCost / volume;
+
     const googleShare = variablePerTrip > 0 ? (googlePerTrip / variablePerTrip) * 100 : 0;
 
     return {
@@ -483,6 +514,7 @@ export default function UnitEconomics() {
       variable: { perTrip: variablePerTrip, total: variableTotal },
       fixed: { perTrip: fixedPerTrip, total: fixedTotal },
       fullyLoaded,
+      blendedAllInCostPerTrip,
       margin,
       contributionMargin,
       // Blended economics
@@ -646,7 +678,7 @@ export default function UnitEconomics() {
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171" },
             { label: "Monthly Profit", value: `$${costs.blendedProfit.toFixed(0)}`, sub: `$${costs.totalRevenue.toFixed(0)} rev - $${costs.totalCost.toFixed(0)} cost`, accent: costs.blendedProfit > 0 ? "#34D399" : "#F87171" },
             { label: "Revenue / Trip", value: `$${costs.revenuePerTrip.toFixed(2)}`, sub: `${costs.payingTrips.toFixed(0)} paying of ${volume}`, accent: "#38BDF8" },
-            { label: "Cost / Trip", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `Scenario ${scenario}`, accent: "#A78BFA" },
+            { label: "Cost / Trip", value: `$${costs.blendedAllInCostPerTrip.toFixed(2)}`, sub: `All-in (blended)`, accent: "#A78BFA" },
             { label: "Margin / Trip", value: `$${costs.realMarginPerTrip.toFixed(2)}`, sub: costs.realMarginPerTrip > 0 ? "Profitable" : "Loss", accent: costs.realMarginPerTrip > 0 ? "#34D399" : "#F87171" },
           ]).map((m, i) => (
             <div key={i} style={{
@@ -1132,6 +1164,9 @@ export default function UnitEconomics() {
                 const netProfit = revenue - totalCost;
                 const realMargin = revenue > 0 ? (netProfit / revenue) * 100 : -100;
 
+                // Blended all-in cost per trip (matches Total Cost / Net Profit)
+                const blendedCostPerTrip = totalCost / vol;
+
                 const isAmadeusThreshold = vol === 400;
                 const isKeyVolume = vol === 100 || vol === 500 || vol === 1000;
                 
@@ -1189,7 +1224,7 @@ export default function UnitEconomics() {
                       fontFamily: "'JetBrains Mono', monospace",
                       borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
                     }}>
-                      ${loaded.toFixed(2)}
+                      ${blendedCostPerTrip.toFixed(2)}
                     </td>
                     <td style={{ 
                       padding: "10px 12px", 
