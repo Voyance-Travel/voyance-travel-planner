@@ -6,9 +6,9 @@
 // Credit Costs for Actions
 export const CREDIT_COSTS = {
   UNLOCK_DAY: 150,          // Unlock 1 day of itinerary
-  SWAP_ACTIVITY: 5,         // Swap an activity
-  REGENERATE_DAY: 15,       // Regenerate a day
-  RESTAURANT_REC: 10,       // AI restaurant recommendation
+  SWAP_ACTIVITY: 10,        // Swap an activity
+  REGENERATE_DAY: 20,       // Regenerate a day
+  RESTAURANT_REC: 15,       // AI restaurant recommendation
   AI_MESSAGE: 10,           // AI companion message
   ROUTE_OPTIMIZATION: 0,    // Free
   PDF_EXPORT: 0,            // Free
