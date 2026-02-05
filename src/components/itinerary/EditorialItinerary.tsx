@@ -3026,6 +3026,7 @@ export function EditorialItinerary({
         onClose={() => setShowRouteUpgrade(false)}
         featureName="route optimization"
         context="route"
+         tripId={tripId}
       />
     </div>
   );
