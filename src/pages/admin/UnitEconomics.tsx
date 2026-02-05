@@ -169,15 +169,15 @@ type Scenario = 'A' | 'B' | 'C' | 'D';
 const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescription: string; caching: boolean; amadeus: boolean; amadeusWithinFree: boolean }> = {
   A: { 
     name: "Current Production", 
-    description: "Pre-cache, no Amadeus", 
-    fullDescription: "Current live state: No photo caching (full Google Places costs), no Amadeus hotel integration. Baseline for comparison.",
-    caching: false, amadeus: false, amadeusWithinFree: true 
+    description: "Caching enabled, no Amadeus", 
+    fullDescription: "Current live state: Photo caching is enabled (Google photo URLs are stored and served locally after first fetch), no Amadeus hotel integration. Baseline for comparison.",
+    caching: true, amadeus: false, amadeusWithinFree: true 
   },
   B: { 
-    name: "Post Photo-Cache", 
-    description: "With caching, no Amadeus", 
-    fullDescription: "After deploying photo caching: Reduces Google Places costs by ~33% by storing photos locally. No hotel search yet.",
-    caching: true, amadeus: false, amadeusWithinFree: true 
+    name: "No Photo Cache (Counterfactual)", 
+    description: "No caching, no Amadeus", 
+    fullDescription: "Counterfactual scenario: Photo caching disabled (every request downloads via Google Places photo endpoint), no Amadeus hotel integration. Useful to visualize savings from caching.",
+    caching: false, amadeus: false, amadeusWithinFree: true 
   },
   C: { 
     name: "Cache + Amadeus (Free)", 
@@ -621,10 +621,10 @@ export default function UnitEconomics() {
       const potentialSavings = costs.google.total * PHOTO_CACHE_SAVINGS_RATIO;
       list.push({
         type: 'opportunity',
-        title: 'Photo caching not enabled',
-        description: `Enabling photo caching would reduce Google Places costs by ~${(PHOTO_CACHE_SAVINGS_RATIO * 100).toFixed(0)}%.`,
-        impact: `Save ~$${potentialSavings.toFixed(2)}/mo at current volume`,
-        action: 'Deploy photo-storage.ts utility and update destination-images edge function.',
+        title: 'Scenario: photo caching OFF',
+        description: `This modeled scenario assumes photo caching is disabled. Turning caching on reduces Google Places costs by ~${(PHOTO_CACHE_SAVINGS_RATIO * 100).toFixed(0)}%.`,
+        impact: `Model savings: ~$${potentialSavings.toFixed(2)}/mo at current volume`,
+        action: 'Switch to a caching-enabled scenario to reflect the deployed optimization.',
       });
     }
     

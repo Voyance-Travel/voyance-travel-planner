@@ -19,6 +19,8 @@ interface DestinationImage {
   attribution?: string;
   placeId?: string;
   photoReference?: string;
+  /** Internal: true only when the photo was already cached in storage (no Google photo download). */
+  cacheHit?: boolean;
 }
 
 interface RequestParams {
@@ -256,6 +258,7 @@ function hasMismatchedContent(category: string, altTextOrName: string): boolean 
 // TIER 2: GOOGLE PLACES PHOTOS (New Places API v1) - HARDENED
 // =============================================================================
 async function getGooglePlacesPhoto(
+  entityType: 'activity' | 'destination',
   venueName: string,
   destination: string,
   apiKey: string,
@@ -388,22 +391,23 @@ async function getGooglePlacesPhoto(
       
       // Download to Supabase Storage to avoid repeated API calls
       const cacheResult = await getCachedPhotoUrl(
-        'activity',
+        entityType,
         best.place.id,
         googlePhotoUrl,
         { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id }
       );
 
       return {
-        id: `google-${best.place.id}`,
+        id: `google-${entityType}-${best.place.id}`,
         url: cacheResult.url,
         alt: `${best.place.displayName?.text || venueName} - Photo`,
-        type: "activity",
+        type: entityType === 'destination' ? 'hero' : 'activity',
         source: "google_places",
         width: 1200,
         height: 800,
         placeId: best.place.id,
         photoReference: photoResource,
+        cacheHit: cacheResult.cacheHit,
       };
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
@@ -1120,7 +1124,13 @@ async function fetchImageTiered(
 
   // TIER 2: Google Places (best for real venue photos)
   if (googleApiKey) {
-    const googleImage = await getGooglePlacesPhoto(cleanName, destination, googleApiKey, effectiveCategory);
+    const googleImage = await getGooglePlacesPhoto(
+      (entityType === 'destination' ? 'destination' : 'activity'),
+      cleanName,
+      destination,
+      googleApiKey,
+      effectiveCategory
+    );
     if (googleImage) {
       candidates.push(googleImage);
     }
@@ -1386,10 +1396,13 @@ serve(async (req) => {
     // Update type if specified
     const finalImage = { ...image, type: imageType as any };
 
-    // Track Google Places and Photos calls
+    // Track Google Places and Photos calls.
+    // IMPORTANT: only count a Google Photo call on cache MISS (we had to download from Google).
     if (finalImage.source === 'google_places') {
       costTracker.recordGooglePlaces(1);
-      costTracker.recordGooglePhotos(1);
+      if (finalImage.cacheHit === false) {
+        costTracker.recordGooglePhotos(1);
+      }
     }
     await costTracker.save();
 

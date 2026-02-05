@@ -17,6 +17,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 interface PhotoCacheResult {
   url: string;
   cached: boolean;
+  /** True only when the object was already present in storage (no download performed) */
+  cacheHit: boolean;
   source: 'storage' | 'direct';
 }
 
@@ -50,7 +52,7 @@ export async function getCachedPhotoUrl(
     // File exists - return public URL
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
     console.log(`[PhotoStorage] Cache hit: ${entityType}/${sanitizedId}`);
-    return { url: publicUrl, cached: true, source: 'storage' };
+    return { url: publicUrl, cached: true, cacheHit: true, source: 'storage' };
   }
   
   // Download the photo from Google
@@ -62,7 +64,7 @@ export async function getCachedPhotoUrl(
     
     if (!photoResponse.ok) {
       console.error(`[PhotoStorage] Download failed: ${photoResponse.status}`);
-      return { url: googlePhotoUrl, cached: false, source: 'direct' };
+      return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
     }
     
     const photoBlob = await photoResponse.blob();
@@ -70,7 +72,7 @@ export async function getCachedPhotoUrl(
     // Validate it's actually an image
     if (!photoBlob.type.startsWith('image/')) {
       console.error(`[PhotoStorage] Not an image: ${photoBlob.type}`);
-      return { url: googlePhotoUrl, cached: false, source: 'direct' };
+      return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
     }
     
     // Upload to Supabase Storage
@@ -84,7 +86,7 @@ export async function getCachedPhotoUrl(
     
     if (uploadError) {
       console.error(`[PhotoStorage] Upload failed:`, uploadError);
-      return { url: googlePhotoUrl, cached: false, source: 'direct' };
+      return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
     }
     
     // Return public URL
@@ -109,10 +111,11 @@ export async function getCachedPhotoUrl(
       } catch { /* ignore tracking errors */ }
     }
     
-    return { url: publicUrl, cached: true, source: 'storage' };
+    // This was a cache MISS (we downloaded then cached)
+    return { url: publicUrl, cached: true, cacheHit: false, source: 'storage' };
   } catch (error) {
     console.error(`[PhotoStorage] Error:`, error);
-    return { url: googlePhotoUrl, cached: false, source: 'direct' };
+    return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
   }
 }
 
