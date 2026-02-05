@@ -208,9 +208,10 @@ const CREDIT_TIERS = [
     credits: 80, 
     color: "#94A3B8", 
     description: "Quick boost for swaps & extras",
-    // Boost users CAN'T unlock days (need 150 credits), so only swaps (10 cr) /AI messages (10 cr)
-    typicalUsage: { daysUnlocked: 0, swaps: 5, regenerates: 1, restaurants: 0, aiMessages: 3 },
-    // Cost: No trip base, just light AI calls
+    // Boost users CAN'T unlock days (need 150 credits)
+    // 80 credits / 10 per action = ~8 actions max (swaps + AI messages)
+    typicalUsage: { daysUnlocked: 0, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 4 },
+    // Cost: 4 swaps × $0.0125 + 4 msgs × $0.0125 = $0.10
     estimatedCostToUs: 0.10,
     notes: "Cannot unlock days - 80 credits insufficient",
   },
@@ -221,8 +222,9 @@ const CREDIT_TIERS = [
     credits: 200, 
     color: "#38BDF8", 
     description: "One complete day",
-    // 1 day = 150 credits, leaving 50 for extras (swap 10, regen 20)
-    typicalUsage: { daysUnlocked: 1, swaps: 3, regenerates: 1, restaurants: 0, aiMessages: 2 },
+    // 1 day = 150 credits, leaving 50 for extras
+    // 50 credits = 5 swaps OR 2 regens + 1 msg
+    typicalUsage: { daysUnlocked: 1, swaps: 2, regenerates: 1, restaurants: 0, aiMessages: 1 },
     // Cost: $0.163 base + 1 × $0.100/day = $0.263
     estimatedCostToUs: 0.263,
     notes: "1 new trip with 1 day",
@@ -233,8 +235,8 @@ const CREDIT_TIERS = [
     price: 29.99, 
     credits: 500, 
     description: "3-day trip",
-    // 3 days = 450 credits, leaving 50 for extras (swap 10, regen 20)
-    typicalUsage: { daysUnlocked: 3, swaps: 3, regenerates: 1, restaurants: 0, aiMessages: 2 },
+    // 3 days = 450 credits, leaving 50 for extras
+    typicalUsage: { daysUnlocked: 3, swaps: 2, regenerates: 1, restaurants: 0, aiMessages: 1 },
     // Cost: $0.163 base + 3 × $0.100/day = $0.463
     estimatedCostToUs: 0.463,
     notes: "1 new trip with 3 days",
@@ -246,11 +248,12 @@ const CREDIT_TIERS = [
     credits: 1200, 
     color: "#34D399", 
     description: "Multi-day adventures",
-    // 8 days across potentially 2 trips (5+3), swap 10, regen 20, rest 15
-    typicalUsage: { daysUnlocked: 8, swaps: 6, regenerates: 2, restaurants: 2, aiMessages: 8 },
+    // 8 days = 1200 credits, no extras remaining
+    // 8 × 150 = 1200 credits exactly
+    typicalUsage: { daysUnlocked: 8, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 2 × $0.163 base + 8 × $0.100/day = $1.126
     estimatedCostToUs: 1.126,
-    notes: "May generate 2 trips (5+3 days)",
+    notes: "8 days exactly (1200 credits)",
   },
   { 
     key: "adventurer", 
@@ -259,11 +262,12 @@ const CREDIT_TIERS = [
     credits: 2500, 
     color: "#F59E0B", 
     description: "Frequent travelers",
-    // 16 days across multiple trips (5+5+5+1), swap 10, regen 20, rest 15
-    typicalUsage: { daysUnlocked: 16, swaps: 10, regenerates: 3, restaurants: 3, aiMessages: 12 },
+    // 16 days = 2400 credits, leaving 100 for extras
+    // 100 credits = 10 swaps OR 5 regens OR mix
+    typicalUsage: { daysUnlocked: 16, swaps: 5, regenerates: 2, restaurants: 0, aiMessages: 1 },
     // Cost: 4 × $0.163 base + 16 × $0.100/day = $2.252
     estimatedCostToUs: 2.252,
-    notes: "May generate 4 trips (5+5+5+1)",
+    notes: "16 days + 100 credits extras",
   },
 ];
 
@@ -1805,8 +1809,8 @@ export default function UnitEconomics() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div style={{ padding: 12, background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 8 }}>
               <p style={{ fontSize: 11, color: "#34D399", margin: 0, lineHeight: 1.6 }}>
-                <strong>💰 Paid User Economics:</strong> $8 Boost can't unlock days (only swaps/AI) = <strong>$0.12 cost (98.5% margin)</strong>. 
-                Adventurer unlocks 16 days = <strong>$2.25 cost vs $89 (97.5% margin)</strong>. All tiers profitable.
+                <strong>💰 Paid User Economics:</strong> $8.99 Boost can't unlock days (only swaps/AI) = <strong>$0.10 cost (98.9% margin)</strong>. 
+                Adventurer unlocks 16 days = <strong>$2.25 cost vs $99.99 (97.7% margin)</strong>. All tiers profitable.
               </p>
             </div>
             <div style={{ padding: 12, background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: 8 }}>
