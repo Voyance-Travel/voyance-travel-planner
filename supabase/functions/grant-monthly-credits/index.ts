@@ -31,12 +31,15 @@ serve(async (req) => {
       );
     }
 
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Create client WITH auth header for proper JWT validation on Lovable Cloud
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
     
     if (authError || !user) {
