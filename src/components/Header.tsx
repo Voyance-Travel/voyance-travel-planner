@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Compass, User, Info, Home, Sparkles, LogOut, LogIn } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
