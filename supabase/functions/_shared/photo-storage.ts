@@ -8,7 +8,7 @@
  * API key, Google charges you ~$0.007. This utility fetches once and caches.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 
 const BUCKET_NAME = 'trip-photos';
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";

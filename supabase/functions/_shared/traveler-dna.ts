@@ -5,7 +5,7 @@
 // used across all edge functions (itinerary-chat, get-activity-alternatives, etc.)
 // =============================================================================
 
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.90.1";
 
 // =============================================================================
 // TYPES
