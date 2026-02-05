@@ -9,7 +9,7 @@ export const CREDIT_COSTS = {
   SWAP_ACTIVITY: 5,         // Swap an activity
   REGENERATE_DAY: 15,       // Regenerate a day
   RESTAURANT_REC: 10,       // AI restaurant recommendation
-  AI_MESSAGE: 2,            // AI companion message
+  AI_MESSAGE: 10,           // AI companion message
   ROUTE_OPTIMIZATION: 0,    // Free
   PDF_EXPORT: 0,            // Free
   SHARING: 0,               // Free
