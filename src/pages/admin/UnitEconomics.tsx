@@ -315,10 +315,13 @@ export default function UnitEconomics() {
   const [viewMode, setViewMode] = useState<'itinerary' | 'lifecycle'>('lifecycle');
   
   // Fetch real data from trip_cost_tracking table
-  const { data: realMetrics, isLoading: metricsLoading } = useRealCostMetrics();
+  const { data: realMetrics, isLoading: metricsLoading, isError: metricsError } = useRealCostMetrics();
   
   // Use real data when available, otherwise fallback
   const hasRealData = !!realMetrics && realMetrics.totalTrips > 0;
+  
+  // Data quality warning from the hook
+  const dataQualityWarning = realMetrics?.dataQualityWarning;
   
   // Calculate blended average order value AND blended cost based on revenue mix
   const mixConfig = REVENUE_MIX_PRESETS[revenueMix];
@@ -811,6 +814,95 @@ export default function UnitEconomics() {
       </div>
 
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+        {/* Loading State */}
+        {metricsLoading && (
+          <div style={{ 
+            background: "rgba(56, 189, 248, 0.1)",
+            borderRadius: 12,
+            padding: "16px 24px",
+            border: "1px solid rgba(56, 189, 248, 0.3)",
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}>
+            <div style={{ 
+              width: 16, 
+              height: 16, 
+              border: "2px solid #38BDF8",
+              borderTopColor: "transparent",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+            }} />
+            <span style={{ color: "#38BDF8", fontSize: 14 }}>Loading cost tracking data...</span>
+          </div>
+        )}
+        
+        {/* Error State */}
+        {metricsError && (
+          <div style={{ 
+            background: "rgba(248, 113, 113, 0.1)",
+            borderRadius: 12,
+            padding: "16px 24px",
+            border: "1px solid rgba(248, 113, 113, 0.3)",
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 18 }}>⚠️</span>
+            <div>
+              <span style={{ color: "#F87171", fontSize: 14, fontWeight: 600 }}>Failed to load cost metrics</span>
+              <p style={{ color: "#94A3B8", fontSize: 12, margin: "4px 0 0" }}>
+                Using fallback data. Check console for details.
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Data Quality Warning */}
+        {dataQualityWarning && !metricsLoading && !metricsError && (
+          <div style={{ 
+            background: "rgba(251, 191, 36, 0.1)",
+            borderRadius: 12,
+            padding: "16px 24px",
+            border: "1px solid rgba(251, 191, 36, 0.3)",
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 18 }}>📊</span>
+            <div>
+              <span style={{ color: "#FBBF24", fontSize: 14, fontWeight: 600 }}>Data Quality Notice</span>
+              <p style={{ color: "#94A3B8", fontSize: 12, margin: "4px 0 0" }}>
+                {dataQualityWarning}
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* No Data State */}
+        {!hasRealData && !metricsLoading && !metricsError && (
+          <div style={{ 
+            background: "rgba(100, 116, 139, 0.1)",
+            borderRadius: 12,
+            padding: "16px 24px",
+            border: "1px solid rgba(100, 116, 139, 0.3)",
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 18 }}>📋</span>
+            <div>
+              <span style={{ color: "#94A3B8", fontSize: 14, fontWeight: 600 }}>Using Fallback Data</span>
+              <p style={{ color: "#64748B", fontSize: 12, margin: "4px 0 0" }}>
+                No cost tracking data available yet. Displaying verified production baseline from 61-trip sample.
+              </p>
+            </div>
+          </div>
+        )}
         {/* View Mode Toggle */}
         <div style={{ 
           display: "flex", 
