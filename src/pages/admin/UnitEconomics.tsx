@@ -801,7 +801,9 @@ export default function UnitEconomics() {
                 ✓ Production Verified
               </div>
               <div style={{ fontSize: 11, color: "#64748B" }}>
-                {hasRealData ? `$${realMetrics.totalCost.toFixed(2)} total spend tracked` : "Based on 61-trip production sample"}
+                {hasRealData 
+                  ? `$${realMetrics.totalCost.toFixed(2)} spend · ${realMetrics.uniqueUsers} users · ${realMetrics.totalInteractions} actions` 
+                  : "Based on 61-trip production sample"}
               </div>
             </div>
           </div>
