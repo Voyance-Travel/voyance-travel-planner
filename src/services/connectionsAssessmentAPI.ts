@@ -102,10 +102,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   if (session?.access_token) {
     return { Authorization: `Bearer ${session.access_token}` };
   }
-  const token = localStorage.getItem('voyance_token');
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
+  // No legacy token fallback - require valid Supabase session
   return {};
 }
 

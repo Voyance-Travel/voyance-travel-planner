@@ -62,7 +62,12 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Use anon key + auth header for proper user token validation
+    const supabase = createClient(
+      supabaseUrl,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
     
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
