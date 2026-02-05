@@ -57,6 +57,8 @@ const FALLBACK_DATA = {
     lovableCloud: 25.00,
     domain: 4.08,
     email: 0.00, // Zoho free tier
+    // Hidden fixed: your own testing, API testing, dev overhead
+    devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
   revenue: { boost: 8, single: 12, starter: 29, explorer: 55, adventurer: 89 } as Record<string, number>,
 };
@@ -281,7 +283,7 @@ const SCALE_COLUMNS = [
   { key: "cogs", label: "COGS/Trip", tooltip: "Cost Of Goods Sold per itinerary if every user triggered full generation (Google + AI + Perplexity + Amadeus + fixed overhead). Worst-case capacity planning." },
   { key: "blended", label: "Blended/Trip", tooltip: "All-in cost per trip = Total Cost ÷ Trips. Reflects actual mix of free previews ($0.10), tier-based paid costs, and fixed overhead. Matches Net Profit math." },
   { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
-  { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES FIXED COSTS. Formula: (All Trips × Variable Cost) + $29.08 fixed. This is your total monthly infrastructure spend." },
+  { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES ALL FIXED COSTS. Formula: (Free Variable + Paid Variable) + $49 fixed (Cloud + Domain + DevOps). This is your REAL monthly burn." },
   { key: "netProfit", label: "Net Profit", tooltip: "Revenue minus ALL costs (variable + fixed). Formula: Revenue - Total Cost. This is what hits your bank account." },
   { key: "realMargin", label: "Real Margin", tooltip: "True margin after ALL costs including fixed overhead. Formula: Net Profit / Revenue. Much lower than per-tier margins." },
 ];
@@ -458,7 +460,8 @@ export default function UnitEconomics() {
     const variablePerTrip = googlePerTrip + aiPerTrip + perplexityPerTrip + amadeusPerTrip;
     const variableTotal = variablePerTrip * volume;
 
-    const fixedTotal = VERIFIED_DATA.fixed.lovableCloud + VERIFIED_DATA.fixed.domain;
+    // TRUE fixed cost: Cloud + Domain + DevOps overhead (testing, internal usage)
+    const fixedTotal = VERIFIED_DATA.fixed.lovableCloud + VERIFIED_DATA.fixed.domain + (VERIFIED_DATA.fixed.devOps || 0);
     const fixedPerTrip = fixedTotal / volume;
 
     const fullyLoaded = variablePerTrip + fixedPerTrip;
@@ -831,9 +834,9 @@ export default function UnitEconomics() {
           ] : [
             // Lifecycle View: Focus on blended economics across all users
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171" },
-            { label: "Monthly Profit", value: `$${costs.blendedProfit.toFixed(0)}`, sub: `$${costs.totalRevenue.toFixed(0)} rev - $${costs.totalCost.toFixed(0)} cost`, accent: costs.blendedProfit > 0 ? "#34D399" : "#F87171" },
+            { label: "Monthly Profit", value: `$${costs.blendedProfit.toFixed(0)}`, sub: `Rev $${costs.totalRevenue.toFixed(0)} – Cost $${costs.totalCost.toFixed(0)} (incl $${costs.fixed.total.toFixed(0)} fixed)`, accent: costs.blendedProfit > 0 ? "#34D399" : "#F87171" },
             { label: "Revenue / Trip", value: `$${costs.revenuePerTrip.toFixed(2)}`, sub: `${costs.payingTrips.toFixed(0)} paying of ${volume}`, accent: "#38BDF8" },
-            { label: "Cost / Trip", value: `$${costs.blendedAllInCostPerTrip.toFixed(2)}`, sub: `All-in (blended)`, accent: "#A78BFA" },
+            { label: "Cost / Trip", value: `$${costs.blendedAllInCostPerTrip.toFixed(2)}`, sub: `Var + $${costs.fixed.perTrip.toFixed(2)} fixed/trip`, accent: "#A78BFA" },
             { label: "Margin / Trip", value: `$${costs.realMarginPerTrip.toFixed(2)}`, sub: costs.realMarginPerTrip > 0 ? "Profitable" : "Loss", accent: costs.realMarginPerTrip > 0 ? "#34D399" : "#F87171" },
           ]).map((m, i) => (
             <div key={i} style={{
@@ -1383,6 +1386,10 @@ export default function UnitEconomics() {
               <span style={{ color: "#F59E0B", fontWeight: 600, marginLeft: 6 }}>~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}</span>
               <span style={{ color: "#475569", marginLeft: 4 }}>(Full Preview, No Details)</span>
             </div>
+            <div style={{ fontSize: 11, borderLeft: "1px solid #334155", paddingLeft: 16 }}>
+              <span style={{ color: "#EF4444", fontWeight: 600 }}>Fixed Burn: $49/mo</span>
+              <span style={{ color: "#64748B", marginLeft: 6 }}>(Cloud $25 + Domain $4 + DevOps $20)</span>
+            </div>
           </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -1420,7 +1427,9 @@ export default function UnitEconomics() {
                   }
                 }
                 const variable = goog + ai + perp + amad;
-                const fixedPer = 29.08 / vol;
+                // TRUE FIXED COST: $25 Cloud + $4 Domain + $20 DevOps = $49
+                const TOTAL_FIXED = 49;
+                const fixedPer = TOTAL_FIXED / vol;
                 const loaded = variable + fixedPer;
                 
                 // Free user economics - CREDIT-CONSTRAINED
@@ -1443,7 +1452,7 @@ export default function UnitEconomics() {
                 
                 // Revenue from paying users
                 const revenue = paidUsers * blendedAOV;
-                const totalCost = totalVariableCost + 29.08; // Variable + fixed
+                const totalCost = totalVariableCost + TOTAL_FIXED; // Variable + ALL fixed
                 const netProfit = revenue - totalCost;
                 const realMargin = revenue > 0 ? (netProfit / revenue) * 100 : -100;
 
