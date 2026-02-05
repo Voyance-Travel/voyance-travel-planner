@@ -239,13 +239,13 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    // Auth
+    // Auth - pass header to client for proper token validation
+    const authHeader = req.headers.get("Authorization");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader || '' } } }
     );
-
-    const authHeader = req.headers.get("Authorization");
     let userId: string | null = null;
     
     if (authHeader) {

@@ -436,10 +436,11 @@ export default function Quiz() {
 
   const stepQuestions = getQuestionsForStep(currentStep);
 
-  // Initialize quiz session when user is available and quiz starts
+  // Initialize quiz session when user is authenticated and quiz starts
   useEffect(() => {
     const initSession = async () => {
-      if (user && !sessionId && hasStarted) {
+      // Guard: require user.id to be present before creating session
+      if (user?.id && !sessionId && hasStarted) {
         const newSessionId = await createQuizSession({
           userId: user.id,
           quizVersion: 'v4',
@@ -454,7 +455,7 @@ export default function Quiz() {
       }
     };
     initSession();
-  }, [user, sessionId, hasStarted]);
+  }, [user?.id, sessionId, hasStarted]); // Use user?.id for stable dependency
 
   const handleSelect = async (questionId: string, value: string, isMultiSelect: boolean) => {
     let newAnswers: Record<string, string | string[]>;

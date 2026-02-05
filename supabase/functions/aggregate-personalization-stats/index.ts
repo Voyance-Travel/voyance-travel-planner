@@ -25,10 +25,12 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+    
     // Optional auth check for manual triggers
     const authHeader = req.headers.get('Authorization');
+    
+    // Use service role for data aggregation, but validate auth properly
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
       const { data: { user } } = await supabase.auth.getUser(token);

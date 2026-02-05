@@ -11,8 +11,8 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-// Backend base URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://voyance-backend.railway.app';
+// Backend base URL - default to Supabase functions if env not set
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 // ============================================================================
 // Types
