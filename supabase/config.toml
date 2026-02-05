@@ -110,3 +110,126 @@ verify_jwt = false
 
 [functions.grant-monthly-credits]
 verify_jwt = false
+
+[functions.add-credits]
+verify_jwt = false
+
+[functions.aggregate-personalization-stats]
+verify_jwt = false
+
+[functions.airport-transfers]
+verify_jwt = false
+
+[functions.cleanup-activities]
+verify_jwt = false
+
+[functions.cleanup-attractions]
+verify_jwt = false
+
+[functions.create-embedded-checkout]
+verify_jwt = false
+
+[functions.enrich-attraction]
+verify_jwt = false
+
+[functions.enrich-destinations]
+verify_jwt = false
+
+[functions.fetch-reviews]
+verify_jwt = false
+
+[functions.flight-status]
+verify_jwt = false
+
+[functions.generate-full-preview]
+verify_jwt = false
+
+[functions.generate-trip-preview]
+verify_jwt = false
+
+[functions.get-activity-alternatives]
+verify_jwt = false
+
+[functions.get-checkout-session]
+verify_jwt = false
+
+[functions.get-destination-intelligence]
+verify_jwt = false
+
+[functions.golden-persona-tests]
+verify_jwt = false
+
+[functions.grant-bonus-credits]
+verify_jwt = false
+
+[functions.itinerary-chat]
+verify_jwt = false
+
+[functions.lookup-activity-url]
+verify_jwt = false
+
+[functions.lookup-destination-insights]
+verify_jwt = false
+
+[functions.lookup-local-events]
+verify_jwt = false
+
+[functions.lookup-restaurant-url]
+verify_jwt = false
+
+[functions.lookup-travel-advisory]
+verify_jwt = false
+
+[functions.nearby-suggestions]
+verify_jwt = false
+
+[functions.parse-booking-confirmation]
+verify_jwt = false
+
+[functions.parse-document-text]
+verify_jwt = false
+
+[functions.post-trip-cron]
+verify_jwt = false
+
+[functions.post-trip-email]
+verify_jwt = false
+
+[functions.purchase-trip-pass]
+verify_jwt = false
+
+[functions.recommend-restaurants]
+verify_jwt = false
+
+[functions.score-image-quality]
+verify_jwt = false
+
+[functions.seed-demo-user]
+verify_jwt = false
+
+[functions.spend-credits]
+verify_jwt = false
+
+[functions.stripe-connect-onboard]
+verify_jwt = false
+
+[functions.stripe-connect-payouts]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.summarize-trip-learnings]
+verify_jwt = false
+
+[functions.viator-availability]
+verify_jwt = false
+
+[functions.viator-book]
+verify_jwt = false
+
+[functions.viator-product]
+verify_jwt = false
+
+[functions.viator-search]
+verify_jwt = false
