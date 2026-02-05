@@ -1624,8 +1624,8 @@ export default function UnitEconomics() {
                 { action: "Restaurant Rec", credits: 15, costMin: 0.01, costMax: 0.04 },
                 { action: "AI Message", credits: 10, costMin: 0.005, costMax: 0.02 },
               ].map((row, i) => {
-                // Calculate user payment based on Explorer tier ($55 / 1200 credits = $0.046/credit)
-                const pricePerCredit = 55 / 1200;
+                // Calculate user payment based on Explorer tier ($59.99 / 1200 credits = $0.05/credit)
+                const pricePerCredit = 59.99 / 1200;
                 const userPays = row.credits * pricePerCredit;
                 const avgCost = (row.costMin + row.costMax) / 2;
                 const grossMargin = ((userPays - avgCost) / userPays) * 100;
@@ -1653,7 +1653,7 @@ export default function UnitEconomics() {
             </tbody>
           </table>
           <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
-            *User payment based on Explorer tier ($55 ÷ 1200 credits = $0.046/credit). Top-Up users pay more ($0.10/credit).
+            *User payment based on Explorer tier ($59.99 ÷ 1200 credits = $0.05/credit). Boost users pay more ($0.11/credit).
           </p>
 
           {/* TIER-BASED COST BREAKDOWN TABLE */}
