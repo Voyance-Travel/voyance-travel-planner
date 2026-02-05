@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
- import { openMapLocation } from '@/utils/mapNavigation';
+ import { openMapLocation, isIOS } from '@/utils/mapNavigation';
 
 interface ActiveTripCardProps {
   trip: {
@@ -95,9 +95,13 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
   const TimeIcon = getTimeOfDayIcon();
   const greeting = getTimeOfDayGreeting();
 
-   // Open destination in native maps app
-   const handleOpenMap = () => {
-     openMapLocation({ name: trip.destination }, 'auto');
+   // Generate map URL for the destination
+   const getMapUrl = () => {
+     const query = encodeURIComponent(trip.destination);
+     if (isIOS()) {
+       return `https://maps.apple.com/?q=${query}`;
+     }
+     return `https://www.google.com/maps/search/?api=1&query=${query}`;
    };
 
   return (
@@ -186,12 +190,14 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
           </Button>
           
           <Button 
-             onClick={handleOpenMap}
+            asChild
             variant="outline"
             className="h-auto py-4 flex-col gap-2 border-border/60"
           >
+            <a href={getMapUrl()} target="_blank" rel="noopener noreferrer">
             <MapPin className="h-5 w-5" />
             <span className="text-sm font-medium">Open Map</span>
+            </a>
           </Button>
         </div>
 
