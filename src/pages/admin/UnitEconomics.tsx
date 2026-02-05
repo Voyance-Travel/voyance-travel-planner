@@ -8,6 +8,7 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useRealCostMetrics } from "@/hooks/useRealCostMetrics";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // =============================================================================
 // FALLBACK STATIC DATA (used when no tracking data available)
@@ -530,6 +531,143 @@ export default function UnitEconomics() {
     };
   }, [volume, tier, scenario, scenarioConfig, revenue, conversionRate, blendedAOV, blendedCostPerUser, hasRealData, VERIFIED_DATA]);
 
+  // =========================================================================
+  // INSIGHTS ENGINE - Detects leaks, opportunities, and anomalies
+  // =========================================================================
+  const insights = useMemo(() => {
+    const list: Array<{
+      type: 'leak' | 'opportunity' | 'warning' | 'success';
+      title: string;
+      description: string;
+      impact: string;
+      action?: string;
+      category?: string;
+    }> = [];
+    
+    // Analyze category breakdown for leaks
+    if (hasRealData && realMetrics?.categoryBreakdown) {
+      const totalCost = Object.values(realMetrics.categoryBreakdown).reduce((sum, d) => sum + d.cost, 0);
+      
+      // Check for Home/Browse being disproportionately high
+      const homeBrowse = realMetrics.categoryBreakdown['home_browse'];
+      if (homeBrowse && totalCost > 0) {
+        const homePct = (homeBrowse.cost / totalCost) * 100;
+        if (homePct > 50) {
+          list.push({
+            type: 'leak',
+            title: 'Homepage causing majority of costs',
+            description: `Home/Browse is ${homePct.toFixed(0)}% of total spend ($${homeBrowse.cost.toFixed(2)}). This is likely destination_images fetching Google Places photos for cards.`,
+            impact: `-$${homeBrowse.cost.toFixed(2)}/period`,
+            action: 'Cache destination images in Supabase Storage instead of fetching on every page load. Pre-warm cache for top 50 destinations.',
+            category: 'home_browse',
+          });
+        } else if (homePct > 30) {
+          list.push({
+            type: 'warning',
+            title: 'Homepage costs elevated',
+            description: `Home/Browse is ${homePct.toFixed(0)}% of spend. Consider caching destination images.`,
+            impact: `-$${homeBrowse.cost.toFixed(2)}/period`,
+            action: 'Implement lazy loading and cache destination hero images.',
+            category: 'home_browse',
+          });
+        }
+      }
+      
+      // Check for booking search costs (Amadeus/hotels)
+      const bookingSearch = realMetrics.categoryBreakdown['booking_search'];
+      if (bookingSearch && bookingSearch.cost > 0.5) {
+        const bookingPct = (bookingSearch.cost / totalCost) * 100;
+        list.push({
+          type: 'opportunity',
+          title: 'Booking search costs active',
+          description: `Hotel search is costing $${bookingSearch.cost.toFixed(2)} (${bookingPct.toFixed(0)}%). ${bookingSearch.count} searches triggered.`,
+          impact: `$${bookingSearch.cost.toFixed(2)}/period`,
+          action: 'Ensure search is only triggered for paid users or on explicit action (not automatic).',
+          category: 'booking_search',
+        });
+      }
+      
+      // Check for low-cost categories that could be optimized further
+      const quiz = realMetrics.categoryBreakdown['quiz'];
+      if (quiz && quiz.cost < 0.01 && quiz.count > 5) {
+        list.push({
+          type: 'success',
+          title: 'Quiz is highly efficient',
+          description: `${quiz.count} DNA quizzes completed at only $${quiz.cost.toFixed(4)}. Cost per quiz: $${(quiz.cost / quiz.count).toFixed(5)}.`,
+          impact: '✓ Minimal',
+          category: 'quiz',
+        });
+      }
+    }
+    
+    // Scenario-based opportunities
+    if (!scenarioConfig.caching) {
+      const potentialSavings = costs.google.total * PHOTO_CACHE_SAVINGS_RATIO;
+      list.push({
+        type: 'opportunity',
+        title: 'Photo caching not enabled',
+        description: `Enabling photo caching would reduce Google Places costs by ~${(PHOTO_CACHE_SAVINGS_RATIO * 100).toFixed(0)}%.`,
+        impact: `Save ~$${potentialSavings.toFixed(2)}/mo at current volume`,
+        action: 'Deploy photo-storage.ts utility and update destination-images edge function.',
+      });
+    }
+    
+    if (scenarioConfig.caching && !scenarioConfig.amadeus) {
+      list.push({
+        type: 'opportunity',
+        title: 'Amadeus hotel search available',
+        description: `Hotel search can be enabled with 2,000 free calls/month (covers ~400 trips).`,
+        impact: `0 cost within free tier`,
+        action: 'Enable Amadeus integration for hotel pricing and booking links.',
+      });
+    }
+    
+    // Conversion rate warnings
+    if (conversionRate < 5) {
+      list.push({
+        type: 'warning',
+        title: 'Low conversion rate modeled',
+        description: `At ${conversionRate}% conversion, ${(100 - conversionRate)}% of costs come from non-paying users.`,
+        impact: `Free users cost $${(volume * (1 - conversionRate / 100) * FREE_USER_ECONOMICS.blendedCostToUs).toFixed(2)}/mo`,
+        action: 'Improve conversion or reduce free tier generosity.',
+      });
+    }
+    
+    // Margin check
+    if (costs.blendedMargin < 20) {
+      list.push({
+        type: 'warning',
+        title: 'Low blended margin',
+        description: `Blended margin is ${costs.blendedMargin.toFixed(1)}% - below target 50%.`,
+        impact: `Net profit: $${costs.blendedProfit.toFixed(0)}/mo`,
+        action: 'Increase conversion rate, adjust pricing, or reduce costs.',
+      });
+    } else if (costs.blendedMargin >= 50) {
+      list.push({
+        type: 'success',
+        title: 'Healthy margins',
+        description: `Blended margin is ${costs.blendedMargin.toFixed(1)}% - above target.`,
+        impact: `Net profit: $${costs.blendedProfit.toFixed(0)}/mo`,
+      });
+    }
+    
+    // Credit pricing check
+    const boostTier = CREDIT_TIERS.find(t => t.key === 'boost');
+    if (boostTier) {
+      const boostMargin = ((boostTier.price - boostTier.estimatedCostToUs) / boostTier.price) * 100;
+      if (boostMargin > 98) {
+        list.push({
+          type: 'success',
+          title: 'Boost tier is highly profitable',
+          description: `$8 Boost has ${boostMargin.toFixed(1)}% margin ($0.12 cost). Users can't unlock days - only swaps/AI.`,
+          impact: `$${(boostTier.price - boostTier.estimatedCostToUs).toFixed(2)} profit per sale`,
+        });
+      }
+    }
+    
+    return list;
+  }, [hasRealData, realMetrics, scenarioConfig, costs, volume, conversionRate]);
+
   const verifiedMargins = useMemo(() => {
     return Object.entries(VERIFIED_DATA.revenue).map(([key, rev]) => {
       const cost = costs.fullyLoaded;
@@ -701,6 +839,134 @@ export default function UnitEconomics() {
             </div>
           ))}
         </div>
+
+        {/* Insights & Opportunities Panel */}
+        {insights.length > 0 && (
+          <div style={{
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            padding: "24px 28px",
+            border: "1px solid rgba(100, 116, 139, 0.2)",
+            marginBottom: 32,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 20 }}>🔍</span>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", margin: 0 }}>
+                    Live Insights & Opportunities
+                  </h3>
+                  <p style={{ fontSize: 11, color: "#64748B", margin: "4px 0 0" }}>
+                    Auto-detected based on real tracking data + current scenario
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ 
+                  fontSize: 10, 
+                  padding: "4px 8px", 
+                  borderRadius: 4, 
+                  background: "rgba(239, 68, 68, 0.2)", 
+                  color: "#EF4444",
+                  fontWeight: 600,
+                }}>
+                  {insights.filter(i => i.type === 'leak').length} Leaks
+                </span>
+                <span style={{ 
+                  fontSize: 10, 
+                  padding: "4px 8px", 
+                  borderRadius: 4, 
+                  background: "rgba(245, 158, 11, 0.2)", 
+                  color: "#F59E0B",
+                  fontWeight: 600,
+                }}>
+                  {insights.filter(i => i.type === 'warning').length} Warnings
+                </span>
+                <span style={{ 
+                  fontSize: 10, 
+                  padding: "4px 8px", 
+                  borderRadius: 4, 
+                  background: "rgba(56, 189, 248, 0.2)", 
+                  color: "#38BDF8",
+                  fontWeight: 600,
+                }}>
+                  {insights.filter(i => i.type === 'opportunity').length} Opportunities
+                </span>
+                <span style={{ 
+                  fontSize: 10, 
+                  padding: "4px 8px", 
+                  borderRadius: 4, 
+                  background: "rgba(52, 211, 153, 0.2)", 
+                  color: "#34D399",
+                  fontWeight: 600,
+                }}>
+                  {insights.filter(i => i.type === 'success').length} ✓
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              {insights.map((insight, i) => {
+                const INSIGHT_STYLES: Record<string, { bg: string; border: string; icon: string; accent: string }> = {
+                  leak: { bg: "rgba(239, 68, 68, 0.1)", border: "#EF4444", icon: "🚨", accent: "#EF4444" },
+                  warning: { bg: "rgba(245, 158, 11, 0.1)", border: "#F59E0B", icon: "⚠️", accent: "#F59E0B" },
+                  opportunity: { bg: "rgba(56, 189, 248, 0.1)", border: "#38BDF8", icon: "💡", accent: "#38BDF8" },
+                  success: { bg: "rgba(52, 211, 153, 0.1)", border: "#34D399", icon: "✓", accent: "#34D399" },
+                };
+                const style = INSIGHT_STYLES[insight.type];
+                
+                return (
+                  <div 
+                    key={i}
+                    style={{
+                      background: style.bg,
+                      borderRadius: 8,
+                      padding: 16,
+                      borderLeft: `4px solid ${style.border}`,
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto",
+                      gap: 16,
+                      alignItems: "start",
+                    }}
+                  >
+                    <span style={{ fontSize: 18 }}>{style.icon}</span>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0", margin: "0 0 4px" }}>
+                        {insight.title}
+                      </p>
+                      <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 8px", lineHeight: 1.5 }}>
+                        {insight.description}
+                      </p>
+                      {insight.action && (
+                        <p style={{ 
+                          fontSize: 11, 
+                          color: style.accent, 
+                          margin: 0, 
+                          padding: "6px 10px",
+                          background: "rgba(15, 23, 42, 0.5)",
+                          borderRadius: 4,
+                          display: "inline-block",
+                        }}>
+                          <strong>→</strong> {insight.action}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{ 
+                        fontSize: 12, 
+                        fontWeight: 700, 
+                        color: style.accent,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}>
+                        {insight.impact}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Controls - 2x2 Grid */}
         <div style={{ 
