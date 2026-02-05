@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.analyze-itinerary]
 verify_jwt = false
+
+[functions.grant-monthly-credits]
+verify_jwt = false
