@@ -192,44 +192,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(transformProfile(session.user, profile, preferences));
   };
 
-  // Initialize auth state
+  // Initialize auth state - SEPARATED initial load from ongoing changes
+  // to prevent race condition where isLoading becomes false before user data loads
   useEffect(() => {
     let isMounted = true;
     let loadingTimeout: ReturnType<typeof setTimeout>;
+    let initialLoadComplete = false;
     
-    // Safety timeout: never show loading spinner for more than 5 seconds
+    // Safety timeout: never show loading spinner for more than 8 seconds
     loadingTimeout = setTimeout(() => {
       if (isMounted && isLoading) {
         console.warn('[Auth] Loading timeout - forcing isLoading to false');
         setIsLoading(false);
       }
-    }, 5000);
+    }, 8000);
     
-    // CRITICAL: Set up listener BEFORE getSession() per Supabase docs
-    // This prevents race conditions on page refresh where session exists
-    // but listener hasn't been registered yet
+    // LISTENER for ONGOING auth changes (does NOT control isLoading after initial)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log('[Auth] Auth state changed:', event);
+      console.log('[Auth] Auth state changed:', event, 'initialLoadComplete:', initialLoadComplete);
       
-      // Handle synchronous state updates first
+      // Always update session synchronously
       setSession(newSession);
       
-      // INITIAL_SESSION fires on page load when session exists in storage
-      // SIGNED_IN fires on explicit login
+      // If this is initial load, let initializeAuth handle everything
+      if (!initialLoadComplete) {
+        return;
+      }
+      
+      // Handle ongoing auth changes (after initial load)
       if (newSession?.user) {
-        // Defer async operations with setTimeout to avoid deadlock with Supabase internals
-        setTimeout(async () => {
+        // Fire and forget for ongoing changes - don't control isLoading
+        (async () => {
           if (!isMounted) return;
           
           try {
-            // On explicit sign in, sync profile and claim any locally-saved trips
             if (event === 'SIGNED_IN') {
               await syncProfile(newSession.user);
               await migrateLocalTripsToAccount(newSession.user);
               
-              // Log OAuth logins (email/password logins are logged in login())
               const provider = newSession.user.app_metadata?.provider;
               if (provider && provider !== 'email') {
                 logOAuthLogin(provider).catch(console.error);
@@ -242,30 +244,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           } catch (error) {
             console.error('[Auth] Error loading user data:', error);
-          } finally {
-            if (isMounted) {
-              setIsLoading(false);
-            }
           }
-        }, 0);
+        })();
       } else {
         setUser(null);
-        setIsLoading(false);
       }
     });
 
-    // Get initial session - listener above will handle the INITIAL_SESSION event
-    // This ensures we don't miss the session if it's already in localStorage
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      // If no session and no pending auth state change, we can stop loading
-      // The onAuthStateChange callback handles the case where session exists
-      if (!initialSession && isMounted) {
-        setIsLoading(false);
-      }
-      
-      // Validate the session by checking if the user actually exists
-      // This handles stale tokens pointing to deleted/non-existent users
-      if (initialSession?.user) {
+    // INITIAL load - this controls isLoading
+    const initializeAuth = async () => {
+      try {
+        console.log('[Auth] Starting initial auth check...');
+        
+        // Get the current session
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        
+        if (!isMounted) return;
+        
+        if (!initialSession?.user) {
+          console.log('[Auth] No session found');
+          setSession(null);
+          setUser(null);
+          return;
+        }
+        
+        console.log('[Auth] Session found, validating user...');
+        setSession(initialSession);
+        
+        // Validate the session by checking if the user actually exists
         const { error: userError } = await supabase.auth.getUser();
         if (userError) {
           console.warn('[Auth] Stale session detected, signing out:', userError.message);
@@ -273,16 +279,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (isMounted) {
             setSession(null);
             setUser(null);
-            setIsLoading(false);
           }
+          return;
+        }
+        
+        // User is valid - load their data BEFORE setting loading to false
+        console.log('[Auth] User valid, loading profile data...');
+        const { profile, preferences } = await loadUserData(initialSession.user);
+        
+        if (isMounted) {
+          setUser(transformProfile(initialSession.user, profile, preferences));
+          console.log('[Auth] Initial load complete, user set');
+        }
+      } catch (error) {
+        console.error('[Auth] Error during initial auth:', error);
+      } finally {
+        // Mark initial load complete and stop loading
+        initialLoadComplete = true;
+        if (isMounted) {
+          setIsLoading(false);
+          console.log('[Auth] isLoading set to false');
         }
       }
-    }).catch((error) => {
-      console.error('[Auth] Error getting session:', error);
-      if (isMounted) {
-        setIsLoading(false);
-      }
-    });
+    };
+
+    initializeAuth();
 
     return () => {
       isMounted = false;
