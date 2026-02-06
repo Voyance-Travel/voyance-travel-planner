@@ -22,22 +22,48 @@ type PageEvent = {
   created_at: string;
 };
 
-const NICE_NAMES: Record<string, string> = {
+// All known site pages — ensures they always appear in the stats table
+const ALL_SITE_PAGES: Record<string, string> = {
   '/': 'Home',
   '/explore': 'Explore',
   '/destinations': 'Destinations',
-  '/quiz': 'Quiz',
-  '/quiz/results': 'Quiz Results',
-  '/sign-in': 'Sign In',
-  '/sign-up': 'Sign Up',
-  '/itinerary': 'Itinerary',
-  '/settings': 'Settings',
+  '/demo': 'Demo',
   '/how-it-works': 'How It Works',
   '/about': 'About',
-  '/faq': 'FAQ',
+  '/archetypes': 'Archetypes',
   '/guides': 'Guides',
+  '/travel-tips': 'Travel Tips',
+  '/sample-itinerary': 'Sample Itinerary',
+  '/careers': 'Careers',
+  '/press': 'Press',
+  '/faq': 'FAQ',
+  '/help': 'Help Center',
   '/contact': 'Contact',
+  '/pricing': 'Pricing',
+  '/privacy': 'Privacy',
+  '/terms': 'Terms',
+  '/signin': 'Sign In',
+  '/signup': 'Sign Up',
+  '/forgot-password': 'Forgot Password',
+  '/reset-password': 'Reset Password',
+  '/welcome': 'Welcome',
+  '/start': 'Start',
+  '/quiz': 'Quiz',
+  '/onboard/conversation': 'Onboard Conversation',
+  '/profile': 'Profile',
+  '/profile/edit': 'Profile Edit',
+  '/profile/settings': 'Settings',
+  '/planner/multi-city': 'Multi-City Planner',
+  '/planner/flight': 'Flight Search',
+  '/planner/hotel': 'Hotel Search',
+  '/planner/summary': 'Trip Summary',
+  '/planner/itinerary': 'Planner Itinerary',
+  '/planner/booking': 'Booking',
+  '/trip/dashboard': 'Trip Dashboard',
+  '/payment-success': 'Payment Success',
 };
+
+const NICE_NAMES: Record<string, string> = { ...ALL_SITE_PAGES };
 
 function niceName(path: string): string {
   if (NICE_NAMES[path]) return NICE_NAMES[path];
@@ -409,8 +435,9 @@ export default function UserTracking() {
                   </thead>
                   <tbody>
                     {(() => {
-                      // Gather all known pages from traffic, entries, exits, bounces
+                      // Include all known site pages + any pages with recorded data
                       const allPaths = new Set([
+                        ...Object.keys(ALL_SITE_PAGES),
                         ...Object.keys(analytics.pageTraffic),
                         ...Object.keys(analytics.entryCounts),
                         ...Object.keys(analytics.exitData),
