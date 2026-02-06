@@ -1,259 +1,240 @@
 
-# Comprehensive End-to-End Testing Plan
+# Voyance Credit System Overhaul - Implementation Plan
 
 ## Overview
 
-This plan creates **Playwright E2E tests** that verify critical user flows work correctly - from signup through trip creation to itinerary generation. These tests will catch breaking issues before they reach users.
+Migrate from flat per-action credit costs (150/day unlock) to a dynamic formula-based model where trip cost = `roundUpTo10((Days x 90 + MultiCityFee) x TierMultiplier) + AddOns`. This touches pricing config, edge functions, database triggers, Stripe products, and multiple UI components.
+
+## What's Changing
+
+### Credit Costs (Old vs New)
+
+| Action | Old | New |
+|--------|-----|-----|
+| Trip generation | 150/day (UNLOCK_DAY) | Formula: (Days x 90 + MultiCityFee) x Multiplier |
+| Activity swap | 10 | 15 |
+| Day regeneration | 20 | 90 |
+| Hotel search | N/A | 40/city (new) |
+| Restaurant rec | 15 | Removed |
+| AI message | 10 | Removed |
+| PDF export | 0 | 0 (no change) |
+
+### Package Changes
+
+| Pack | Old Price | Old Credits | New Price | New Credits |
+|------|-----------|-------------|-----------|-------------|
+| Boost | $8.99 | 80 | $8.99 | 100 |
+| Starter | $15.99 | 200 | $15.99 | 200 (no change) |
+| Weekend | $29.99 | 500 | $29.99 | 500 (no change) |
+| Explorer | $59.99 | 1,200 | $65.99 | 1,200 |
+| Adventurer | $99.99 | 2,500 | $99.99 | 2,500 (no change) |
+
+### Signup Bonus
+
+| | Old | New |
+|--|-----|-----|
+| Signup bonus | 500 credits | 150 credits |
+| Expiration | 6 months | 2 months |
 
 ---
 
-## Test Coverage Matrix
+## Preserved Sections (User Request)
 
-| Flow | Priority | Risk Level | Test Count |
-|------|----------|------------|------------|
-| Authentication | Critical | High | 12 tests |
-| Quiz & Onboarding | Critical | High | 10 tests |
-| Trip Planning | Critical | High | 15 tests |
-| Itinerary Generation | High | High | 8 tests |
-| Edge Functions | High | Medium | 10 tests |
-| Navigation & Routing | Medium | Medium | 8 tests |
-| Profile Management | Medium | Low | 6 tests |
-
-**Total: 69 E2E tests**
+The following sections of the current Pricing page will be **kept as-is** (with minor content updates):
+- "Everything included with credits" (12-feature grid with icons and descriptions)
+- "Every day includes" (6-item whatsInADay grid)
+- Pack description cards with breakdown options and examples
+- Sample day preview (Tokyo)
+- Guarantee section
+- Bottom CTA
 
 ---
 
-## Test Suites to Create
+## Implementation Phases (Ordered to Avoid Breakage)
 
-### 1. Authentication Suite (`e2e/auth.spec.ts`)
+### Phase 1: Create New Stripe Prices
 
-Tests the complete authentication flow to ensure users can access the app:
+Before any code changes, create two new Stripe prices:
+1. **Boost**: $8.99 for 100 credits (replaces 80-credit Boost)
+2. **Explorer**: $65.99 for 1,200 credits (replaces $59.99 Explorer)
 
-- Sign up with valid email/password → redirects to quiz
-- Sign up form validates required fields (first name, last name, email, password)
-- Sign up shows password strength indicator
-- Sign up fails gracefully with invalid email format
-- Sign up fails gracefully with weak password (< 8 chars)
-- Sign in with valid credentials → redirects to profile
-- Sign in fails with invalid credentials → shows error message
-- Sign in preserves redirect destination (e.g., `/start` → signin → `/start`)
-- Forgot password page loads and accepts email
-- Sign out clears session and redirects to home
-- Protected routes redirect to signin when not authenticated
-- Social login buttons (Google) are present and functional
+Record the new Price IDs for use in Phase 2.
 
-### 2. Quiz Flow Suite (`e2e/quiz.spec.ts`)
+### Phase 2: Shared Logic and Config
 
-Tests the Travel DNA quiz that personalizes itineraries:
+**New file: `src/lib/tripCostCalculator.ts`**
+- `calculateComplexity(dna, tripParams)` -- returns tier, multiplier, factors array
+- `calculateMultiCityFee(cityCount)` -- returns 0/60/120/180
+- `calculateTripCredits(days, cities, dna, tripParams, includeHotels)` -- returns full estimate breakdown
+- `getRecommendedPackForEstimate(creditsNeeded, currentBalance)` -- suggests best pack
+- `roundUpTo10(n)` -- rounding helper
+- Pure functions, no side effects, importable by both frontend and referenced conceptually by edge functions
 
-- Quiz intro screen loads with "Begin Discovery" button
-- Quiz intro shows credit bonus nudge for new users
-- Quiz step 1 renders questions with selectable options
-- Multi-select questions allow multiple answers
-- Single-select questions replace previous answer
-- Progress bar updates as user advances
-- Navigation works: back button, step dots
-- Quiz completion triggers archetype calculation
-- Quiz completion shows personalized result screen
-- Skip quiz option exists and warns about consequences
+**Update: `src/config/pricing.ts`**
+- Replace `CREDIT_COSTS` object: remove `UNLOCK_DAY`, `RESTAURANT_REC`, `AI_MESSAGE`; add `TRIP_GENERATION` (variable), `HOTEL_SEARCH` (40), update `SWAP_ACTIVITY` (15), `REGENERATE_DAY` (90)
+- Add constants: `BASE_RATE_PER_DAY = 90`, `MULTI_CITY_FEES = {1: 0, 2: 60, 3: 120, 4: 180}`, `COMPLEXITY_TIERS`
+- Update `STRIPE_PRODUCTS.CREDITS_80` to 100 credits with new Price ID
+- Update `STRIPE_PRODUCTS.CREDITS_1200` to $65.99 with new Price ID
+- Update `FREE_TIER.signupBonus` from 500 to 150; `freeExpirationMonths` stays at 2
+- Update `CREDIT_PACKS` and `BOOST_PACK` arrays accordingly
+- Rewrite `TRIP_COST_EXAMPLES` with formula-based examples (Paris 3-day 270, Tokyo 5-day 450, etc.)
 
-### 3. Onboard Conversation Suite (`e2e/onboard-conversation.spec.ts`)
+### Phase 3: Database Changes
 
-Tests the alternative "Just Tell Us" onboarding path:
-
-- Intro screen loads with story input prompt
-- User can type travel story and submit
-- Loading state shows during AI analysis
-- Follow-up question appears if confidence is low
-- Result screen shows detected archetype
-- Confirmation saves to database
-- Error states are handled gracefully
-- Race condition guard prevents duplicate saves
-
-### 4. Trip Planning Suite (`e2e/trip-planning.spec.ts`)
-
-Tests the `/start` trip creation wizard - the most critical flow:
-
-- Step 1: Destination autocomplete loads and accepts input
-- Step 1: Date pickers work and validate (start < end)
-- Step 1: Traveler count selection works
-- Step 1: Trip type chips are selectable
-- Step 1: Budget presets are selectable
-- Step 1: Continue button only enabled when required fields filled
-- Step 2: Flight section renders (manual entry or import)
-- Step 2: Hotel autocomplete works
-- Step 2: "Skip hotel" option works
-- Step 2: First time visiting checkbox works
-- Step 2: Must-do activities textarea accepts input
-- Form submission creates trip in database
-- After creation, redirects to `/trip/{id}?generate=true`
-- Draft limit banner appears when limit reached
-- Error handling shows toast on API failure
-
-### 5. Trip Detail & Itinerary Suite (`e2e/trip-itinerary.spec.ts`)
-
-Tests viewing and generating itineraries:
-
-- Trip detail page loads for valid trip ID
-- Trip header shows destination, dates, traveler count
-- "Generate Itinerary" button triggers generation
-- Generation shows progress indicators
-- Generated itinerary renders day-by-day view
-- Each day shows activities with times
-- Editorial view toggle works
-- AI Assistant chat panel opens and accepts messages
-- Hotel information displays correctly
-- Flight information displays correctly
-
-### 6. Edge Function Health Suite (`e2e/edge-functions.spec.ts`)
-
-Tests that critical edge functions respond correctly:
-
-- `generate-itinerary` accepts valid payload and returns 200
-- `analyze-preferences` uses correct AI Gateway URL
-- `flights` search returns valid response structure
-- `hotels` search returns valid response structure
-- `spend-credits` deducts correctly for authenticated user
-- `create-booking-checkout` creates Stripe session
-- `parse-travel-story` returns archetype analysis
-- `calculate-travel-dna` computes archetype from quiz answers
-- CORS preflight (OPTIONS) returns correct headers
-- Invalid auth token returns 401 (not 500)
-
-### 7. Navigation Guard Suite (`e2e/navigation.spec.ts`)
-
-Tests routing works correctly without loops or dead ends:
-
-- Public pages load without auth: `/`, `/explore`, `/destinations`
-- Protected pages redirect to signin: `/profile`, `/trip/dashboard`
-- 404 page shows for invalid routes
-- Redirect chains work: `/planner` → `/start`
-- Deep links preserve state after login
-- Browser back/forward navigation works
-- Page refresh maintains auth state
-- No console errors on navigation
-
-### 8. Profile Management Suite (`e2e/profile.spec.ts`)
-
-Tests user profile and settings:
-
-- Profile page loads for authenticated user
-- Edit profile form pre-fills current data
-- Profile update saves to database
-- Settings page shows preferences
-- Home airport selection works
-- Travel agent mode toggle works
-
----
-
-## Technical Implementation
-
-### File Structure
+**Migration 1: Create `trip_complexity` table**
+```text
+trip_complexity
+  trip_id UUID PRIMARY KEY (FK -> trips.id)
+  factor_count INTEGER NOT NULL
+  tier TEXT NOT NULL ('standard' | 'custom' | 'highly_curated')
+  multiplier NUMERIC(3,2) NOT NULL
+  factors JSONB NOT NULL
+  base_credits INTEGER NOT NULL
+  multi_city_fee INTEGER NOT NULL
+  total_credits INTEGER NOT NULL
+  created_at TIMESTAMPTZ DEFAULT now()
 ```
-e2e/
-├── auth.spec.ts           # Authentication flows
-├── quiz.spec.ts           # Quiz completion flow
-├── onboard-conversation.spec.ts  # Story-based onboarding
-├── trip-planning.spec.ts  # Trip creation wizard
-├── trip-itinerary.spec.ts # Itinerary viewing/generation
-├── edge-functions.spec.ts # Backend function health
-├── navigation.spec.ts     # Routing guards
-├── profile.spec.ts        # Profile management
-└── fixtures/
-    └── test-user.ts       # Test user credentials helper
-```
+- RLS policy: users can read their own trip complexity via trip ownership
 
-### Test User Strategy
-- Create a dedicated test user during test setup
-- Use unique email per test run to avoid conflicts
-- Clean up test data after each suite
+**Migration 2: Update `handle_new_user()` function**
+- Change signup bonus from 500 to 150 free credits
+- Change expiration from 6 months to 2 months
+- Update ledger note to "Welcome bonus - 150 free credits"
 
-### Key Testing Patterns
+### Phase 4: Backend Edge Functions
 
-**Page Object Pattern**: Encapsulate selectors for maintainability
-```typescript
-// Example: SignUpPage
-class SignUpPage {
-  readonly firstNameInput = page.locator('[data-testid="firstName"]');
-  readonly submitButton = page.locator('button[type="submit"]');
-}
-```
+**Update: `supabase/functions/spend-credits/index.ts`**
+- Replace `CREDIT_COSTS` map:
+  - Remove `unlock_day` (replaced by `trip_generation`)
+  - Add `trip_generation` as variable-cost action (accepts `creditsAmount` in request body, validates server-side)
+  - Add `hotel_search` as variable-cost action (40 x cityCount)
+  - Update `swap_activity` to 15
+  - Update `regenerate_day` to 90
+  - Remove `restaurant_rec` and `ai_message`
+- For variable-cost actions, accept and validate a `creditsAmount` field
+- Store complexity breakdown in ledger metadata
 
-**Wait for Network**: Ensure API calls complete
-```typescript
-await Promise.all([
-  page.waitForResponse(r => r.url().includes('/functions/v1/')),
-  page.click('button[type="submit"]')
-]);
-```
+**Update: `supabase/functions/get-entitlements/index.ts`**
+- Update `CREDIT_COSTS` references used for feature flags (lines ~245-250)
+- Replace `build_full_trip` / `build_day` with new trip-generation logic
 
-**Visual Assertions**: Screenshot comparison for critical UI
-```typescript
-await expect(page).toHaveScreenshot('quiz-result.png');
-```
+### Phase 5: Frontend Hooks
 
----
+**Update: `src/hooks/useSpendCredits.ts`**
+- Update `ACTION_MAP`: remove `UNLOCK_DAY`, add `TRIP_GENERATION`, `HOTEL_SEARCH`
+- Support passing `creditsAmount` in request body for variable-cost actions
 
-## Critical Flows Verified
+**Update: `src/hooks/useFreeTierLimits.ts`**
+- Remove `canUnlockDay` and `daysAffordable` (no longer flat per-day)
+- Remove `canGetRestaurantRec` and `canSendAiMessage`
+- Update `canSwapActivity` threshold to 15, `canRegenerateDay` to 90
+- Add `canAffordTrip(estimate: number)` or keep generic `needsCredits` based on minimum action cost
 
-1. **New User Journey**: Home → Sign Up → Quiz → Start Trip → Generate Itinerary
-2. **Returning User Journey**: Sign In → Dashboard → View Trip → Modify
-3. **Story Onboarding**: Sign Up → "Just Tell Us" → Story Analysis → Profile
-4. **Trip Creation**: Start → Destination → Dates → Budget → Create → Generate
+**Update: `src/hooks/useDraftLimitCheck.ts`**
+- Remove all `CREDIT_COSTS.UNLOCK_DAY` references
+- Replace with estimate-aware messaging (e.g., "Your trip costs X credits")
 
----
+**New: `src/hooks/useTripEstimate.ts`**
+- Takes trip params (days, cities, DNA profile) and returns full credit estimate
+- Uses `calculateTripCredits` from shared calculator
+- Provides `canAfford`, `creditsNeeded`, `recommendedPack`
 
-## Test Data Fixtures
+### Phase 6: Frontend UI Components
 
-```typescript
-// e2e/fixtures/test-user.ts
-export const TEST_USER = {
-  email: `test-${Date.now()}@voyance-e2e.test`,
-  password: 'TestPassword123!',
-  firstName: 'E2E',
-  lastName: 'Tester'
-};
+**Update: `src/pages/Pricing.tsx`**
+- Update `tiers` array: Boost credits 80 -> 100, Explorer price $55 -> $65.99
+- Update tier descriptions to use formula language ("~2 days" instead of "1 full day")
+- Add "What Do Credits Cover?" section: base rate (90/day), multi-city fees, complexity tiers, add-ons table
+- Add "Example Trip Costs" table (Paris 3-day 270, Tokyo->Kyoto 7-day 690, etc.)
+- Add complexity tier explainer with "Accessibility is always free" messaging
+- Update FAQs to reflect formula-based pricing
+- **Keep**: "Everything included with credits" grid, "Every day includes" grid, sample day preview, guarantee, bottom CTA
 
-export const TEST_TRIP = {
-  destination: 'Paris',
-  startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days out
-  endDate: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000),   // 7 day trip
-  travelers: 2,
-  tripType: 'romantic'
-};
-```
+**Update: `src/components/checkout/UpgradePrompt.tsx`**
+- Remove `unlock_day` context option
+- Add `trip_generation` and `hotel_search` contexts
+- Update `ACTION_LABELS` with new costs (swap 15, regenerate 90, remove restaurant/ai_message)
+- Support dynamic `creditsNeeded` display for variable-cost actions
+- Update Boost display from "80 credits" to "100 credits"
 
----
+**Update: `src/components/common/DraftLimitBanner.tsx`**
+- Remove `CREDIT_COSTS.UNLOCK_DAY` references
+- Base low-credit threshold on minimum useful action (e.g., swap at 15 credits)
+- Update messaging from "unlock a day" to "generate a trip"
 
-## Error Scenarios to Test
+**Update: `src/components/itinerary/EditorialItinerary.tsx`**
+- Swap cost references auto-update from `CREDIT_COSTS.SWAP_ACTIVITY` (now 15)
+- Regenerate cost references auto-update from `CREDIT_COSTS.REGENERATE_DAY` (now 90)
+- These read from the config so they update automatically
 
-| Scenario | Expected Behavior |
-|----------|-------------------|
-| Network timeout | Toast error, retry button |
-| Invalid session | Redirect to signin |
-| Edge function 500 | Error toast, fallback UI |
-| Database constraint violation | User-friendly error message |
-| Rate limit exceeded | "Too many requests" message |
-| Empty search results | "No results" placeholder |
+**Update: `src/components/itinerary/ItineraryAssistant.tsx`**
+- Remove AI message credit check (AI messages no longer cost credits, or remove gating entirely)
 
----
+### Phase 7: Admin/Internal Config
 
-## Execution Strategy
+**Update: `src/config/unitEconomics.ts`**
+- Update `CREDIT_ACTION_MAPPING` with new credit values
+- Update `REVENUE_CONFIG.creditPacks` with new prices
+- Update `freeTier.signupBonus` to 150
 
-1. **CI Integration**: Run on every PR
-2. **Parallel Execution**: Split suites across workers
-3. **Retry Logic**: 2 retries for flaky tests
-4. **Screenshot on Failure**: Auto-capture for debugging
-5. **Video Recording**: Optional for debugging complex flows
+**Update: `src/config/userLifecycleCosts.ts`**
+- Update `CREDIT_TO_COST_MAPPING` with new credit values and actions
+- Add `trip_generation` and `hotel_search` entries
+- Remove `restaurant_rec` and `ai_message`
+
+### Phase 8: Migration for Existing Users
+
+**Database migration**: Grant 150 free credits to all existing users who have 0 balance
+- One-time script via migration SQL
+- Does not affect users who already have purchased credits
 
 ---
 
-## Summary
+## Complete File Impact List
 
-This plan creates **69 E2E tests** across **8 test suites** covering:
-- Complete user journeys from signup to itinerary generation
-- Edge function health verification
-- Navigation and routing guards
-- Error handling and edge cases
+| File | Change |
+|------|--------|
+| `src/config/pricing.ts` | Major rewrite of costs, packages, free tier |
+| `src/lib/tripCostCalculator.ts` | **New file** - shared calculation logic |
+| `src/hooks/useTripEstimate.ts` | **New file** - trip cost estimation hook |
+| `src/hooks/useSpendCredits.ts` | Update action map, add variable-cost support |
+| `src/hooks/useFreeTierLimits.ts` | Remove UNLOCK_DAY, update thresholds |
+| `src/hooks/useDraftLimitCheck.ts` | Remove UNLOCK_DAY references |
+| `src/pages/Pricing.tsx` | Update tiers, add cost table, update FAQs |
+| `src/components/checkout/UpgradePrompt.tsx` | New contexts, updated costs |
+| `src/components/common/DraftLimitBanner.tsx` | Remove UNLOCK_DAY references |
+| `src/components/itinerary/EditorialItinerary.tsx` | Costs auto-update from config |
+| `src/components/itinerary/ItineraryAssistant.tsx` | Remove AI message credit gate |
+| `src/config/unitEconomics.ts` | Update credit action mapping |
+| `src/config/userLifecycleCosts.ts` | Update credit cost mapping |
+| `supabase/functions/spend-credits/index.ts` | Major update - new actions, variable costs |
+| `supabase/functions/get-entitlements/index.ts` | Update feature flag credit checks |
+| DB: `handle_new_user()` | 500 -> 150 signup bonus, 6mo -> 2mo expiry |
+| DB: `trip_complexity` table | New table with RLS |
 
-Tests will run automatically and catch breaking changes before they impact your users.
+---
+
+## Edge Cases Handled
+
+| Scenario | Handling |
+|----------|----------|
+| User has exactly enough credits | Allow, show "0 remaining" |
+| User has 0 credits | Show purchase options only |
+| Mid-generation failure | Refund credits automatically |
+| 21+ day trip | Same formula, no cap |
+| 6+ city trip | Multi-city fee capped at 180 |
+| 10+ complexity factors | Multiplier capped at 1.30x |
+| Existing users with old balance | Keep current balance, no disruption |
+
+## Implementation Order (Critical Path)
+
+1. Create Stripe prices (Boost 100, Explorer $65.99)
+2. Create `src/lib/tripCostCalculator.ts` (safe - new file, no imports yet)
+3. Update `src/config/pricing.ts` (all downstream reads from here)
+4. Database migrations (trip_complexity table + handle_new_user update)
+5. Update `spend-credits` edge function + deploy
+6. Update frontend hooks (useSpendCredits, useFreeTierLimits, useDraftLimitCheck)
+7. Create `useTripEstimate` hook
+8. Update UI components (Pricing page, UpgradePrompt, DraftLimitBanner)
+9. Update admin configs (unitEconomics, userLifecycleCosts)
+10. Test end-to-end: signup flow, trip generation, swaps, regeneration, purchases
