@@ -1097,8 +1097,8 @@ export default function UnitEconomics() {
           ]).map((m, i) => (
             <div key={i} style={{
               background: `linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)`,
-              borderRadius: 16,
-              padding: "22px 24px 18px",
+              borderRadius: 12,
+              padding: "14px 16px 12px",
               border: `1px solid ${m.accent}22`,
               position: "relative",
               overflow: "hidden",
@@ -1109,19 +1109,18 @@ export default function UnitEconomics() {
             onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 24px -4px ${m.accent}15`; }}
             >
               {/* Accent glow */}
-              <div style={{ position: "absolute", top: -30, right: -30, width: 80, height: 80, borderRadius: "50%", background: `${m.accent}08`, filter: "blur(20px)" }} />
-              <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: 3, background: `linear-gradient(90deg, ${m.accent}, ${m.accent}00)` }} />
+               <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: 2, background: `linear-gradient(90deg, ${m.accent}, ${m.accent}00)` }} />
               
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                <span style={{ fontSize: 14 }}>{(m as any).icon}</span>
-                <p style={{ fontSize: 10, color: "#64748B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+                <span style={{ fontSize: 12 }}>{(m as any).icon}</span>
+                <p style={{ fontSize: 9, color: "#64748B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
                   {m.label}
                 </p>
               </div>
-              <p style={{ fontSize: 26, fontWeight: 800, color: m.accent, margin: "0 0 4px", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-0.02em" }}>
+              <p style={{ fontSize: 20, fontWeight: 800, color: m.accent, margin: "0 0 2px", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-0.02em" }}>
                 {m.value}
               </p>
-              <p style={{ fontSize: 10, color: "#94A3B8", margin: 0, lineHeight: 1.4 }}>{m.sub}</p>
+              <p style={{ fontSize: 9, color: "#94A3B8", margin: 0, lineHeight: 1.3 }}>{m.sub}</p>
             </div>
           ))}
         </div>
