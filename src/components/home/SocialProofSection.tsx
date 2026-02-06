@@ -5,11 +5,11 @@ import { Quote, Sparkles, Brain, Clock, MapPin, AlertTriangle, Gem, Users, Trend
 const BETA_TESTIMONIALS = [
   {
     id: 1,
-    quote: "Finally, a travel app that gets that I don't want to rush. Every recommendation felt like me.",
-    name: "Sarah M.",
-    archetype: "Slow Traveler",
-    trip: "Lisbon, 10 days",
-    isReal: true, // Mark as real once verified
+    quote: "We used it for a long weekend in Denver and it nailed every restaurant. Never thought AI could plan a domestic trip this well.",
+    name: "Chris R.",
+    archetype: "Culinary Cartographer",
+    trip: "Denver, 3 days",
+    isReal: true,
   },
   {
     id: 2,
@@ -21,10 +21,10 @@ const BETA_TESTIMONIALS = [
   },
   {
     id: 3,
-    quote: "Shared the itinerary with my boyfriend. Now we're actually going together. The group blend feature is genius.",
+    quote: "Planned a girls' trip to New York in 10 minutes. The group blend feature figured out what all four of us would love.",
     name: "Maria K.",
     archetype: "Social Butterfly",
-    trip: "Barcelona, 4 days",
+    trip: "New York, 4 days",
     isReal: true,
   },
 ];
@@ -96,12 +96,12 @@ export default function SocialProofSection() {
           </div>
           
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-normal text-foreground mb-6 max-w-3xl mx-auto">
-            Built by travelers who were tired of tourist traps
+            Built for every traveler, every trip
           </h2>
           
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            We spent years following generic recommendations and ending up in crowded, overpriced spots. 
-            So we built the tool we wished existed: one that actually understands how you travel.
+            Whether you're exploring Tokyo or your local mountains, we got tired of generic recommendations 
+            that didn't match how we actually travel. So we built the tool we wished existed.
           </p>
         </motion.div>
 

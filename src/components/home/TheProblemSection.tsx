@@ -296,9 +296,9 @@ export default function TheProblemSection() {
 
           {/* Punchy copy - simplified for mobile */}
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground leading-relaxed max-w-2xl mx-auto px-2">
-            You research for <span className="font-semibold text-foreground">HOURS</span>. 
-            <span className="hidden sm:inline"> Half the recommendations aren't for you.</span>
-            <span className="sm:hidden"> Most tips don't fit your style.</span>
+            Whether it's a weekend getaway or a month abroad, you research for <span className="font-semibold text-foreground">HOURS</span>
+            <span className="hidden sm:inline"> and still end up disappointed.</span>
+            <span className="sm:hidden"> and still miss the mark.</span>
           </p>
         </motion.div>
 

@@ -18,11 +18,10 @@ const SAMPLE_ITINERARIES = [
     archetypeCategory: 'RESTORER',
     budgetTier: 'Stretch',
     totalCost: 2890,
-    // Intelligence metrics - computed from real trip analysis
     intelligence: {
-      finds: 3,        // Voyance-discovered gems
-      timingHacks: 2,  // Optimal timing suggestions
-      trapsAvoided: 3, // Tourist traps skipped
+      finds: 3,
+      timingHacks: 2,
+      trapsAvoided: 3,
     },
     highlights: [
       'Morning at Tsukiji Outer Market (before 8am)',
@@ -31,24 +30,45 @@ const SAMPLE_ITINERARIES = [
     ],
   },
   {
-    id: 'paris-culture',
-    destination: 'Paris',
-    country: 'France',
-    duration: '5 days',
-    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
-    archetype: 'Culture Curator',
+    id: 'denver-social',
+    destination: 'Denver',
+    country: 'Colorado',
+    duration: '3 days',
+    image: 'https://images.unsplash.com/photo-1619856699906-09e1f4ef32c8?w=800',
+    archetype: 'Social Butterfly',
+    archetypeCategory: 'CONNECTOR',
+    budgetTier: 'Safe',
+    totalCost: 980,
+    intelligence: {
+      finds: 4,
+      timingHacks: 2,
+      trapsAvoided: 2,
+    },
+    highlights: [
+      'RiNo Art District brewery crawl',
+      'Sunrise hike at Red Rocks (before crowds)',
+      'Live music on South Broadway',
+    ],
+  },
+  {
+    id: 'new-orleans-romantic',
+    destination: 'New Orleans',
+    country: 'Louisiana',
+    duration: '4 days',
+    image: 'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=800',
+    archetype: 'Culinary Cartographer',
     archetypeCategory: 'CURATOR',
-    budgetTier: 'Splurge',
-    totalCost: 4250,
+    budgetTier: 'Stretch',
+    totalCost: 1650,
     intelligence: {
       finds: 5,
       timingHacks: 3,
       trapsAvoided: 4,
     },
     highlights: [
-      'Musée de lOrangerie at golden hour',
-      'Hidden sculpture garden in Le Marais',
-      'Chef table at unmarked bistro',
+      'Private courtyard dinner in the Bywater',
+      'Jazz at Preservation Hall (skip Bourbon St)',
+      'Beignets at Café Du Monde before 7am',
     ],
   },
   {
@@ -95,7 +115,7 @@ const SAMPLE_ITINERARIES = [
   },
 ];
 
-const DESTINATIONS = ['Tokyo', 'Paris', 'Bali', 'Rome'];
+const DESTINATIONS = ['Tokyo', 'Denver', 'New Orleans', 'Bali', 'Rome'];
 
 function getBudgetTierColor(tier: string) {
   switch (tier) {
