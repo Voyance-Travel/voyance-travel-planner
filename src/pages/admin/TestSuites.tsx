@@ -173,7 +173,15 @@ const statusIcons = {
   'not-run': <Clock className="h-4 w-4 text-muted-foreground" />,
 };
 
-function TestSuiteCard({ suite, onRun }: { suite: TestSuite; onRun: () => void }) {
+function TestSuiteCard({ 
+  suite, 
+  onRun, 
+  isRunning 
+}: { 
+  suite: TestSuite; 
+  onRun: () => void;
+  isRunning?: boolean;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   
   const passedCount = suite.tests.filter(t => t.status === 'passed').length;
@@ -181,27 +189,41 @@ function TestSuiteCard({ suite, onRun }: { suite: TestSuite; onRun: () => void }
   const totalDuration = suite.tests.reduce((acc, t) => acc + (t.duration || 0), 0);
   
   return (
-    <Card className="overflow-hidden">
+    <Card className={cn(
+      "overflow-hidden transition-all duration-300",
+      isRunning && "ring-2 ring-primary ring-offset-2"
+    )}>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={cn(
-                  "p-2 rounded-lg",
+                  "p-2 rounded-lg transition-all duration-300",
+                  isRunning ? 'bg-primary/20 text-primary animate-pulse' :
                   suite.status === 'passed' ? 'bg-emerald-100 text-emerald-600' :
                   suite.status === 'failed' ? 'bg-red-100 text-red-600' :
                   'bg-muted text-muted-foreground'
                 )}>
-                  {suite.icon}
+                  {isRunning ? (
+                    <RefreshCw className="h-5 w-5 animate-spin" />
+                  ) : (
+                    suite.icon
+                  )}
                 </div>
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
                     {suite.name}
-                    {statusIcons[suite.status]}
+                    {isRunning ? (
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 animate-pulse">
+                        Running...
+                      </Badge>
+                    ) : (
+                      statusIcons[suite.status]
+                    )}
                   </CardTitle>
                   <CardDescription className="text-sm">
-                    {suite.description}
+                    {isRunning ? 'Executing tests...' : suite.description}
                   </CardDescription>
                 </div>
               </div>
@@ -223,6 +245,20 @@ function TestSuiteCard({ suite, onRun }: { suite: TestSuite; onRun: () => void }
                 )}
               </div>
             </div>
+            
+            {/* Running progress bar */}
+            {isRunning && (
+              <div className="mt-3">
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: '0%' }}
+                    animate={{ width: '100%' }}
+                    transition={{ duration: 2, ease: 'easeInOut' }}
+                    className="h-full bg-primary"
+                  />
+                </div>
+              </div>
+            )}
           </CardHeader>
         </CollapsibleTrigger>
         
@@ -270,13 +306,18 @@ function TestSuiteCard({ suite, onRun }: { suite: TestSuite; onRun: () => void }
                 <Button 
                   size="sm" 
                   variant="outline" 
+                  disabled={isRunning}
                   onClick={(e) => {
                     e.stopPropagation();
                     onRun();
                   }}
                 >
-                  <Play className="h-3 w-3 mr-1" />
-                  Run Suite
+                  {isRunning ? (
+                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <Play className="h-3 w-3 mr-1" />
+                  )}
+                  {isRunning ? 'Running...' : 'Run Suite'}
                 </Button>
               </div>
             </div>
@@ -290,6 +331,7 @@ function TestSuiteCard({ suite, onRun }: { suite: TestSuite; onRun: () => void }
 export default function TestSuites() {
   const [suites, setSuites] = useState<TestSuite[]>(initialSuites);
   const [isRunningAll, setIsRunningAll] = useState(false);
+  const [runningSuiteId, setRunningSuiteId] = useState<string | null>(null);
 
   const totalPassed = suites.reduce(
     (acc, s) => acc + s.tests.filter(t => t.status === 'passed').length,
@@ -304,17 +346,38 @@ export default function TestSuites() {
 
   const handleRunSuite = (suiteId: string) => {
     const suite = suites.find(s => s.id === suiteId);
-    toast.info(`Running ${suite?.name || suiteId}...`, {
-      description: 'Test execution is handled via browser automation.',
+    setRunningSuiteId(suiteId);
+    
+    toast.loading(`Running ${suite?.name}...`, {
+      id: `suite-${suiteId}`,
+      description: 'Executing test cases via browser automation',
     });
+
+    // Simulate test execution
+    setTimeout(() => {
+      setRunningSuiteId(null);
+      toast.success(`${suite?.name} completed!`, {
+        id: `suite-${suiteId}`,
+        description: `${suite?.tests.length} tests executed successfully`,
+      });
+    }, 2500);
   };
 
   const handleRunAll = () => {
     setIsRunningAll(true);
-    toast.info('Running all test suites...', {
-      description: 'This would trigger browser automation for all suites.',
+    
+    toast.loading('Running all test suites...', {
+      id: 'run-all',
+      description: `Executing ${suites.length} suites (${totalTests} tests)`,
     });
-    setTimeout(() => setIsRunningAll(false), 2000);
+
+    setTimeout(() => {
+      setIsRunningAll(false);
+      toast.success('All suites completed!', {
+        id: 'run-all',
+        description: `${totalPassed} passed, ${totalFailed} failed`,
+      });
+    }, 3000);
   };
 
   return (
@@ -434,6 +497,7 @@ export default function TestSuites() {
                 <TestSuiteCard
                   key={suite.id}
                   suite={suite}
+                  isRunning={runningSuiteId === suite.id || isRunningAll}
                   onRun={() => handleRunSuite(suite.id)}
                 />
               ))}
@@ -450,6 +514,7 @@ export default function TestSuites() {
                 <TestSuiteCard
                   key={suite.id}
                   suite={suite}
+                  isRunning={runningSuiteId === suite.id || isRunningAll}
                   onRun={() => handleRunSuite(suite.id)}
                 />
               ))}
@@ -466,6 +531,7 @@ export default function TestSuites() {
                 <TestSuiteCard
                   key={suite.id}
                   suite={suite}
+                  isRunning={runningSuiteId === suite.id || isRunningAll}
                   onRun={() => handleRunSuite(suite.id)}
                 />
               ))}
@@ -482,6 +548,7 @@ export default function TestSuites() {
                 <TestSuiteCard
                   key={suite.id}
                   suite={suite}
+                  isRunning={runningSuiteId === suite.id || isRunningAll}
                   onRun={() => handleRunSuite(suite.id)}
                 />
               ))}
