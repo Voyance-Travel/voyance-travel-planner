@@ -173,7 +173,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   // Parallel fetch all data sources
   const [costResult, ledgerResult, balanceResult, tripResult, profileResult] = await Promise.all([
     supabase.from('trip_cost_tracking').select('*').order('created_at', { ascending: true }),
-    supabase.from('credit_ledger').select('credits_delta, action_type, transaction_type, is_free_credit, amount_cents, created_at, notes'),
+    supabase.from('credit_ledger').select('user_id, credits_delta, action_type, transaction_type, is_free_credit, amount_cents, created_at, notes'),
     supabase.from('credit_balances').select('user_id, purchased_credits, free_credits'),
     supabase.from('trips').select('id, user_id, created_at', { count: 'exact' }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
@@ -288,12 +288,19 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
 
   // ---- USER METRICS ----
   const uniqueApiUsers = new Set(costEntries.filter(e => e.user_id).map(e => e.user_id));
-  let outstandingPurchased = 0, outstandingFree = 0, paidUsers = 0;
+  let outstandingPurchased = 0, outstandingFree = 0;
+  
+  // Count paid users from actual purchase transactions in ledger (not system-granted credits)
+  const paidUsers = new Set(
+    ledgerEntries
+      .filter(e => e.transaction_type === 'purchase' && (e.amount_cents || 0) > 0)
+      .map(e => (e as any).user_id)
+      .filter(Boolean)
+  ).size;
   
   for (const b of balances) {
     outstandingPurchased += b.purchased_credits || 0;
     outstandingFree += b.free_credits || 0;
-    if ((b.purchased_credits || 0) > 0) paidUsers++;
   }
 
   // ---- DAILY TIME SERIES ----
