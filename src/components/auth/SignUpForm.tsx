@@ -75,6 +75,7 @@ export function SignUpForm() {
     
     try {
       await signup(email, password, { firstName: firstName.trim(), lastName: lastName.trim() });
+      // Return path is preserved in sessionStorage for post-quiz redirect
       navigate(ROUTES.QUIZ);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';

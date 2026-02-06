@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { consumeReturnPath } from '@/utils/authReturnPath';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, ArrowRight, Check, Compass, Plane,
@@ -581,7 +582,7 @@ export default function Quiz() {
   };
 
   const handleComplete = () => {
-    navigate(ROUTES.PROFILE.VIEW);
+    navigate(consumeReturnPath(ROUTES.PROFILE.VIEW));
   };
 
   return (

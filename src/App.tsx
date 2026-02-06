@@ -14,6 +14,7 @@ import { MonthlyCreditsChecker } from '@/components/common/MonthlyCreditsChecker
 import { WelcomeBonusManager } from '@/components/common/WelcomeBonusManager';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
+import { OAuthReturnHandler } from '@/components/auth/OAuthReturnHandler';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -276,6 +277,7 @@ const App = () => (
               <JourneyTracker />
               <MonthlyCreditsChecker />
               <WelcomeBonusManager />
+              <OAuthReturnHandler />
               <ErrorBoundary>
                 <AnimatedRoutes />
               </ErrorBoundary>

@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { saveReturnPath } from '@/utils/authReturnPath';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -30,7 +31,9 @@ export default function ProtectedRoute({
 
   // Redirect to sign in if not authenticated
   if (!isAuthenticated) {
-    return <Navigate to={ROUTES.SIGNIN} state={{ from: location }} replace />;
+    const fullPath = location.pathname + location.search + location.hash;
+    saveReturnPath(fullPath);
+    return <Navigate to={ROUTES.SIGNIN} state={{ from: fullPath }} replace />;
   }
 
   // Redirect to quiz if required and not completed
