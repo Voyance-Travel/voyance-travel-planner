@@ -131,19 +131,19 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 const FREE_USER_ECONOMICS = {
   // Credit grants
   monthlyCredits: 150,
-  maxBonusCredits: 100,
-  maxFirstMonthCredits: 250,
+  maxBonusCredits: 200, // referral bonus
+  maxFirstMonthCredits: 350, // 150 monthly + 200 referral
   creditExpiry: "2 months",
   
-  // Cost model — two tiers based on actual production data
+  // Cost model — based on corrected credit costs (90cr/day = $0.018/day)
   costs: {
     preview: 0.03,              // Free preview: structure + anchor names + proof evening (~30% of full)
     fullTrip: 0.091,            // Full enriched trip: actual observed from 567 entries / 41 trips
     lightBrowse: 0.02,          // Explore + quiz, no trip gen
   },
   
-  // Blended free user cost = preview cost (all free users get a preview)
-  blendedCostToUs: 0.03,
+  // Free user: 150cr → 1 day (90cr) + 4 swaps (60cr) = $0.018 + 4×$0.009 = $0.054
+  blendedCostToUs: 0.054,
   
   // Model name for display
   modelName: "Preview First",
@@ -183,10 +183,8 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 };
 
 // Credit pack tiers with USAGE-BASED COST MODELING
-// Uses the decomposed cost model: $0.163 base + $0.10/day
-// NOTE: Boost ($8.99/100 credits) replaces Top-Up ($5/50 credits)
-// Updated pricing: Boost $8.99, Single $15.99, Weekend $29.99, Explorer $65.99, Adventurer $99.99
-// Credit costs: Unlock Day 150, Swap 10, Regenerate 20, Restaurant 15, AI Message 10
+// Action costs: Unlock/Regen Day = 90cr/$0.018, Swap = 15cr/$0.009, Restaurant = 15cr/$0.015, AI = 10cr/$0.005, Hotel = 40cr/$0.020
+// Cost derivations from production data: $0.091 total ÷ 5 days = $0.018/day
 const CREDIT_TIERS = [
   { 
     key: "boost", 
@@ -195,11 +193,11 @@ const CREDIT_TIERS = [
     credits: 100, 
     color: "#94A3B8", 
     description: "Quick boost for swaps & extras",
-    // 100 credits / 10 per action = ~10 actions max (swaps + AI messages)
-    typicalUsage: { daysUnlocked: 0, swaps: 5, regenerates: 0, restaurants: 0, aiMessages: 5 },
-    // Cost: 5 swaps × $0.0125 + 5 msgs × $0.0125 = $0.125
-    estimatedCostToUs: 0.125,
-    notes: "Cannot unlock days - 100 credits insufficient (need 150)",
+    // 1 day = 90cr, leaving 10cr → 1 AI message (10cr)
+    typicalUsage: { daysUnlocked: 1, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 1 },
+    // Cost: 1×$0.018 + 1×$0.005 = $0.023
+    estimatedCostToUs: 0.023,
+    notes: "1 day + 1 AI message (10cr leftover)",
   },
   { 
     key: "single", 
@@ -207,25 +205,24 @@ const CREDIT_TIERS = [
     price: 15.99, 
     credits: 200, 
     color: "#38BDF8", 
-    description: "One complete day",
-    // 1 day = 150 credits, leaving 50 for extras
-    // 50 credits = 5 swaps OR 2 regens + 1 msg
-    typicalUsage: { daysUnlocked: 1, swaps: 2, regenerates: 1, restaurants: 0, aiMessages: 1 },
-    // Cost: $0.163 base + 1×$0.100/day + 2 swaps×$0.0125 + 1 regen×$0.05 + 1 msg×$0.0125 = $0.351
-    estimatedCostToUs: 0.351,
-    notes: "1 new trip with 1 day",
+    description: "~2 days of itinerary",
+    // 2 days = 180cr, leaving 20cr → 1 swap (15cr) + 5cr leftover
+    typicalUsage: { daysUnlocked: 2, swaps: 1, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 2×$0.018 + 1×$0.009 = $0.045
+    estimatedCostToUs: 0.045,
+    notes: "2 days + 1 swap",
   },
   { 
     key: "weekend", 
     label: "Weekend", 
     price: 29.99, 
     credits: 500, 
-    description: "3-day trip",
-    // 3 days = 450 credits, leaving 50 for extras
-    typicalUsage: { daysUnlocked: 3, swaps: 2, regenerates: 1, restaurants: 0, aiMessages: 1 },
-    // Cost: $0.163 base + 3×$0.100/day + 2 swaps×$0.0125 + 1 regen×$0.05 + 1 msg×$0.0125 = $0.551
-    estimatedCostToUs: 0.551,
-    notes: "1 new trip with 3 days",
+    description: "3-5 day trip",
+    // 5 days = 450cr, leaving 50cr → 2 swaps (30cr) + 1 restaurant (15cr) + 5cr leftover
+    typicalUsage: { daysUnlocked: 5, swaps: 2, regenerates: 0, restaurants: 1, aiMessages: 0 },
+    // Cost: 5×$0.018 + 2×$0.009 + 1×$0.015 = $0.123
+    estimatedCostToUs: 0.123,
+    notes: "5 days + 2 swaps + 1 restaurant rec",
   },
   { 
     key: "explorer", 
@@ -233,13 +230,12 @@ const CREDIT_TIERS = [
     price: 65.99, 
     credits: 1200, 
     color: "#34D399", 
-    description: "Multi-day adventures",
-    // 8 days = 1200 credits, no extras remaining
-    // 8 × 150 = 1200 credits exactly
-    typicalUsage: { daysUnlocked: 8, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Cost: 2 × $0.163 base + 8 × $0.100/day = $1.126
-    estimatedCostToUs: 1.126,
-    notes: "8 days exactly (1200 credits)",
+    description: "Week+ trip or multi-trip",
+    // 13 days = 1170cr, leaving 30cr → 2 swaps (30cr)
+    typicalUsage: { daysUnlocked: 13, swaps: 2, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 13×$0.018 + 2×$0.009 = $0.252
+    estimatedCostToUs: 0.252,
+    notes: "13 days + 2 swaps",
   },
   { 
     key: "adventurer", 
@@ -247,13 +243,12 @@ const CREDIT_TIERS = [
     price: 99.99, 
     credits: 2500, 
     color: "#F59E0B", 
-    description: "Frequent travelers",
-    // 16 days = 2400 credits, leaving 100 for extras
-    // 100 credits = 10 swaps OR 5 regens OR mix
-    typicalUsage: { daysUnlocked: 16, swaps: 5, regenerates: 2, restaurants: 0, aiMessages: 1 },
-    // Cost: 4×$0.163 base + 16×$0.100/day + 5 swaps×$0.0125 + 2 regens×$0.05 + 1 msg×$0.0125 = $2.427
-    estimatedCostToUs: 2.427,
-    notes: "16 days + 100 credits extras",
+    description: "Multiple vacations",
+    // 27 days = 2430cr, leaving 70cr → 4 swaps (60cr) + 1 AI msg (10cr)
+    typicalUsage: { daysUnlocked: 27, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 1 },
+    // Cost: 27×$0.018 + 4×$0.009 + 1×$0.005 = $0.527
+    estimatedCostToUs: 0.527,
+    notes: "27 days + 4 swaps + 1 AI message",
   },
 ];
 
@@ -2058,7 +2053,7 @@ export default function UnitEconomics() {
                     1
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    0
+                    4
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     0
@@ -2088,16 +2083,16 @@ export default function UnitEconomics() {
                     {FREE_USER_ECONOMICS.maxFirstMonthCredits}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    1
+                    3
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    ~10
+                    5
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    1
+                    0
                   </td>
                   <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    ${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)}
+                    $0.10
                   </td>
                   <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     -100%
