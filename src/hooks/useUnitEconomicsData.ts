@@ -36,6 +36,21 @@ export interface TierRevenue {
   totalCredits: number;
 }
 
+export interface UserPurchase {
+  userId: string;
+  displayName?: string;
+  email?: string;
+  purchases: Array<{
+    tier: string;
+    credits: number;
+    revenue: number;
+    date: string;
+  }>;
+  totalRevenue: number;
+  totalCredits: number;
+  purchaseCount: number;
+}
+
 export interface CostCategory {
   category: string;
   label: string;
@@ -81,6 +96,9 @@ export interface UnitEconomicsData {
     
     // Per-tier breakdown
     tiers: TierRevenue[];
+    
+    // Per-user purchase drilldown
+    userPurchases: UserPurchase[];
     
     // Spending patterns
     spendByAction: Record<string, { count: number; credits: number }>;
@@ -171,12 +189,13 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   if (!roles || roles.length === 0) return null;
 
   // Parallel fetch all data sources
-  const [costResult, ledgerResult, balanceResult, tripResult, profileResult] = await Promise.all([
+  const [costResult, ledgerResult, balanceResult, tripResult, profileResult, profileNamesResult] = await Promise.all([
     supabase.from('trip_cost_tracking').select('*').order('created_at', { ascending: true }),
     supabase.from('credit_ledger').select('user_id, credits_delta, action_type, transaction_type, is_free_credit, amount_cents, created_at, notes'),
     supabase.from('credit_balances').select('user_id, purchased_credits, free_credits'),
     supabase.from('trips').select('id, user_id, created_at', { count: 'exact' }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    supabase.from('profiles').select('id, display_name'),
   ]);
 
   const warnings: string[] = [];
@@ -286,6 +305,40 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
     warnings.push('No purchase transactions in credit ledger — revenue data is not yet available');
   }
 
+  // Build per-user purchase drilldown
+  const profileNameMap = new Map<string, string>();
+  for (const p of profileNamesResult.data || []) {
+    profileNameMap.set(p.id, p.display_name || 'Unknown');
+  }
+  
+  const userPurchaseMap: Record<string, UserPurchase> = {};
+  for (const entry of ledgerEntries) {
+    if ((entry.transaction_type === 'purchase' || (entry.transaction_type === 'credit' && entry.amount_cents && entry.amount_cents > 0)) && entry.user_id) {
+      if (!userPurchaseMap[entry.user_id]) {
+        userPurchaseMap[entry.user_id] = {
+          userId: entry.user_id,
+          displayName: profileNameMap.get(entry.user_id) || 'Unknown',
+          purchases: [],
+          totalRevenue: 0,
+          totalCredits: 0,
+          purchaseCount: 0,
+        };
+      }
+      const up = userPurchaseMap[entry.user_id];
+      const tierKey = PURCHASE_TIER_MAP[entry.action_type || ''] || 'unknown';
+      up.purchases.push({
+        tier: tierKey,
+        credits: entry.credits_delta || 0,
+        revenue: (entry.amount_cents || 0) / 100,
+        date: entry.created_at,
+      });
+      up.totalRevenue += (entry.amount_cents || 0) / 100;
+      up.totalCredits += entry.credits_delta || 0;
+      up.purchaseCount++;
+    }
+  }
+  const userPurchases = Object.values(userPurchaseMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
   // ---- USER METRICS ----
   const uniqueApiUsers = new Set(costEntries.filter(e => e.user_id).map(e => e.user_id));
   let outstandingPurchased = 0, outstandingFree = 0;
@@ -363,6 +416,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
       totalCreditsSpent,
       purchaseCount,
       tiers: Object.values(tierRevMap),
+      userPurchases,
       spendByAction,
     },
     users: {
