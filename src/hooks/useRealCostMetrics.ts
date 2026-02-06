@@ -118,16 +118,23 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
       return null;
     }
 
-    // Fetch all cost tracking entries
-    const { data: entries, error: fetchError } = await supabase
-      .from('trip_cost_tracking')
-      .select('*')
-      .order('created_at', { ascending: false });
+    // Fetch cost tracking entries and real trip count in parallel
+    const [costResult, tripCountResult] = await Promise.all([
+      supabase
+        .from('trip_cost_tracking')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('trips')
+        .select('id', { count: 'exact', head: true }),
+    ]);
 
-    if (fetchError) {
-      console.error('[useRealCostMetrics] Fetch error:', fetchError.message);
-      throw new Error(`Failed to load cost data: ${fetchError.message}`);
+    if (costResult.error) {
+      console.error('[useRealCostMetrics] Fetch error:', costResult.error.message);
+      throw new Error(`Failed to load cost data: ${costResult.error.message}`);
     }
+
+    const entries = costResult.data;
 
     // Handle empty data gracefully
     if (!entries || entries.length === 0) {
@@ -135,31 +142,28 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
       return null;
     }
 
-    // Get unique trips - but many entries may not have trip_id attached
-    // Estimate trip count from action types that represent trip generation
-    const tripGenerationActions = ['generate_itinerary', 'itinerary_generation', 'full_itinerary', 'day_generation'];
-    const tripRelatedEntries = entries.filter(e => 
-      e.trip_id || tripGenerationActions.some(a => e.action_type?.includes(a))
-    );
-    
+    // Get trip count from cost tracking trip_ids, falling back to trips table
     const uniqueTripIds = new Set(entries.filter(e => e.trip_id).map(e => e.trip_id));
+    const tripsTableCount = tripCountResult.count || 0;
     
-    // Determine data quality
+    // Determine data quality and trip count
     const hasCompleteTripIds = uniqueTripIds.size > 0 && uniqueTripIds.size >= entries.length * 0.5;
     let dataQualityWarning: string | undefined;
-    
-    // If we have trip IDs, use them. Otherwise, estimate from action patterns
     let totalTrips: number;
-    if (uniqueTripIds.size > 0) {
+    
+    if (hasCompleteTripIds) {
       totalTrips = uniqueTripIds.size;
-      if (!hasCompleteTripIds) {
-        dataQualityWarning = 'Some entries missing trip_id - per-trip costs may be approximate';
+    } else if (tripsTableCount > 0) {
+      // Use actual trip count from trips table
+      totalTrips = tripsTableCount;
+      if (uniqueTripIds.size === 0) {
+        dataQualityWarning = `Cost entries lack trip_id attribution — using ${tripsTableCount} trips from database`;
+      } else {
+        dataQualityWarning = `Only ${uniqueTripIds.size}/${entries.length} cost entries have trip_id — per-trip costs approximate`;
       }
     } else {
-      // No trip IDs tracked yet - use entry count to estimate
-      console.log('[useRealCostMetrics] No trip_id data - estimating from entry count');
-      totalTrips = Math.max(1, Math.ceil(entries.length / 8)); // Rough estimate: 8 entries per trip
-      dataQualityWarning = 'No trip_id data available - using estimated trip count';
+      totalTrips = Math.max(1, Math.ceil(entries.length / 8));
+      dataQualityWarning = 'No trip data available — using estimated trip count';
     }
 
     // Count unique users and total interactions
