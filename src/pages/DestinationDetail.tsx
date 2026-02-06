@@ -217,8 +217,8 @@ export default function DestinationDetail() {
   }
 
   const handleStartTrip = () => {
-    // Navigate to the unified start flow with destination pre-filled
-    const destinationParam = encodeURIComponent(destination.city);
+    // Navigate to the unified start flow with destination pre-filled (city + country for search)
+    const destinationParam = encodeURIComponent(`${destination.city}, ${destination.country}`);
     navigate(`/start?destination=${destinationParam}`);
   };
 
