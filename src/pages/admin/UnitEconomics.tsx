@@ -1005,9 +1005,22 @@ export default function UnitEconomics() {
             padding: "20px 24px",
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Monthly Volume</span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#63B3AA", fontFamily: "'JetBrains Mono', monospace" }}>{volume} trips</span>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={volume}
+                  onChange={(e) => {
+                    const v = Math.max(1, Math.min(1000, +e.target.value || 1));
+                    setVolume(v);
+                  }}
+                  style={{ width: 60, fontSize: 16, fontWeight: 700, color: "#63B3AA", fontFamily: "'JetBrains Mono', monospace", background: "rgba(15, 23, 42, 0.5)", border: "1px solid rgba(100,116,139,0.3)", borderRadius: 6, padding: "2px 8px", textAlign: "right", outline: "none" }}
+                />
+                <span style={{ fontSize: 12, color: "#64748B" }}>trips</span>
+              </div>
             </div>
             <input
               type="range"
@@ -1034,9 +1047,22 @@ export default function UnitEconomics() {
             padding: "20px 24px",
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Conversion Rate</span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{conversionRate}%</span>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={conversionRate}
+                  onChange={(e) => {
+                    const v = Math.max(1, Math.min(100, +e.target.value || 1));
+                    setConversionRate(v);
+                  }}
+                  style={{ width: 52, fontSize: 16, fontWeight: 700, color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace", background: "rgba(15, 23, 42, 0.5)", border: "1px solid rgba(100,116,139,0.3)", borderRadius: 6, padding: "2px 8px", textAlign: "right", outline: "none" }}
+                />
+                <span style={{ fontSize: 12, color: "#64748B" }}>%</span>
+              </div>
             </div>
             <input
               type="range"
