@@ -1110,14 +1110,15 @@ export default function UnitEconomics() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 32 }}>
           {(viewMode === 'itinerary' ? (() => {
             const totalMonthlyCost = costs.variable.total + costs.fixed.total;
-            const blendedPerUser = (1 - conversionRate/100) * FREE_USER_ECONOMICS.costs.preview + (conversionRate/100) * costs.variable.perTrip;
-            const breakEven = (FREE_USER_ECONOMICS.costs.preview / (blendedAOV * 0.97) * 100);
+            // Use tier-weighted cost model (Revenue Mix × Tier Usage Pattern) for blended user cost
+            const blendedAllUserCost = (1 - conversionRate/100) * FREE_USER_ECONOMICS.blendedCostToUs + (conversionRate/100) * blendedCostPerUser;
+            const breakEven = (FREE_USER_ECONOMICS.blendedCostToUs / (blendedAOV * 0.97) * 100);
             return [
               { label: "Full Trip Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Observed across ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8", icon: "📍" },
-              { label: "Preview Cost", value: `$${FREE_USER_ECONOMICS.costs.preview.toFixed(3)}`, sub: "Est. 30% of full (pre-launch)", accent: "#A78BFA", icon: "👁" },
-              { label: "Blended / User", value: `$${blendedPerUser.toFixed(3)}`, sub: `Break-even at ${breakEven.toFixed(1)}% conversion`, accent: "#34D399", icon: "⚖" },
+              { label: "Free User Cost", value: `$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}`, sub: `150cr → 1 day + 4 swaps`, accent: "#F87171", icon: "🆓" },
+              { label: "Paid User Cost", value: `$${blendedCostPerUser.toFixed(3)}`, sub: `${REVENUE_MIX_PRESETS[revenueMix].label} mix weighted`, accent: "#A78BFA", icon: "💳" },
+              { label: "Blended / User", value: `$${blendedAllUserCost.toFixed(3)}`, sub: `Break-even at ${breakEven.toFixed(1)}% conversion`, accent: "#34D399", icon: "⚖" },
               { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo at ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
-              { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `Variable + fixed per trip`, accent: "#E2E8F0", icon: "📦" },
               { label: "Monthly Burn", value: `$${totalMonthlyCost.toFixed(0)}`, sub: `Var $${costs.variable.total.toFixed(0)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
             ];
           })() : [
@@ -1886,10 +1887,10 @@ export default function UnitEconomics() {
           
           <div style={{ marginTop: 16, padding: 12, background: "rgba(245, 158, 11, 0.1)", borderRadius: 8, borderLeft: "3px solid #F59E0B" }}>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              <strong style={{ color: "#F59E0B" }}>📋 Preview First Model:</strong> Free users get preview at <strong style={{ color: "#F59E0B" }}>~$0.03</strong> (structure + anchor names + proof evening).
+              <strong style={{ color: "#F59E0B" }}>📋 Credit-Constrained Model:</strong> Free users consume 150cr → 1 day + 4 swaps = <strong style={{ color: "#F59E0B" }}>~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}</strong> API cost.
               Full enriched trip: <strong style={{ color: "#38BDF8" }}>$0.091</strong> (actual observed).
-              Break-even conversion: <strong style={{ color: "#34D399" }}>{(FREE_USER_ECONOMICS.costs.preview / (blendedAOV * 0.97) * 100).toFixed(1)}%</strong>.
-              Blended paid user cost at <strong style={{ color: "#A78BFA" }}>{REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(2)}</strong>.
+              Break-even conversion: <strong style={{ color: "#34D399" }}>{(FREE_USER_ECONOMICS.blendedCostToUs / (blendedAOV * 0.97) * 100).toFixed(1)}%</strong>.
+              Blended paid user cost at <strong style={{ color: "#A78BFA" }}>{REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(3)}</strong>.
             </p>
           </div>
         </div>
