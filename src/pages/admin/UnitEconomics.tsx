@@ -135,20 +135,18 @@ const FREE_USER_ECONOMICS = {
   maxFirstMonthCredits: 250,
   creditExpiry: "2 months",
   
-  // Cost model ("FULL PREVIEW, NO DETAILS")
+  // Cost model — two tiers based on actual production data
   costs: {
+    preview: 0.03,              // Free preview: structure + anchor names + proof evening (~30% of full)
+    fullTrip: 0.091,            // Full enriched trip: actual observed from 567 entries / 41 trips
     lightBrowse: 0.02,          // Explore + quiz, no trip gen
-    fullPreview: 0.12,          // Full itinerary with real venues (gated details)
-    venueValidation: 0.06,      // 1-3 Google Text Searches for existence check
-    dnaQuiz: 0.02,              // DNA calculation
   },
   
-  // Blended cost: 80% generate full preview ($0.12) + 20% light browse ($0.02)
-  // = 0.096 + 0.004 = ~$0.10 per free user
-  blendedCostToUs: 0.10,
+  // Blended free user cost = preview cost (all free users get a preview)
+  blendedCostToUs: 0.03,
   
   // Model name for display
-  modelName: "Full Preview, No Details",
+  modelName: "Preview First",
 };
 
 // Helper function: Calculate variable cost for N days
@@ -1029,11 +1027,11 @@ export default function UnitEconomics() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
           {(viewMode === 'itinerary' ? [
             // Per-Itinerary View: Real observed costs from tracking data
-            { label: "Variable Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Actual avg across ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8" },
-            { label: "Google Places + Photos", value: `$${costs.google.perTrip.toFixed(3)}`, sub: `${VERIFIED_DATA.services.google.callsPerTrip.toFixed(1)} calls/trip · ${costs.google.share.toFixed(0)}% of var`, accent: "#4285F4" },
-            { label: "AI + Perplexity", value: `$${(costs.ai.perTrip + costs.perplexity.perTrip).toFixed(3)}`, sub: `${VERIFIED_DATA.services.lovableAI.callsPerTrip.toFixed(1)} AI + ${VERIFIED_DATA.services.perplexity.callsPerTrip.toFixed(1)} Sonar/trip`, accent: "#A855F7" },
-            { label: "Amadeus", value: `$${costs.amadeus.perTrip.toFixed(3)}`, sub: scenarioConfig.amadeus ? (scenarioConfig.amadeusWithinFree ? "Within free tier" : "Paid tier") : "Not enabled", accent: "#F59E0B" },
-            { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(3)}`, sub: `Var $${costs.variable.perTrip.toFixed(3)} + Fixed $${costs.fixed.perTrip.toFixed(2)}/trip`, accent: "#E2E8F0" },
+            { label: "Full Trip Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Actual observed · ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8" },
+            { label: "Preview Cost", value: `$${FREE_USER_ECONOMICS.costs.preview.toFixed(3)}`, sub: "Est. ~30% of full (pre-launch)", accent: "#A78BFA" },
+            { label: "Blended / User", value: `$${((1 - conversionRate/100) * FREE_USER_ECONOMICS.costs.preview + (conversionRate/100) * costs.variable.perTrip).toFixed(3)}`, sub: `${conversionRate}% conversion · break-even ${(FREE_USER_ECONOMICS.costs.preview / (blendedAOV * 0.97) * 100).toFixed(1)}%`, accent: "#34D399" },
+            { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo ÷ ${volume} trips`, accent: "#F59E0B" },
+            { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `Full $${costs.variable.perTrip.toFixed(3)} + Fixed $${costs.fixed.perTrip.toFixed(2)}`, accent: "#E2E8F0" },
           ] : [
             // Lifecycle View: Focus on blended economics across all users
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171" },
@@ -1834,10 +1832,9 @@ export default function UnitEconomics() {
           
           <div style={{ marginTop: 16, padding: 12, background: "rgba(245, 158, 11, 0.1)", borderRadius: 8, borderLeft: "3px solid #F59E0B" }}>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              <strong style={{ color: "#F59E0B" }}>📋 Full Preview, No Details Model:</strong> Free users see complete itinerary with real venue names, times, and DNA reasoning — but gated logistics.
-              Cost: <strong style={{ color: "#F59E0B" }}>~$0.10/user</strong> (AI generation + light venue validation).
-              <strong style={{ color: "#38BDF8" }}> Boost users</strong> cost ~$0.12 (swaps/AI only). 
-              <strong style={{ color: "#34D399" }}> Explorer users</strong> cost ~$1.13 (8 days across 2 trips). 
+              <strong style={{ color: "#F59E0B" }}>📋 Preview First Model:</strong> Free users get preview at <strong style={{ color: "#F59E0B" }}>~$0.03</strong> (structure + anchor names + proof evening).
+              Full enriched trip: <strong style={{ color: "#38BDF8" }}>$0.091</strong> (actual observed).
+              Break-even conversion: <strong style={{ color: "#34D399" }}>{(FREE_USER_ECONOMICS.costs.preview / (blendedAOV * 0.97) * 100).toFixed(1)}%</strong>.
               Blended paid user cost at <strong style={{ color: "#A78BFA" }}>{REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(2)}</strong>.
             </p>
           </div>
