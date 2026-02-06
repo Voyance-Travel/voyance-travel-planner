@@ -784,6 +784,7 @@ export default function TripDetail() {
               tripType={trip.trip_type || undefined}
               budgetTier={trip.budget_tier || undefined}
               userId={user?.id}
+              isMultiCity={!!(trip as any).is_multi_city}
               autoStart={autoStartGeneration}
               onComplete={handleGenerationComplete}
               onCancel={() => setShowGenerator(false)}

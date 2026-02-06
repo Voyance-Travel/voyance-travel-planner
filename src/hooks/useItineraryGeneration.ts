@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getTripCities } from '@/services/tripCitiesService';
 
 // =============================================================================
 // TYPES
@@ -102,6 +103,7 @@ interface TripDetails {
   tripType?: string;
   budgetTier?: string;
   userId?: string;
+  isMultiCity?: boolean;
 }
 
 // =============================================================================
@@ -142,13 +144,34 @@ export function useItineraryGeneration() {
       // Update progress: preparing
       setState(prev => ({ ...prev, progress: 20, status: 'generating' }));
 
+      // Fetch multi-city data if applicable
+      let citiesPayload: any[] | undefined;
+      if (trip.isMultiCity) {
+        try {
+          const cities = await getTripCities(trip.tripId);
+          if (cities.length > 0) {
+            citiesPayload = cities.map(c => ({
+              cityName: c.city_name,
+              country: c.country,
+              nights: c.nights || c.days_total || 1,
+              order: c.city_order,
+              transitionDayMode: (c as any).transition_day_mode || 'half_and_half',
+              transportType: c.transport_type,
+            }));
+          }
+        } catch (e) {
+          console.warn('[useItineraryGeneration] Could not load trip cities:', e);
+        }
+      }
+
       // Call the new generate-full action
-      // Pass trip data directly for localStorage/demo mode trips that aren't in DB
       const { data, error } = await supabase.functions.invoke('generate-itinerary', {
         body: {
           action: 'generate-full',
           tripId: trip.tripId,
           userId: trip.userId,
+          isMultiCity: trip.isMultiCity || false,
+          cities: citiesPayload,
           // Include trip data as fallback for when trip isn't in database
           tripData: {
             destination: trip.destination,
@@ -239,8 +262,6 @@ export function useItineraryGeneration() {
     const endDate = new Date(trip.endDate);
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    // Starting progressive generation
-
     setState({
       isGenerating: true,
       currentDay: 0,
@@ -251,6 +272,38 @@ export function useItineraryGeneration() {
       error: null,
       status: 'generating',
     });
+
+    // Fetch multi-city data if applicable
+    let dayCityMap: Array<{ cityName: string; country?: string; isTransitionDay: boolean; transitionFrom?: string; transitionTo?: string; transportType?: string }> | null = null;
+    if (trip.isMultiCity) {
+      try {
+        const cities = await getTripCities(trip.tripId);
+        if (cities.length > 0) {
+          // Build day→city mapping
+          const map: typeof dayCityMap = [];
+          for (const city of cities) {
+            const nights = city.nights || city.days_total || 1;
+            for (let n = 0; n < nights; n++) {
+              const isTransition = n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip';
+              const prevCity = city.city_order > 0 ? cities.find(c => c.city_order === city.city_order - 1) : null;
+              map.push({
+                cityName: city.city_name,
+                country: city.country || undefined,
+                isTransitionDay: isTransition,
+                transitionFrom: isTransition ? prevCity?.city_name : undefined,
+                transitionTo: isTransition ? city.city_name : undefined,
+                transportType: isTransition ? (city.transport_type || undefined) : undefined,
+              });
+            }
+          }
+          // Pad/trim
+          while (map.length < totalDays) map.push({ ...map[map.length - 1], isTransitionDay: false });
+          dayCityMap = map.slice(0, totalDays);
+        }
+      } catch (e) {
+        console.warn('[useItineraryGeneration] Could not load trip cities:', e);
+      }
+    }
 
     const generatedDays: GeneratedDay[] = [];
     const previousActivities: string[] = [];
@@ -267,20 +320,27 @@ export function useItineraryGeneration() {
         dayDate.setDate(dayDate.getDate() + dayNum - 1);
         const formattedDate = dayDate.toISOString().split('T')[0];
 
+        const cityInfo = dayCityMap?.[dayNum - 1];
+
         const { data, error } = await supabase.functions.invoke('generate-itinerary', {
           body: {
             action: 'generate-day',
             tripId: trip.tripId,
             dayNumber: dayNum,
             totalDays,
-            destination: trip.destination,
-            destinationCountry: trip.destinationCountry,
+            destination: cityInfo?.cityName || trip.destination,
+            destinationCountry: cityInfo?.country || trip.destinationCountry,
             date: formattedDate,
             travelers: trip.travelers,
             tripType: trip.tripType,
             budgetTier: trip.budgetTier,
             userId: trip.userId,
             previousDayActivities: previousActivities,
+            isMultiCity: trip.isMultiCity || false,
+            isTransitionDay: cityInfo?.isTransitionDay || false,
+            transitionFrom: cityInfo?.transitionFrom,
+            transitionTo: cityInfo?.transitionTo,
+            transitionMode: cityInfo?.transportType,
           },
         });
 
