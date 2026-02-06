@@ -753,338 +753,72 @@ export default function UnitEconomics() {
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 
-      {/* Back Navigation */}
-      <div style={{ maxWidth: 1400, margin: "0 auto 16px" }}>
-        <Link 
-          to="/profile/settings" 
-          style={{ 
-            display: "inline-flex", 
-            alignItems: "center", 
-            gap: 8, 
-            color: "#94A3B8", 
-            textDecoration: "none",
-            fontSize: 14,
-            padding: "8px 12px",
-            borderRadius: 8,
-            transition: "all 0.2s",
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = "rgba(100, 116, 139, 0.2)"}
-          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Back to Settings
-        </Link>
-      </div>
-
       {/* Header */}
-      <div style={{ maxWidth: 1400, margin: "0 auto 40px" }}>
-        <div style={{ 
-          background: "rgba(30, 41, 59, 0.6)",
-          borderRadius: 16,
-          padding: "28px 36px",
-          border: "1px solid rgba(100, 116, 139, 0.2)",
-          backdropFilter: "blur(12px)",
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 20 }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#34D399" }} />
-                <span style={{ fontSize: 13, color: "#94A3B8", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                  Voyance · Verified Production Baseline
-                </span>
-              </div>
-              <h1 style={{ fontSize: 28, fontWeight: 700, margin: "4px 0 0", letterSpacing: "-0.02em" }}>
-                Unit Economics Dashboard
-              </h1>
-              <p style={{ fontSize: 14, color: "#64748B", marginTop: 6 }}>
-                Verified rates: $0.51 Google + $0.06 AI + $0.02 Perplexity = <strong style={{ color: "#38BDF8" }}>$0.59/trip variable</strong> · {VERIFIED_DATA.period}
-              </p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 12, color: "#34D399", fontWeight: 600, marginBottom: 4 }}>
-                ✓ Production Verified
-              </div>
-              <div style={{ fontSize: 11, color: "#64748B" }}>
-                {econData 
-                  ? `$${econData.costs.totalCost.toFixed(2)} spend · ${econData.users.totalUsers} users · ${econData.trips.totalTrips} trips · $${econData.revenue.totalRevenue.toFixed(2)} revenue` 
-                  : hasRealData 
-                    ? `$${realMetrics.totalCost.toFixed(2)} spend · ${realMetrics.uniqueUsers} users · ${realMetrics.totalInteractions} actions` 
-                    : "Based on 61-trip production sample"}
-              </div>
-            </div>
-          </div>
+      <div style={{ maxWidth: 1400, margin: "0 auto 24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <Link 
+            to="/profile" 
+            style={{ fontSize: 12, color: "#64748B", textDecoration: "none" }}
+          >
+            ← Back to Profile
+          </Link>
+          <span style={{ fontSize: 10, color: "#475569" }}>
+            {VERIFIED_DATA.period}
+          </span>
         </div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#F1F5F9", margin: "0 0 16px" }}>
+          Unit Economics
+        </h1>
       </div>
 
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        {/* Loading State */}
-        {metricsLoading && (
+        {/* Status bar */}
+        {(metricsLoading || metricsError || dataQualityWarning || (!hasRealData && !metricsLoading)) && (
           <div style={{ 
-            background: "rgba(56, 189, 248, 0.1)",
-            borderRadius: 12,
-            padding: "16px 24px",
-            border: "1px solid rgba(56, 189, 248, 0.3)",
-            marginBottom: 24,
+            padding: "10px 16px",
+            borderRadius: 8,
+            marginBottom: 16,
+            fontSize: 12,
             display: "flex",
             alignItems: "center",
-            gap: 12,
+            gap: 8,
+            background: metricsError ? "rgba(248, 113, 113, 0.1)" : "rgba(100, 116, 139, 0.1)",
+            border: `1px solid ${metricsError ? "rgba(248, 113, 113, 0.3)" : "rgba(100, 116, 139, 0.2)"}`,
+            color: metricsError ? "#F87171" : "#94A3B8",
           }}>
-            <div style={{ 
-              width: 16, 
-              height: 16, 
-              border: "2px solid #38BDF8",
-              borderTopColor: "transparent",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-            }} />
-            <span style={{ color: "#38BDF8", fontSize: 14 }}>Loading cost tracking data...</span>
-          </div>
-        )}
-        
-        {/* Error State */}
-        {metricsError && (
-          <div style={{ 
-            background: "rgba(248, 113, 113, 0.1)",
-            borderRadius: 12,
-            padding: "16px 24px",
-            border: "1px solid rgba(248, 113, 113, 0.3)",
-            marginBottom: 24,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 18 }}>⚠️</span>
-            <div>
-              <span style={{ color: "#F87171", fontSize: 14, fontWeight: 600 }}>Failed to load cost metrics</span>
-              <p style={{ color: "#94A3B8", fontSize: 12, margin: "4px 0 0" }}>
-                Using fallback data. Check console for details.
-              </p>
-            </div>
-          </div>
-        )}
-        
-        {/* Data Quality Warning */}
-        {dataQualityWarning && !metricsLoading && !metricsError && (
-          <div style={{ 
-            background: "rgba(251, 191, 36, 0.1)",
-            borderRadius: 12,
-            padding: "16px 24px",
-            border: "1px solid rgba(251, 191, 36, 0.3)",
-            marginBottom: 24,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 18 }}>📊</span>
-            <div>
-              <span style={{ color: "#FBBF24", fontSize: 14, fontWeight: 600 }}>Data Quality Notice</span>
-              <p style={{ color: "#94A3B8", fontSize: 12, margin: "4px 0 0" }}>
-                {dataQualityWarning}
-              </p>
-            </div>
-          </div>
-        )}
-        
-        {/* No Data State */}
-        {!hasRealData && !metricsLoading && !metricsError && (
-          <div style={{ 
-            background: "rgba(100, 116, 139, 0.1)",
-            borderRadius: 12,
-            padding: "16px 24px",
-            border: "1px solid rgba(100, 116, 139, 0.3)",
-            marginBottom: 24,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 18 }}>📋</span>
-            <div>
-              <span style={{ color: "#94A3B8", fontSize: 14, fontWeight: 600 }}>Using Fallback Data</span>
-              <p style={{ color: "#64748B", fontSize: 12, margin: "4px 0 0" }}>
-                No cost tracking data available yet. Displaying verified production baseline from 61-trip sample.
-              </p>
-            </div>
+            {metricsLoading && "⏳ Loading..."}
+            {metricsError && "⚠️ Failed to load metrics — using fallback data"}
+            {dataQualityWarning && !metricsLoading && !metricsError && `📊 ${dataQualityWarning}`}
+            {!hasRealData && !metricsLoading && !metricsError && !dataQualityWarning && "📋 Using fallback baseline (61-trip sample)"}
           </div>
         )}
 
-        {/* ============================================== */}
-        {/* REAL-TIME TELEMETRY - Live Data from Database  */}
-        {/* ============================================== */}
+        {/* Live Data Summary */}
         {econData && (
           <div style={{
-            background: "rgba(30, 41, 59, 0.5)",
-            borderRadius: 12,
-            padding: "24px 28px",
-            border: "1px solid rgba(52, 211, 153, 0.3)",
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 12,
             marginBottom: 24,
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 20 }}>📡</span>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#34D399", margin: 0 }}>
-                    Real-Time Telemetry
-                  </h3>
-                  <p style={{ fontSize: 11, color: "#64748B", margin: "4px 0 0" }}>
-                    Live data from database · {econData.dataQuality.costDataDays} days of cost data
-                    {econData.dataQuality.warnings.length > 0 && (
-                      <span style={{ color: "#FBBF24", marginLeft: 8 }}>
-                        ⚠ {econData.dataQuality.warnings.length} data quality note{econData.dataQuality.warnings.length > 1 ? 's' : ''}
-                      </span>
-                    )}
-                  </p>
-                </div>
+            {[
+              { label: "API Spend", value: `$${econData.costs.totalCost.toFixed(2)}`, sub: `${econData.dataQuality.costDataDays}d tracked`, color: "#F87171" },
+              { label: "Revenue", value: econData.revenue.totalRevenue > 0 ? `$${econData.revenue.totalRevenue.toFixed(2)}` : "—", sub: econData.revenue.purchaseCount > 0 ? `${econData.revenue.purchaseCount} purchases` : "No purchases", color: "#34D399" },
+              { label: "Users", value: `${econData.users.totalUsers}`, sub: `${econData.users.paidUsers} paid`, color: "#38BDF8" },
+              { label: "Trips", value: `${econData.trips.totalTrips}`, sub: `${econData.trips.uniqueTripUsers} creators`, color: "#A855F7" },
+              { label: "Credit Liability", value: `${(econData.users.outstandingPurchased + econData.users.outstandingFree).toLocaleString()}`, sub: `${econData.users.outstandingPurchased.toLocaleString()} paid`, color: "#FBBF24" },
+            ].map((kpi, i) => (
+              <div key={i} style={{
+                background: "rgba(30, 41, 59, 0.5)",
+                borderRadius: 8,
+                padding: "12px 16px",
+                borderTop: `2px solid ${kpi.color}`,
+              }}>
+                <p style={{ fontSize: 10, color: "#64748B", marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{kpi.label}</p>
+                <p style={{ fontSize: 20, fontWeight: 700, color: kpi.color, fontFamily: "'JetBrains Mono', monospace", margin: "0 0 2px" }}>{kpi.value}</p>
+                <p style={{ fontSize: 10, color: "#94A3B8", margin: 0 }}>{kpi.sub}</p>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <span style={{ fontSize: 10, padding: "4px 8px", borderRadius: 4, background: econData.dataQuality.hasCostData ? "rgba(52, 211, 153, 0.2)" : "rgba(100, 116, 139, 0.2)", color: econData.dataQuality.hasCostData ? "#34D399" : "#64748B", fontWeight: 600 }}>
-                  {econData.dataQuality.hasCostData ? "✓ Costs" : "✗ Costs"}
-                </span>
-                <span style={{ fontSize: 10, padding: "4px 8px", borderRadius: 4, background: econData.dataQuality.hasRevenueData ? "rgba(52, 211, 153, 0.2)" : "rgba(100, 116, 139, 0.2)", color: econData.dataQuality.hasRevenueData ? "#34D399" : "#64748B", fontWeight: 600 }}>
-                  {econData.dataQuality.hasRevenueData ? "✓ Revenue" : "✗ Revenue"}
-                </span>
-                <span style={{ fontSize: 10, padding: "4px 8px", borderRadius: 4, background: econData.dataQuality.hasTripLinkage ? "rgba(52, 211, 153, 0.2)" : "rgba(100, 116, 139, 0.2)", color: econData.dataQuality.hasTripLinkage ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
-                  {econData.dataQuality.hasTripLinkage ? "✓ Trip IDs" : "⚠ No Trip IDs"}
-                </span>
-              </div>
-            </div>
-
-            {/* 5-column KPI row */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
-              {[
-                { label: "Total API Spend", value: `$${econData.costs.totalCost.toFixed(2)}`, sub: `${econData.costs.periodStart} → ${econData.costs.periodEnd}`, color: "#F87171" },
-                { label: "Revenue", value: econData.revenue.totalRevenue > 0 ? `$${econData.revenue.totalRevenue.toFixed(2)}` : "—", sub: econData.revenue.purchaseCount > 0 ? `${econData.revenue.purchaseCount} purchases` : "No purchases yet", color: "#34D399" },
-                { label: "Users", value: `${econData.users.totalUsers}`, sub: `${econData.users.paidUsers} paid · ${econData.users.activeApiUsers} active`, color: "#38BDF8" },
-                { label: "Trips", value: `${econData.trips.totalTrips}`, sub: `${econData.trips.uniqueTripUsers} unique users`, color: "#A855F7" },
-                { label: "Credit Liability", value: `${(econData.users.outstandingPurchased + econData.users.outstandingFree).toLocaleString()}`, sub: `${econData.users.outstandingPurchased.toLocaleString()} purchased · ${econData.users.outstandingFree.toLocaleString()} free`, color: "#FBBF24" },
-              ].map((kpi, i) => (
-                <div key={i} style={{
-                  background: "rgba(15, 23, 42, 0.5)",
-                  borderRadius: 8,
-                  padding: "14px 16px",
-                  borderTop: `2px solid ${kpi.color}`,
-                }}>
-                  <p style={{ fontSize: 10, color: "#64748B", marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{kpi.label}</p>
-                  <p style={{ fontSize: 22, fontWeight: 700, color: kpi.color, fontFamily: "'JetBrains Mono', monospace", margin: "0 0 2px" }}>{kpi.value}</p>
-                  <p style={{ fontSize: 10, color: "#94A3B8", margin: 0 }}>{kpi.sub}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Daily trend mini-chart */}
-            {econData.dailyMetrics.length > 1 && (
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontSize: 11, color: "#64748B", marginBottom: 8, fontWeight: 500 }}>Daily API Spend</p>
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 60 }}>
-                  {(() => {
-                    const maxCost = Math.max(...econData.dailyMetrics.map(d => d.apiCost), 0.01);
-                    return econData.dailyMetrics.map((day, i) => {
-                      const height = Math.max(4, (day.apiCost / maxCost) * 56);
-                      return (
-                        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 8, color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace" }}>
-                            ${day.apiCost.toFixed(2)}
-                          </span>
-                          <div
-                            style={{
-                              width: "100%",
-                              height,
-                              background: "linear-gradient(180deg, #F87171, #991B1B)",
-                              borderRadius: "4px 4px 0 0",
-                              minWidth: 24,
-                            }}
-                            title={`${day.date}: $${day.apiCost.toFixed(3)} cost, ${day.trips} trips, ${day.users} users`}
-                          />
-                          <span style={{ fontSize: 8, color: "#475569" }}>{day.date.slice(5)}</span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {/* Credit Economy Summary */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {/* Revenue / Credits */}
-              <div style={{ background: "rgba(15, 23, 42, 0.5)", borderRadius: 8, padding: 16, borderLeft: "3px solid #34D399" }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", marginBottom: 12 }}>💰 Credit Economy</p>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {[
-                    { k: "Credits Granted (free)", v: econData.revenue.totalCreditsGranted.toLocaleString(), c: "#FBBF24" },
-                    { k: "Credits Purchased", v: econData.revenue.totalCreditsPurchased.toLocaleString(), c: "#34D399" },
-                    { k: "Credits Spent", v: econData.revenue.totalCreditsSpent.toLocaleString(), c: "#F87171" },
-                    { k: "Revenue from Purchases", v: `$${econData.revenue.totalRevenue.toFixed(2)}`, c: "#34D399" },
-                  ].map((row, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
-                      <span style={{ color: "#94A3B8" }}>{row.k}</span>
-                      <span style={{ color: row.c, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{row.v}</span>
-                    </div>
-                  ))}
-                </div>
-                {econData.revenue.totalCreditsSpent > 0 && Object.keys(econData.revenue.spendByAction).length > 0 && (
-                  <div style={{ marginTop: 12, borderTop: "1px solid rgba(100, 116, 139, 0.2)", paddingTop: 8 }}>
-                    <p style={{ fontSize: 10, color: "#64748B", marginBottom: 6 }}>Spend by Action</p>
-                    {Object.entries(econData.revenue.spendByAction)
-                      .sort((a, b) => b[1].credits - a[1].credits)
-                      .slice(0, 5)
-                      .map(([action, data], i) => (
-                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 3 }}>
-                          <span style={{ color: "#64748B" }}>{action}</span>
-                          <span style={{ color: "#A78BFA", fontFamily: "'JetBrains Mono', monospace" }}>{data.credits} credits ({data.count}×)</span>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Cost Breakdown by Service */}
-              <div style={{ background: "rgba(15, 23, 42, 0.5)", borderRadius: 8, padding: 16, borderLeft: "3px solid #F87171" }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", marginBottom: 12 }}>🔥 API Cost Breakdown</p>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {[
-                    { k: `Google (${econData.costs.google.calls} calls)`, v: `$${econData.costs.google.cost.toFixed(3)}`, c: "#4285F4" },
-                    { k: `AI (${econData.costs.ai.calls} calls)`, v: `$${econData.costs.ai.cost.toFixed(3)}`, c: "#A855F7" },
-                    { k: `Perplexity (${econData.costs.perplexity.calls} calls)`, v: `$${econData.costs.perplexity.cost.toFixed(3)}`, c: "#06B6D4" },
-                    { k: `Amadeus (${econData.costs.amadeus.calls} calls)`, v: `$${econData.costs.amadeus.cost.toFixed(3)}`, c: "#F59E0B" },
-                  ].map((row, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, alignItems: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: 2, background: row.c }} />
-                        <span style={{ color: "#94A3B8" }}>{row.k}</span>
-                      </div>
-                      <span style={{ color: row.c, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{row.v}</span>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: "1px solid rgba(100, 116, 139, 0.2)", paddingTop: 8, display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                    <span style={{ color: "#E2E8F0", fontWeight: 600 }}>Total</span>
-                    <span style={{ color: "#F87171", fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>${econData.costs.totalCost.toFixed(3)}</span>
-                  </div>
-                </div>
-                {econData.costs.categories.length > 0 && (
-                  <div style={{ marginTop: 12, borderTop: "1px solid rgba(100, 116, 139, 0.2)", paddingTop: 8 }}>
-                    <p style={{ fontSize: 10, color: "#64748B", marginBottom: 6 }}>Top Cost Categories</p>
-                    {econData.costs.categories.slice(0, 4).map((cat, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 3 }}>
-                        <span style={{ color: "#64748B" }}>{cat.label}</span>
-                        <span style={{ color: "#F87171", fontFamily: "'JetBrains Mono', monospace" }}>${cat.cost.toFixed(3)} ({cat.count} entries)</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Data quality warnings */}
-            {econData.dataQuality.warnings.length > 0 && (
-              <div style={{ marginTop: 16, padding: 12, background: "rgba(251, 191, 36, 0.08)", borderRadius: 8, borderLeft: "3px solid #FBBF24" }}>
-                <p style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600, marginBottom: 4 }}>Data Quality Notes</p>
-                {econData.dataQuality.warnings.map((w, i) => (
-                  <p key={i} style={{ fontSize: 10, color: "#94A3B8", margin: "2px 0" }}>• {w}</p>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
         )}
 
@@ -2223,345 +1957,10 @@ export default function UnitEconomics() {
           </table>
         </div>
 
-        {/* Verified Source Data */}
-        <div style={{
-          background: "rgba(30, 41, 59, 0.5)",
-          borderRadius: 12,
-          padding: "28px",
-          border: "1px solid rgba(100, 116, 139, 0.2)",
-          marginBottom: 32,
-        }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            Source Data · Raw Billing Verification
-          </h3>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-            {[
-              {
-                source: "Google Cloud Console",
-                icon: "☁️",
-                data: [
-                  { k: "Project", v: "voyance-462423" },
-                  { k: "Service", v: "Places API (New)" },
-                  { k: "YTD Billed", v: "$30.82" },
-                  { k: "SKUs Active", v: "7" },
-                  { k: "Free Tiers", v: "EXCEEDED" },
-                  { k: "Charges Since", v: "Jan 25, 2026" },
-                ],
-                color: "#4285F4",
-              },
-              {
-                source: "Lovable Cloud",
-                icon: "🧡",
-                data: [
-                  { k: "Cloud Usage", v: "$0.89 / $25.00" },
-                  { k: "AI Usage", v: "$3.93 ($1 free + $2.93)" },
-                  { k: "Top-up Balance", v: "$37.00 remaining" },
-                  { k: "Total Requests", v: "303" },
-                  { k: "Models", v: "4 (all Gemini Flash)" },
-                  { k: "⚠️ Pricing", v: "Temporary until 2026" },
-                ],
-                color: "#A855F7",
-              },
-              {
-                source: "Perplexity API",
-                icon: "🔍",
-                data: [
-                  { k: "Model", v: "sonar (s4qP)" },
-                  { k: "API Requests", v: "208" },
-                  { k: "Request Cost", v: "$1.04" },
-                  { k: "Token Cost", v: "~$0.04" },
-                  { k: "Budget Loaded", v: "$5.00" },
-                  { k: "Remaining", v: "~$3.90" },
-                ],
-                color: "#06B6D4",
-              },
-              {
-                source: "Amadeus Self-Service",
-                icon: "✈️",
-                data: [
-                  { k: "Status", v: "Configured (not live)" },
-                  { k: "Endpoints", v: "Hotel List + Offers" },
-                  { k: "Price/Call", v: "$0.024" },
-                  { k: "Calls/Trip", v: "5 (1 list + 4 batches)" },
-                  { k: "Cost/Trip", v: "$0.12 (beyond free)" },
-                  { k: "Free Tier", v: "2,000/mo = 400 trips" },
-                ],
-                color: "#F59E0B",
-              },
-            ].map((src, i) => (
-              <div key={i} style={{
-                background: "rgba(15, 23, 42, 0.5)",
-                borderRadius: 8,
-                padding: 16,
-                borderLeft: `3px solid ${src.color}`,
-              }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0", marginBottom: 12 }}>
-                  {src.icon} {src.source}
-                </p>
-                {src.data.map((d, j) => (
-                  <div key={j} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 6 }}>
-                    <span style={{ color: d.k.startsWith("⚠️") ? "#F59E0B" : "#64748B" }}>{d.k}</span>
-                    <span style={{ color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace" }}>{d.v}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* AI Models in Production */}
-        <div style={{
-          background: "rgba(30, 41, 59, 0.5)",
-          borderRadius: 12,
-          padding: "28px",
-          border: "1px solid rgba(100, 116, 139, 0.2)",
-          marginBottom: 32,
-        }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            AI Models in Production {hasRealData ? "· Real Tracked Data" : "· Fallback Estimates"}
-          </h3>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-            {(hasRealData && realMetrics?.modelBreakdown 
-              ? Object.entries(realMetrics.modelBreakdown).map(([model, data]) => ({
-                  model,
-                  calls: data.count,
-                  usage: `${(data.inputTokens / 1000).toFixed(0)}K in / ${(data.outputTokens / 1000).toFixed(0)}K out`
-                }))
-              : FALLBACK_AI_MODELS
-            ).map((m, i) => (
-              <div key={i} style={{
-                background: "rgba(15, 23, 42, 0.5)",
-                borderRadius: 8,
-                padding: 14,
-                borderLeft: "3px solid #A855F7",
-              }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", marginBottom: 4 }}>
-                  {m.model}
-                </p>
-                <p style={{ fontSize: 20, fontWeight: 700, color: "#A855F7", fontFamily: "'JetBrains Mono', monospace" }}>
-                  {m.calls} calls
-                </p>
-                <p style={{ fontSize: 10, color: "#64748B" }}>{m.usage}</p>
-              </div>
-            ))}
-          </div>
-          <p style={{ fontSize: 11, color: "#64748B", marginTop: 16, padding: 12, background: "rgba(248, 113, 113, 0.1)", borderRadius: 6, borderLeft: "3px solid #F87171" }}>
-            <strong style={{ color: "#F87171" }}>CORRECTED:</strong> Production runs Gemini Flash variants, not GPT-5/GPT-5-mini. Previous internal docs were wrong. Real AI cost is 3-10× lower than documented estimates.
-          </p>
-        </div>
-
-         {/* Cost by User Action Category */}
-         <div style={{
-           background: "rgba(30, 41, 59, 0.5)",
-           borderRadius: 12,
-           padding: "28px",
-           border: "1px solid rgba(100, 116, 139, 0.2)",
-           marginBottom: 32,
-         }}>
-           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", margin: 0 }}>
-               Cost by User Action {hasRealData ? "· Real Tracked Data" : "· No Data Yet"}
-             </h3>
-             <span style={{ 
-               fontSize: 10, 
-               color: hasRealData ? "#34D399" : "#64748B", 
-               background: "rgba(15, 23, 42, 0.5)", 
-               padding: "4px 8px", 
-               borderRadius: 4 
-             }}>
-               {hasRealData && realMetrics?.categoryBreakdown 
-                 ? `${Object.keys(realMetrics.categoryBreakdown).length} categories tracked` 
-                 : "Awaiting instrumentation data"}
-             </span>
-           </div>
- 
-           {hasRealData && realMetrics?.categoryBreakdown && Object.keys(realMetrics.categoryBreakdown).length > 0 ? (
-             <>
-               {/* Category Cards Grid */}
-               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
-                 {Object.entries(realMetrics.categoryBreakdown)
-                   .sort((a, b) => b[1].cost - a[1].cost)
-                   .map(([category, data], i) => {
-                     const CATEGORY_COLORS: Record<string, string> = {
-                       home_browse: "#38BDF8",
-                       quiz: "#A855F7",
-                       explore: "#34D399",
-                       itinerary_gen: "#F59E0B",
-                       itinerary_edit: "#EC4899",
-                       booking_search: "#06B6D4",
-                       recommendations: "#84CC16",
-                       enrichment: "#F97316",
-                       other: "#64748B",
-                     };
-                     const color = CATEGORY_COLORS[category] || "#64748B";
-                     const totalCost = Object.values(realMetrics.categoryBreakdown).reduce((sum, d) => sum + d.cost, 0);
-                     const pct = totalCost > 0 ? (data.cost / totalCost) * 100 : 0;
-                     
-                     return (
-                       <div key={category} style={{
-                         background: "rgba(15, 23, 42, 0.5)",
-                         borderRadius: 8,
-                         padding: 14,
-                         borderLeft: `3px solid ${color}`,
-                       }}>
-                         <p style={{ fontSize: 11, fontWeight: 600, color: "#E2E8F0", marginBottom: 4 }}>
-                           {data.label}
-                         </p>
-                         <p style={{ fontSize: 20, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>
-                           ${data.cost.toFixed(3)}
-                         </p>
-                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748B", marginTop: 4 }}>
-                           <span>{data.count} calls</span>
-                           <span>{pct.toFixed(1)}%</span>
-                         </div>
-                       </div>
-                     );
-                   })}
-               </div>
- 
-               {/* Cost Distribution Bar */}
-               <div style={{ marginBottom: 16 }}>
-                 <p style={{ fontSize: 11, color: "#64748B", marginBottom: 8 }}>Cost Distribution</p>
-                 <div style={{ display: "flex", height: 24, borderRadius: 6, overflow: "hidden", background: "rgba(15, 23, 42, 0.5)" }}>
-                   {Object.entries(realMetrics.categoryBreakdown)
-                     .sort((a, b) => b[1].cost - a[1].cost)
-                     .map(([category, data]) => {
-                       const CATEGORY_COLORS: Record<string, string> = {
-                         home_browse: "#38BDF8",
-                         quiz: "#A855F7",
-                         explore: "#34D399",
-                         itinerary_gen: "#F59E0B",
-                         itinerary_edit: "#EC4899",
-                         booking_search: "#06B6D4",
-                         recommendations: "#84CC16",
-                         enrichment: "#F97316",
-                         other: "#64748B",
-                       };
-                       const color = CATEGORY_COLORS[category] || "#64748B";
-                       const totalCost = Object.values(realMetrics.categoryBreakdown).reduce((sum, d) => sum + d.cost, 0);
-                       const pct = totalCost > 0 ? (data.cost / totalCost) * 100 : 0;
-                       if (pct < 1) return null;
-                       
-                       return (
-                         <div
-                           key={category}
-                           style={{
-                             width: `${pct}%`,
-                             background: color,
-                             display: "flex",
-                             alignItems: "center",
-                             justifyContent: "center",
-                             transition: "width 0.3s ease",
-                           }}
-                           title={`${data.label}: ${pct.toFixed(1)}% ($${data.cost.toFixed(3)})`}
-                         >
-                           {pct >= 12 && (
-                             <span style={{ fontSize: 9, fontWeight: 600, color: "#FFF", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>
-                               {pct.toFixed(0)}%
-                             </span>
-                           )}
-                         </div>
-                       );
-                     })}
-                 </div>
-               </div>
- 
-               <p style={{ fontSize: 10, color: "#64748B" }}>
-                 Categories map user-facing actions to backend costs. Helps identify which features are most expensive to serve.
-               </p>
-             </>
-           ) : (
-             <div style={{ textAlign: "center", padding: "40px 20px", color: "#64748B" }}>
-               <p style={{ fontSize: 13, marginBottom: 8 }}>📊 No category data yet</p>
-               <p style={{ fontSize: 11 }}>
-                 Edge functions will log cost_category as users interact with the app.
-                 Categories: Home/Browse, Quiz, Explore, Itinerary Gen, Itinerary Edit, Booking Search, Recommendations, Enrichment
-               </p>
-             </div>
-           )}
-         </div>
- 
-        {/* Key Findings */}
-        <div style={{
-          background: "rgba(30, 41, 59, 0.5)",
-          borderRadius: 12,
-          padding: "28px",
-          border: "1px solid rgba(100, 116, 139, 0.2)",
-          marginBottom: 32,
-        }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            Key Findings & Caveats
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: 16 }}>
-            {[
-              { title: "AI is a rounding error", body: "Lovable AI + Perplexity combined = $0.082/trip. At $35 revenue, AI is 0.23% of revenue. Model selection barely matters for margins.", tag: "VERIFIED", tagColor: "#34D399" },
-              { title: "Google Places is 63-86% of variable cost", body: "$0.505/trip pre-caching. Photo caching deployed but not yet measured — 33% reduction is estimated, not verified.", tag: "CRITICAL", tagColor: "#F87171" },
-              { title: "AI cost includes non-trip overhead", body: "The $0.064/trip includes quiz, explore, homepage preview — not just itinerary generation. Marginal cost of one more trip is lower.", tag: "NOTE", tagColor: "#38BDF8" },
-              { title: "Amadeus adds $0.12/trip beyond 400/mo", body: "5 calls × $0.024/call. Free tier covers 400 trips/month. Step change visible in economics at scale table.", tag: "PROJECTED", tagColor: "#F59E0B" },
-              { title: "Google free tiers already exceeded", body: "As of Jan 25, 2026, Google Places free tiers are exhausted. All usage now billable. Need SKU breakdown to optimize.", tag: "ACTION", tagColor: "#FBBF24" },
-              { title: "Lovable pricing is temporary", body: "Billing page states pricing model being refined through early 2026. Current margins depend partly on a structure the vendor may change.", tag: "RISK", tagColor: "#F87171" },
-            ].map((f, i) => (
-              <div key={i} style={{
-                background: "rgba(15, 23, 42, 0.5)",
-                borderRadius: 8,
-                padding: 16,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: 9, background: `${f.tagColor}20`, color: f.tagColor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{f.tag}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{f.title}</span>
-                </div>
-                <p style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.5 }}>{f.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* What to Track */}
-        <div style={{
-          background: "rgba(30, 41, 59, 0.5)",
-          borderRadius: 12,
-          padding: "28px",
-          border: "1px solid rgba(100, 116, 139, 0.2)",
-          marginBottom: 32,
-        }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 20 }}>
-            What to Track Going Forward
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
-            {[
-              { metric: "Google Places spend", where: "console.cloud.google.com/billing", freq: "Weekly" },
-              { metric: "Google SKU breakdown", where: "Cloud Console → Cost breakdown", freq: "Weekly" },
-              { metric: "Lovable AI spend", where: "Lovable → Cloud & AI balance", freq: "Weekly" },
-              { metric: "Perplexity balance", where: "perplexity.ai/account/api/billing", freq: "Monthly" },
-              { metric: "Amadeus calls (when live)", where: "developers.amadeus.com dashboard", freq: "Weekly" },
-              { metric: "Photo cache hit rate", where: "curated_images + storage bucket", freq: "Weekly" },
-              { metric: "Cost per trip (actual)", where: "Total spend ÷ trips", freq: "Weekly" },
-            ].map((item, i) => (
-              <div key={i} style={{ 
-                display: "flex", 
-                justifyContent: "space-between", 
-                alignItems: "center",
-                padding: "10px 14px",
-                background: "rgba(15, 23, 42, 0.5)",
-                borderRadius: 6,
-                fontSize: 11,
-              }}>
-                <span style={{ color: "#E2E8F0", fontWeight: 500 }}>{item.metric}</span>
-                <span style={{ color: "#64748B", fontSize: 10 }}>{item.freq}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Footer */}
-        <div style={{ textAlign: "center", paddingTop: 20, borderTop: "1px solid rgba(100, 116, 139, 0.2)" }}>
-          <p style={{ fontSize: 11, color: "#64748B" }}>
-            Voyance Unit Economics · Built from verified production billing data · {VERIFIED_DATA.trips} trips · {VERIFIED_DATA.period}
-          </p>
-          <p style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
-            Generated Feb 4, 2026. "Verified" = from billing dashboards. "Projected" = documented pricing + estimates. Update weekly.
+        <div style={{ textAlign: "center", paddingTop: 20, borderTop: "1px solid rgba(100, 116, 139, 0.2)", marginTop: 32 }}>
+          <p style={{ fontSize: 11, color: "#475569" }}>
+            Voyance Unit Economics · {VERIFIED_DATA.period}
           </p>
         </div>
       </div>
