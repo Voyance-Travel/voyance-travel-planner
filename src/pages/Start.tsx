@@ -4,8 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, ChevronUp, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star
+  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route
 } from 'lucide-react';
+import { addDays as addDaysUtil } from 'date-fns';
+import MultiCitySelector from '@/components/planner/MultiCitySelector';
+import { TripDestination, InterCityTransport, calculateTotalNights, generateDestinationDates } from '@/types/multiCity';
 import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -241,6 +244,12 @@ function TripDetailsStep({
   setCelebrationDay,
   budgetAmount,
   setBudgetAmount,
+  isMultiCity,
+  setIsMultiCity,
+  destinations,
+  setDestinations,
+  transports,
+  setTransports,
   onContinue,
 }: {
   destinationSelection: LocationSelection;
@@ -257,6 +266,12 @@ function TripDetailsStep({
   setCelebrationDay: (d: number | undefined) => void;
   budgetAmount: number | undefined;
   setBudgetAmount: (n: number | undefined) => void;
+  isMultiCity: boolean;
+  setIsMultiCity: (v: boolean) => void;
+  destinations: TripDestination[];
+  setDestinations: (d: TripDestination[]) => void;
+  transports: InterCityTransport[];
+  setTransports: (t: InterCityTransport[]) => void;
   onContinue: () => void;
 }) {
   const today = startOfToday();
@@ -272,7 +287,33 @@ function TripDetailsStep({
     }
   }, [startDate, endDate, setEndDate]);
 
-  const isValid = destinationSelection.cityName && startDate && endDate;
+  // Auto-calculate end date for multi-city mode
+  useEffect(() => {
+    if (isMultiCity && startDate && destinations.length > 0) {
+      const totalNights = calculateTotalNights(destinations);
+      if (totalNights > 0) {
+        setEndDate(addDaysUtil(startDate, totalNights));
+      }
+    }
+  }, [isMultiCity, startDate, destinations, setEndDate]);
+
+  // When switching to multi-city, seed first destination from current selection
+  const handleToggleMultiCity = (multi: boolean) => {
+    setIsMultiCity(multi);
+    if (multi && destinations.length === 0 && destinationSelection.cityName) {
+      const seed: TripDestination = {
+        id: crypto.randomUUID(),
+        city: destinationSelection.cityName,
+        nights: 3,
+        order: 1,
+      };
+      setDestinations([seed]);
+    }
+  };
+
+  const isValid = isMultiCity
+    ? destinations.length >= 2 && startDate && endDate
+    : destinationSelection.cityName && startDate && endDate;
 
   return (
     <motion.div
@@ -290,8 +331,39 @@ function TripDetailsStep({
         </p>
       </div>
 
-      <div className="space-y-4 sm:space-y-5 max-w-md mx-auto px-1">
-        {/* Destination */}
+      <div className={cn("space-y-4 sm:space-y-5 mx-auto px-1", isMultiCity ? "max-w-xl" : "max-w-md")}>
+        {/* Single / Multi-City Toggle */}
+        <div className="flex items-center gap-2 p-1 bg-muted rounded-lg w-fit mx-auto">
+          <button
+            type="button"
+            onClick={() => handleToggleMultiCity(false)}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2',
+              !isMultiCity
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            Single City
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleMultiCity(true)}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2',
+              isMultiCity
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Route className="h-3.5 w-3.5" />
+            Multi-City
+          </button>
+        </div>
+
+        {/* Destination - Single City Mode */}
+        {!isMultiCity && (
         <div className="space-y-1.5 sm:space-y-2">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Destination
@@ -302,6 +374,20 @@ function TripDetailsStep({
             placeholder="Search cities..."
           />
         </div>
+        )}
+
+        {/* Multi-City Selector */}
+        {isMultiCity && (
+          <div className="space-y-1.5 sm:space-y-2">
+            <MultiCitySelector
+              destinations={destinations}
+              transports={transports}
+              onDestinationsChange={setDestinations}
+              onTransportsChange={setTransports}
+              startDate={startDate ? format(startDate, 'yyyy-MM-dd') : undefined}
+            />
+          </div>
+        )}
 
         {/* Dates - mobile optimized */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -1170,6 +1256,15 @@ export default function Start() {
   const [tripType, setTripType] = useState<string>('leisure');
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
+
+  // Multi-city state
+  const [isMultiCity, setIsMultiCity] = useState(plannerState.basics.isMultiCity || false);
+  const [multiCityDestinations, setMultiCityDestinations] = useState<TripDestination[]>(
+    plannerState.basics.destinations || []
+  );
+  const [multiCityTransports, setMultiCityTransports] = useState<InterCityTransport[]>(
+    plannerState.basics.interCityTransports || []
+  );
   
   // Flight state
   const [outboundFlight, setOutboundFlight] = useState<ManualFlightEntry>({
@@ -1225,7 +1320,11 @@ export default function Start() {
 
   // Handle final submission
   const handleSubmit = async () => {
-    if (!destinationSelection.cityName || !startDate || !endDate) {
+    const primaryDestination = isMultiCity
+      ? (multiCityDestinations[0]?.city || '')
+      : destinationSelection.cityName;
+
+    if (!primaryDestination || !startDate || !endDate) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -1276,13 +1375,18 @@ export default function Start() {
         source: 'manual',
       }] : null;
 
+      // Build multi-city name
+      const tripName = isMultiCity && multiCityDestinations.length >= 2
+        ? multiCityDestinations.map(d => d.city).join(' → ')
+        : `Trip to ${primaryDestination}`;
+
       // Save trip directly to database
       const { data: trip, error } = await supabase
         .from('trips')
         .insert({
           user_id: user.id,
-          name: `Trip to ${destinationSelection.cityName}`,
-          destination: destinationSelection.cityName,
+          name: tripName,
+          destination: primaryDestination,
           start_date: format(startDate, 'yyyy-MM-dd'),
           end_date: format(endDate, 'yyyy-MM-dd'),
           travelers,
@@ -1291,6 +1395,9 @@ export default function Start() {
           budget_total_cents: budgetAmount ? budgetAmount * 100 : null,
           flight_selection: flightSelection,
           hotel_selection: hotelSelection,
+          is_multi_city: isMultiCity || null,
+          destinations: isMultiCity ? multiCityDestinations as any : null,
+          transportation_preferences: isMultiCity && multiCityTransports.length > 0 ? multiCityTransports as any : null,
           status: 'draft',
           metadata: {
             isFirstTimeVisitor,
@@ -1350,15 +1457,26 @@ export default function Start() {
                     setCelebrationDay={setCelebrationDay}
                     budgetAmount={budgetAmount}
                     setBudgetAmount={setBudgetAmount}
+                    isMultiCity={isMultiCity}
+                    setIsMultiCity={setIsMultiCity}
+                    destinations={multiCityDestinations}
+                    setDestinations={setMultiCityDestinations}
+                    transports={multiCityTransports}
+                    setTransports={setMultiCityTransports}
                     onContinue={() => {
                       if (!user) {
-                        // Save basics to context before showing auth gate
+                        const dest = isMultiCity
+                          ? (multiCityDestinations[0]?.city || '')
+                          : destinationSelection.cityName;
                         setBasics({
-                          destination: destinationSelection.cityName,
+                          destination: dest,
                           startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
                           endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
                           travelers,
                           budgetAmount,
+                          isMultiCity,
+                          destinations: multiCityDestinations,
+                          interCityTransports: multiCityTransports,
                         });
                         setShowAuthGate(true);
                         return;
@@ -1372,7 +1490,7 @@ export default function Start() {
                 {currentStep === 2 && startDate && endDate && (
                   <FlightHotelStep
                     key="flight-hotel"
-                    destination={destinationSelection.cityName}
+                    destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
                     startDate={format(startDate, 'yyyy-MM-dd')}
                     endDate={format(endDate, 'yyyy-MM-dd')}
                     travelers={travelers}
