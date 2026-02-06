@@ -806,7 +806,7 @@ export default function UnitEconomics() {
               { label: "Revenue", value: econData.revenue.totalRevenue > 0 ? `$${econData.revenue.totalRevenue.toFixed(2)}` : "—", sub: econData.revenue.purchaseCount > 0 ? `${econData.revenue.purchaseCount} purchases` : "No purchases", color: "#34D399" },
               { label: "Users", value: `${econData.users.totalUsers}`, sub: `${econData.users.paidUsers} paid`, color: "#38BDF8" },
               { label: "Trips", value: `${econData.trips.totalTrips}`, sub: `${econData.trips.uniqueTripUsers} creators`, color: "#A855F7" },
-              { label: "Credit Liability", value: `${(econData.users.outstandingPurchased + econData.users.outstandingFree).toLocaleString()}`, sub: `${econData.users.outstandingPurchased.toLocaleString()} paid`, color: "#FBBF24" },
+              { label: "Credit Liability", value: `${(econData.users.outstandingPurchased + econData.users.outstandingFree).toLocaleString()}`, sub: `${econData.users.outstandingPurchased.toLocaleString()} paid · ${econData.users.outstandingFree.toLocaleString()} free`, color: "#FBBF24", expandable: true },
             ].map((kpi, i) => (
               <div key={i} style={{
                 background: "rgba(30, 41, 59, 0.5)",
@@ -819,6 +819,53 @@ export default function UnitEconomics() {
                 <p style={{ fontSize: 10, color: "#94A3B8", margin: 0 }}>{kpi.sub}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Credit Liability Drilldown */}
+        {econData && (econData.users.outstandingPurchased > 0 || econData.users.outstandingFree > 0) && (
+          <div style={{
+            marginBottom: 24,
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            border: "1px solid rgba(251, 191, 36, 0.2)",
+            overflow: "hidden",
+          }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(100, 116, 139, 0.15)" }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#FBBF24", margin: 0 }}>
+                🏦 Credit Liability Breakdown
+              </h3>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "16px 20px" }}>
+              <div style={{
+                background: "rgba(251, 191, 36, 0.08)",
+                borderRadius: 8,
+                padding: "14px 16px",
+                border: "1px solid rgba(251, 191, 36, 0.15)",
+              }}>
+                <p style={{ fontSize: 10, color: "#94A3B8", marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Purchased (Real $)</p>
+                <p style={{ fontSize: 22, fontWeight: 700, color: "#FBBF24", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 4px" }}>
+                  {econData.users.outstandingPurchased.toLocaleString()}
+                </p>
+                <p style={{ fontSize: 10, color: "#94A3B8", margin: 0 }}>
+                  ≈ ${(econData.users.outstandingPurchased * 0.05).toFixed(2)} value @ $0.05/cr
+                </p>
+              </div>
+              <div style={{
+                background: "rgba(100, 116, 139, 0.08)",
+                borderRadius: 8,
+                padding: "14px 16px",
+                border: "1px solid rgba(100, 116, 139, 0.15)",
+              }}>
+                <p style={{ fontSize: 10, color: "#94A3B8", marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Free / Granted</p>
+                <p style={{ fontSize: 22, fontWeight: 700, color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 4px" }}>
+                  {econData.users.outstandingFree.toLocaleString()}
+                </p>
+                <p style={{ fontSize: 10, color: "#64748B", margin: 0 }}>
+                  No cash liability — expires naturally
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -914,56 +961,38 @@ export default function UnitEconomics() {
           </div>
         )}
 
+        {/* View Mode Tabs */}
         <div style={{ 
           display: "flex", 
-          alignItems: "center", 
-          gap: 16, 
+          alignItems: "stretch", 
           marginBottom: 24,
-          background: "rgba(30, 41, 59, 0.5)",
-          padding: "16px 24px",
           borderRadius: 12,
+          overflow: "hidden",
           border: "1px solid rgba(100, 116, 139, 0.2)",
         }}>
-          <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>View Mode:</span>
-          <div style={{ display: "flex", gap: 8 }}>
+          {([
+            { key: 'itinerary' as const, icon: '📊', title: 'Per-Itinerary Cost', desc: 'What ONE trip generation costs (APIs, AI tokens). Use for capacity planning.', accent: '#38BDF8' },
+            { key: 'lifecycle' as const, icon: '👤', title: 'User Lifecycle Economics', desc: 'Revenue vs cost across all users (free + paid). Use for profitability.', accent: '#A855F7' },
+          ] as const).map((tab) => (
             <button
-              onClick={() => setViewMode('itinerary')}
+              key={tab.key}
+              onClick={() => setViewMode(tab.key)}
               style={{
-                padding: "8px 16px",
-                borderRadius: 8,
-                border: viewMode === 'itinerary' ? "1px solid #38BDF8" : "1px solid rgba(100,116,139,0.3)",
-                background: viewMode === 'itinerary' ? "rgba(56, 189, 248, 0.15)" : "transparent",
-                color: viewMode === 'itinerary' ? "#38BDF8" : "#64748B",
-                fontSize: 12,
-                fontWeight: 600,
+                flex: 1,
+                padding: "16px 20px",
+                background: viewMode === tab.key ? "rgba(30, 41, 59, 0.7)" : "rgba(15, 23, 42, 0.5)",
+                border: "none",
+                borderBottom: viewMode === tab.key ? `2px solid ${tab.accent}` : "2px solid transparent",
+                color: viewMode === tab.key ? "#E2E8F0" : "#64748B",
                 cursor: "pointer",
                 transition: "all 0.2s",
+                textAlign: "left",
               }}
             >
-              📊 Per-Itinerary Cost
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{tab.icon} {tab.title}</span>
+              <p style={{ fontSize: 10, color: viewMode === tab.key ? "#94A3B8" : "#475569", margin: "4px 0 0", lineHeight: 1.3 }}>{tab.desc}</p>
             </button>
-            <button
-              onClick={() => setViewMode('lifecycle')}
-              style={{
-                padding: "8px 16px",
-                borderRadius: 8,
-                border: viewMode === 'lifecycle' ? "1px solid #A855F7" : "1px solid rgba(100,116,139,0.3)",
-                background: viewMode === 'lifecycle' ? "rgba(168, 85, 247, 0.15)" : "transparent",
-                color: viewMode === 'lifecycle' ? "#A855F7" : "#64748B",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 0.2s",
-              }}
-            >
-              👤 User Lifecycle Economics
-            </button>
-          </div>
-          <div style={{ marginLeft: "auto", fontSize: 11, color: "#64748B", maxWidth: 400 }}>
-            {viewMode === 'itinerary' 
-              ? "What it costs us to generate ONE itinerary (API calls, AI tokens). Use for capacity planning."
-              : "Revenue vs cost across ALL users (free + paid), factoring conversion rates. Use for profitability."}
-          </div>
+          ))}
         </div>
 
         {/* Hero Metrics - Context-aware based on view mode */}
