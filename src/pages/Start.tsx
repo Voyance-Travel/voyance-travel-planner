@@ -1411,6 +1411,40 @@ export default function Start() {
 
       if (error) throw error;
 
+      // Persist per-city rows for multi-city trips
+      if (isMultiCity && multiCityDestinations.length >= 2) {
+        const datesWithDates = multiCityDestinations.map((d, i) => {
+          // Calculate arrival/departure dates sequentially from start
+          let arrival = new Date(startDate!);
+          for (let j = 0; j < i; j++) {
+            arrival.setDate(arrival.getDate() + multiCityDestinations[j].nights);
+          }
+          const departure = new Date(arrival);
+          departure.setDate(departure.getDate() + d.nights);
+          return { ...d, arrivalDate: format(arrival, 'yyyy-MM-dd'), departureDate: format(departure, 'yyyy-MM-dd') };
+        });
+
+        const cityRows = datesWithDates.map((d, i) => ({
+          trip_id: trip.id,
+          city_order: i,
+          city_name: d.city,
+          country: d.country || null,
+          arrival_date: d.arrivalDate,
+          departure_date: d.departureDate,
+          nights: d.nights,
+          transport_type: i > 0 && multiCityTransports[i - 1]
+            ? multiCityTransports[i - 1].type
+            : null,
+          transport_details: i > 0 && multiCityTransports[i - 1]
+            ? { fromCity: multiCityTransports[i - 1].fromCity, toCity: multiCityTransports[i - 1].toCity }
+            : null,
+          generation_status: 'pending' as const,
+          days_total: d.nights,
+        }));
+
+        await supabase.from('trip_cities').insert(cityRows as any[]);
+      }
+
       // Navigate directly to trip page with generate flag
       navigate(`/trip/${trip.id}?generate=true`);
     } catch (err) {
