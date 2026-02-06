@@ -15,7 +15,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
     setIsLoadingGoogle(true);
     try {
       const { error } = await lovable.auth.signInWithOAuth('google', {
-        redirect_uri: window.location.origin,
+        redirect_uri: 'https://voyance-travel-planner.lovable.app',
       });
       
       if (error) {
