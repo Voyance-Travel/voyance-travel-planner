@@ -512,7 +512,7 @@ function TripDetailsStep({
               <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', showBudget && 'rotate-180')} />
             </button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3">
+          <CollapsibleContent className="pt-3 space-y-3">
             <div className="grid grid-cols-4 gap-2">
               {budgetPresets.map((preset) => (
                 <button
@@ -530,6 +530,27 @@ function TripDetailsStep({
                   <div className="text-[10px] text-muted-foreground">{preset.description}</div>
                 </button>
               ))}
+            </div>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="number"
+                min={0}
+                max={100000}
+                placeholder="Or enter your own budget"
+                value={budgetAmount && !budgetPresets.some(p => p.value === budgetAmount) ? budgetAmount : ''}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setBudgetAmount(val > 0 ? val : undefined);
+                }}
+                onFocus={() => {
+                  // Clear preset selection when user starts typing custom
+                  if (budgetAmount && budgetPresets.some(p => p.value === budgetAmount)) {
+                    setBudgetAmount(undefined);
+                  }
+                }}
+                className="w-full pl-8 pr-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+              />
             </div>
           </CollapsibleContent>
         </Collapsible>
@@ -1266,6 +1287,7 @@ export default function Start() {
           travelers,
           trip_type: tripType,
           budget_tier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : 'moderate',
+          budget_total_cents: budgetAmount ? budgetAmount * 100 : null,
           flight_selection: flightSelection,
           hotel_selection: hotelSelection,
           status: 'draft',
