@@ -822,51 +822,41 @@ export default function UnitEconomics() {
           </div>
         )}
 
-        {/* Credit Liability Drilldown */}
+        {/* Credit Liability Drilldown — compact expandable */}
         {econData && (econData.users.outstandingPurchased > 0 || econData.users.outstandingFree > 0) && (
-          <div style={{
+          <details style={{
             marginBottom: 24,
             background: "rgba(30, 41, 59, 0.5)",
             borderRadius: 12,
-            border: "1px solid rgba(251, 191, 36, 0.2)",
+            border: "1px solid rgba(251, 191, 36, 0.15)",
             overflow: "hidden",
           }}>
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(100, 116, 139, 0.15)" }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#FBBF24", margin: 0 }}>
-                🏦 Credit Liability Breakdown
-              </h3>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "16px 20px" }}>
-              <div style={{
-                background: "rgba(251, 191, 36, 0.08)",
-                borderRadius: 8,
-                padding: "14px 16px",
-                border: "1px solid rgba(251, 191, 36, 0.15)",
-              }}>
-                <p style={{ fontSize: 10, color: "#94A3B8", marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Purchased (Real $)</p>
-                <p style={{ fontSize: 22, fontWeight: 700, color: "#FBBF24", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 4px" }}>
+            <summary style={{ padding: "12px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#FBBF24", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 10, transition: "transform 0.2s" }}>▶</span>
+              🏦 Credit Liability — {(econData.users.outstandingPurchased + econData.users.outstandingFree).toLocaleString()} total
+              <span style={{ fontSize: 11, color: "#94A3B8", fontWeight: 400, marginLeft: 8 }}>
+                {econData.users.outstandingPurchased.toLocaleString()} paid · {econData.users.outstandingFree.toLocaleString()} free
+              </span>
+            </summary>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "12px 20px" }}>
+              <div style={{ background: "rgba(251, 191, 36, 0.08)", borderRadius: 8, padding: "12px 14px", border: "1px solid rgba(251, 191, 36, 0.15)" }}>
+                <p style={{ fontSize: 10, color: "#94A3B8", marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Purchased (Stripe-backed)</p>
+                <p style={{ fontSize: 20, fontWeight: 700, color: "#FBBF24", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 2px" }}>
                   {econData.users.outstandingPurchased.toLocaleString()}
                 </p>
                 <p style={{ fontSize: 10, color: "#94A3B8", margin: 0 }}>
-                  ≈ ${(econData.users.outstandingPurchased * 0.05).toFixed(2)} value @ $0.05/cr
+                  {econData.users.outstandingPurchased > 0 ? `≈ $${(econData.users.outstandingPurchased * 0.05).toFixed(2)} value @ $0.05/cr` : 'No real purchases yet'}
                 </p>
               </div>
-              <div style={{
-                background: "rgba(100, 116, 139, 0.08)",
-                borderRadius: 8,
-                padding: "14px 16px",
-                border: "1px solid rgba(100, 116, 139, 0.15)",
-              }}>
+              <div style={{ background: "rgba(100, 116, 139, 0.08)", borderRadius: 8, padding: "12px 14px", border: "1px solid rgba(100, 116, 139, 0.15)" }}>
                 <p style={{ fontSize: 10, color: "#94A3B8", marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Free / Granted</p>
-                <p style={{ fontSize: 22, fontWeight: 700, color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 4px" }}>
+                <p style={{ fontSize: 20, fontWeight: 700, color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 2px" }}>
                   {econData.users.outstandingFree.toLocaleString()}
                 </p>
-                <p style={{ fontSize: 10, color: "#64748B", margin: 0 }}>
-                  No cash liability — expires naturally
-                </p>
+                <p style={{ fontSize: 10, color: "#64748B", margin: 0 }}>No cash liability — expires naturally</p>
               </div>
             </div>
-          </div>
+          </details>
         )}
 
         {/* Revenue Drilldown - appears when there are paid users */}
