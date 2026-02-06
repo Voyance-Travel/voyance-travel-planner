@@ -4548,6 +4548,7 @@ export type Database = {
           nights: number | null
           slug: string | null
           total_cost_cents: number | null
+          transition_day_mode: string | null
           transport_cost_cents: number | null
           transport_currency: string | null
           transport_details: Json | null
@@ -4576,6 +4577,7 @@ export type Database = {
           nights?: number | null
           slug?: string | null
           total_cost_cents?: number | null
+          transition_day_mode?: string | null
           transport_cost_cents?: number | null
           transport_currency?: string | null
           transport_details?: Json | null
@@ -4604,6 +4606,7 @@ export type Database = {
           nights?: number | null
           slug?: string | null
           total_cost_cents?: number | null
+          transition_day_mode?: string | null
           transport_cost_cents?: number | null
           transport_currency?: string | null
           transport_details?: Json | null
