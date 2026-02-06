@@ -86,7 +86,7 @@ const tiers = [
         'One epic 21+ day adventure',
         'Mix and match all year long',
       ],
-      example: 'Tokyo (7) + Barcelona (7) + Iceland (7) — all fully curated',
+      example: 'Tokyo (7) + Barcelona (7) + Iceland (7), all fully curated',
     },
   },
 ];
@@ -111,7 +111,7 @@ const faqs = [
   },
   {
     q: 'What if my trip has special requirements?',
-    a: 'Trips with vegan/halal/kosher dietary needs, kids, pets, strict budgets, or special occasions use slightly more credits because our AI does extra work to match venues to your specific needs. Accessibility is always free — no upcharge, ever.',
+    a: 'Trips with vegan/halal/kosher dietary needs, kids, pets, strict budgets, or special occasions use slightly more credits because our AI does extra work to match venues to your specific needs. Accessibility is always free, no upcharge, ever.',
   },
   {
     q: 'What about multi-city trips?',
@@ -342,7 +342,7 @@ export default function Pricing() {
               disabled={loadingPlan === 'boost'}
               className="text-primary font-medium hover:underline disabled:opacity-50"
             >
-              {loadingPlan === 'boost' ? 'Loading...' : 'Boost — $8.99'}
+              {loadingPlan === 'boost' ? 'Loading...' : 'Boost · $8.99'}
             </button>
             : 100 credits for swaps, regenerations, or extending a trip.
           </motion.p>
@@ -411,7 +411,7 @@ export default function Pricing() {
                 <div className="flex items-start gap-2 mt-3 p-2 bg-primary/5 rounded-lg">
                   <Info className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
                   <p className="text-[11px] text-muted-foreground">
-                    Accessibility needs are always free — no upcharge, ever. Vegetarian alone doesn't count as a complexity factor.
+                    Accessibility needs are always free, no upcharge, ever. Vegetarian alone doesn't count as a complexity factor.
                   </p>
                 </div>
               </div>
