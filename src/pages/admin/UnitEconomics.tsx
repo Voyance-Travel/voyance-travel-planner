@@ -991,6 +991,70 @@ export default function UnitEconomics() {
           </div>
         )}
 
+        {/* Global Controls - Volume & Conversion */}
+        <div style={{ 
+          display: "grid", 
+          gridTemplateColumns: "1fr 1fr", 
+          gap: 16, 
+          marginBottom: 24,
+        }}>
+          {/* Volume Slider */}
+          <div style={{
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            padding: "20px 24px",
+            border: "1px solid rgba(100, 116, 139, 0.2)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Monthly Volume</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "#63B3AA", fontFamily: "'JetBrains Mono', monospace" }}>{volume} trips</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="1000"
+              value={volume}
+              onChange={(e) => setVolume(+e.target.value)}
+              style={{ width: "100%", accentColor: "#63B3AA", cursor: "pointer" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 6 }}>
+              <span>1</span><span>250</span><span>500</span><span>1,000</span>
+            </div>
+            {volume > AMADEUS_FREE_TRIPS && scenarioConfig.amadeus && (
+              <p style={{ fontSize: 10, color: "#F59E0B", marginTop: 6 }}>
+                ⚠️ Beyond Amadeus free tier ({AMADEUS_FREE_TRIPS} trips)
+              </p>
+            )}
+          </div>
+
+          {/* Conversion Rate Slider */}
+          <div style={{
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            padding: "20px 24px",
+            border: "1px solid rgba(100, 116, 139, 0.2)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Conversion Rate</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{conversionRate}%</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              value={conversionRate}
+              onChange={(e) => setConversionRate(+e.target.value)}
+              style={{ width: "100%", accentColor: "#F59E0B", cursor: "pointer" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 6 }}>
+              <span>1%</span><span>10%</span><span>25%</span><span>50%</span><span>100%</span>
+            </div>
+            <p style={{ fontSize: 10, color: "#64748B", marginTop: 6 }}>
+              {costs.payingTrips.toFixed(0)} paying users of {volume} total trips
+            </p>
+          </div>
+        </div>
+
         {/* View Mode Tabs */}
         <div style={{ 
           display: "flex", 
@@ -1231,69 +1295,13 @@ export default function UnitEconomics() {
           );
         })()}
 
-        {/* Controls - 2x2 Grid */}
+        {/* Controls - Revenue Mix & Scenario */}
         <div style={{ 
           display: "grid", 
           gridTemplateColumns: "1fr 1fr", 
           gap: 16, 
           marginBottom: 32,
         }}>
-          {/* Volume Slider */}
-          <div style={{
-            background: "rgba(30, 41, 59, 0.5)",
-            borderRadius: 12,
-            padding: "24px 28px",
-            border: "1px solid rgba(100, 116, 139, 0.2)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Monthly Volume</span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#63B3AA", fontFamily: "'JetBrains Mono', monospace" }}>{volume} trips</span>
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="1000"
-              value={volume}
-              onChange={(e) => setVolume(+e.target.value)}
-              style={{ width: "100%", accentColor: "#63B3AA", cursor: "pointer" }}
-            />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 8 }}>
-              <span>1</span><span>250</span><span>400</span><span>500</span><span>1,000</span>
-            </div>
-            {volume > AMADEUS_FREE_TRIPS && scenarioConfig.amadeus && (
-              <p style={{ fontSize: 10, color: "#F59E0B", marginTop: 8 }}>
-                ⚠️ Beyond Amadeus free tier ({AMADEUS_FREE_TRIPS} trips)
-              </p>
-            )}
-          </div>
-
-          {/* Conversion Rate Slider */}
-          <div style={{
-            background: "rgba(30, 41, 59, 0.5)",
-            borderRadius: 12,
-            padding: "24px 28px",
-            border: "1px solid rgba(100, 116, 139, 0.2)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Conversion Rate</span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{conversionRate}%</span>
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              value={conversionRate}
-              onChange={(e) => setConversionRate(+e.target.value)}
-              style={{ width: "100%", accentColor: "#F59E0B", cursor: "pointer" }}
-            />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 8 }}>
-              <span>1%</span><span>10%</span><span>25%</span><span>50%</span><span>100%</span>
-            </div>
-            <p style={{ fontSize: 10, color: "#64748B", marginTop: 8 }}>
-              {costs.payingTrips.toFixed(0)} paying users of {volume} total trips
-            </p>
-          </div>
-
           {/* Revenue Mix - Visual */}
           <div style={{
             background: "rgba(30, 41, 59, 0.5)",
