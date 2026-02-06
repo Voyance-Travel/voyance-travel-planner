@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, ArrowRight, MessageCircle, RefreshCw, Check, ArrowLeft } from 'lucide-react';
@@ -51,6 +51,10 @@ export default function OnboardConversation() {
   const [analysis, setAnalysis] = useState<StoryAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // CRITICAL: Synchronous ref guard to prevent race condition on save
+  // Multiple rapid clicks can trigger duplicate saves before state updates
+  const savingInProgressRef = useRef(false);
 
   const analyzeStory = useCallback(async (text: string, previousAnalysis?: StoryAnalysis) => {
     setIsAnalyzing(true);
@@ -116,6 +120,13 @@ export default function OnboardConversation() {
       navigate(ROUTES.SIGNIN);
       return;
     }
+    
+    // Race condition guard - prevent duplicate saves from rapid clicks
+    if (savingInProgressRef.current) {
+      console.log('[OnboardConversation] Save already in progress, skipping');
+      return;
+    }
+    savingInProgressRef.current = true;
 
     setIsSaving(true);
 
@@ -212,6 +223,7 @@ export default function OnboardConversation() {
       toast.error('Failed to save your Travel DNA. Please try again.');
     } finally {
       setIsSaving(false);
+      savingInProgressRef.current = false;
     }
   }, [analysis, user, navigate]);
 
